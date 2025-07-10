@@ -1,12 +1,19 @@
 import { useStore } from '@nanostores/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { chatStore } from '~/lib/stores/chat';
+import { authStore } from '~/lib/stores/auth';
 import { classNames } from '~/utils/classNames';
 import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
+import { UserMenu } from '~/components/auth/UserMenu';
+import { AuthDialog } from '~/components/auth/AuthDialog';
+import { Button } from '~/components/ui/Button';
+import { useState } from 'react';
 
 export function Header() {
   const chat = useStore(chatStore);
+  const isAuthenticated = useStore(authStore.isAuthenticated);
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
 
   return (
     <header
@@ -37,6 +44,23 @@ export function Header() {
           </ClientOnly>
         </>
       )}
+
+      {/* Authentication UI */}
+      <div className="flex items-center gap-2 ml-auto">
+        <ClientOnly>
+          {() =>
+            isAuthenticated ? (
+              <UserMenu />
+            ) : (
+              <Button onClick={() => setShowAuthDialog(true)} size="sm">
+                Sign In
+              </Button>
+            )
+          }
+        </ClientOnly>
+      </div>
+
+      <AuthDialog isOpen={showAuthDialog} onClose={() => setShowAuthDialog(false)} />
     </header>
   );
 }
