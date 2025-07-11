@@ -151,6 +151,7 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
+    const [aiMode, setAiMode] = useState<'standard' | 'orchestration' | undefined>(undefined);
     const {
       messages,
       isLoading,
@@ -651,6 +652,8 @@ export const ChatImpl = memo(
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
+        aiMode={aiMode}
+        onModeSelect={setAiMode}
       />
     );
   },

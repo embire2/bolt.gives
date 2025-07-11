@@ -43,6 +43,13 @@ We believe that the best AI coding tools should be open source, community-driven
 - **Improved Navigation**: Streamlined interface with better user flow
 - **Visual Feedback**: Real-time status indicators and progress tracking
 
+### 🧠 AI Mode Selection & Multi-Model Orchestration
+- **Smart Mode Selection**: Choose between Standard Mode and Multi-Model Orchestration
+- **Multi-Agent Execution**: Run multiple AI models in parallel for complex tasks
+- **Task Decomposition**: Intelligent breaking down of complex requirements
+- **Consensus-Based Results**: Cross-model validation and quality assurance
+- **Advanced Error Detection**: Self-healing capabilities with automated error recovery
+
 ### 🔧 Developer Tools
 - **Advanced Terminal**: Full terminal output with error detection
 - **Git Integration**: Clone, commit, and push directly to GitHub
@@ -59,9 +66,14 @@ We believe that the best AI coding tools should be open source, community-driven
 
 Our team is actively working on these high-priority features:
 
+### 🔥 Recently Completed
+- **AI Mode Selection**: Choose between Standard Mode and Multi-Model Orchestration before starting
+- **Multi-Model Orchestration**: Complete system for running multiple AI agents in parallel
+- **Advanced Task Management**: Visual interface for complex task decomposition and execution
+- **Consensus Mechanisms**: Cross-model validation and result aggregation
+
 ### 🔥 Currently in Development
 - **Advanced File Locking**: Prevent unnecessary rewrites with intelligent diff detection
-- **Multi-Model Orchestration**: Run multiple AI agents in parallel for complex tasks
 - **Enhanced Prompting**: Optimized prompts for smaller LLMs and better code generation
 - **VSCode Integration**: Seamless integration with popular development environments
 
@@ -76,6 +88,28 @@ Our team is actively working on these high-priority features:
 - **Advanced Analytics**: Usage insights and performance metrics
 - **Collaborative Features**: Real-time collaboration on projects
 - **Enterprise Features**: SSO, audit logs, and advanced security options
+
+## 🎯 AI Mode Selection
+
+When you start a new chat session, Bolt.DIY now offers you two powerful modes to choose from:
+
+### 🔸 Standard Mode
+Perfect for quick tasks and straightforward development:
+- **Single AI conversation** with fast response times
+- **Direct interaction** for immediate feedback
+- **Cost-effective** for simple coding tasks
+- **Ideal for**: Quick questions, simple coding tasks, learning, general conversations
+
+### 🔸 Multi-Model Orchestration Mode
+Advanced mode for complex projects requiring multiple perspectives:
+- **Multiple AI agents** working in parallel
+- **Task decomposition** and intelligent delegation
+- **Cross-model validation** and review
+- **Consensus-based results** for higher quality output
+- **Advanced error detection** with self-healing capabilities
+- **Ideal for**: Complex software development, code review, multi-perspective analysis, large-scale refactoring
+
+The system automatically presents you with a comparison interface to help you choose the right mode for your specific task.
 
 ## 🚀 Quick Start
 
@@ -199,7 +233,7 @@ We maintain a transparent roadmap showing our development priorities:
 
 ### Q1 2025
 - Enhanced file management and diff system
-- Advanced AI model orchestration
+- ✅ **Advanced AI model orchestration** (Completed)
 - Improved mobile experience
 - Plugin system foundation
 

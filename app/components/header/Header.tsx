@@ -30,6 +30,16 @@ export function Header() {
           <img src="/logo-dark-styled.png" alt="logo" className="w-[90px] inline-block hidden dark:block" />
         </a>
       </div>
+
+      {/* Navigation Links */}
+      <div className="flex items-center gap-4 ml-4">
+        <a
+          href="/features"
+          className="text-sm font-medium text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-colors"
+        >
+          New Features
+        </a>
+      </div>
       {chat.started && ( // Display ChatDescription and HeaderActionButtons only when the chat has started.
         <>
           <span className="flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">

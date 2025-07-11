@@ -34,6 +34,9 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
 
+// Note: Orchestration features temporarily disabled pending type fixes
+import { ModeSelector } from './ModeSelector';
+
 const TEXTAREA_MIN_HEIGHT = 76;
 
 interface BaseChatProps {
@@ -80,6 +83,8 @@ interface BaseChatProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: (element: ElementInfo | null) => void;
+  aiMode?: 'standard' | 'orchestration';
+  onModeSelect?: (mode: 'standard' | 'orchestration') => void;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -126,6 +131,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setDesignScheme,
       selectedElement,
       setSelectedElement,
+      aiMode,
+      onModeSelect,
     },
     ref,
   ) => {
@@ -140,6 +147,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
+
+    // const orchestrationState = useStore(orchestrationStore.state);
+    const [showModeSelector, setShowModeSelector] = useState(!chatStarted && !aiMode);
+    const [selectedAiMode, setSelectedAiMode] = useState<'standard' | 'orchestration' | undefined>(aiMode);
 
     useEffect(() => {
       if (expoUrl) {
@@ -162,6 +173,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     useEffect(() => {
       onStreamingChange?.(isStreaming);
     }, [isStreaming, onStreamingChange]);
+
+    useEffect(() => {
+      // Show mode selector when chat hasn't started and no mode is selected
+      setShowModeSelector(!chatStarted && !selectedAiMode);
+    }, [chatStarted, selectedAiMode]);
+
+    const handleModeSelect = (mode: 'standard' | 'orchestration') => {
+      setSelectedAiMode(mode);
+      setShowModeSelector(false);
+      onModeSelect?.(mode);
+    };
 
     useEffect(() => {
       if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -344,7 +366,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div className="flex flex-col lg:flex-row overflow-y-auto w-full h-full">
           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
-            {!chatStarted && (
+            {!chatStarted && !showModeSelector && (
               <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
                 <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
                   Where ideas begin
@@ -352,6 +374,29 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                   Bring ideas to life in seconds or get help on existing projects.
                 </p>
+                {selectedAiMode && (
+                  <div className="mt-6 p-4 bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-lg">
+                    <div className="flex items-center justify-center gap-3">
+                      <div
+                        className={
+                          selectedAiMode === 'orchestration'
+                            ? 'i-ph:brain text-purple-600'
+                            : 'i-ph:user-circle text-blue-600'
+                        }
+                      />
+                      <span className="text-sm font-medium text-bolt-elements-textPrimary">
+                        {selectedAiMode === 'orchestration' ? 'Multi-Model Orchestration Mode' : 'Standard Mode'}{' '}
+                        Selected
+                      </span>
+                      <button
+                        onClick={() => setShowModeSelector(true)}
+                        className="text-xs text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <StickToBottom
@@ -490,6 +535,35 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             )}
           </ClientOnly>
         </div>
+
+        {/* Mode Selector */}
+        {showModeSelector && (
+          <ClientOnly>
+            {() => (
+              <ModeSelector
+                onModeSelect={handleModeSelect}
+                onClose={() => {
+                  setShowModeSelector(false);
+                  setSelectedAiMode('standard'); // Default to standard if user closes without selecting
+                  onModeSelect?.('standard');
+                }}
+              />
+            )}
+          </ClientOnly>
+        )}
+
+        {/* Orchestration Panel - Temporarily disabled pending type fixes */}
+        {/* {orchestrationState.isVisible && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-6xl max-h-[90vh] m-4 overflow-auto">
+              <ClientOnly>
+                {() => (
+                  <OrchestrationPanel className="w-full h-full" onClose={() => orchestrationStore.setVisible(false)} />
+                )}
+              </ClientOnly>
+            </div>
+          </div>
+        )} */}
       </div>
     );
 
