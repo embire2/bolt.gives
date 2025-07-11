@@ -150,6 +150,231 @@ The system automatically presents you with a comparison interface to help you ch
    docker compose --profile development up
    ```
 
+## 🖥️ Ubuntu VPS/Server Installation
+
+### Prerequisites
+- Ubuntu 20.04 LTS or newer
+- Node.js 18+ (LTS recommended)
+- pnpm or npm
+- Git
+- Basic firewall (UFW recommended)
+
+### Step 1: Server Setup
+
+1. **Update System**:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   ```
+
+2. **Install Node.js (using NodeSource)**:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+   ```
+
+3. **Install pnpm**:
+   ```bash
+   npm install -g pnpm
+   ```
+
+4. **Install Git** (if not already installed):
+   ```bash
+   sudo apt install git -y
+   ```
+
+### Step 2: Application Installation
+
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/embire2/bolt.gives.git
+   cd bolt.gives
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+3. **Build the Application**:
+   ```bash
+   pnpm run build
+   ```
+
+### Step 3: Remote Access Configuration
+
+#### Option A: Direct Port Access (Development/Testing)
+
+1. **Configure Firewall**:
+   ```bash
+   sudo ufw allow OpenSSH
+   sudo ufw allow 5173/tcp
+   sudo ufw enable
+   ```
+
+2. **Start Development Server** (binds to all interfaces):
+   ```bash
+   pnpm run dev -- --host 0.0.0.0 --port 5173
+   ```
+
+3. **Access Application**:
+   - Open browser to `http://your-server-ip:5173`
+
+#### Option B: Production Setup with Reverse Proxy (Recommended)
+
+1. **Install Nginx**:
+   ```bash
+   sudo apt install nginx -y
+   ```
+
+2. **Configure Nginx**:
+   ```bash
+   sudo nano /etc/nginx/sites-available/bolt-gives
+   ```
+
+   Add this configuration:
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;  # Replace with your domain or IP
+       
+       location / {
+           proxy_pass http://localhost:5173;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_cache_bypass $http_upgrade;
+           proxy_read_timeout 86400;
+       }
+   }
+   ```
+
+3. **Enable Site**:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/bolt-gives /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+
+4. **Configure Firewall**:
+   ```bash
+   sudo ufw allow 'Nginx Full'
+   sudo ufw enable
+   ```
+
+5. **Create Systemd Service**:
+   ```bash
+   sudo nano /etc/systemd/system/bolt-gives.service
+   ```
+
+   Add this configuration:
+   ```ini
+   [Unit]
+   Description=Bolt.gives Application
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=ubuntu
+   WorkingDirectory=/home/ubuntu/bolt.gives
+   ExecStart=/usr/bin/pnpm run start
+   Restart=always
+   RestartSec=5
+   Environment=NODE_ENV=production
+   Environment=PORT=5173
+   Environment=HOST=127.0.0.1
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+6. **Start and Enable Service**:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable bolt-gives
+   sudo systemctl start bolt-gives
+   ```
+
+### Step 4: SSL Certificate (Optional but Recommended)
+
+1. **Install Certbot**:
+   ```bash
+   sudo apt install certbot python3-certbot-nginx -y
+   ```
+
+2. **Obtain SSL Certificate**:
+   ```bash
+   sudo certbot --nginx -d your-domain.com
+   ```
+
+3. **Auto-renewal**:
+   ```bash
+   sudo systemctl enable certbot.timer
+   ```
+
+### Security Considerations
+
+⚠️ **Important Security Notes**:
+
+- **Change Default Passwords**: Always change any default credentials
+- **Use Strong Authentication**: Enable user authentication in the application
+- **Regular Updates**: Keep the system and application updated
+- **Firewall Rules**: Only open necessary ports
+- **SSL/TLS**: Always use HTTPS in production
+- **Access Control**: Consider IP whitelisting for admin access
+- **Backup Strategy**: Regular backups of configuration and data
+- **Monitor Logs**: Regular monitoring of application and system logs
+
+### Troubleshooting
+
+**Common Issues**:
+
+1. **Port Already in Use**:
+   ```bash
+   sudo lsof -i :5173
+   sudo kill -9 PID
+   ```
+
+2. **Permission Errors**:
+   ```bash
+   sudo chown -R $USER:$USER /home/ubuntu/bolt.gives
+   ```
+
+3. **Service Not Starting**:
+   ```bash
+   sudo journalctl -u bolt-gives -f
+   ```
+
+4. **Nginx Configuration Test**:
+   ```bash
+   sudo nginx -t
+   sudo systemctl status nginx
+   ```
+
+### Monitoring and Maintenance
+
+1. **Check Application Status**:
+   ```bash
+   sudo systemctl status bolt-gives
+   ```
+
+2. **View Logs**:
+   ```bash
+   sudo journalctl -u bolt-gives -f
+   ```
+
+3. **Update Application**:
+   ```bash
+   cd /home/ubuntu/bolt.gives
+   git pull origin main
+   pnpm install
+   pnpm run build
+   sudo systemctl restart bolt-gives
+   ```
+
 ## 🔑 API Configuration
 
 ### Adding API Keys
