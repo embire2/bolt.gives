@@ -1,6 +1,6 @@
 # Bolt.gives - Special Edition
 
-[![Bolt.gives Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltspecial.jpg)](https://openweb.co.za)
+[![Bolt.gives Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltlogo.png)](https://openweb.co.za)
 
 Welcome to **Bolt.gives - Special Edition**, a powerful alternative to StackBlitz's Bolt.new that puts community-driven development at the forefront. This special edition is maintained by a dedicated team of volunteers who are continuously adding highly requested features and improvements to create the most comprehensive open-source AI coding assistant.
 
@@ -130,13 +130,120 @@ The system automatically presents you with a comparison interface to help you ch
    pnpm install
    ```
 
-3. **Start Development Server**:
+3. **Install Required Remix Dependencies** (if not already installed):
+   ```bash
+   pnpm add @remix-run/dev @remix-run/node
+   ```
+
+4. **Start Development Server**:
    ```bash
    pnpm run dev
    ```
 
-4. **Open in Browser**:
+5. **Open in Browser**:
    Navigate to `http://localhost:5173`
+
+## 🔧 System Configuration
+
+### Node.js Memory Configuration
+
+For optimal performance, especially when building large projects, you may need to increase Node.js memory allocation:
+
+#### Option 1: Temporary (for current session)
+```bash
+export NODE_OPTIONS="--max-old-space-size=4096"
+pnpm run dev
+```
+
+#### Option 2: Permanent (recommended)
+Add to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
+```bash
+export NODE_OPTIONS="--max-old-space-size=4096"
+```
+
+Then reload your shell or run:
+```bash
+source ~/.bashrc  # or ~/.zshrc
+```
+
+#### Option 3: Using npm/pnpm scripts (already configured)
+The project is already configured to use 4GB memory in the dev script:
+```json
+"dev": "node --max-old-space-size=4096 pre-start.cjs && remix vite:dev --host=0.0.0.0 --port=5173"
+```
+
+### Essential Dependencies Checklist
+
+Before running the application, ensure you have installed:
+
+✅ **Core Dependencies**:
+- `@remix-run/dev` - Remix development tools
+- `@remix-run/node` - Remix Node.js adapter
+- `@remix-run/react` - Remix React integration
+- `@remix-run/cloudflare` - Cloudflare deployment support
+
+✅ **Build Dependencies**:
+- `vite` - Build tool
+- `typescript` - Type checking
+- `@types/node` - Node.js type definitions
+
+✅ **Runtime Dependencies**:
+- `react` and `react-dom` - React framework
+- `@webcontainer/api` - WebContainer integration
+- All AI provider SDKs (OpenAI, Anthropic, etc.)
+
+### Common Installation Issues & Solutions
+
+**Issue**: "Remix Vite plugin not found in Vite config"
+**Solution**: 
+```bash
+pnpm add @remix-run/dev @remix-run/node
+```
+
+**Issue**: "Cannot find module '@remix-run/nod'"
+**Solution**: Fix the typo - it should be `@remix-run/node`
+
+**Issue**: "JavaScript heap out of memory"
+**Solution**: Increase Node.js memory limit (see Memory Configuration above)
+
+**Issue**: "Port 5173 already in use"
+**Solution**: 
+```bash
+# Find and kill process using port 5173
+sudo lsof -i :5173
+sudo kill -9 <PID>
+```
+
+### External Access Configuration
+
+To make your development server accessible from external networks:
+
+1. **Configure Vite for external access** (already set in `vite.config.ts`):
+   ```typescript
+   server: {
+     host: '0.0.0.0',  // Allows external connections
+     port: 5173,
+   }
+   ```
+
+2. **Start with external host binding**:
+   ```bash
+   pnpm run dev  # Already configured to bind to 0.0.0.0
+   ```
+
+3. **Configure firewall** (if applicable):
+   ```bash
+   # Ubuntu/Debian
+   sudo ufw allow 5173/tcp
+   
+   # CentOS/RHEL
+   sudo firewall-cmd --permanent --add-port=5173/tcp
+   sudo firewall-cmd --reload
+   ```
+
+4. **Access your application**:
+   - Local: `http://localhost:5173`
+   - External: `http://your-server-ip:5173`
 
 ### Docker Setup (Alternative)
 
@@ -195,7 +302,18 @@ The system automatically presents you with a comparison interface to help you ch
    pnpm install
    ```
 
-3. **Build the Application**:
+3. **Install Required Remix Dependencies** (if missing):
+   ```bash
+   pnpm add @remix-run/dev @remix-run/node
+   ```
+
+4. **Configure Node.js Memory** (for optimal performance):
+   ```bash
+   echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+5. **Build the Application**:
    ```bash
    pnpm run build
    ```
@@ -286,6 +404,7 @@ The system automatically presents you with a comparison interface to help you ch
    Environment=NODE_ENV=production
    Environment=PORT=5173
    Environment=HOST=127.0.0.1
+   Environment=NODE_OPTIONS=--max-old-space-size=4096
 
    [Install]
    WantedBy=multi-user.target
@@ -332,26 +451,49 @@ The system automatically presents you with a comparison interface to help you ch
 
 **Common Issues**:
 
-1. **Port Already in Use**:
+1. **"Remix Vite plugin not found in Vite config"**:
+   ```bash
+   pnpm add @remix-run/dev @remix-run/node
+   sudo systemctl restart bolt-gives
+   ```
+
+2. **"JavaScript heap out of memory"**:
+   ```bash
+   echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> ~/.bashrc
+   source ~/.bashrc
+   sudo systemctl restart bolt-gives
+   ```
+
+3. **Port Already in Use**:
    ```bash
    sudo lsof -i :5173
    sudo kill -9 PID
    ```
 
-2. **Permission Errors**:
+4. **Permission Errors**:
    ```bash
    sudo chown -R $USER:$USER /home/ubuntu/bolt.gives
    ```
 
-3. **Service Not Starting**:
+5. **Service Not Starting**:
    ```bash
    sudo journalctl -u bolt-gives -f
    ```
 
-4. **Nginx Configuration Test**:
+6. **Nginx Configuration Test**:
    ```bash
    sudo nginx -t
    sudo systemctl status nginx
+   ```
+
+7. **External Access Not Working**:
+   ```bash
+   # Check if firewall is blocking
+   sudo ufw status
+   sudo ufw allow 5173/tcp
+   
+   # Check if service is binding to correct interface
+   sudo netstat -tlnp | grep 5173
    ```
 
 ### Monitoring and Maintenance
