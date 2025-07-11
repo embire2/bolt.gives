@@ -4,7 +4,7 @@ import BackgroundRays from '~/components/ui/BackgroundRays';
 
 export const meta: MetaFunction = () => {
   return [
-    { title: 'New Features - Bolt' },
+    { title: 'New Features - Bolt.gives' },
     { name: 'description', content: 'Latest features and capabilities in Bolt' },
   ];
 };

@@ -1,12 +1,12 @@
-# Bolt.DIY - Special Edition
+# Bolt.gives - Special Edition
 
-[![Bolt.DIY Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltspecial.jpg)](https://openweb.co.za)
+[![Bolt.gives Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltspecial.jpg)](https://openweb.co.za)
 
-Welcome to **Bolt.DIY - Special Edition**, a powerful alternative to StackBlitz's Bolt.new that puts community-driven development at the forefront. This special edition is maintained by a dedicated team of volunteers who are continuously adding highly requested features and improvements to create the most comprehensive open-source AI coding assistant.
+Welcome to **Bolt.gives - Special Edition**, a powerful alternative to StackBlitz's Bolt.new that puts community-driven development at the forefront. This special edition is maintained by a dedicated team of volunteers who are continuously adding highly requested features and improvements to create the most comprehensive open-source AI coding assistant.
 
 ## 🚀 What Makes This Special?
 
-Bolt.DIY - Special Edition represents the next evolution of AI-powered web development, offering:
+Bolt.gives - Special Edition represents the next evolution of AI-powered web development, offering:
 
 - **Community-Driven Development**: Built by volunteers who listen to user feedback and implement the features you actually want
 - **Advanced Feature Set**: Enhanced capabilities that go beyond the basic Bolt.new experience
@@ -91,7 +91,7 @@ Our team is actively working on these high-priority features:
 
 ## 🎯 AI Mode Selection
 
-When you start a new chat session, Bolt.DIY now offers you two powerful modes to choose from:
+When you start a new chat session, Bolt.gives now offers you two powerful modes to choose from:
 
 ### 🔸 Standard Mode
 Perfect for quick tasks and straightforward development:
@@ -121,8 +121,8 @@ The system automatically presents you with a comparison interface to help you ch
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/embire2/bolt.diy.git
-   cd bolt.diy
+   git clone https://github.com/embire2/bolt.gives.git
+   cd bolt.gives
    ```
 
 2. **Install Dependencies**:
@@ -269,12 +269,12 @@ This project is made possible by our amazing community of volunteers:
 
 ## 🔗 Links
 
-- **Live Demo**: [https://bolt.diy](https://bolt.diy)
-- **Documentation**: [Bolt.DIY Docs](https://stackblitz-labs.github.io/bolt.diy/)
+- **Live Demo**: [https://bolt.gives](https://bolt.gives)
+- **Documentation**: [Bolt.gives Docs](https://stackblitz-labs.github.io/bolt.gives/)
 - **Community**: [oTTomator Think Tank](https://thinktank.ottomator.ai)
 - **Roadmap**: [Development Roadmap](https://roadmap.sh/r/ottodev-roadmap-2ovzo)
-- **Support**: [GitHub Issues](https://github.com/embire2/bolt.diy/issues)
+- **Support**: [GitHub Issues](https://github.com/embire2/bolt.gives/issues)
 
 ---
 
-**Bolt.DIY - Special Edition**: Where community-driven development meets cutting-edge AI technology. Join us in building the future of AI-powered web development! 🚀
+**Bolt.gives - Special Edition**: Where community-driven development meets cutting-edge AI technology. Join us in building the future of AI-powered web development! 🚀

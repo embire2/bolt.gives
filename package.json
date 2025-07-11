@@ -1,5 +1,5 @@
 {
-  "name": "bolt",
+  "name": "bolt-gives",
   "description": "An AI Agent",
   "private": true,
   "license": "MIT",
@@ -7,8 +7,8 @@
   "type": "module",
   "version": "1.0.0",
   "author": {
-    "name": "bolt.diy team",
-    "email": "maintainers@bolt.diy"
+    "name": "bolt.gives team",
+    "email": "maintainers@bolt.gives"
   },
   "scripts": {
     "deploy": "npm run build && wrangler pages deploy",

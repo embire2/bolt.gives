@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## High-Level Architecture
 
 ### Core Structure
-bolt.diy is a Remix-based web application that provides an AI-powered full-stack development environment in the browser. It uses WebContainers for sandboxed execution and supports multiple LLM providers.
+bolt.gives is a Remix-based web application that provides an AI-powered full-stack development environment in the browser. It uses WebContainers for sandboxed execution and supports multiple LLM providers.
 
 ### Key Components
 
