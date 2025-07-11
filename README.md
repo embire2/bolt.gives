@@ -1,6 +1,6 @@
 # Bolt.DIY - Special Edition
 
-[![Bolt.DIY Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/social_preview_index.jpg)](https://bolt.diy)
+[![Bolt.DIY Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltspecial.jpg)](https://openweb.co.za)
 
 Welcome to **Bolt.DIY - Special Edition**, a powerful alternative to StackBlitz's Bolt.new that puts community-driven development at the forefront. This special edition is maintained by a dedicated team of volunteers who are continuously adding highly requested features and improvements to create the most comprehensive open-source AI coding assistant.
 
