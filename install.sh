@@ -399,6 +399,12 @@ configure_firewall() {
 configure_nginx() {
     log "Configuring Nginx..."
     
+    # Backup existing nginx configuration if it exists
+    if [ -f "$NGINX_CONF_PATH" ]; then
+        cp "$NGINX_CONF_PATH" "${NGINX_CONF_PATH}.backup.$(date +%Y%m%d_%H%M%S)"
+        log "Backed up existing nginx configuration"
+    fi
+    
     # Remove default site
     rm -f /etc/nginx/sites-enabled/default
     
@@ -418,7 +424,7 @@ server {
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_proxied expired no-cache no-store private auth;
     gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
     
     # Client upload limit
@@ -454,12 +460,37 @@ EOF
     # Test Nginx configuration
     if ! nginx -t; then
         error "Nginx configuration test failed"
-        exit 1
+        
+        # Restore backup if it exists
+        local backup_file=$(ls "${NGINX_CONF_PATH}.backup."* 2>/dev/null | head -1)
+        if [ -n "$backup_file" ]; then
+            log "Restoring backup configuration..."
+            cp "$backup_file" "$NGINX_CONF_PATH"
+            if nginx -t; then
+                log "✓ Backup configuration restored successfully"
+            else
+                error "Backup configuration also failed. Removing invalid configuration."
+                rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+            fi
+        else
+            # Remove invalid configuration
+            rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+        fi
+        
+        # Try to start nginx with default configuration
+        systemctl restart nginx || true
+        return 1
     fi
     
     # Start and enable Nginx
     systemctl enable nginx
     systemctl restart nginx
+    
+    # Verify nginx is running
+    if ! systemctl is-active --quiet nginx; then
+        error "Failed to start nginx service"
+        return 1
+    fi
     
     log "✓ Nginx configured and started"
 }
@@ -515,7 +546,7 @@ server {
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_proxied expired no-cache no-store private auth;
     gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
     
     # Client upload limit
@@ -548,10 +579,72 @@ EOF
     # Test and restart Nginx
     if nginx -t; then
         systemctl start nginx
-        log "✓ SSL certificate configured in Nginx"
+        
+        # Verify nginx is running
+        if systemctl is-active --quiet nginx; then
+            log "✓ SSL certificate configured in Nginx"
+        else
+            error "Failed to start nginx after SSL configuration"
+            return 1
+        fi
     else
         error "Nginx configuration test failed after SSL setup"
-        exit 1
+        
+        # Restore to HTTP-only configuration
+        log "Restoring HTTP-only configuration..."
+        cat > "$NGINX_CONF_PATH" << EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private auth;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+    
+    # Client upload limit
+    client_max_body_size 50M;
+    
+    # Proxy settings
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+        
+        if nginx -t; then
+            systemctl start nginx
+            warn "Restored to HTTP-only configuration. SSL setup failed."
+            return 1
+        else
+            error "Failed to restore HTTP configuration. Manual intervention required."
+            return 1
+        fi
     fi
     
     # Setup auto-renewal
@@ -751,8 +844,17 @@ main() {
     
     # Security and web server
     configure_firewall
-    configure_nginx
-    setup_ssl
+    if ! configure_nginx; then
+        error "Nginx configuration failed. Continuing without web server proxy."
+        warn "You may need to manually configure nginx later."
+        warn "The application will still be accessible on port 3000."
+    else
+        # Only attempt SSL setup if nginx configuration succeeded
+        if ! setup_ssl; then
+            warn "SSL setup failed. Application accessible via HTTP only."
+            warn "You can manually configure SSL later using: certbot --nginx -d $DOMAIN"
+        fi
+    fi
     
     # Service management
     create_systemd_service

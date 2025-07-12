@@ -1,3 +1,18 @@
+# 🚀 Release v1.0.1
+
+## What's Changed 🌟
+
+### 🔄 Changes since v1.0.0
+
+### 🐛 Bug Fixes
+
+* fix nginx configuration error in install script - removed invalid `must-revalidate` value from `gzip_proxied` directive
+* add comprehensive error recovery mechanisms for nginx configuration failures
+* enhance install script to gracefully handle nginx configuration errors and continue installation
+* improve install script self-healing capabilities for production deployments
+
+---
+
 # 🚀 Release v1.0.0
 
 ## What's Changed 🌟
