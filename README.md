@@ -1,647 +1,324 @@
-# Bolt.gives - Special Edition
+# Bolt.gives
 
-[![Bolt.gives Special Edition: Enhanced AI-Powered Full-Stack Web Development](./public/boltlogo.png)](https://openweb.co.za)
+![Bolt.gives Logo](./public/boltlogo.png)
 
-Welcome to **Bolt.gives - Special Edition**, a powerful alternative to StackBlitz's Bolt.new that puts community-driven development at the forefront. This special edition is maintained by a dedicated team of volunteers who are continuously adding highly requested features and improvements to create the most comprehensive open-source AI coding assistant.
+**The Next Generation AI-Powered Full-Stack Development Platform**
 
-## 🚀 What Makes This Special?
+Bolt.gives is an advanced AI-powered development environment that brings the future of coding to your browser. Built from the ground up with cutting-edge technology, it offers a comprehensive suite of tools for modern web development, enhanced with intelligent AI assistance and seamless deployment capabilities.
 
-Bolt.gives - Special Edition represents the next evolution of AI-powered web development, offering:
+## 🚀 What is Bolt.gives?
 
-- **Community-Driven Development**: Built by volunteers who listen to user feedback and implement the features you actually want
-- **Advanced Feature Set**: Enhanced capabilities that go beyond the basic Bolt.new experience
-- **Multiple LLM Support**: Choose from OpenAI, Anthropic, Ollama, OpenRouter, Gemini, LMStudio, Mistral, xAI, HuggingFace, DeepSeek, Groq, and more
-- **Production-Ready**: Robust features like user authentication, chat history management, and advanced deployment options
-- **Extensible Architecture**: Easy to extend with new models and capabilities
+Bolt.gives is a revolutionary web-based development platform that combines:
 
-## 🎯 Our Mission
+- **Advanced AI Integration**: Multiple LLM providers with intelligent model orchestration
+- **Browser-Based Development**: Full development environment running entirely in your browser
+- **Real-Time Collaboration**: Seamless sharing and collaborative coding
+- **Instant Deployment**: Deploy your applications with a single click
+- **Comprehensive Toolchain**: Everything you need from ideation to production
 
-We believe that the best AI coding tools should be open source, community-driven, and accessible to everyone. Our team of volunteers is dedicated to:
+## ✨ Key Features
 
-- **Listening to the Community**: Every feature request is considered and prioritized based on user needs
-- **Rapid Innovation**: Faster development cycles than traditional corporate alternatives
-- **Quality First**: Thorough testing and code review processes ensure stability and performance
-- **Transparency**: Open development process with clear roadmaps and progress tracking
+### 🧠 AI-Powered Development
+- **Multi-Model Orchestration**: Leverage multiple AI models working in harmony
+- **Intelligent Code Generation**: Context-aware code suggestions and completions
+- **Smart Debugging**: AI-assisted error detection and resolution
+- **Natural Language Processing**: Describe what you want to build in plain English
 
-## 🛠️ Enhanced Features
+### 🛠️ Advanced Development Environment
+- **WebContainer Technology**: Sandboxed Node.js environment in the browser
+- **Full-Stack Support**: Frontend, backend, and database development
+- **Real-Time Preview**: Instant preview of your applications as you build
+- **Integrated Terminal**: Full terminal access for advanced operations
 
-### 🔐 User Authentication & Session Management
-- **Multi-user Support**: Create separate accounts with isolated chat histories
-- **Secure Authentication**: bcryptjs-powered password hashing
-- **Session Persistence**: 7-day session management with automatic cleanup
-- **User Profiles**: Manage account settings and preferences
-
-### 💬 Advanced Chat Management
-- **Private Chat History**: Each user has completely isolated chat data
-- **Chat Export/Import**: Backup and restore your conversations
-- **Chat Duplication**: Clone successful conversations for reuse
-- **Smart Chat Metadata**: Enhanced organization and search capabilities
-
-### 🎨 Enhanced UI/UX
-- **Mobile-Friendly**: Responsive design that works on all devices
-- **Dark/Light Theme**: Toggle between themes for comfort
-- **Improved Navigation**: Streamlined interface with better user flow
-- **Visual Feedback**: Real-time status indicators and progress tracking
-
-### 🧠 AI Mode Selection & Multi-Model Orchestration
-- **Smart Mode Selection**: Choose between Standard Mode and Multi-Model Orchestration
-- **Multi-Agent Execution**: Run multiple AI models in parallel for complex tasks
-- **Task Decomposition**: Intelligent breaking down of complex requirements
-- **Consensus-Based Results**: Cross-model validation and quality assurance
-- **Advanced Error Detection**: Self-healing capabilities with automated error recovery
-
-### 🔧 Developer Tools
-- **Advanced Terminal**: Full terminal output with error detection
-- **Git Integration**: Clone, commit, and push directly to GitHub
-- **File Diff View**: See exactly what changes are being made
-- **Project Templates**: Quick start with pre-configured templates
+### 🔐 Enterprise-Grade Features
+- **User Authentication**: Secure multi-user support with session management
+- **Private Workspaces**: Isolated development environments per user
+- **Advanced Security**: bcrypt password hashing and secure session handling
+- **Audit Logging**: Comprehensive logging for enterprise compliance
 
 ### 🌐 Deployment & Integration
-- **Multiple Deployment Options**: Direct deployment to Netlify, Vercel, and more
-- **Supabase Integration**: Database integration for dynamic applications
-- **Docker Support**: Containerized deployment for easy scaling
+- **One-Click Deployment**: Deploy to major cloud platforms instantly
+- **Git Integration**: Seamless GitHub, GitLab, and Bitbucket connectivity
+- **Database Support**: Integrated database management and migrations
 - **API Integration**: Connect with external services and APIs
 
-## 📋 Volunteer Team Priorities
-
-Our team is actively working on these high-priority features:
-
-### 🔥 Recently Completed
-- **AI Mode Selection**: Choose between Standard Mode and Multi-Model Orchestration before starting
-- **Multi-Model Orchestration**: Complete system for running multiple AI agents in parallel
-- **Advanced Task Management**: Visual interface for complex task decomposition and execution
-- **Consensus Mechanisms**: Cross-model validation and result aggregation
-
-### 🔥 Currently in Development
-- **Advanced File Locking**: Prevent unnecessary rewrites with intelligent diff detection
-- **Enhanced Prompting**: Optimized prompts for smaller LLMs and better code generation
-- **VSCode Integration**: Seamless integration with popular development environments
-
-### 🎯 Next Up
-- **Document Upload**: Add knowledge base with design templates and coding standards
-- **Voice Commands**: Natural language voice prompting for hands-free coding
-- **Project Planning**: LLM-generated project plans with transparent decision-making
-- **Advanced Error Handling**: Automatic error detection and resolution
-
-### 🔮 Future Enhancements
-- **Plugin System**: Extensible architecture for community-contributed features
-- **Advanced Analytics**: Usage insights and performance metrics
-- **Collaborative Features**: Real-time collaboration on projects
-- **Enterprise Features**: SSO, audit logs, and advanced security options
-
-## 🎯 AI Mode Selection
-
-When you start a new chat session, Bolt.gives now offers you two powerful modes to choose from:
-
-### 🔸 Standard Mode
-Perfect for quick tasks and straightforward development:
-- **Single AI conversation** with fast response times
-- **Direct interaction** for immediate feedback
-- **Cost-effective** for simple coding tasks
-- **Ideal for**: Quick questions, simple coding tasks, learning, general conversations
-
-### 🔸 Multi-Model Orchestration Mode
-Advanced mode for complex projects requiring multiple perspectives:
-- **Multiple AI agents** working in parallel
-- **Task decomposition** and intelligent delegation
-- **Cross-model validation** and review
-- **Consensus-based results** for higher quality output
-- **Advanced error detection** with self-healing capabilities
-- **Ideal for**: Complex software development, code review, multi-perspective analysis, large-scale refactoring
-
-The system automatically presents you with a comparison interface to help you choose the right mode for your specific task.
+### 🎨 Modern User Experience
+- **Responsive Design**: Works perfectly on desktop, tablet, and mobile
+- **Dark/Light Themes**: Customizable interface themes
+- **Intuitive UI**: Clean, modern interface designed for productivity
+- **Accessibility**: Full accessibility support for all users
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js (LTS version recommended)
-- pnpm (recommended) or npm
+- Node.js 20+ (LTS recommended)
+- 4GB+ RAM (8GB recommended for large projects)
+- Modern web browser (Chrome, Firefox, Safari, Edge)
 
 ### Installation
 
-1. **Clone the Repository**:
+1. **Clone the Repository**
    ```bash
    git clone https://github.com/embire2/bolt.gives.git
    cd bolt.gives
    ```
 
-2. **Install Dependencies**:
+2. **Install Dependencies**
    ```bash
    pnpm install
    ```
 
-3. **Install Required Remix Dependencies** (if not already installed):
-   ```bash
-   pnpm add @remix-run/dev @remix-run/node
-   ```
-
-4. **Start Development Server**:
+3. **Start Development Server**
    ```bash
    pnpm run dev
    ```
 
-5. **Open in Browser**:
-   Navigate to `http://localhost:5173`
+4. **Open in Browser**
+   Navigate to `http://localhost:5174`
 
-## 🔧 System Configuration
+### Production Deployment
 
-### Node.js Memory Configuration
+For production deployment on Ubuntu/Debian servers, use our automated installation script:
 
-For optimal performance, especially when building large projects, you may need to increase Node.js memory allocation:
-
-#### Option 1: Temporary (for current session)
 ```bash
-export NODE_OPTIONS="--max-old-space-size=4096"
-pnpm run dev
+wget https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh
+chmod +x install.sh
+sudo ./install.sh
 ```
 
-#### Option 2: Permanent (recommended)
-Add to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
-```bash
-export NODE_OPTIONS="--max-old-space-size=4096"
-```
-
-Then reload your shell or run:
-```bash
-source ~/.bashrc  # or ~/.zshrc
-```
-
-#### Option 3: Using npm/pnpm scripts (already configured)
-The project is already configured to use 4GB memory in the dev script:
-```json
-"dev": "node --max-old-space-size=4096 pre-start.cjs && remix vite:dev --host=0.0.0.0 --port=5173"
-```
-
-### Essential Dependencies Checklist
-
-Before running the application, ensure you have installed:
-
-✅ **Core Dependencies**:
-- `@remix-run/dev` - Remix development tools
-- `@remix-run/node` - Remix Node.js adapter
-- `@remix-run/react` - Remix React integration
-- `@remix-run/cloudflare` - Cloudflare deployment support
-
-✅ **Build Dependencies**:
-- `vite` - Build tool
-- `typescript` - Type checking
-- `@types/node` - Node.js type definitions
-
-✅ **Runtime Dependencies**:
-- `react` and `react-dom` - React framework
-- `@webcontainer/api` - WebContainer integration
-- All AI provider SDKs (OpenAI, Anthropic, etc.)
-
-### Common Installation Issues & Solutions
-
-**Issue**: "Remix Vite plugin not found in Vite config"
-**Solution**: 
-```bash
-pnpm add @remix-run/dev @remix-run/node
-```
-
-**Issue**: "Cannot find module '@remix-run/nod'"
-**Solution**: Fix the typo - it should be `@remix-run/node`
-
-**Issue**: "JavaScript heap out of memory"
-**Solution**: Increase Node.js memory limit (see Memory Configuration above)
-
-**Issue**: "Port 5173 already in use"
-**Solution**: 
-```bash
-# Find and kill process using port 5173
-sudo lsof -i :5173
-sudo kill -9 <PID>
-```
-
-### External Access Configuration
-
-To make your development server accessible from external networks:
-
-1. **Configure Vite for external access** (already set in `vite.config.ts`):
-   ```typescript
-   server: {
-     host: '0.0.0.0',  // Allows external connections
-     port: 5173,
-   }
-   ```
-
-2. **Start with external host binding**:
-   ```bash
-   pnpm run dev  # Already configured to bind to 0.0.0.0
-   ```
-
-3. **Configure firewall** (if applicable):
-   ```bash
-   # Ubuntu/Debian
-   sudo ufw allow 5173/tcp
-   
-   # CentOS/RHEL
-   sudo firewall-cmd --permanent --add-port=5173/tcp
-   sudo firewall-cmd --reload
-   ```
-
-4. **Access your application**:
-   - Local: `http://localhost:5173`
-   - External: `http://your-server-ip:5173`
-
-### Docker Setup (Alternative)
-
-1. **Build Docker Image**:
-   ```bash
-   docker build . --target bolt-ai-development
-   ```
-
-2. **Run Container**:
-   ```bash
-   docker compose --profile development up
-   ```
-
-## 🖥️ Ubuntu VPS/Server Installation
-
-### Prerequisites
-- Ubuntu 20.04 LTS or newer
-- Node.js 18+ (LTS recommended)
-- pnpm or npm
-- Git
-- Basic firewall (UFW recommended)
-
-### Step 1: Server Setup
-
-1. **Update System**:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
-
-2. **Install Node.js (using NodeSource)**:
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-   sudo apt-get install -y nodejs
-   ```
-
-3. **Install pnpm**:
-   ```bash
-   npm install -g pnpm
-   ```
-
-4. **Install Git** (if not already installed):
-   ```bash
-   sudo apt install git -y
-   ```
-
-### Step 2: Application Installation
-
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/embire2/bolt.gives.git
-   cd bolt.gives
-   ```
-
-2. **Install Dependencies**:
-   ```bash
-   pnpm install
-   ```
-
-3. **Install Required Remix Dependencies** (if missing):
-   ```bash
-   pnpm add @remix-run/dev @remix-run/node
-   ```
-
-4. **Configure Node.js Memory** (for optimal performance):
-   ```bash
-   echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> ~/.bashrc
-   source ~/.bashrc
-   ```
-
-5. **Build the Application**:
-   ```bash
-   pnpm run build
-   ```
-
-### Step 3: Remote Access Configuration
-
-#### Option A: Direct Port Access (Development/Testing)
-
-1. **Configure Firewall**:
-   ```bash
-   sudo ufw allow OpenSSH
-   sudo ufw allow 5173/tcp
-   sudo ufw enable
-   ```
-
-2. **Start Development Server** (binds to all interfaces):
-   ```bash
-   pnpm run dev -- --host 0.0.0.0 --port 5173
-   ```
-
-3. **Access Application**:
-   - Open browser to `http://your-server-ip:5173`
-
-#### Option B: Production Setup with Reverse Proxy (Recommended)
-
-1. **Install Nginx**:
-   ```bash
-   sudo apt install nginx -y
-   ```
-
-2. **Configure Nginx**:
-   ```bash
-   sudo nano /etc/nginx/sites-available/bolt-gives
-   ```
-
-   Add this configuration:
-   ```nginx
-   server {
-       listen 80;
-       server_name your-domain.com;  # Replace with your domain or IP
-       
-       location / {
-           proxy_pass http://localhost:5173;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           proxy_cache_bypass $http_upgrade;
-           proxy_read_timeout 86400;
-       }
-   }
-   ```
-
-3. **Enable Site**:
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/bolt-gives /etc/nginx/sites-enabled/
-   sudo nginx -t
-   sudo systemctl reload nginx
-   ```
-
-4. **Configure Firewall**:
-   ```bash
-   sudo ufw allow 'Nginx Full'
-   sudo ufw enable
-   ```
-
-5. **Create Systemd Service**:
-   ```bash
-   sudo nano /etc/systemd/system/bolt-gives.service
-   ```
-
-   Add this configuration:
-   ```ini
-   [Unit]
-   Description=Bolt.gives Application
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=ubuntu
-   WorkingDirectory=/home/ubuntu/bolt.gives
-   ExecStart=/usr/bin/pnpm run start
-   Restart=always
-   RestartSec=5
-   Environment=NODE_ENV=production
-   Environment=PORT=5173
-   Environment=HOST=127.0.0.1
-   Environment=NODE_OPTIONS=--max-old-space-size=4096
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-6. **Start and Enable Service**:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable bolt-gives
-   sudo systemctl start bolt-gives
-   ```
-
-### Step 4: SSL Certificate (Optional but Recommended)
-
-1. **Install Certbot**:
-   ```bash
-   sudo apt install certbot python3-certbot-nginx -y
-   ```
-
-2. **Obtain SSL Certificate**:
-   ```bash
-   sudo certbot --nginx -d your-domain.com
-   ```
-
-3. **Auto-renewal**:
-   ```bash
-   sudo systemctl enable certbot.timer
-   ```
-
-### Security Considerations
-
-⚠️ **Important Security Notes**:
-
-- **Change Default Passwords**: Always change any default credentials
-- **Use Strong Authentication**: Enable user authentication in the application
-- **Regular Updates**: Keep the system and application updated
-- **Firewall Rules**: Only open necessary ports
-- **SSL/TLS**: Always use HTTPS in production
-- **Access Control**: Consider IP whitelisting for admin access
-- **Backup Strategy**: Regular backups of configuration and data
-- **Monitor Logs**: Regular monitoring of application and system logs
-
-### Troubleshooting
-
-**Common Issues**:
-
-1. **"Remix Vite plugin not found in Vite config"**:
-   ```bash
-   pnpm add @remix-run/dev @remix-run/node
-   sudo systemctl restart bolt-gives
-   ```
-
-2. **"JavaScript heap out of memory"**:
-   ```bash
-   echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> ~/.bashrc
-   source ~/.bashrc
-   sudo systemctl restart bolt-gives
-   ```
-
-3. **Port Already in Use**:
-   ```bash
-   sudo lsof -i :5173
-   sudo kill -9 PID
-   ```
-
-4. **Permission Errors**:
-   ```bash
-   sudo chown -R $USER:$USER /home/ubuntu/bolt.gives
-   ```
-
-5. **Service Not Starting**:
-   ```bash
-   sudo journalctl -u bolt-gives -f
-   ```
-
-6. **Nginx Configuration Test**:
-   ```bash
-   sudo nginx -t
-   sudo systemctl status nginx
-   ```
-
-7. **External Access Not Working**:
-   ```bash
-   # Check if firewall is blocking
-   sudo ufw status
-   sudo ufw allow 5173/tcp
-   
-   # Check if service is binding to correct interface
-   sudo netstat -tlnp | grep 5173
-   ```
-
-### Monitoring and Maintenance
-
-1. **Check Application Status**:
-   ```bash
-   sudo systemctl status bolt-gives
-   ```
-
-2. **View Logs**:
-   ```bash
-   sudo journalctl -u bolt-gives -f
-   ```
-
-3. **Update Application**:
-   ```bash
-   cd /home/ubuntu/bolt.gives
-   git pull origin main
-   pnpm install
-   pnpm run build
-   sudo systemctl restart bolt-gives
-   ```
-
-## 🔑 API Configuration
-
-### Adding API Keys
-1. Open the application in your browser
-2. Select your preferred AI provider from the dropdown
-3. Click the pencil icon to edit
-4. Enter your API key securely
-
-### Supported Providers
-- **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo models
+The script will:
+- ✅ Detect your server IP and guide domain setup
+- ✅ Install all dependencies automatically
+- ✅ Configure SSL certificates with Let's Encrypt
+- ✅ Set up Nginx reverse proxy
+- ✅ Create systemd services for auto-startup
+- ✅ Configure firewall and security settings
+
+## 🧠 AI Model Support
+
+Bolt.gives supports a comprehensive range of AI providers:
+
+### Cloud Providers
+- **OpenAI**: GPT-4, GPT-4 Turbo, GPT-3.5
 - **Anthropic**: Claude 3 Opus, Sonnet, Haiku
 - **Google**: Gemini Pro, Gemini Pro Vision
-- **Ollama**: Local model support
-- **OpenRouter**: Access to multiple models
-- **LM Studio**: Local model server
-- **Mistral**: Mistral 7B, Mixtral models
-- **xAI**: Grok Beta models
-- **HuggingFace**: Open source models
-- **DeepSeek**: DeepSeek Coder models
-- **Groq**: Fast inference models
+- **Mistral**: Mistral Large, Medium, Small
+- **xAI**: Grok models
 - **Cohere**: Command models
-- **Together**: Collaborative AI models
 - **Perplexity**: Search-augmented models
+
+### Open Source & Local
+- **Ollama**: Local model hosting
+- **LM Studio**: Local model server
+- **HuggingFace**: Open source models
+- **Together**: Collaborative AI platform
+
+### Enterprise
 - **AWS Bedrock**: Enterprise AI models
+- **Azure OpenAI**: Microsoft's OpenAI service
+- **Google Vertex AI**: Google Cloud AI platform
+
+## 🎯 AI Mode Selection
+
+Choose the perfect AI mode for your development needs:
+
+### 🔹 Standard Mode
+Ideal for quick development and straightforward tasks:
+- Single AI conversation with fast responses
+- Direct interaction for immediate feedback
+- Cost-effective for simple coding tasks
+- Perfect for learning and experimentation
+
+### 🔹 Multi-Model Orchestration
+Advanced mode for complex projects:
+- Multiple AI agents working in parallel
+- Intelligent task decomposition and delegation
+- Cross-model validation and consensus
+- Advanced error detection and self-healing
+- Best for large-scale development projects
+
+## 🛠️ Development Commands
+
+### Core Development
+```bash
+pnpm run dev        # Start development server
+pnpm run build      # Build for production
+pnpm run start      # Run production build
+pnpm run preview    # Preview production build
+```
+
+### Quality Assurance
+```bash
+pnpm test           # Run test suite
+pnpm run typecheck  # TypeScript type checking
+pnpm run lint       # Run ESLint
+pnpm run lint:fix   # Fix linting issues
+```
+
+### Deployment
+```bash
+pnpm run deploy     # Deploy to Cloudflare Pages
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+Create a `.env` file in the root directory:
+
+```env
+# Production settings
+NODE_ENV=production
+PORT=3000
+HOST=0.0.0.0
+
+# Node.js optimization
+NODE_OPTIONS="--max-old-space-size=4096"
+
+# Application settings
+VITE_LOG_LEVEL=info
+```
+
+### Memory Optimization
+For optimal performance, configure Node.js memory:
+
+```bash
+# Temporary (current session)
+export NODE_OPTIONS="--max-old-space-size=4096"
+
+# Permanent (add to ~/.bashrc or ~/.zshrc)
+echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+## 🔐 Security Features
+
+- **Secure Authentication**: bcrypt password hashing with salt rounds
+- **Session Management**: Secure session tokens with automatic expiration
+- **User Isolation**: Complete separation of user data and workspaces
+- **HTTPS Support**: SSL/TLS encryption for all communications
+- **Firewall Protection**: Built-in security configurations
+- **Input Validation**: Comprehensive input sanitization
+
+## 📊 Performance Features
+
+- **Memory Optimization**: 4GB Node.js heap allocation
+- **Lazy Loading**: Components loaded on demand
+- **Code Splitting**: Optimized bundle sizes
+- **Caching**: Intelligent caching strategies
+- **Compression**: Gzip compression for assets
+- **CDN Support**: Content delivery network integration
+
+## 🌟 What Makes Bolt.gives Special
+
+### Innovation-First Approach
+- Cutting-edge AI integration with multiple model support
+- Browser-based development environment with no local setup required
+- Real-time collaboration and sharing capabilities
+- Instant deployment to major cloud platforms
+
+### Developer Experience
+- Intuitive interface designed for productivity
+- Comprehensive error handling and debugging tools
+- Extensive documentation and community support
+- Regular updates with new features and improvements
+
+### Enterprise Ready
+- Scalable architecture supporting multiple users
+- Advanced security and compliance features
+- Professional support and customization options
+- Integration with existing development workflows
 
 ## 🤝 Contributing
 
-We welcome contributions from developers of all skill levels! Here's how you can help:
+We welcome contributions from developers worldwide! Here's how to get involved:
 
 ### Ways to Contribute
-- **Feature Development**: Help implement new features from our roadmap
-- **Bug Fixes**: Report and fix issues to improve stability
-- **Documentation**: Improve setup guides and feature documentation
-- **Testing**: Help test new features and provide feedback
-- **UI/UX**: Contribute to design improvements and user experience
+- 🐛 **Bug Reports**: Help us identify and fix issues
+- 💡 **Feature Requests**: Suggest new capabilities
+- 🔧 **Code Contributions**: Submit pull requests
+- 📖 **Documentation**: Improve our guides and tutorials
+- 🧪 **Testing**: Help test new features and provide feedback
 
-### Getting Started
+### Development Process
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`pnpm test`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes with proper tests
+4. Run quality checks: `pnpm run lint && pnpm test`
+5. Commit with clear messages: `git commit -m 'Add amazing feature'`
+6. Push to your branch: `git push origin feature/amazing-feature`
+7. Submit a Pull Request
 
 ### Code Standards
 - **TypeScript**: Strict type checking enabled
-- **ESLint**: Code linting with Prettier formatting
-- **Testing**: Jest/Vitest for unit tests
-- **Documentation**: JSDoc comments for complex functions
-
-## 📊 Available Scripts
-
-- `pnpm run dev` - Start development server
-- `pnpm run build` - Build for production
-- `pnpm run start` - Run production build locally
-- `pnpm run preview` - Preview production build
-- `pnpm test` - Run test suite
-- `pnpm run typecheck` - TypeScript type checking
-- `pnpm run lint` - Run ESLint
-- `pnpm run lint:fix` - Fix linting issues automatically
-- `pnpm run deploy` - Deploy to Cloudflare Pages
-
-## 🌟 Community & Support
-
-### Join Our Community
-- **Discord**: [Join our Discord server](https://discord.gg/bolt-diy) for real-time discussions
-- **GitHub Issues**: Report bugs and request features
-- **GitHub Discussions**: Ask questions and share ideas
-- **Community Forum**: [oTTomator Think Tank](https://thinktank.ottomator.ai)
-
-### Getting Help
-- **Documentation**: Check our comprehensive docs
-- **FAQ**: Common questions and solutions
-- **Video Tutorials**: Step-by-step guides
-- **Community Support**: Ask questions in our Discord
+- **ESLint + Prettier**: Consistent code formatting
+- **Testing**: Comprehensive test coverage required
+- **Documentation**: Clear JSDoc comments for public APIs
 
 ## 📈 Roadmap
 
-We maintain a transparent roadmap showing our development priorities:
+### Current Focus (Q4 2024)
+- ✅ Multi-model AI orchestration
+- ✅ Enhanced user authentication
+- ✅ Production-ready deployment scripts
+- 🔄 Advanced file management system
+- 🔄 Mobile experience improvements
 
-### Q1 2025
-- Enhanced file management and diff system
-- ✅ **Advanced AI model orchestration** (Completed)
-- Improved mobile experience
-- Plugin system foundation
+### Upcoming Features (Q1 2025)
+- 🎯 Voice command integration
+- 🎯 VSCode extension
+- 🎯 Advanced project templates
+- 🎯 Real-time collaboration features
+- 🎯 Plugin system architecture
 
-### Q2 2025
-- Voice command integration
-- Advanced project templates
-- Collaborative features
-- Enterprise security features
+### Future Vision (2025+)
+- 🌟 Enterprise SSO integration
+- 🌟 Advanced analytics dashboard
+- 🌟 Multi-language IDE support
+- 🌟 AI-powered project planning
+- 🌟 Advanced deployment pipelines
 
-### Q3 2025
-- VSCode extension
-- Advanced analytics dashboard
-- Multi-language support
-- Performance optimizations
+## 🏆 Recognition & Credits
 
-View our detailed roadmap: [Roadmap](https://roadmap.sh/r/ottodev-roadmap-2ovzo)
+### Lead Developer
+**Keoma Wright** - Technical Architect and Lead Developer
 
-## 🏆 Acknowledgments
+Keoma Wright is the sole developer responsible for:
+- **Architecture & Development**: Building the next generation of AI-powered development tools
+- **Quality Assurance**: Ensuring reliability and performance  
+- **Documentation**: Creating comprehensive guides and tutorials
+- **Innovation**: Driving cutting-edge features and capabilities
 
-This project is made possible by our amazing community of volunteers:
+### Technology Partners
+- **WebContainer**: Powering our browser-based development environment
+- **AI Providers**: Enabling advanced AI capabilities
+- **Cloud Partners**: Supporting seamless deployment options
 
-- **Core Team**: Dedicated developers maintaining the codebase
-- **Contributors**: Community members who submit features and fixes
-- **Testers**: Users who report bugs and test new features
-- **Documentation Team**: Writers who keep our docs up-to-date
-- **Community Moderators**: Helpers who support users in our forums
+## 📞 Support & Contact
+
+### Get Help
+- **📧 Email Support**: founder@openweb.live
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/embire2/bolt.gives/issues)
+- **💬 Feature Requests**: [GitHub Discussions](https://github.com/embire2/bolt.gives/discussions)
+- **📖 Documentation**: Comprehensive guides available in this repository
+
+### Business Inquiries
+- **Partnership Opportunities**: founder@openweb.live
+- **Enterprise Solutions**: Custom deployment and support options
+- **Technical Consulting**: Integration and customization services
 
 ## 📄 License
 
-**MIT License** - See [LICENSE](LICENSE) for details.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-**Important**: This project uses WebContainers API which requires [commercial licensing](https://webcontainers.io/enterprise) for production use in commercial, for-profit settings. Prototypes and POCs do not require a commercial license.
+### Important WebContainer Licensing Note
+This project uses WebContainer technology which requires [commercial licensing](https://webcontainers.io/enterprise) for production use in commercial, for-profit environments. Development, prototyping, and personal use do not require commercial licensing.
 
-## 🔗 Links
+## 🌟 Join the Revolution
 
-- **Live Demo**: [https://bolt.gives](https://bolt.gives)
-- **Documentation**: [Bolt.gives Docs](https://stackblitz-labs.github.io/bolt.gives/)
-- **Community**: [oTTomator Think Tank](https://thinktank.ottomator.ai)
-- **Roadmap**: [Development Roadmap](https://roadmap.sh/r/ottodev-roadmap-2ovzo)
-- **Support**: [GitHub Issues](https://github.com/embire2/bolt.gives/issues)
+Bolt.gives represents the future of web development - where AI assistance, cloud-native architecture, and modern developer experience converge to create something truly extraordinary.
+
+**Ready to build the future?** Start your journey with Bolt.gives today!
 
 ---
 
-**Bolt.gives - Special Edition**: Where community-driven development meets cutting-edge AI technology. Join us in building the future of AI-powered web development! 🚀
+*Built with ❤️ by the Bolt.gives team - Empowering developers worldwide to create amazing applications with the power of AI.*

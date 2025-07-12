@@ -136,3 +136,168 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 - **JSDOM**: DOM simulation for component testing
 - **Testing Library**: React component testing utilities
 - **Mocking**: WebContainer and provider mocking for isolated tests
+
+## Production Deployment
+
+### Automated Installation Script
+
+Bolt.gives includes a comprehensive installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script is designed to be self-healing and handles all potential installation issues.
+
+#### Prerequisites
+
+- Ubuntu 20.04+ or Debian 11+ server
+- Root access or sudo privileges
+- A domain name pointing to your server's IP address
+- Minimum 5GB available disk space
+- Minimum 2GB RAM (4GB recommended)
+
+#### Quick Installation
+
+1. **Download the installation script:**
+   ```bash
+   wget https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh
+   chmod +x install.sh
+   ```
+
+2. **Run the installation script as root:**
+   ```bash
+   sudo ./install.sh
+   ```
+
+3. **Follow the prompts:**
+   - The script will detect your server's public IP address
+   - Configure your domain's A record to point to the displayed IP
+   - Enter your domain name when prompted
+   - Wait for the automated installation to complete
+
+#### What the Script Does
+
+**System Setup:**
+- Updates all system packages
+- Installs required dependencies (Node.js 20, pnpm, nginx, certbot, etc.)
+- Configures firewall rules (ports 22, 80, 443)
+- Creates dedicated application user (`bolt`)
+
+**Application Deployment:**
+- Clones the latest Bolt.gives repository to `/opt/bolt-gives`
+- Installs all dependencies with pnpm
+- Builds the production application
+- Configures Node.js with 4GB memory limit
+- Sets up environment variables for production
+
+**Web Server & SSL:**
+- Configures Nginx as reverse proxy
+- Obtains and installs Let's Encrypt SSL certificate
+- Sets up automatic SSL certificate renewal
+- Configures security headers and gzip compression
+- Redirects HTTP traffic to HTTPS
+
+**Service Management:**
+- Creates systemd service for automatic startup
+- Configures log rotation
+- Sets up fail2ban for additional security
+- Configures monitoring and health checks
+
+**Security Features:**
+- Firewall configuration with UFW
+- fail2ban protection against brute force attacks
+- Security headers (HSTS, XSS protection, etc.)
+- Non-root application execution
+- Automatic security updates
+
+#### Post-Installation
+
+After successful installation, your Bolt.gives instance will be:
+
+- **Accessible at:** `https://yourdomain.com`
+- **Service status:** `systemctl status bolt-gives`
+- **Logs:** `journalctl -u bolt-gives -f`
+- **Configuration:** `/opt/bolt-gives/.env`
+
+#### Service Management Commands
+
+```bash
+# Check service status
+systemctl status bolt-gives
+
+# Start/stop/restart the service
+systemctl start bolt-gives
+systemctl stop bolt-gives
+systemctl restart bolt-gives
+
+# View real-time logs
+journalctl -u bolt-gives -f
+
+# Check nginx status
+systemctl status nginx
+
+# Test nginx configuration
+nginx -t
+
+# Renew SSL certificate manually
+certbot renew --dry-run
+```
+
+#### Troubleshooting
+
+**Common Issues:**
+
+1. **DNS not propagated:** Wait 15-30 minutes for DNS changes to propagate globally
+2. **SSL certificate failed:** Ensure domain points to correct IP and ports 80/443 are open
+3. **Service won't start:** Check logs with `journalctl -u bolt-gives -n 50`
+4. **Memory issues:** Monitor with `htop` and adjust Node.js memory if needed
+
+**Error Recovery:**
+
+The installation script includes comprehensive error handling and retry mechanisms. If installation fails:
+
+1. Check the installation log: `/var/log/bolt-gives-install.log`
+2. Fix any network/DNS issues
+3. Re-run the installation script - it's designed to resume from where it left off
+
+**Manual Configuration:**
+
+For custom configurations, edit `/opt/bolt-gives/.env` and restart the service:
+
+```bash
+sudo nano /opt/bolt-gives/.env
+sudo systemctl restart bolt-gives
+```
+
+#### Performance Optimization
+
+**Default Configuration:**
+- Node.js memory limit: 4GB (`NODE_OPTIONS="--max-old-space-size=4096"`)
+- Nginx worker processes: Auto-detected based on CPU cores
+- Gzip compression enabled for static assets
+- Proxy timeouts optimized for long-running operations
+
+**Monitoring:**
+- Application logs: `journalctl -u bolt-gives`
+- Nginx logs: `/var/log/nginx/access.log` and `/var/log/nginx/error.log`
+- System resources: `htop` or `top`
+- Disk usage: `df -h`
+
+#### Security Best Practices
+
+The installation script implements security best practices:
+
+- **Firewall:** Only essential ports (22, 80, 443) are open
+- **SSL/TLS:** Modern TLS configuration with HSTS
+- **fail2ban:** Protection against brute force attacks
+- **Non-root execution:** Application runs as dedicated user
+- **Security headers:** XSS protection, content type validation
+- **Auto-updates:** Automatic security updates for system packages
+
+#### Backup and Maintenance
+
+**Automated Backups:** Consider setting up automated backups of:
+- Application directory: `/opt/bolt-gives`
+- SSL certificates: `/etc/letsencrypt`
+- Nginx configuration: `/etc/nginx/sites-available/bolt-gives`
+
+**Regular Maintenance:**
+- SSL certificates auto-renew every 60 days
+- System packages should be updated monthly
+- Monitor disk space and clean logs as needed
+- Review security logs in `/var/log/auth.log`

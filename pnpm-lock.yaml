@@ -153,7 +153,7 @@ importers:
         specifier: ^2.15.2
         version: 2.16.3(@cloudflare/workers-types@4.20250327.0)(typescript@5.8.2)
       '@remix-run/node':
-        specifier: ^2.15.2
+        specifier: ^2.16.3
         version: 2.16.3(typescript@5.8.2)
       '@remix-run/react':
         specifier: ^2.15.2
@@ -358,7 +358,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       '@remix-run/dev':
-        specifier: ^2.15.2
+        specifier: ^2.16.3
         version: 2.16.3(@remix-run/react@2.16.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.8.2))(@remix-run/serve@2.16.3(typescript@5.8.2))(@types/node@22.13.14)(sass-embedded@1.86.0)(typescript@5.8.2)(vite@5.4.15(@types/node@22.13.14)(sass-embedded@1.86.0))(wrangler@4.6.0(@cloudflare/workers-types@4.20250327.0))
       '@remix-run/serve':
         specifier: ^2.15.2
