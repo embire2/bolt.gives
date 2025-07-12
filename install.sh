@@ -399,16 +399,40 @@ configure_firewall() {
 configure_nginx() {
     log "Configuring Nginx..."
     
-    # Backup existing nginx configuration if it exists
-    if [ -f "$NGINX_CONF_PATH" ]; then
-        cp "$NGINX_CONF_PATH" "${NGINX_CONF_PATH}.backup.$(date +%Y%m%d_%H%M%S)"
-        log "Backed up existing nginx configuration"
+    # Clean up any problematic existing configurations
+    if [ -f "$NGINX_ENABLED_PATH" ] || [ -f "$NGINX_CONF_PATH" ]; then
+        log "Found existing nginx configuration, backing up and removing..."
+        
+        # Backup existing configuration
+        if [ -f "$NGINX_CONF_PATH" ]; then
+            cp "$NGINX_CONF_PATH" "${NGINX_CONF_PATH}.backup.$(date +%Y%m%d_%H%M%S)"
+            log "Backed up existing nginx configuration"
+        fi
+        
+        # Remove potentially problematic configurations
+        rm -f "$NGINX_ENABLED_PATH"
+        rm -f "$NGINX_CONF_PATH"
+        
+        # Also check for any other bolt-gives configurations
+        rm -f /etc/nginx/sites-enabled/bolt-gives*
+        rm -f /etc/nginx/sites-available/bolt-gives*
     fi
     
     # Remove default site
     rm -f /etc/nginx/sites-enabled/default
     
-    # Create Nginx configuration
+    # Test nginx before making changes
+    if ! nginx -t 2>/dev/null; then
+        log "Existing nginx configuration has errors, attempting to fix..."
+        
+        # Remove all site configurations to start fresh
+        rm -f /etc/nginx/sites-enabled/*
+        
+        # Restart nginx with clean configuration
+        systemctl restart nginx || true
+    fi
+    
+    # Create Nginx configuration with proper syntax
     cat > "$NGINX_CONF_PATH" << EOF
 server {
     listen 80;
@@ -419,6 +443,11 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Cache control (proper syntax)
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
     
     # Gzip compression
     gzip on;
@@ -542,6 +571,11 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
+    # Cache control (proper syntax)
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    
     # Gzip compression
     gzip on;
     gzip_vary on;
@@ -602,6 +636,11 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Cache control (proper syntax)
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
     
     # Gzip compression
     gzip on;

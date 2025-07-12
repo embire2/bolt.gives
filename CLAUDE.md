@@ -246,6 +246,26 @@ certbot renew --dry-run
 2. **SSL certificate failed:** Ensure domain points to correct IP and ports 80/443 are open
 3. **Service won't start:** Check logs with `journalctl -u bolt-gives -n 50`
 4. **Memory issues:** Monitor with `htop` and adjust Node.js memory if needed
+5. **Nginx configuration errors:** The script now includes self-healing mechanisms that:
+   - Automatically backs up existing configurations
+   - Removes problematic configurations and starts fresh
+   - Tests nginx configuration before applying changes
+   - Falls back to HTTP-only if SSL setup fails
+
+**Nginx-Specific Troubleshooting:**
+
+If you encounter nginx errors like "invalid value" or configuration test failures:
+
+1. **Check nginx error logs:** `tail -f /var/log/nginx/error.log`
+2. **Test current configuration:** `nginx -t`
+3. **View current configuration:** `cat /etc/nginx/sites-enabled/bolt-gives`
+4. **Manual fix:** Remove problematic config and restart:
+   ```bash
+   rm -f /etc/nginx/sites-enabled/bolt-gives*
+   rm -f /etc/nginx/sites-available/bolt-gives*
+   systemctl restart nginx
+   ```
+5. **Re-run installer:** The script will clean up and reconfigure nginx automatically
 
 **Error Recovery:**
 
