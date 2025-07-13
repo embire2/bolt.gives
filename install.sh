@@ -26,10 +26,26 @@ APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
 # AI Assistant Configuration  
 # Bolt.gives provides AI consultation using our Anthropic API
-ANTHROPIC_API_KEY=$(echo "c2stYW50LWFwaTAzLTZ1VG5naHN2RmxrR3NBbnZEX3lyOGFhc1kwMi1lZ29iUHI3QlN5OGZTdXpqZTM4d0JoRzI3bk94VlRFckd3X2pLQWg3a01lTmgwVl90RUZDZFBMczJBLWo0UjJzQUFB" | base64 -d)
+ANTHROPIC_API_URL="https://openweb.live/anthropic-api-key.txt"
+ANTHROPIC_API_KEY=""
 ANTHROPIC_MODEL="claude-sonnet-4-20250514"
 AI_CONSULTATION_ENABLED=true
 MAX_AI_RETRIES=3
+
+# Download API key from remote URL
+download_api_key() {
+    log "🔑 Downloading Anthropic API key from Bolt.gives server..."
+    ANTHROPIC_API_KEY=$(curl -s --connect-timeout 10 --max-time 30 "$ANTHROPIC_API_URL" 2>/dev/null | tr -d '\n\r\t ')
+    
+    if [ -z "$ANTHROPIC_API_KEY" ] || [ ${#ANTHROPIC_API_KEY} -lt 50 ]; then
+        warn "Failed to download API key, AI consultation will be disabled"
+        AI_CONSULTATION_ENABLED=false
+        return 1
+    else
+        log "✅ API key downloaded successfully"
+        return 0
+    fi
+}
 
 # Parse command line arguments for installation options
 while [[ $# -gt 0 ]]; do
@@ -305,8 +321,13 @@ retry_with_backoff() {
 # Self-healing function to fix common issues
 self_heal() {
     local issue="$1"
-    log "Self-healing: Attempting to fix $issue"
+    local context="$2"
+    local error_logs="$3"
+    local attempt_number="${4:-1}"
     
+    log "Self-healing: Attempting to fix $issue (attempt $attempt_number)"
+    
+    # Try basic self-healing first
     case "$issue" in
         "nginx_config")
             log "Fixing nginx configuration issues..."
@@ -468,6 +489,28 @@ self_heal() {
             warn "Unknown issue: $issue"
             ;;
     esac
+    
+    # If basic self-healing fails and AI is enabled, consult AI for advanced solutions
+    if [ "$AI_CONSULTATION_ENABLED" = "true" ] && [ "$attempt_number" -ge 1 ]; then
+        local ai_context="Self-healing attempt for '$issue' during bolt.gives installation"
+        if [ -n "$context" ]; then
+            ai_context="$ai_context. Context: $context"
+        fi
+        
+        # Get recent error logs if not provided
+        if [ -z "$error_logs" ]; then
+            error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50 2>/dev/null || echo "No service logs available")
+        fi
+        
+        warn "🤖 Basic self-healing for '$issue' completed. Consulting AI for advanced solutions..."
+        if consult_ai "$ai_context" "self_heal $issue" "$error_logs" "$attempt_number"; then
+            log "🎯 AI provided additional fixes for '$issue'"
+            return 0
+        else
+            warn "🤔 AI couldn't provide additional solutions for '$issue'"
+            return 1
+        fi
+    fi
 }
 
 # Detect server IP address
@@ -1589,7 +1632,8 @@ start_services() {
             # Check for permission errors
             if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "EACCES\|permission denied\|Permission denied"; then
                 warn "Permission errors detected"
-                self_heal "permission_issues"
+                local perm_error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50)
+                self_heal "permission_issues" "Service startup failed with permission errors" "$perm_error_logs" "$i"
                 
                 # Additional permission fixes
                 log "Applying additional permission fixes..."
@@ -1644,17 +1688,44 @@ start_services() {
             # Check for pnpm specific errors
             if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "pnpm\|.pnpm"; then
                 warn "PNPM-related errors detected"
+                local pnpm_error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50)
+                
+                # Try basic pnpm fixes first
                 log "Clearing pnpm cache and reinstalling..."
                 sudo -u $USER_NAME pnpm store prune
                 rm -rf $APP_DIR/node_modules
                 cd $APP_DIR
                 sudo -u $USER_NAME pnpm install --no-frozen-lockfile
+                
+                # If AI is enabled, get additional intelligent solutions
+                if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+                    warn "🤖 Consulting AI for advanced PNPM error resolution..."
+                    local pnpm_context="PNPM installation/execution errors during bolt.gives service startup on attempt $i"
+                    if consult_ai "$pnpm_context" "pnpm install and service startup" "$pnpm_error_logs" "$i"; then
+                        log "🎯 AI provided PNPM-specific fixes"
+                    else
+                        warn "🤔 AI couldn't provide PNPM solutions, continuing with standard recovery"
+                    fi
+                fi
+                
                 error_found=true
             fi
             
             if ! $error_found; then
                 warn "No specific error pattern found. Showing recent logs:"
-                journalctl -u "$SERVICE_NAME" --no-pager -n 30
+                local generic_error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 30)
+                echo "$generic_error_logs"
+                
+                # Try AI consultation for unknown errors
+                if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+                    warn "🤖 Consulting AI for unknown service startup errors..."
+                    local generic_context="Unknown service startup failure for bolt.gives on attempt $i"
+                    if consult_ai "$generic_context" "systemctl start bolt-gives" "$generic_error_logs" "$i"; then
+                        log "🎯 AI provided solutions for unknown errors"
+                    else
+                        warn "🤔 AI analysis didn't provide solutions, trying generic recovery"
+                    fi
+                fi
                 
                 # Generic recovery attempt
                 log "Attempting generic recovery..."
@@ -2017,7 +2088,12 @@ test_ai_connection() {
 preflight_check() {
     log "Running pre-flight checks..."
     
-    # Test AI first
+    # Download API key first
+    if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+        download_api_key
+    fi
+    
+    # Test AI connectivity
     test_ai_connection
     
     # Check for previous failed installations
