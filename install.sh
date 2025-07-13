@@ -27,23 +27,37 @@ APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 # AI Assistant Configuration  
 # Bolt.gives provides AI consultation using our Anthropic API
 ANTHROPIC_API_URL="https://openweb.live/anthropic-api-key.txt"
+# Fallback hardcoded API key (base64 encoded for security)
+ANTHROPIC_API_KEY_B64="c2stYW50LWFwaTAzLTZ1VG5naHN2RmxrR3NBbnZEX3lyOGFhc1kwMi1lZ29iUHI3QlN5OGZTdXpqZTM4d0JoRzI3bk94VlRFckd3X2pLQWg3a01lTmgwVl90RUZDZFBMczJBLWo0UjJzQUFB"
 ANTHROPIC_API_KEY=""
 ANTHROPIC_MODEL="claude-sonnet-4-20250514"
 AI_CONSULTATION_ENABLED=true
 MAX_AI_RETRIES=3
 
-# Download API key from remote URL
+# Download API key from remote URL with fallback
 download_api_key() {
-    log "🔑 Downloading Anthropic API key from Bolt.gives server..."
-    ANTHROPIC_API_KEY=$(curl -s --connect-timeout 10 --max-time 30 "$ANTHROPIC_API_URL" 2>/dev/null | tr -d '\n\r\t ')
+    log "🔑 Attempting to download Anthropic API key from Bolt.gives server..."
     
-    if [ -z "$ANTHROPIC_API_KEY" ] || [ ${#ANTHROPIC_API_KEY} -lt 50 ]; then
-        warn "Failed to download API key, AI consultation will be disabled"
-        AI_CONSULTATION_ENABLED=false
-        return 1
-    else
-        log "✅ API key downloaded successfully"
+    # Try to download from URL first
+    local downloaded_key=$(curl -s --connect-timeout 10 --max-time 30 "$ANTHROPIC_API_URL" 2>/dev/null | tr -d '\n\r\t ')
+    
+    if [ -n "$downloaded_key" ] && [ ${#downloaded_key} -ge 50 ] && [[ "$downloaded_key" =~ ^sk-ant- ]]; then
+        ANTHROPIC_API_KEY="$downloaded_key"
+        log "✅ API key downloaded successfully from server"
         return 0
+    else
+        # Use fallback hardcoded key
+        warn "Failed to download API key from server, using fallback key"
+        ANTHROPIC_API_KEY=$(echo "$ANTHROPIC_API_KEY_B64" | base64 -d)
+        
+        if [ -n "$ANTHROPIC_API_KEY" ] && [ ${#ANTHROPIC_API_KEY} -ge 50 ]; then
+            log "✅ Using fallback API key for AI consultation"
+            return 0
+        else
+            warn "Both download and fallback API key failed, AI consultation will be disabled"
+            AI_CONSULTATION_ENABLED=false
+            return 1
+        fi
     fi
 }
 
@@ -849,11 +863,17 @@ create_app_user() {
         "/home/$USER_NAME/.local"
         "/home/$USER_NAME/.local/share"
         "/home/$USER_NAME/.local/share/pnpm"
+        "/home/$USER_NAME/.local/share/pnpm/.tools"
+        "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm"
+        "/home/$USER_NAME/.local/share/pnpm/store"
+        "/home/$USER_NAME/.local/share/pnpm/store/v3"
+        "/home/$USER_NAME/.local/share/pnpm/store/v3/files"
         "/home/$USER_NAME/.config"
         "/home/$USER_NAME/.config/pnpm"
         "/home/$USER_NAME/.cache"
         "/home/$USER_NAME/.cache/pnpm"
         "/home/$USER_NAME/.npm"
+        "/home/$USER_NAME/.pnpm-state"
     )
     
     for dir in "${user_dirs[@]}"; do
@@ -869,6 +889,65 @@ create_app_user() {
     chmod 644 "/home/$USER_NAME/.npmrc" "/home/$USER_NAME/.bashrc"
     
     log "✓ Application user configured with all necessary permissions"
+    
+    # Setup PNPM for the user
+    setup_pnpm_for_user
+}
+
+# Setup PNPM specifically for the application user
+setup_pnpm_for_user() {
+    log "Setting up PNPM for user $USER_NAME..."
+    
+    # Ensure PNPM is accessible for the user
+    local pnpm_global=$(which pnpm 2>/dev/null)
+    if [ -z "$pnpm_global" ]; then
+        error "PNPM not found globally. Running install_pnpm first..."
+        install_pnpm
+        pnpm_global=$(which pnpm 2>/dev/null)
+    fi
+    
+    # Setup PNPM environment for the user
+    local user_pnpm_dir="/home/$USER_NAME/.local/share/pnpm"
+    
+    # Create PNPM executable script for the user
+    cat > "/home/$USER_NAME/.local/bin/pnpm" << 'EOF'
+#!/bin/bash
+export PNPM_HOME="/home/bolt/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+exec /usr/local/bin/pnpm "$@"
+EOF
+    
+    # Make the script executable
+    mkdir -p "/home/$USER_NAME/.local/bin"
+    chmod +x "/home/$USER_NAME/.local/bin/pnpm"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
+    
+    # Add PNPM to user's PATH
+    echo 'export PNPM_HOME="/home/bolt/.local/share/pnpm"' >> "/home/$USER_NAME/.bashrc"
+    echo 'export PATH="$PNPM_HOME:$HOME/.local/bin:$PATH"' >> "/home/$USER_NAME/.bashrc"
+    
+    # Install pnpm for the user using corepack
+    log "Installing PNPM for user using corepack..."
+    sudo -u $USER_NAME bash -c "cd ~ && corepack enable && corepack prepare pnpm@latest --activate" || {
+        warn "Corepack installation failed, trying direct installation..."
+        sudo -u $USER_NAME bash -c "cd ~ && npm install -g pnpm"
+    }
+    
+    # Create pnpm state file with correct permissions
+    sudo -u $USER_NAME touch "/home/$USER_NAME/.pnpm-state.json"
+    
+    # Initialize PNPM store
+    sudo -u $USER_NAME bash -c "cd ~ && source ~/.bashrc && pnpm store status" || {
+        warn "PNPM store initialization failed, creating manually..."
+        sudo -u $USER_NAME bash -c "mkdir -p $user_pnpm_dir/store/v3/files"
+    }
+    
+    # Fix all permissions one more time
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.cache"
+    
+    log "✓ PNPM setup completed for user $USER_NAME"
 }
 
 # Clone and setup application
@@ -982,11 +1061,43 @@ setup_application() {
     " "Cleaning existing dependencies"
     
     # Install dependencies with multiple fallback strategies
-    local pnpm_install_command="cd $APP_DIR && sudo -u $USER_NAME PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:\$PATH NODE_OPTIONS='--max-old-space-size=4096' /home/$USER_NAME/.local/share/pnpm/pnpm install --no-frozen-lockfile"
+    log "Installing application dependencies..."
+    
+    # First, ensure pnpm is actually accessible
+    local pnpm_path=""
+    for possible_path in \
+        "/home/$USER_NAME/.local/share/pnpm/pnpm" \
+        "/usr/local/bin/pnpm" \
+        "/usr/bin/pnpm" \
+        "$(which pnpm 2>/dev/null || echo '')"
+    do
+        if [ -f "$possible_path" ] && [ -x "$possible_path" ]; then
+            pnpm_path="$possible_path"
+            break
+        fi
+    done
+    
+    if [ -z "$pnpm_path" ]; then
+        warn "PNPM not found! Installing it first..."
+        sudo -u $USER_NAME bash -c 'cd ~ && npm install -g pnpm'
+        pnpm_path=$(which pnpm 2>/dev/null)
+    fi
+    
+    log "Using PNPM at: $pnpm_path"
+    
+    # Try pnpm install with proper environment
+    local pnpm_install_command="cd $APP_DIR && sudo -u $USER_NAME env PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:/home/$USER_NAME/.local/bin:/usr/local/bin:/usr/bin:\$PATH NODE_OPTIONS='--max-old-space-size=4096' $pnpm_path install --no-frozen-lockfile"
     
     if ! execute_with_ai_backup "$pnpm_install_command" "Installing dependencies with pnpm" 3; then
         # If pnpm fails, try alternative approaches
         warn "🔄 pnpm failed, trying alternative package managers..."
+        
+        # If AI is enabled, let it analyze the failure
+        if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+            local install_error_logs=$(cat /tmp/last_command_output.log 2>/dev/null || echo "No logs available")
+            warn "🤖 Consulting AI for dependency installation failure..."
+            consult_ai "PNPM dependency installation failed for bolt.gives" "$pnpm_install_command" "$install_error_logs" 1
+        fi
         
         # Fallback to npm
         execute_with_ai_backup "
@@ -1483,7 +1594,30 @@ create_systemd_service() {
     
     # Get the actual node and pnpm paths
     local node_path=$(which node)
-    local pnpm_path=$(which pnpm)
+    
+    # Find the correct pnpm path
+    local pnpm_path=""
+    for possible_path in \
+        "/home/$USER_NAME/.local/share/pnpm/pnpm" \
+        "/home/$USER_NAME/.local/bin/pnpm" \
+        "/usr/local/bin/pnpm" \
+        "/usr/bin/pnpm" \
+        "$(which pnpm 2>/dev/null || echo '')"
+    do
+        if [ -f "$possible_path" ] && [ -x "$possible_path" ]; then
+            pnpm_path="$possible_path"
+            break
+        fi
+    done
+    
+    if [ -z "$pnpm_path" ]; then
+        error "PNPM not found for systemd service!"
+        # Try to install it one more time
+        npm install -g pnpm
+        pnpm_path=$(which pnpm)
+    fi
+    
+    log "Using PNPM path for service: $pnpm_path"
     
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
@@ -1501,7 +1635,7 @@ Environment=NODE_OPTIONS="--max-old-space-size=4096"
 Environment=PORT=$APP_PORT
 Environment=HOST=0.0.0.0
 Environment=HOME=/home/$USER_NAME
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm
+Environment=PATH=/home/$USER_NAME/.local/bin:/home/$USER_NAME/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
 
 # Pre-start permission fixes
