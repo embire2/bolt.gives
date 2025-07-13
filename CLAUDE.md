@@ -141,9 +141,15 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 
 ### Automated Installation Script
 
-Bolt.gives includes a comprehensive installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script features advanced self-healing capabilities and intelligent error recovery mechanisms.
+Bolt.gives includes a revolutionary AI-powered installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script features **Claude Sonnet AI consultation** with hardcoded API access and advanced self-healing capabilities.
 
 #### Self-Healing Features
+
+**AI-Powered Error Resolution:**
+- **Claude Sonnet Integration**: Real-time AI consultation for intelligent error analysis and resolution
+- **Context-Aware Solutions**: AI analyzes system state, error logs, and installation context to provide targeted fixes
+- **Automatic Fix Application**: AI-generated solutions are automatically tested and applied
+- **No API Key Required**: Uses hardcoded Bolt.gives API credentials for seamless user experience
 
 **Automatic Issue Detection & Resolution:**
 - **Permission Management**: Comprehensive permission fixes for all pnpm and user directories
@@ -198,10 +204,12 @@ Bolt.gives includes a comprehensive installation script (`install.sh`) that sets
    chmod +x install.sh
    ```
 
-2. **Run the installation script as root:**
+2. **Run the AI-powered installation script as root:**
    ```bash
    sudo ./install.sh
    ```
+   
+   The script automatically enables AI consultation using Claude Sonnet 4 for intelligent error resolution. No API key setup required!
 
 3. **Follow the prompts:**
    - The script will detect your server's public IP address
@@ -270,6 +278,27 @@ After successful installation, your Bolt.gives instance will be:
 - **Service status:** `systemctl status bolt-gives`
 - **Logs:** `journalctl -u bolt-gives -f`
 - **Configuration:** `/opt/bolt-gives/.env`
+
+#### AI Consultation Options
+
+The installation script includes Claude Sonnet AI consultation by default:
+
+```bash
+# Standard installation with AI assistance (default)
+sudo ./install.sh
+
+# Disable AI consultation if preferred
+sudo ./install.sh --no-ai
+
+# View AI consultation options
+sudo ./install.sh --help
+```
+
+The AI system automatically:
+- Analyzes installation errors in real-time
+- Provides context-aware solutions
+- Applies fixes automatically when safe
+- Falls back to standard retry mechanisms if AI solutions fail
 
 #### Service Management Commands
 
