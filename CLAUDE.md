@@ -141,7 +141,34 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 
 ### Automated Installation Script
 
-Bolt.gives includes a comprehensive installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script is designed to be self-healing and handles all potential installation issues.
+Bolt.gives includes a comprehensive installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script features advanced self-healing capabilities and intelligent error recovery mechanisms.
+
+#### Self-Healing Features
+
+**Automatic Issue Detection & Resolution:**
+- **Nginx Configuration Validation**: Automatically detects and fixes common nginx syntax errors
+- **Memory Management**: Dynamically adjusts Node.js memory allocation based on available system resources
+- **Port Conflict Resolution**: Detects and resolves port 3000 conflicts automatically
+- **DNS Resolution Fixes**: Automatically configures DNS servers if resolution issues are detected
+- **Package Lock Recovery**: Cleans up APT locks and fixes broken packages
+- **Disk Space Optimization**: Automatically cleans caches and old logs when disk space is low
+
+**Intelligent Retry Mechanisms:**
+- **Exponential Backoff**: Failed operations retry with increasing delays
+- **Context-Aware Retries**: Different retry strategies based on failure type
+- **Alternative Methods**: Falls back to alternative installation methods when primary fails
+- **Network Resilience**: Switches to mirror registries on network failures
+
+**Installation State Management:**
+- **Resume Capability**: Installations can be resumed from the last successful step
+- **Failed Installation Cleanup**: Automatically detects and cleans up previous failed installations
+- **Progress Tracking**: Saves installation state for recovery purposes
+
+**Build & Deployment Intelligence:**
+- **Memory-Aware Building**: Reduces Node.js memory allocation if builds fail due to memory
+- **Automatic Swap Creation**: Creates swap file on low-memory systems
+- **Dependency Resolution**: Tries multiple NPM registries and cleans caches on failures
+- **Permission Auto-Fixing**: Automatically corrects file ownership issues
 
 #### Prerequisites
 
@@ -248,9 +275,11 @@ certbot renew --dry-run
 4. **Memory issues:** Monitor with `htop` and adjust Node.js memory if needed
 5. **Nginx configuration errors:** The script now includes self-healing mechanisms that:
    - Automatically backs up existing configurations
-   - Removes problematic configurations and starts fresh
+   - Validates and fixes nginx configuration syntax errors
+   - Converts problematic quote styles in headers
    - Tests nginx configuration before applying changes
    - Falls back to HTTP-only if SSL setup fails
+   - Completely resets nginx to clean state if needed
 
 **Nginx-Specific Troubleshooting:**
 
@@ -274,6 +303,40 @@ The installation script includes comprehensive error handling and retry mechanis
 1. Check the installation log: `/var/log/bolt-gives-install.log`
 2. Fix any network/DNS issues
 3. Re-run the installation script - it's designed to resume from where it left off
+
+**Using Self-Healing Features:**
+
+The installer automatically detects and fixes common issues:
+
+```bash
+# The script will automatically:
+# - Resume from the last successful step
+# - Clean up failed installations
+# - Fix configuration errors
+# - Retry with exponential backoff
+# - Switch to alternative methods
+
+# To force a complete reinstall:
+rm -f /var/log/bolt-gives-install.state
+rm -f /var/log/bolt-gives-install.failed
+sudo ./install.sh
+
+# To manually trigger self-healing for specific issues:
+# (These are normally called automatically by the script)
+self_heal "nginx_config"      # Fix nginx issues
+self_heal "port_conflict"     # Resolve port conflicts
+self_heal "package_locks"     # Fix APT locks
+self_heal "dns_resolution"    # Fix DNS issues
+self_heal "memory_issues"     # Optimize memory
+```
+
+**Installation State Recovery:**
+
+The script tracks installation progress and can resume from failures:
+
+- State file: `/var/log/bolt-gives-install.state`
+- Failed marker: `/var/log/bolt-gives-install.failed`
+- Installation phases: ip_detected → domain_configured → system_checked → dependencies_installed → nodejs_installed → pnpm_installed → app_setup → firewall_configured → nginx_configured → ssl_configured → service_created → monitoring_setup → services_started → verified
 
 **Manual Configuration:**
 

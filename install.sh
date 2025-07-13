@@ -72,6 +72,113 @@ retry_command() {
     done
 }
 
+# Advanced retry with exponential backoff and custom error handling
+retry_with_backoff() {
+    local max_attempts=5
+    local delay=2
+    local command="$1"
+    local description="$2"
+    local error_handler="$3"
+    
+    for ((i=1; i<=max_attempts; i++)); do
+        log "Attempting: $description (Try $i/$max_attempts)"
+        if eval "$command"; then
+            log "Success: $description"
+            return 0
+        else
+            local exit_code=$?
+            if [ $i -eq $max_attempts ]; then
+                error "Failed: $description after $max_attempts attempts (Exit code: $exit_code)"
+                if [ -n "$error_handler" ]; then
+                    log "Running error handler for: $description"
+                    eval "$error_handler"
+                fi
+                return 1
+            else
+                warn "Failed: $description (Exit code: $exit_code). Retrying in ${delay}s..."
+                sleep $delay
+                delay=$((delay * 2))  # Exponential backoff
+            fi
+        fi
+    done
+}
+
+# Self-healing function to fix common issues
+self_heal() {
+    local issue="$1"
+    log "Self-healing: Attempting to fix $issue"
+    
+    case "$issue" in
+        "nginx_config")
+            log "Fixing nginx configuration issues..."
+            # Remove all potentially problematic configurations
+            rm -f /etc/nginx/sites-enabled/bolt-gives*
+            rm -f /etc/nginx/sites-available/bolt-gives*
+            rm -f /etc/nginx/sites-enabled/default
+            
+            # Reset nginx to clean state
+            nginx -s stop 2>/dev/null || true
+            sleep 2
+            systemctl start nginx || true
+            ;;
+            
+        "port_conflict")
+            log "Checking for port conflicts..."
+            local pids=$(lsof -ti :3000 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+                warn "Found processes using port 3000: $pids"
+                for pid in $pids; do
+                    local process_name=$(ps -p $pid -o comm= 2>/dev/null || echo "unknown")
+                    warn "Killing process $pid ($process_name) using port 3000"
+                    kill -9 $pid 2>/dev/null || true
+                done
+                sleep 2
+            fi
+            ;;
+            
+        "package_locks")
+            log "Fixing package manager locks..."
+            rm -f /var/lib/dpkg/lock-frontend
+            rm -f /var/lib/dpkg/lock
+            rm -f /var/cache/apt/archives/lock
+            rm -f /var/lib/apt/lists/lock
+            dpkg --configure -a
+            ;;
+            
+        "dns_resolution")
+            log "Fixing DNS resolution..."
+            echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+            echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+            systemctl restart systemd-resolved 2>/dev/null || true
+            ;;
+            
+        "memory_issues")
+            log "Optimizing memory usage..."
+            # Clear package cache
+            apt-get clean
+            apt-get autoremove -y
+            
+            # Clear system caches
+            sync && echo 3 > /proc/sys/vm/drop_caches
+            
+            # Increase swap if needed
+            local swap_size=$(free -m | awk '/^Swap:/ {print $2}')
+            if [ "$swap_size" -lt 2048 ]; then
+                log "Creating 2GB swap file..."
+                fallocate -l 2G /swapfile
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+            ;;
+            
+        *)
+            warn "Unknown issue: $issue"
+            ;;
+    esac
+}
+
 # Detect server IP address
 detect_server_ip() {
     log "Detecting server IP address..."
@@ -200,8 +307,35 @@ check_system() {
     local required_space=$((5 * 1024 * 1024)) # 5GB in KB
     
     if [ "$available_space" -lt "$required_space" ]; then
-        error "Insufficient disk space. Required: 5GB, Available: $(($available_space / 1024 / 1024))GB"
-        exit 1
+        warn "Insufficient disk space. Required: 5GB, Available: $(($available_space / 1024 / 1024))GB"
+        
+        # Try to free up space
+        log "Attempting to free up disk space..."
+        apt-get clean
+        apt-get autoremove -y
+        rm -rf /var/log/*.gz
+        rm -rf /var/log/*.[0-9]
+        
+        # Recheck
+        available_space=$(df / | awk 'NR==2{print $4}')
+        if [ "$available_space" -lt "$required_space" ]; then
+            error "Still insufficient disk space after cleanup"
+            exit 1
+        else
+            log "✓ Freed up enough disk space"
+        fi
+    fi
+    
+    # Check memory
+    local total_mem=$(free -m | awk '/^Mem:/ {print $2}')
+    if [ "$total_mem" -lt 1024 ]; then
+        warn "Low memory detected: ${total_mem}MB. Minimum recommended: 2GB"
+        warn "Installation will continue but may be slow"
+        
+        # Enable swap if not present
+        if [ $(free -m | awk '/^Swap:/ {print $2}') -eq 0 ]; then
+            self_heal "memory_issues"
+        fi
     fi
     
     log "✓ System compatibility check passed"
@@ -211,14 +345,19 @@ check_system() {
 update_system() {
     log "Updating system packages..."
     
+    # Self-heal package locks if needed
+    if ! dpkg --configure -a 2>/dev/null; then
+        self_heal "package_locks"
+    fi
+    
     # Fix any broken packages first
-    retry_command "dpkg --configure -a" "Configuring packages"
-    retry_command "apt-get update --fix-missing" "Updating package lists"
-    retry_command "apt-get install -f -y" "Fixing broken packages"
+    retry_with_backoff "dpkg --configure -a" "Configuring packages" "self_heal package_locks"
+    retry_with_backoff "apt-get update --fix-missing" "Updating package lists" "self_heal dns_resolution"
+    retry_with_backoff "apt-get install -f -y" "Fixing broken packages"
     
     # Update packages
-    retry_command "apt-get update" "Updating package lists"
-    retry_command "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y" "Upgrading packages"
+    retry_with_backoff "apt-get update" "Updating package lists"
+    retry_with_backoff "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y" "Upgrading packages"
     
     log "✓ System updated successfully"
 }
@@ -263,9 +402,23 @@ install_nodejs() {
     # Remove any existing Node.js installations
     apt-get remove -y nodejs npm 2>/dev/null || true
     
-    # Install NodeSource repository
-    retry_command "curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -" "Adding NodeSource repository"
-    retry_command "apt-get install -y nodejs" "Installing Node.js"
+    # Clear any old NodeSource repositories
+    rm -f /etc/apt/sources.list.d/nodesource.list*
+    
+    # Install NodeSource repository with retry and error handling
+    local nodejs_setup_url="https://deb.nodesource.com/setup_${NODE_VERSION}.x"
+    
+    retry_with_backoff "curl -fsSL $nodejs_setup_url | bash -" "Adding NodeSource repository" "self_heal dns_resolution"
+    
+    # Install Node.js with memory optimization
+    if ! retry_with_backoff "apt-get install -y nodejs" "Installing Node.js"; then
+        warn "Standard installation failed, trying alternative method..."
+        
+        # Alternative installation method
+        curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}.0.0/node-v${NODE_VERSION}.0.0-linux-x64.tar.xz -o /tmp/node.tar.xz
+        tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+        rm -f /tmp/node.tar.xz
+    fi
     
     # Verify installation
     local node_version=$(node --version 2>/dev/null || echo "")
@@ -279,11 +432,19 @@ install_nodejs() {
     log "✓ Node.js installed: $node_version"
     log "✓ npm installed: $npm_version"
     
-    # Configure Node.js memory limit
-    export NODE_OPTIONS="--max-old-space-size=4096"
-    echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> /etc/environment
+    # Configure Node.js memory limit based on available memory
+    local total_mem=$(free -m | awk '/^Mem:/ {print $2}')
+    local node_mem=4096
     
-    log "✓ Node.js memory limit set to 4GB"
+    if [ "$total_mem" -lt 4096 ]; then
+        node_mem=$((total_mem * 3 / 4))  # Use 75% of available memory
+        warn "Limited memory detected. Setting Node.js memory to ${node_mem}MB"
+    fi
+    
+    export NODE_OPTIONS="--max-old-space-size=$node_mem"
+    echo "export NODE_OPTIONS=\"--max-old-space-size=$node_mem\"" >> /etc/environment
+    
+    log "✓ Node.js memory limit set to ${node_mem}MB"
 }
 
 # Install pnpm
@@ -338,13 +499,120 @@ setup_application() {
     
     cd "$APP_DIR"
     
-    # Install dependencies
+    # Install dependencies with self-healing
     log "Installing application dependencies..."
-    sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=4096" pnpm install
     
-    # Build application
+    # Clear any cache issues first
+    sudo -u "$USER_NAME" pnpm store prune 2>/dev/null || true
+    
+    # Attempt installation with retry
+    local install_success=false
+    for attempt in {1..3}; do
+        log "Dependency installation attempt $attempt/3..."
+        
+        if sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=4096" pnpm install --no-frozen-lockfile 2>&1 | tee /tmp/pnpm-install.log; then
+            install_success=true
+            log "✓ Dependencies installed successfully"
+            rm -f /tmp/pnpm-install.log
+            break
+        else
+            # Analyze installation failure
+            if grep -q "ECONNREFUSED\|ETIMEDOUT\|ENOTFOUND" /tmp/pnpm-install.log; then
+                warn "Network issues detected"
+                self_heal "dns_resolution"
+                
+                # Try with different registry
+                log "Switching to alternative npm registry..."
+                sudo -u "$USER_NAME" pnpm config set registry https://registry.npmmirror.com
+            elif grep -q "ENOSPC\|EACCES" /tmp/pnpm-install.log; then
+                warn "Disk space or permission issues"
+                
+                # Fix permissions
+                chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
+                
+                # Clean up
+                rm -rf node_modules
+                rm -rf ~/.pnpm-store
+                self_heal "memory_issues"
+            fi
+            
+            if [ $attempt -lt 3 ]; then
+                sleep 10
+            fi
+        fi
+    done
+    
+    if ! $install_success; then
+        error "Failed to install dependencies after multiple attempts"
+        [ -f /tmp/pnpm-install.log ] && tail -50 /tmp/pnpm-install.log
+        return 1
+    fi
+    
+    # Build application with self-healing
     log "Building application..."
-    sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+    
+    # Check available memory before building
+    local available_mem=$(free -m | awk '/^Available:/ {print $2}')
+    if [ -z "$available_mem" ]; then
+        available_mem=$(free -m | awk '/^Mem:/ {print $7}')
+    fi
+    
+    if [ "$available_mem" -lt 1024 ]; then
+        warn "Low available memory: ${available_mem}MB. Optimizing..."
+        self_heal "memory_issues"
+    fi
+    
+    # Attempt build with retry and memory optimization
+    local build_success=false
+    local node_mem=4096
+    
+    for attempt in {1..3}; do
+        log "Build attempt $attempt/3 with ${node_mem}MB memory..."
+        
+        if sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm run build 2>&1 | tee /tmp/build.log; then
+            build_success=true
+            log "✓ Build completed successfully"
+            rm -f /tmp/build.log
+            break
+        else
+            # Analyze build failure
+            if grep -q "JavaScript heap out of memory" /tmp/build.log; then
+                warn "Build failed due to memory issues"
+                
+                # Reduce memory allocation and try again
+                node_mem=$((node_mem * 3 / 4))
+                warn "Reducing Node.js memory to ${node_mem}MB"
+                
+                # Free up more memory
+                self_heal "memory_issues"
+            elif grep -q "ENOSPC" /tmp/build.log; then
+                warn "Build failed due to disk space"
+                
+                # Clean up disk space
+                log "Cleaning up disk space..."
+                rm -rf node_modules/.cache
+                rm -rf .parcel-cache
+                rm -rf build
+                pnpm store prune
+                
+                # System cleanup
+                apt-get clean
+                apt-get autoremove -y
+            else
+                warn "Build failed with unknown error"
+            fi
+            
+            if [ $attempt -lt 3 ]; then
+                sleep 5
+            fi
+        fi
+    done
+    
+    if ! $build_success; then
+        error "Build failed after multiple attempts"
+        [ -f /tmp/build.log ] && cat /tmp/build.log
+        return 1
+    fi
     
     # Create environment file
     if [ ! -f ".env" ]; then
@@ -395,9 +663,68 @@ configure_firewall() {
     log "✓ Firewall configured"
 }
 
+# Validate nginx configuration syntax
+validate_nginx_config() {
+    local config_file="$1"
+    local temp_file="/tmp/nginx_test_$(date +%s).conf"
+    
+    # Create a temporary nginx config for testing
+    cat > "$temp_file" << 'EOF'
+events {
+    worker_connections 1024;
+}
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+EOF
+    
+    # Include our config in the test
+    echo "    include $config_file;" >> "$temp_file"
+    echo "}" >> "$temp_file"
+    
+    # Test the configuration
+    if nginx -t -c "$temp_file" 2>/dev/null; then
+        rm -f "$temp_file"
+        return 0
+    else
+        rm -f "$temp_file"
+        return 1
+    fi
+}
+
+# Fix common nginx configuration issues
+fix_nginx_config() {
+    local config_file="$1"
+    local temp_file="${config_file}.tmp"
+    
+    log "Attempting to fix nginx configuration..."
+    
+    # Common fixes
+    sed -e 's/add_header Cache-Control "\([^"]*\)"/add_header Cache-Control '\''\1'\''/' \
+        -e 's/listen 80 default_server/listen 80/' \
+        -e 's/listen \[::\]:80 default_server/listen [::]:80/' \
+        -e 's/server_name _;/server_name localhost;/' \
+        "$config_file" > "$temp_file"
+    
+    # Test the fixed configuration
+    if validate_nginx_config "$temp_file"; then
+        mv "$temp_file" "$config_file"
+        log "✓ Fixed nginx configuration"
+        return 0
+    else
+        rm -f "$temp_file"
+        return 1
+    fi
+}
+
 # Configure Nginx
 configure_nginx() {
     log "Configuring Nginx..."
+    
+    # Self-heal nginx if needed
+    if ! systemctl is-active --quiet nginx; then
+        self_heal "nginx_config"
+    fi
     
     # Clean up any problematic existing configurations
     if [ -f "$NGINX_ENABLED_PATH" ] || [ -f "$NGINX_CONF_PATH" ]; then
@@ -424,12 +751,7 @@ configure_nginx() {
     # Test nginx before making changes
     if ! nginx -t 2>/dev/null; then
         log "Existing nginx configuration has errors, attempting to fix..."
-        
-        # Remove all site configurations to start fresh
-        rm -f /etc/nginx/sites-enabled/*
-        
-        # Restart nginx with clean configuration
-        systemctl restart nginx || true
+        self_heal "nginx_config"
     fi
     
     # Create Nginx configuration with proper syntax
@@ -444,10 +766,10 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
-    # Cache control (proper syntax)
-    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
+    # Cache control
+    add_header Cache-Control 'no-cache, no-store, must-revalidate' always;
+    add_header Pragma 'no-cache' always;
+    add_header Expires '0' always;
     
     # Gzip compression
     gzip on;
@@ -488,27 +810,42 @@ EOF
     
     # Test Nginx configuration
     if ! nginx -t; then
-        error "Nginx configuration test failed"
+        warn "Nginx configuration test failed, attempting to fix..."
         
-        # Restore backup if it exists
-        local backup_file=$(ls "${NGINX_CONF_PATH}.backup."* 2>/dev/null | head -1)
-        if [ -n "$backup_file" ]; then
-            log "Restoring backup configuration..."
-            cp "$backup_file" "$NGINX_CONF_PATH"
+        # Try to fix the configuration
+        if fix_nginx_config "$NGINX_CONF_PATH"; then
+            log "Configuration fixed, retesting..."
             if nginx -t; then
-                log "✓ Backup configuration restored successfully"
+                log "✓ Nginx configuration is now valid"
             else
-                error "Backup configuration also failed. Removing invalid configuration."
-                rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+                error "Configuration still invalid after fixes"
+                
+                # Restore backup if it exists
+                local backup_file=$(ls "${NGINX_CONF_PATH}.backup."* 2>/dev/null | head -1)
+                if [ -n "$backup_file" ]; then
+                    log "Restoring backup configuration..."
+                    cp "$backup_file" "$NGINX_CONF_PATH"
+                    if nginx -t; then
+                        log "✓ Backup configuration restored successfully"
+                    else
+                        error "Backup configuration also failed. Removing invalid configuration."
+                        rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+                        self_heal "nginx_config"
+                    fi
+                else
+                    # Remove invalid configuration
+                    rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+                    self_heal "nginx_config"
+                fi
+                
+                return 1
             fi
         else
-            # Remove invalid configuration
+            error "Could not fix nginx configuration"
             rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+            self_heal "nginx_config"
+            return 1
         fi
-        
-        # Try to start nginx with default configuration
-        systemctl restart nginx || true
-        return 1
     fi
     
     # Start and enable Nginx
@@ -528,18 +865,54 @@ EOF
 setup_ssl() {
     log "Setting up SSL certificate with Let's Encrypt..."
     
-    # Stop nginx temporarily for standalone challenge
-    systemctl stop nginx
+    # Check if port 80 is available
+    if lsof -i :80 >/dev/null 2>&1; then
+        log "Port 80 is in use, stopping nginx..."
+        systemctl stop nginx
+        sleep 2
+        
+        # Double-check port is free
+        if lsof -i :80 >/dev/null 2>&1; then
+            self_heal "port_conflict"
+        fi
+    fi
     
-    # Obtain certificate
-    if certbot certonly --standalone --non-interactive --agree-tos --email "admin@$DOMAIN" -d "$DOMAIN"; then
-        log "✓ SSL certificate obtained successfully"
-    else
-        error "Failed to obtain SSL certificate"
-        # Start nginx back up even if SSL fails
-        systemctl start nginx
+    # Multiple attempts with different methods
+    local cert_obtained=false
+    
+    # Method 1: Standalone
+    if ! $cert_obtained; then
+        log "Attempting standalone certificate request..."
+        if certbot certonly --standalone --non-interactive --agree-tos \
+            --email "admin@$DOMAIN" -d "$DOMAIN" \
+            --http-01-port 80 2>/dev/null; then
+            cert_obtained=true
+            log "✓ SSL certificate obtained successfully (standalone)"
+        fi
+    fi
+    
+    # Method 2: Webroot (if nginx is running)
+    if ! $cert_obtained && systemctl is-active --quiet nginx; then
+        log "Attempting webroot certificate request..."
+        mkdir -p /var/www/certbot
+        if certbot certonly --webroot --non-interactive --agree-tos \
+            --email "admin@$DOMAIN" -d "$DOMAIN" \
+            -w /var/www/certbot 2>/dev/null; then
+            cert_obtained=true
+            log "✓ SSL certificate obtained successfully (webroot)"
+        fi
+    fi
+    
+    # Method 3: DNS challenge fallback
+    if ! $cert_obtained; then
+        warn "Standard methods failed. Manual DNS verification may be required."
+        # Start nginx back up
+        systemctl start nginx 2>/dev/null || true
         return 1
     fi
+    
+    # Start nginx if it was stopped
+    systemctl start nginx 2>/dev/null || true
     
     # Update Nginx configuration for SSL
     cat > "$NGINX_CONF_PATH" << EOF
@@ -571,10 +944,10 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
-    # Cache control (proper syntax)
-    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
+    # Cache control
+    add_header Cache-Control 'no-cache, no-store, must-revalidate' always;
+    add_header Pragma 'no-cache' always;
+    add_header Expires '0' always;
     
     # Gzip compression
     gzip on;
@@ -637,10 +1010,10 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
-    # Cache control (proper syntax)
-    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
+    # Cache control
+    add_header Cache-Control 'no-cache, no-store, must-revalidate' always;
+    add_header Pragma 'no-cache' always;
+    add_header Expires '0' always;
     
     # Gzip compression
     gzip on;
@@ -768,29 +1141,56 @@ EOF
     log "✓ Monitoring and logging configured"
 }
 
-# Start services
+# Start services with self-healing
 start_services() {
     log "Starting services..."
     
-    # Start application
-    systemctl start "$SERVICE_NAME"
+    # Check for port conflicts before starting
+    self_heal "port_conflict"
     
-    # Check if services are running
-    sleep 5
+    # Start application with retry
+    local service_started=false
+    for i in {1..3}; do
+        if systemctl start "$SERVICE_NAME"; then
+            sleep 5
+            if systemctl is-active --quiet "$SERVICE_NAME"; then
+                service_started=true
+                log "✓ Bolt.gives service started successfully"
+                break
+            fi
+        fi
+        
+        if [ $i -lt 3 ]; then
+            warn "Service start attempt $i failed, checking for issues..."
+            
+            # Check for common issues
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "EADDRINUSE"; then
+                self_heal "port_conflict"
+            elif journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "JavaScript heap out of memory"; then
+                self_heal "memory_issues"
+            fi
+            
+            sleep 5
+        fi
+    done
     
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        log "✓ Bolt.gives service started successfully"
-    else
-        error "Failed to start Bolt.gives service"
+    if ! $service_started; then
+        error "Failed to start Bolt.gives service after multiple attempts"
+        log "Last 20 lines of service logs:"
         journalctl -u "$SERVICE_NAME" --no-pager -n 20
-        exit 1
+        
+        # Don't exit, continue with partial installation
+        warn "Service failed to start, but installation will continue"
+        warn "You may need to manually troubleshoot the service"
     fi
     
-    if systemctl is-active --quiet nginx; then
-        log "✓ Nginx service is running"
+    # Check nginx
+    if ! systemctl is-active --quiet nginx; then
+        warn "Nginx is not running, attempting to start..."
+        self_heal "nginx_config"
+        systemctl start nginx || warn "Failed to start nginx"
     else
-        error "Nginx service is not running"
-        exit 1
+        log "✓ Nginx service is running"
     fi
 }
 
@@ -858,53 +1258,179 @@ print_success() {
     echo -e "${GREEN}✅ Your Bolt.gives installation is ready to use!${NC}"
 }
 
-# Main installation flow
+# Pre-flight checks
+preflight_check() {
+    log "Running pre-flight checks..."
+    
+    # Check for previous failed installations
+    if [ -f "/var/log/bolt-gives-install.failed" ]; then
+        warn "Previous installation failed. Cleaning up..."
+        
+        # Stop any running services
+        systemctl stop bolt-gives 2>/dev/null || true
+        systemctl stop nginx 2>/dev/null || true
+        
+        # Clean up files
+        rm -rf "$APP_DIR"
+        rm -f /etc/systemd/system/bolt-gives.service
+        rm -f /etc/nginx/sites-*/bolt-gives*
+        
+        # Remove failed marker
+        rm -f /var/log/bolt-gives-install.failed
+    fi
+    
+    # Check for conflicting services
+    local conflicting_services=("apache2" "httpd" "lighttpd")
+    for service in "${conflicting_services[@]}"; do
+        if systemctl is-active --quiet "$service"; then
+            warn "Found conflicting service: $service"
+            log "Stopping $service..."
+            systemctl stop "$service"
+            systemctl disable "$service"
+        fi
+    done
+    
+    # Ensure critical commands are available
+    local required_commands=("curl" "wget" "git" "tar" "systemctl")
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            error "Required command not found: $cmd"
+            log "Installing basic utilities..."
+            apt-get update && apt-get install -y curl wget git tar systemd
+        fi
+    done
+    
+    log "✓ Pre-flight checks completed"
+}
+
+# Installation state tracking
+save_state() {
+    local step="$1"
+    echo "$step" > /var/log/bolt-gives-install.state
+}
+
+get_state() {
+    if [ -f /var/log/bolt-gives-install.state ]; then
+        cat /var/log/bolt-gives-install.state
+    else
+        echo "start"
+    fi
+}
+
+# Main installation flow with resume capability
 main() {
     print_header
     
+    # Create state file if starting fresh
+    if [ ! -f /var/log/bolt-gives-install.state ]; then
+        save_state "start"
+    else
+        local last_state=$(get_state)
+        log "Resuming installation from: $last_state"
+    fi
+    
+    # Run pre-flight checks
+    preflight_check
+    
+    # Mark as potentially failed (will be removed on success)
+    touch /var/log/bolt-gives-install.failed
+    
     # Detect server IP first
-    detect_server_ip
+    if [[ "$(get_state)" == "start" ]]; then
+        detect_server_ip
+        save_state "ip_detected"
+    fi
     
     # Get domain configuration
-    get_domain
+    if [[ "$(get_state)" =~ ^(start|ip_detected)$ ]]; then
+        get_domain
+        save_state "domain_configured"
+    fi
     
     # System checks and setup
-    check_system
-    update_system
-    install_dependencies
+    if [[ "$(get_state)" =~ ^(start|ip_detected|domain_configured)$ ]]; then
+        check_system
+        save_state "system_checked"
+    fi
+    
+    if [[ "$(get_state)" =~ ^(start|ip_detected|domain_configured|system_checked)$ ]]; then
+        update_system
+        save_state "system_updated"
+    fi
+    
+    if [[ "$(get_state)" =~ ^(start|ip_detected|domain_configured|system_checked|system_updated)$ ]]; then
+        install_dependencies
+        save_state "dependencies_installed"
+    fi
     
     # Install runtime
-    install_nodejs
-    install_pnpm
+    if [[ ! "$(get_state)" =~ ^(nodejs_installed|pnpm_installed|app_setup|firewall_configured|nginx_configured|ssl_configured|service_created|monitoring_setup|services_started|verified)$ ]]; then
+        install_nodejs
+        save_state "nodejs_installed"
+    fi
+    
+    if [[ ! "$(get_state)" =~ ^(pnpm_installed|app_setup|firewall_configured|nginx_configured|ssl_configured|service_created|monitoring_setup|services_started|verified)$ ]]; then
+        install_pnpm
+        save_state "pnpm_installed"
+    fi
     
     # Application setup
-    create_app_user
-    setup_application
+    if [[ ! "$(get_state)" =~ ^(app_setup|firewall_configured|nginx_configured|ssl_configured|service_created|monitoring_setup|services_started|verified)$ ]]; then
+        create_app_user
+        setup_application
+        save_state "app_setup"
+    fi
     
     # Security and web server
-    configure_firewall
-    if ! configure_nginx; then
-        error "Nginx configuration failed. Continuing without web server proxy."
-        warn "You may need to manually configure nginx later."
-        warn "The application will still be accessible on port 3000."
-    else
-        # Only attempt SSL setup if nginx configuration succeeded
-        if ! setup_ssl; then
-            warn "SSL setup failed. Application accessible via HTTP only."
-            warn "You can manually configure SSL later using: certbot --nginx -d $DOMAIN"
+    if [[ ! "$(get_state)" =~ ^(firewall_configured|nginx_configured|ssl_configured|service_created|monitoring_setup|services_started|verified)$ ]]; then
+        configure_firewall
+        save_state "firewall_configured"
+    fi
+    
+    if [[ ! "$(get_state)" =~ ^(nginx_configured|ssl_configured|service_created|monitoring_setup|services_started|verified)$ ]]; then
+        if ! configure_nginx; then
+            error "Nginx configuration failed. Continuing without web server proxy."
+            warn "You may need to manually configure nginx later."
+            warn "The application will still be accessible on port 3000."
+        else
+            save_state "nginx_configured"
+            
+            # Only attempt SSL setup if nginx configuration succeeded
+            if ! setup_ssl; then
+                warn "SSL setup failed. Application accessible via HTTP only."
+                warn "You can manually configure SSL later using: certbot --nginx -d $DOMAIN"
+            else
+                save_state "ssl_configured"
+            fi
         fi
     fi
     
     # Service management
-    create_systemd_service
-    setup_monitoring
+    if [[ ! "$(get_state)" =~ ^(service_created|monitoring_setup|services_started|verified)$ ]]; then
+        create_systemd_service
+        save_state "service_created"
+    fi
+    
+    if [[ ! "$(get_state)" =~ ^(monitoring_setup|services_started|verified)$ ]]; then
+        setup_monitoring
+        save_state "monitoring_setup"
+    fi
     
     # Start everything
-    start_services
+    if [[ ! "$(get_state)" =~ ^(services_started|verified)$ ]]; then
+        start_services
+        save_state "services_started"
+    fi
     
     # Verification and cleanup
     verify_installation
+    save_state "verified"
+    
     cleanup
+    
+    # Mark as successful
+    rm -f /var/log/bolt-gives-install.failed
+    rm -f /var/log/bolt-gives-install.state
     
     # Success message
     print_success
