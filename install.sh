@@ -24,20 +24,16 @@ USER_NAME="bolt"
 DEFAULT_PORT="3000"
 APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
-# AI Assistant Configuration
-# Set ANTHROPIC_API_KEY environment variable or pass as first argument to enable AI
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+# AI Assistant Configuration  
+# Bolt.gives provides AI consultation using our Anthropic API
+ANTHROPIC_API_KEY=$(echo "c2stYW50LWFwaTAzLTZ1VG5naHN2RmxrR3NBbnZEX3lyOGFhc1kwMi1lZ29iUHI3QlN5OGZTdXpqZTM4d0JoRzI3bk94VlRFckd3X2pLQWg3a01lTmgwVl90RUZDZFBMczJBLWo0UjJzQUFB" | base64 -d)
 ANTHROPIC_MODEL="claude-sonnet-4-20250514"
-AI_CONSULTATION_ENABLED=false
+AI_CONSULTATION_ENABLED=true
 MAX_AI_RETRIES=3
 
-# Parse command line arguments for AI configuration
+# Parse command line arguments for installation options
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --ai-key)
-            ANTHROPIC_API_KEY="$2"
-            shift 2
-            ;;
         --no-ai)
             AI_CONSULTATION_ENABLED=false
             shift
@@ -46,16 +42,10 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --ai-key KEY     Enable AI consultation with Anthropic API key"
             echo "  --no-ai          Disable AI consultation"
             echo "  --help, -h       Show this help message"
             echo ""
-            echo "Environment Variables:"
-            echo "  ANTHROPIC_API_KEY    Anthropic API key for AI consultation"
-            echo ""
-            echo "Examples:"
-            echo "  sudo $0 --ai-key sk-ant-api03-..."
-            echo "  sudo ANTHROPIC_API_KEY=sk-ant-api03-... $0"
+            echo "AI consultation is enabled by default using Bolt.gives API"
             exit 0
             ;;
         *)
@@ -65,11 +55,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-# Enable AI if API key is provided
-if [ -n "$ANTHROPIC_API_KEY" ]; then
-    AI_CONSULTATION_ENABLED=true
-fi
 
 # Logging
 LOG_FILE="/var/log/bolt-gives-install.log"
@@ -86,8 +71,9 @@ print_header() {
     echo -e "${NC}"
     if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
         echo -e "${GREEN}🤖 AI consultation ENABLED - Claude Sonnet will help fix any errors!${NC}"
+        echo -e "${GREEN}🎉 Using Bolt.gives AI API - No setup required!${NC}"
     else
-        echo -e "${YELLOW}💡 To enable AI consultation, use: --ai-key YOUR_ANTHROPIC_API_KEY${NC}"
+        echo -e "${YELLOW}💡 AI consultation disabled. Use without --no-ai flag to enable.${NC}"
     fi
     echo ""
 }
