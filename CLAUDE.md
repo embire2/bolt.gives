@@ -146,29 +146,41 @@ Bolt.gives includes a comprehensive installation script (`install.sh`) that sets
 #### Self-Healing Features
 
 **Automatic Issue Detection & Resolution:**
+- **Permission Management**: Comprehensive permission fixes for all pnpm and user directories
 - **Nginx Configuration Validation**: Automatically detects and fixes common nginx syntax errors
 - **Memory Management**: Dynamically adjusts Node.js memory allocation based on available system resources
-- **Port Conflict Resolution**: Detects and resolves port 3000 conflicts automatically
+- **Dynamic Port Detection**: Automatically finds available ports if default port 3000 is in use
+- **Port Conflict Resolution**: Detects conflicts and intelligently switches to available ports
 - **DNS Resolution Fixes**: Automatically configures DNS servers if resolution issues are detected
 - **Package Lock Recovery**: Cleans up APT locks and fixes broken packages
 - **Disk Space Optimization**: Automatically cleans caches and old logs when disk space is low
+- **Service Recovery**: Enhanced service startup with comprehensive error diagnosis
 
 **Intelligent Retry Mechanisms:**
 - **Exponential Backoff**: Failed operations retry with increasing delays
 - **Context-Aware Retries**: Different retry strategies based on failure type
 - **Alternative Methods**: Falls back to alternative installation methods when primary fails
 - **Network Resilience**: Switches to mirror registries on network failures
+- **Service Startup Retries**: Up to 5 attempts with intelligent error analysis
 
 **Installation State Management:**
 - **Resume Capability**: Installations can be resumed from the last successful step
 - **Failed Installation Cleanup**: Automatically detects and cleans up previous failed installations
 - **Progress Tracking**: Saves installation state for recovery purposes
+- **User Cleanup**: Removes created users and files from failed installations
 
 **Build & Deployment Intelligence:**
 - **Memory-Aware Building**: Reduces Node.js memory allocation if builds fail due to memory
 - **Automatic Swap Creation**: Creates swap file on low-memory systems
 - **Dependency Resolution**: Tries multiple NPM registries and cleans caches on failures
-- **Permission Auto-Fixing**: Automatically corrects file ownership issues
+- **Permission Auto-Fixing**: Automatically corrects file ownership issues before each service start
+- **Port Configuration Updates**: Dynamically updates all configuration files when port changes
+
+**Service Startup Intelligence:**
+- **Comprehensive Error Detection**: Identifies permission, port, memory, and dependency issues
+- **Auto-Recovery Actions**: Applies specific fixes based on detected error patterns
+- **Direct Startup Testing**: Falls back to direct execution testing if service fails
+- **Port Usage Detection**: Detects if service is actually using a different port than configured
 
 #### Prerequisites
 
@@ -202,28 +214,35 @@ Bolt.gives includes a comprehensive installation script (`install.sh`) that sets
 **System Setup:**
 - Updates all system packages
 - Installs required dependencies (Node.js 20, pnpm, nginx, certbot, etc.)
-- Configures firewall rules (ports 22, 80, 443)
-- Creates dedicated application user (`bolt`)
+- Configures firewall rules (ports 22, 80, 443, and application port)
+- Creates dedicated application user (`bolt`) with proper permissions
 
 **Application Deployment:**
 - Clones the latest Bolt.gives repository to `/opt/bolt-gives`
-- Installs all dependencies with pnpm
-- Builds the production application
-- Configures Node.js with 4GB memory limit
+- Creates all necessary user directories (.local, .config, .cache, .npm)
+- Sets proper permissions for pnpm operations
+- Detects available ports and configures accordingly
+- Installs all dependencies with pnpm (with retry mechanisms)
+- Builds the production application (with memory optimization)
+- Configures Node.js with dynamic memory allocation
 - Sets up environment variables for production
 
 **Web Server & SSL:**
 - Configures Nginx as reverse proxy
+- Automatically detects and uses available ports
 - Obtains and installs Let's Encrypt SSL certificate
 - Sets up automatic SSL certificate renewal
 - Configures security headers and gzip compression
 - Redirects HTTP traffic to HTTPS
+- Falls back to HTTP if SSL setup fails
 
 **Service Management:**
-- Creates systemd service for automatic startup
+- Creates systemd service with pre-start permission fixes
+- Implements comprehensive service startup validation
 - Configures log rotation
 - Sets up fail2ban for additional security
 - Configures monitoring and health checks
+- Automatic service recovery with intelligent error diagnosis
 
 **Security Features:**
 - Firewall configuration with UFW
@@ -231,6 +250,17 @@ Bolt.gives includes a comprehensive installation script (`install.sh`) that sets
 - Security headers (HSTS, XSS protection, etc.)
 - Non-root application execution
 - Automatic security updates
+- Comprehensive permission management
+
+**Enhanced Installation Features:**
+- **Smart Error Recovery**: Automatically detects and fixes common issues
+- **Port Flexibility**: Finds available ports if defaults are in use
+- **Permission Management**: Ensures all directories have correct ownership
+- **Memory Optimization**: Adjusts based on available system resources
+- **Network Resilience**: Falls back to alternative registries and methods
+- **Service Validation**: Multiple checks to ensure service starts correctly
+- **External Connectivity Testing**: Verifies the application is accessible
+- **Progress Tracking**: Can resume failed installations
 
 #### Post-Installation
 
@@ -273,7 +303,17 @@ certbot renew --dry-run
 2. **SSL certificate failed:** Ensure domain points to correct IP and ports 80/443 are open
 3. **Service won't start:** Check logs with `journalctl -u bolt-gives -n 50`
 4. **Memory issues:** Monitor with `htop` and adjust Node.js memory if needed
-5. **Nginx configuration errors:** The script now includes self-healing mechanisms that:
+5. **Permission errors (EACCES):** The script now automatically fixes permission issues:
+   - Creates all necessary pnpm directories with correct ownership
+   - Fixes .npmrc and .config/pnpm permissions
+   - Sets proper permissions before each service start
+   - Comprehensive permission healing mechanism
+6. **Port conflicts:** The script automatically handles port issues:
+   - Detects if port 3000 is in use
+   - Automatically finds an available port (3000-3100)
+   - Updates all configurations with the new port
+   - Displays the actual port in use after installation
+7. **Nginx configuration errors:** The script includes self-healing mechanisms that:
    - Automatically backs up existing configurations
    - Validates and fixes nginx configuration syntax errors
    - Converts problematic quote styles in headers
@@ -304,6 +344,30 @@ The installation script includes comprehensive error handling and retry mechanis
 2. Fix any network/DNS issues
 3. Re-run the installation script - it's designed to resume from where it left off
 
+**What Happens During Errors:**
+
+When the script encounters errors, it will:
+
+1. **Identify the Error Type**: Analyzes logs for specific error patterns
+2. **Apply Targeted Fixes**: 
+   - Permission errors → Fixes ownership and creates missing directories
+   - Port conflicts → Finds available port and updates all configurations
+   - Memory issues → Reduces Node.js memory allocation or creates swap
+   - Network errors → Switches to mirror registries or fixes DNS
+   - Build failures → Cleans caches and retries with reduced resources
+3. **Retry with Intelligence**: Uses exponential backoff and different strategies
+4. **Provide Context**: Shows helpful error messages and suggestions
+5. **Save Progress**: Allows resuming from the last successful step
+
+**Service Startup Issues:**
+
+If the service fails to start, the script will:
+- Perform up to 5 startup attempts
+- Diagnose each failure (permissions, ports, memory, dependencies)
+- Apply specific fixes for each issue type
+- Test direct execution as a fallback
+- Continue installation even if service fails (allowing manual fixes)
+
 **Using Self-Healing Features:**
 
 The installer automatically detects and fixes common issues:
@@ -328,6 +392,11 @@ self_heal "port_conflict"     # Resolve port conflicts
 self_heal "package_locks"     # Fix APT locks
 self_heal "dns_resolution"    # Fix DNS issues
 self_heal "memory_issues"     # Optimize memory
+self_heal "permission_issues" # Fix permission problems
+self_heal "service_timeout"   # Increase service timeouts
+self_heal "build_failure"     # Clean and retry builds
+self_heal "network_issues"    # Fix network connectivity
+self_heal "ssl_issues"        # Handle SSL certificate problems
 ```
 
 **Installation State Recovery:**

@@ -21,6 +21,8 @@ NGINX_ENABLED_PATH="/etc/nginx/sites-enabled/bolt-gives"
 APP_DIR="/opt/bolt-gives"
 SERVICE_NAME="bolt-gives"
 USER_NAME="bolt"
+DEFAULT_PORT="3000"
+APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
 # Logging
 LOG_FILE="/var/log/bolt-gives-install.log"
@@ -124,16 +126,108 @@ self_heal() {
             
         "port_conflict")
             log "Checking for port conflicts..."
-            local pids=$(lsof -ti :3000 2>/dev/null || true)
+            local current_port=${APP_PORT:-3000}
+            local pids=$(lsof -ti :$current_port 2>/dev/null || true)
             if [ -n "$pids" ]; then
-                warn "Found processes using port 3000: $pids"
+                warn "Found processes using port $current_port: $pids"
                 for pid in $pids; do
                     local process_name=$(ps -p $pid -o comm= 2>/dev/null || echo "unknown")
-                    warn "Killing process $pid ($process_name) using port 3000"
-                    kill -9 $pid 2>/dev/null || true
+                    # Don't kill our own service
+                    if [[ "$process_name" != "node" ]] || ! systemctl is-active --quiet $SERVICE_NAME; then
+                        warn "Killing process $pid ($process_name) using port $current_port"
+                        kill -9 $pid 2>/dev/null || true
+                    fi
                 done
                 sleep 2
             fi
+            ;;
+            
+        "permission_issues")
+            log "Fixing permission issues..."
+            # Fix ownership of user home directory and all subdirectories
+            chown -R $USER_NAME:$USER_NAME /home/$USER_NAME
+            
+            # Fix specific pnpm directories
+            local dirs_to_fix=(
+                "/home/$USER_NAME/.local"
+                "/home/$USER_NAME/.config"
+                "/home/$USER_NAME/.cache"
+                "/home/$USER_NAME/.npm"
+                "$APP_DIR"
+            )
+            
+            for dir in "${dirs_to_fix[@]}"; do
+                if [ -d "$dir" ]; then
+                    chown -R $USER_NAME:$USER_NAME "$dir"
+                    find "$dir" -type d -exec chmod 755 {} \;
+                    find "$dir" -type f -exec chmod 644 {} \;
+                fi
+            done
+            
+            # Fix executable permissions for node_modules/.bin
+            if [ -d "$APP_DIR/node_modules/.bin" ]; then
+                find "$APP_DIR/node_modules/.bin" -type f -exec chmod 755 {} \;
+            fi
+            ;;
+            
+        "service_timeout")
+            log "Fixing service timeout issues..."
+            # Increase systemd timeout
+            sed -i '/\[Service\]/a TimeoutStartSec=300' "/etc/systemd/system/$SERVICE_NAME.service"
+            systemctl daemon-reload
+            ;;
+            
+        "build_failure")
+            log "Attempting to fix build failures..."
+            cd $APP_DIR
+            
+            # Clean build artifacts
+            rm -rf build dist .parcel-cache
+            rm -rf node_modules/.cache
+            
+            # Clear pnpm cache
+            sudo -u $USER_NAME pnpm store prune
+            
+            # Try with reduced parallelism
+            export JOBS=1
+            export NODE_OPTIONS="--max-old-space-size=2048"
+            
+            # Reinstall and rebuild
+            sudo -u $USER_NAME pnpm install --no-frozen-lockfile
+            sudo -u $USER_NAME pnpm run build
+            ;;
+            
+        "network_issues")
+            log "Fixing network connectivity issues..."
+            # Try different DNS servers
+            echo "nameserver 1.1.1.1" > /etc/resolv.conf
+            echo "nameserver 1.0.0.1" >> /etc/resolv.conf
+            echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+            
+            # Restart network services
+            systemctl restart systemd-networkd 2>/dev/null || true
+            systemctl restart NetworkManager 2>/dev/null || true
+            
+            # Clear DNS cache
+            systemd-resolve --flush-caches 2>/dev/null || true
+            ;;
+            
+        "ssl_issues")
+            log "Fixing SSL certificate issues..."
+            # Stop nginx to free port 80
+            systemctl stop nginx
+            
+            # Try to obtain certificate again
+            certbot certonly --standalone --non-interactive --agree-tos \
+                --email "admin@$DOMAIN" -d "$DOMAIN" \
+                --force-renewal || {
+                warn "SSL renewal failed, continuing with HTTP only"
+                # Remove SSL configuration from nginx
+                sed -i '/listen 443/,/^}/d' "$NGINX_CONF_PATH"
+                sed -i '/ssl_certificate/d' "$NGINX_CONF_PATH"
+            }
+            
+            systemctl start nginx
             ;;
             
         "package_locks")
@@ -480,7 +574,32 @@ create_app_user() {
     mkdir -p "$APP_DIR"
     chown "$USER_NAME:$USER_NAME" "$APP_DIR"
     
-    log "✓ Application user configured"
+    # Create all necessary user directories with proper permissions
+    log "Creating user directories with proper permissions..."
+    local user_dirs=(
+        "/home/$USER_NAME/.local"
+        "/home/$USER_NAME/.local/share"
+        "/home/$USER_NAME/.local/share/pnpm"
+        "/home/$USER_NAME/.config"
+        "/home/$USER_NAME/.config/pnpm"
+        "/home/$USER_NAME/.cache"
+        "/home/$USER_NAME/.cache/pnpm"
+        "/home/$USER_NAME/.npm"
+    )
+    
+    for dir in "${user_dirs[@]}"; do
+        mkdir -p "$dir"
+        chown -R "$USER_NAME:$USER_NAME" "$dir"
+        chmod 755 "$dir"
+    done
+    
+    # Create .npmrc and .bashrc if they don't exist
+    touch "/home/$USER_NAME/.npmrc"
+    touch "/home/$USER_NAME/.bashrc"
+    chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.npmrc" "/home/$USER_NAME/.bashrc"
+    chmod 644 "/home/$USER_NAME/.npmrc" "/home/$USER_NAME/.bashrc"
+    
+    log "✓ Application user configured with all necessary permissions"
 }
 
 # Clone and setup application
@@ -502,16 +621,58 @@ setup_application() {
     # Ensure proper ownership of all files and directories
     chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
     
-    # Create and set permissions for pnpm directories
-    log "Setting up pnpm environment for user $USER_NAME..."
-    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.local/share/pnpm"
-    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.config/pnpm"
-    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.cache/pnpm"
+    # Check if default port is available
+    if lsof -ti :$DEFAULT_PORT >/dev/null 2>&1; then
+        warn "Default port $DEFAULT_PORT is in use"
+        local new_port=$(find_available_port $DEFAULT_PORT)
+        if [ -n "$new_port" ]; then
+            APP_PORT=$new_port
+            warn "Will use port $APP_PORT instead"
+        else
+            error "No available ports found"
+            return 1
+        fi
+    fi
     
-    # Set proper permissions
-    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
-    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config"
-    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.cache" 2>/dev/null || true
+    # Fix permissions before running as user
+    log "Fixing permissions for pnpm environment..."
+    
+    # Ensure all parent directories exist and have proper permissions
+    local pnpm_dirs=(
+        "/home/$USER_NAME"
+        "/home/$USER_NAME/.local"
+        "/home/$USER_NAME/.local/share"
+        "/home/$USER_NAME/.local/share/pnpm"
+        "/home/$USER_NAME/.config"
+        "/home/$USER_NAME/.config/pnpm"
+        "/home/$USER_NAME/.cache"
+        "/home/$USER_NAME/.cache/pnpm"
+        "/home/$USER_NAME/.npm"
+    )
+    
+    for dir in "${pnpm_dirs[@]}"; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+        fi
+        chown "$USER_NAME:$USER_NAME" "$dir"
+        chmod 755 "$dir"
+    done
+    
+    # Fix .npmrc and pnpm rc files
+    touch "/home/$USER_NAME/.npmrc"
+    mkdir -p "/home/$USER_NAME/.config/pnpm"
+    touch "/home/$USER_NAME/.config/pnpm/rc"
+    chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.npmrc"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config/pnpm"
+    chmod 644 "/home/$USER_NAME/.npmrc"
+    [ -f "/home/$USER_NAME/.config/pnpm/rc" ] && chmod 644 "/home/$USER_NAME/.config/pnpm/rc"
+    
+    # Set PNPM_HOME environment variable for the user
+    if ! grep -q "PNPM_HOME" "/home/$USER_NAME/.bashrc"; then
+        echo "export PNPM_HOME=/home/$USER_NAME/.local/share/pnpm" >> "/home/$USER_NAME/.bashrc"
+        echo "export PATH=\$PNPM_HOME:\$PATH" >> "/home/$USER_NAME/.bashrc"
+    fi
+    chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.bashrc"
     
     # Install dependencies with self-healing
     log "Installing application dependencies..."
@@ -634,7 +795,7 @@ setup_application() {
         sudo -u "$USER_NAME" cat > .env << EOF
 # Production environment
 NODE_ENV=production
-PORT=3000
+PORT=$APP_PORT
 HOST=0.0.0.0
 
 # Node.js memory settings
@@ -669,7 +830,7 @@ configure_firewall() {
     ufw allow 443/tcp
     
     # Allow specific ports if needed
-    ufw allow 3000/tcp comment "Bolt.gives application"
+    ufw allow $APP_PORT/tcp comment "Bolt.gives application"
     
     # Enable firewall
     ufw --force enable
@@ -797,7 +958,7 @@ server {
     
     # Proxy settings
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -976,7 +1137,7 @@ server {
     
     # Proxy settings
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1042,7 +1203,7 @@ server {
     
     # Proxy settings
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1102,15 +1263,27 @@ Group=$USER_NAME
 WorkingDirectory=$APP_DIR
 Environment=NODE_ENV=production
 Environment=NODE_OPTIONS="--max-old-space-size=4096"
-Environment=PORT=3000
+Environment=PORT=$APP_PORT
 Environment=HOST=0.0.0.0
 Environment=HOME=/home/$USER_NAME
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
-ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config || true'
+
+# Pre-start permission fixes
+ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$USER_NAME/.config/pnpm /home/$USER_NAME/.cache/pnpm'
+ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache /home/$USER_NAME/.npm 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'chmod -R 755 /home/$USER_NAME/.local /home/$USER_NAME/.config 2>/dev/null || true'
+
+# Main process
 ExecStart=$pnpm_path run start
+
+# Restart configuration
 Restart=always
 RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Output
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
@@ -1173,36 +1346,162 @@ start_services() {
     # Check for port conflicts before starting
     self_heal "port_conflict"
     
-    # Start application with retry
+    # Fix permissions one more time before starting
+    self_heal "permission_issues"
+    
+    # Start application with comprehensive retry and diagnostics
     local service_started=false
-    for i in {1..3}; do
+    local max_attempts=5
+    
+    for i in $(seq 1 $max_attempts); do
+        log "Service start attempt $i/$max_attempts..."
+        
+        # Clear any failed state
+        systemctl reset-failed "$SERVICE_NAME" 2>/dev/null || true
+        
+        # Start the service
         if systemctl start "$SERVICE_NAME"; then
-            sleep 5
+            # Wait longer for service to stabilize
+            log "Waiting for service to stabilize..."
+            sleep 10
+            
+            # Check if service is still active
             if systemctl is-active --quiet "$SERVICE_NAME"; then
-                service_started=true
-                log "✓ Bolt.gives service started successfully"
-                break
+                # Double-check by testing the actual port
+                if curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT | grep -q "[23][0-9][0-9]"; then
+                    service_started=true
+                    log "✓ Bolt.gives service started successfully and responding"
+                    break
+                else
+                    warn "Service is running but not responding on port $APP_PORT"
+                    # Check if service is actually listening on the port
+                    if ! netstat -tlnp 2>/dev/null | grep -q ":$APP_PORT "; then
+                        warn "Port $APP_PORT is not being listened to"
+                        # Service might be using a different port, check logs
+                        local actual_port=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -oP "Listening on.*:\K[0-9]+" | tail -1)
+                        if [ -n "$actual_port" ] && [ "$actual_port" != "$APP_PORT" ]; then
+                            warn "Service is actually using port $actual_port"
+                            update_port_configuration $actual_port
+                        fi
+                    fi
+                fi
             fi
         fi
         
-        if [ $i -lt 3 ]; then
-            warn "Service start attempt $i failed, checking for issues..."
+        if [ $i -lt $max_attempts ]; then
+            warn "Service start attempt $i failed, diagnosing issues..."
             
-            # Check for common issues
-            if journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "EADDRINUSE"; then
-                self_heal "port_conflict"
-            elif journalctl -u "$SERVICE_NAME" --no-pager -n 10 | grep -q "JavaScript heap out of memory"; then
-                self_heal "memory_issues"
+            # Comprehensive error diagnosis
+            local error_found=false
+            
+            # Check for permission errors
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "EACCES\|permission denied\|Permission denied"; then
+                warn "Permission errors detected"
+                self_heal "permission_issues"
+                
+                # Additional permission fixes
+                log "Applying additional permission fixes..."
+                find /home/$USER_NAME -type d -name ".npm" -exec chown -R $USER_NAME:$USER_NAME {} \;
+                find /home/$USER_NAME -type d -name ".pnpm" -exec chown -R $USER_NAME:$USER_NAME {} \;
+                find /home/$USER_NAME -type d -name ".local" -exec chown -R $USER_NAME:$USER_NAME {} \;
+                find /home/$USER_NAME -type d -name ".config" -exec chown -R $USER_NAME:$USER_NAME {} \;
+                find /home/$USER_NAME -type d -name ".cache" -exec chown -R $USER_NAME:$USER_NAME {} \;
+                
+                error_found=true
             fi
             
-            sleep 5
+            # Check for port conflicts
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "EADDRINUSE\|address already in use"; then
+                warn "Port conflict detected"
+                self_heal "port_conflict"
+                
+                # Try to find an alternative port
+                local new_port=$(find_available_port $((APP_PORT + 1)))
+                if [ -n "$new_port" ]; then
+                    update_port_configuration $new_port
+                    log "Switched to port $new_port"
+                fi
+                
+                error_found=true
+            fi
+            
+            # Check for memory issues
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "JavaScript heap out of memory\|ENOMEM"; then
+                warn "Memory issues detected"
+                self_heal "memory_issues"
+                
+                # Reduce memory allocation for next attempt
+                local current_mem=$(grep NODE_OPTIONS /etc/systemd/system/$SERVICE_NAME.service | grep -o '[0-9]\+' | head -1)
+                local new_mem=$((current_mem * 3 / 4))
+                log "Reducing Node.js memory from ${current_mem}MB to ${new_mem}MB"
+                sed -i "s/--max-old-space-size=$current_mem/--max-old-space-size=$new_mem/g" /etc/systemd/system/$SERVICE_NAME.service
+                systemctl daemon-reload
+                
+                error_found=true
+            fi
+            
+            # Check for missing dependencies
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "Cannot find module\|MODULE_NOT_FOUND"; then
+                warn "Missing dependencies detected"
+                log "Attempting to reinstall dependencies..."
+                cd $APP_DIR
+                sudo -u $USER_NAME NODE_OPTIONS="--max-old-space-size=2048" pnpm install --no-frozen-lockfile
+                error_found=true
+            fi
+            
+            # Check for pnpm specific errors
+            if journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -q "pnpm\|.pnpm"; then
+                warn "PNPM-related errors detected"
+                log "Clearing pnpm cache and reinstalling..."
+                sudo -u $USER_NAME pnpm store prune
+                rm -rf $APP_DIR/node_modules
+                cd $APP_DIR
+                sudo -u $USER_NAME pnpm install --no-frozen-lockfile
+                error_found=true
+            fi
+            
+            if ! $error_found; then
+                warn "No specific error pattern found. Showing recent logs:"
+                journalctl -u "$SERVICE_NAME" --no-pager -n 30
+                
+                # Generic recovery attempt
+                log "Attempting generic recovery..."
+                
+                # Increase timeout
+                self_heal "service_timeout"
+                
+                # Fix any lingering permission issues
+                self_heal "permission_issues"
+                
+                # Clear any locks or stale files
+                rm -f $APP_DIR/.lock
+                rm -f $APP_DIR/package-lock.json
+                rm -f $APP_DIR/pnpm-lock.yaml.lock
+            fi
+            
+            # Exponential backoff
+            local wait_time=$((5 * i))
+            log "Waiting ${wait_time} seconds before retry..."
+            sleep $wait_time
         fi
     done
     
     if ! $service_started; then
-        error "Failed to start Bolt.gives service after multiple attempts"
-        log "Last 20 lines of service logs:"
-        journalctl -u "$SERVICE_NAME" --no-pager -n 20
+        error "Failed to start Bolt.gives service after $max_attempts attempts"
+        log "Full service logs:"
+        journalctl -u "$SERVICE_NAME" --no-pager -n 50
+        
+        # Try alternative startup method
+        warn "Attempting direct startup as fallback..."
+        cd $APP_DIR
+        timeout 30 sudo -u $USER_NAME NODE_OPTIONS="--max-old-space-size=2048" pnpm run start &
+        local pid=$!
+        sleep 10
+        
+        if kill -0 $pid 2>/dev/null && curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT | grep -q "[23][0-9][0-9]"; then
+            warn "Application runs directly but not as service. Manual configuration may be needed."
+            kill $pid 2>/dev/null
+        fi
         
         # Don't exit, continue with partial installation
         warn "Service failed to start, but installation will continue"
@@ -1219,6 +1518,112 @@ start_services() {
     fi
 }
 
+# Test external connectivity and apply fixes
+test_and_fix_connectivity() {
+    log "Testing and fixing external connectivity..."
+    
+    local connectivity_issues=false
+    
+    # Test DNS resolution
+    if ! nslookup $DOMAIN >/dev/null 2>&1; then
+        warn "DNS resolution failed for $DOMAIN"
+        connectivity_issues=true
+        
+        # Try to fix DNS
+        self_heal "dns_resolution"
+        
+        # Flush DNS cache
+        systemctl restart systemd-resolved 2>/dev/null || true
+        resolvectl flush-caches 2>/dev/null || true
+    fi
+    
+    # Test local connectivity first
+    local local_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT || echo "000")
+    if [[ ! "$local_code" =~ ^[23][0-9][0-9]$ ]]; then
+        warn "Local connectivity test failed (HTTP $local_code)"
+        connectivity_issues=true
+        
+        # Check if service is running
+        if ! systemctl is-active --quiet $SERVICE_NAME; then
+            warn "Service is not running, attempting to start..."
+            systemctl start $SERVICE_NAME
+            sleep 10
+        fi
+    fi
+    
+    # Test nginx proxy
+    local nginx_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost || echo "000")
+    if [[ ! "$nginx_code" =~ ^[23][0-9][0-9]$ ]]; then
+        warn "Nginx proxy test failed (HTTP $nginx_code)"
+        connectivity_issues=true
+        
+        # Check nginx configuration
+        if ! nginx -t; then
+            error "Nginx configuration is invalid"
+            self_heal "nginx_config"
+        fi
+        
+        # Restart nginx
+        systemctl restart nginx
+    fi
+    
+    # Test external HTTP
+    local external_http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 http://$DOMAIN || echo "000")
+    if [[ ! "$external_http_code" =~ ^[23][0-9][0-9]$ ]]; then
+        warn "External HTTP test failed (HTTP $external_http_code)"
+        connectivity_issues=true
+        
+        # Check firewall
+        if command -v ufw >/dev/null 2>&1; then
+            log "Checking firewall rules..."
+            ufw status | grep -E "80|443|3000" || {
+                warn "Required ports may not be open in firewall"
+                ufw allow 80/tcp
+                ufw allow 443/tcp
+                ufw allow 3000/tcp
+                ufw reload
+            }
+        fi
+        
+        # Check if ports are actually listening
+        if ! netstat -tlnp | grep -q ":80 "; then
+            warn "Port 80 is not listening"
+            systemctl restart nginx
+        fi
+    fi
+    
+    # Test external HTTPS (if SSL is configured)
+    if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+        local external_https_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 https://$DOMAIN || echo "000")
+        if [[ ! "$external_https_code" =~ ^[23][0-9][0-9]$ ]]; then
+            warn "External HTTPS test failed (HTTP $external_https_code)"
+            connectivity_issues=true
+            
+            # Check SSL certificate
+            if ! openssl s_client -connect $DOMAIN:443 -servername $DOMAIN </dev/null 2>/dev/null | openssl x509 -noout -dates; then
+                warn "SSL certificate may be invalid"
+                
+                # Try to renew certificate
+                log "Attempting to renew SSL certificate..."
+                certbot renew --force-renewal --nginx -d $DOMAIN || true
+            fi
+        fi
+    fi
+    
+    if $connectivity_issues; then
+        warn "Connectivity issues detected and repair attempted"
+        
+        # Final connectivity report
+        log "=== Connectivity Status ==="
+        log "Local service: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:$APP_PORT || echo '000')"
+        log "Nginx proxy: $(curl -s -o /dev/null -w '%{http_code}' http://localhost || echo '000')"
+        log "External HTTP: $(curl -s -o /dev/null -w '%{http_code}' http://$DOMAIN || echo '000')"
+        [ -d "/etc/letsencrypt/live/$DOMAIN" ] && log "External HTTPS: $(curl -s -o /dev/null -w '%{http_code}' https://$DOMAIN || echo '000')"
+    else
+        log "✓ All connectivity tests passed"
+    fi
+}
+
 # Final verification
 verify_installation() {
     log "Verifying installation..."
@@ -1226,6 +1631,15 @@ verify_installation() {
     # Wait for services to be fully ready
     log "Waiting for services to be ready..."
     sleep 10
+    
+    # Run connectivity tests and fixes
+    test_and_fix_connectivity
+    
+    # If the port was changed during installation, update the configuration one more time
+    if [ "$APP_PORT" != "$DEFAULT_PORT" ]; then
+        log "Ensuring all configurations use port $APP_PORT..."
+        update_port_configuration $APP_PORT
+    fi
     
     # Check if application service is running
     if systemctl is-active --quiet "$SERVICE_NAME"; then
@@ -1244,63 +1658,39 @@ verify_installation() {
         return 1
     fi
     
-    # Test local application with retries
-    local max_attempts=6
-    local attempt=1
-    local http_code="000"
+    # Run comprehensive connectivity tests
+    local service_status="unknown"
+    local nginx_status="unknown"
+    local local_access="000"
+    local external_access="000"
     
-    while [ $attempt -le $max_attempts ]; do
-        log "Testing local application (attempt $attempt/$max_attempts)..."
-        http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3000" || echo "000")
+    # Check services
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        service_status="active"
         
-        if [ "$http_code" = "200" ] || [ "$http_code" = "301" ] || [ "$http_code" = "302" ]; then
-            log "✓ Application is responding locally (HTTP $http_code)"
-            break
-        else
-            if [ $attempt -eq $max_attempts ]; then
-                warn "Application may not be responding correctly after $max_attempts attempts (HTTP $http_code)"
-                # Show service logs for debugging
-                log "Recent service logs:"
-                journalctl -u "$SERVICE_NAME" --no-pager -n 10 || true
-            else
-                log "Waiting 10 seconds before retry..."
-                sleep 10
-            fi
-        fi
-        attempt=$((attempt + 1))
-    done
-    
-    # Test external access with retries
-    attempt=1
-    local external_code="000"
-    
-    while [ $attempt -le $max_attempts ]; do
-        log "Testing external HTTPS access (attempt $attempt/$max_attempts)..."
-        external_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://$DOMAIN" || echo "000")
+        # Test local port
+        local_access=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:$APP_PORT" || echo "000")
+    else
+        service_status="inactive"
         
-        if [ "$external_code" = "200" ]; then
-            log "✓ Application is accessible externally via HTTPS"
-            break
-        elif [ "$external_code" = "301" ] || [ "$external_code" = "302" ]; then
-            log "✓ Application is accessible externally (redirecting: HTTP $external_code)"
-            break
-        else
-            if [ $attempt -eq $max_attempts ]; then
-                warn "External HTTPS access may not be working correctly after $max_attempts attempts (HTTP $external_code)"
-                # Test nginx configuration
-                log "Testing nginx configuration:"
-                nginx -t || true
-                
-                # Check SSL certificate
-                log "Checking SSL certificate:"
-                openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" </dev/null 2>/dev/null | openssl x509 -noout -dates 2>/dev/null || true
-            else
-                log "Waiting 10 seconds before retry..."
-                sleep 10
-            fi
-        fi
-        attempt=$((attempt + 1))
-    done
+        # Try to get more info
+        local exit_code=$(systemctl show -p ExecMainStatus "$SERVICE_NAME" | cut -d= -f2)
+        local sub_state=$(systemctl show -p SubState "$SERVICE_NAME" | cut -d= -f2)
+        warn "Service is $sub_state (exit code: $exit_code)"
+    fi
+    
+    if systemctl is-active --quiet nginx; then
+        nginx_status="active"
+    else
+        nginx_status="inactive"
+    fi
+    
+    # Test external access
+    if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+        external_access=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://$DOMAIN" || echo "000")
+    else
+        external_access=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$DOMAIN" || echo "000")
+    fi
     
     # Final status summary
     log "=== Installation Verification Summary ==="
@@ -1323,6 +1713,55 @@ cleanup() {
     rm -rf /var/lib/apt/lists/*
     
     log "✓ Cleanup completed"
+}
+
+# Find available port
+find_available_port() {
+    local start_port=${1:-3000}
+    local max_port=$((start_port + 100))
+    
+    log "Checking for available port starting from $start_port..."
+    
+    for port in $(seq $start_port $max_port); do
+        if ! lsof -ti :$port >/dev/null 2>&1; then
+            # Double-check with netstat
+            if ! netstat -tlnp 2>/dev/null | grep -q ":$port "; then
+                log "Found available port: $port"
+                echo $port
+                return 0
+            fi
+        fi
+    done
+    
+    error "No available ports found between $start_port and $max_port"
+    return 1
+}
+
+# Update configuration files with new port
+update_port_configuration() {
+    local new_port=$1
+    
+    log "Updating configuration to use port $new_port..."
+    
+    # Update .env file
+    if [ -f "$APP_DIR/.env" ]; then
+        sed -i "s/PORT=.*/PORT=$new_port/" "$APP_DIR/.env"
+    else
+        echo "PORT=$new_port" >> "$APP_DIR/.env"
+    fi
+    
+    # Update systemd service
+    sed -i "s/Environment=PORT=.*/Environment=PORT=$new_port/" "/etc/systemd/system/$SERVICE_NAME.service"
+    
+    # Update nginx configuration
+    sed -i "s|proxy_pass http://127.0.0.1:[0-9]\+|proxy_pass http://127.0.0.1:$new_port|g" "$NGINX_CONF_PATH"
+    
+    # Reload configurations
+    systemctl daemon-reload
+    nginx -t && systemctl reload nginx
+    
+    APP_PORT=$new_port
+    log "✓ Configuration updated to use port $new_port"
 }
 
 # Print final information
@@ -1350,6 +1789,7 @@ print_success() {
     echo -e "  💾 Node Memory: ${BLUE}4GB${NC}"
     echo -e "  🔐 SSL: ${BLUE}Auto-renewal configured${NC}"
     echo -e "  📝 Install Log: ${BLUE}$LOG_FILE${NC}"
+    echo -e "  🔌 Application Port: ${BLUE}$APP_PORT${NC}"
     echo ""
     echo -e "${GREEN}✅ Your Bolt.gives installation is ready to use!${NC}"
 }
@@ -1366,13 +1806,23 @@ preflight_check() {
         systemctl stop bolt-gives 2>/dev/null || true
         systemctl stop nginx 2>/dev/null || true
         
+        # Kill any lingering node processes
+        pkill -f "node.*bolt-gives" 2>/dev/null || true
+        pkill -f "pnpm.*start" 2>/dev/null || true
+        
         # Clean up files
         rm -rf "$APP_DIR"
         rm -f /etc/systemd/system/bolt-gives.service
         rm -f /etc/nginx/sites-*/bolt-gives*
         
+        # Clean up user if it was created
+        if id "$USER_NAME" &>/dev/null && [ "$USER_NAME" != "root" ]; then
+            userdel -r "$USER_NAME" 2>/dev/null || true
+        fi
+        
         # Remove failed marker
         rm -f /var/log/bolt-gives-install.failed
+        rm -f /var/log/bolt-gives-install.state
     fi
     
     # Check for conflicting services
@@ -1532,8 +1982,49 @@ main() {
     print_success
 }
 
+# Enhanced error handler
+error_handler() {
+    local line_no=$1
+    local bash_lineno=$2
+    local last_command=$3
+    local code=$4
+    
+    error "Installation failed at line $line_no"
+    error "Command: $last_command"
+    error "Exit code: $code"
+    
+    # Try to provide helpful recovery suggestions
+    case "$last_command" in
+        *"apt-get"*)
+            warn "Package installation failed. Try:"
+            warn "  1. Run 'apt-get update --fix-missing'"
+            warn "  2. Check your internet connection"
+            warn "  3. Try a different mirror"
+            ;;
+        *"pnpm"*)
+            warn "PNPM command failed. Try:"
+            warn "  1. Clear pnpm cache: 'pnpm store prune'"
+            warn "  2. Remove node_modules and reinstall"
+            warn "  3. Check disk space"
+            ;;
+        *"systemctl"*)
+            warn "Service management failed. Try:"
+            warn "  1. Check 'journalctl -u bolt-gives -n 50'"
+            warn "  2. Verify permissions are correct"
+            warn "  3. Check if ports are available"
+            ;;
+    esac
+    
+    error "Check $LOG_FILE for full details"
+    
+    # Save state for resume
+    echo "Installation can be resumed by running the script again"
+    
+    exit 1
+}
+
 # Trap errors and cleanup
-trap 'error "Installation failed at line $LINENO. Check $LOG_FILE for details."; exit 1' ERR
+trap 'error_handler ${LINENO} ${BASH_LINENO} "$BASH_COMMAND" $?' ERR
 
 # Run main installation
 main "$@"
