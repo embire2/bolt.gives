@@ -24,6 +24,53 @@ USER_NAME="bolt"
 DEFAULT_PORT="3000"
 APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
+# AI Assistant Configuration
+# Set ANTHROPIC_API_KEY environment variable or pass as first argument to enable AI
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+ANTHROPIC_MODEL="claude-sonnet-4-20250514"
+AI_CONSULTATION_ENABLED=false
+MAX_AI_RETRIES=3
+
+# Parse command line arguments for AI configuration
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --ai-key)
+            ANTHROPIC_API_KEY="$2"
+            shift 2
+            ;;
+        --no-ai)
+            AI_CONSULTATION_ENABLED=false
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --ai-key KEY     Enable AI consultation with Anthropic API key"
+            echo "  --no-ai          Disable AI consultation"
+            echo "  --help, -h       Show this help message"
+            echo ""
+            echo "Environment Variables:"
+            echo "  ANTHROPIC_API_KEY    Anthropic API key for AI consultation"
+            echo ""
+            echo "Examples:"
+            echo "  sudo $0 --ai-key sk-ant-api03-..."
+            echo "  sudo ANTHROPIC_API_KEY=sk-ant-api03-... $0"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Enable AI if API key is provided
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    AI_CONSULTATION_ENABLED=true
+fi
+
 # Logging
 LOG_FILE="/var/log/bolt-gives-install.log"
 exec 1> >(tee -a "$LOG_FILE")
@@ -32,10 +79,17 @@ exec 2> >(tee -a "$LOG_FILE" >&2)
 print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║                    BOLT.GIVES INSTALLER                       ║"
-    echo "║              Comprehensive Ubuntu/Debian Setup               ║"
+    echo "║                🤖 AI-POWERED BOLT.GIVES INSTALLER 🤖          ║"
+    echo "║           Revolutionary Self-Healing Installation             ║"
+    echo "║              Powered by Claude Sonnet AI                     ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
+    if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+        echo -e "${GREEN}🤖 AI consultation ENABLED - Claude Sonnet will help fix any errors!${NC}"
+    else
+        echo -e "${YELLOW}💡 To enable AI consultation, use: --ai-key YOUR_ANTHROPIC_API_KEY${NC}"
+    fi
+    echo ""
 }
 
 log() {
@@ -48,6 +102,163 @@ warn() {
 
 error() {
     echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+}
+
+# AI Consultation System - Revolutionary Self-Healing
+consult_ai() {
+    local error_context="$1"
+    local command_that_failed="$2"
+    local error_logs="$3"
+    local attempt_number="${4:-1}"
+    
+    if [ "$AI_CONSULTATION_ENABLED" != "true" ] || [ -z "$ANTHROPIC_API_KEY" ]; then
+        warn "AI consultation disabled or no API key provided"
+        return 1
+    fi
+    
+    if [ "$attempt_number" -gt "$MAX_AI_RETRIES" ]; then
+        error "Maximum AI consultation attempts reached"
+        return 1
+    fi
+    
+    log "🤖 Consulting Claude Sonnet for intelligent error resolution (attempt $attempt_number/$MAX_AI_RETRIES)..."
+    
+    # Get system information for context
+    local system_info=$(cat <<EOF
+System: $(uname -a)
+OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')
+Memory: $(free -h | grep Mem)
+Disk: $(df -h / | tail -1)
+User: $USER_NAME
+App Directory: $APP_DIR
+Service: $SERVICE_NAME
+Port: $APP_PORT
+EOF
+)
+    
+    # Create the AI prompt
+    local ai_prompt=$(cat <<EOF
+You are an expert Linux system administrator helping to fix a bolt.gives installation error. 
+
+CONTEXT:
+$error_context
+
+FAILED COMMAND:
+$command_that_failed
+
+ERROR LOGS:
+$error_logs
+
+SYSTEM INFO:
+$system_info
+
+Please provide a bash script solution that will fix this specific error. The solution should:
+1. Be safe and not break the system
+2. Handle edge cases and permissions properly  
+3. Include proper error checking
+4. Be executable as root
+5. Focus only on fixing the immediate error
+
+Respond with only the bash commands needed to fix this issue, no explanations. Start with #!/bin/bash and include all necessary commands.
+EOF
+)
+    
+    # Call Claude API
+    local ai_response=$(curl -s -X POST https://api.anthropic.com/v1/messages \
+        -H "Content-Type: application/json" \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -d "{
+            \"model\": \"$ANTHROPIC_MODEL\",
+            \"max_tokens\": 2048,
+            \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(printf '%s' "$ai_prompt" | jq -R -s .)
+            }]
+        }" 2>/dev/null)
+    
+    # Extract the solution from the response
+    local solution=$(echo "$ai_response" | jq -r '.content[0].text' 2>/dev/null)
+    
+    if [ -z "$solution" ] || [ "$solution" = "null" ]; then
+        error "Failed to get AI response. API Response: $ai_response"
+        return 1
+    fi
+    
+    log "🧠 Claude Sonnet provided intelligent solution:"
+    echo "$solution" | head -20
+    
+    # Save the AI solution to a temporary file
+    local ai_script="/tmp/ai_fix_$(date +%s).sh"
+    echo "$solution" > "$ai_script"
+    chmod +x "$ai_script"
+    
+    # Execute the AI-generated solution
+    log "🚀 Executing AI-generated fix..."
+    if bash "$ai_script" 2>&1 | tee -a "$LOG_FILE"; then
+        log "✅ AI solution executed successfully!"
+        rm -f "$ai_script"
+        return 0
+    else
+        local exit_code=$?
+        error "❌ AI solution failed with exit code $exit_code"
+        
+        # Try consulting AI again with the failure information
+        if [ "$attempt_number" -lt "$MAX_AI_RETRIES" ]; then
+            warn "🔄 Consulting AI again with failure details..."
+            local new_error_context="Previous AI solution failed: $solution"
+            local new_error_logs=$(tail -20 "$LOG_FILE")
+            consult_ai "$new_error_context" "$command_that_failed" "$new_error_logs" $((attempt_number + 1))
+        fi
+        
+        rm -f "$ai_script"
+        return $exit_code
+    fi
+}
+
+# Enhanced command execution with AI consultation
+execute_with_ai_backup() {
+    local command="$1"
+    local description="$2"
+    local max_attempts="${3:-3}"
+    
+    for attempt in $(seq 1 $max_attempts); do
+        log "Executing: $description (attempt $attempt/$max_attempts)"
+        
+        if eval "$command" 2>&1 | tee /tmp/last_command_output.log; then
+            log "✅ Success: $description"
+            return 0
+        else
+            local exit_code=$?
+            error "❌ Failed: $description (exit code: $exit_code)"
+            
+            # Get error details
+            local error_logs=$(tail -50 /tmp/last_command_output.log 2>/dev/null || echo "No error logs available")
+            
+            if [ "$attempt" -lt "$max_attempts" ] && [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+                warn "🤖 Consulting AI for intelligent error resolution..."
+                
+                local error_context="Installation step '$description' failed during bolt.gives setup on attempt $attempt"
+                
+                if consult_ai "$error_context" "$command" "$error_logs"; then
+                    log "🎯 AI provided a fix, retrying the original command..."
+                    continue
+                else
+                    warn "🤔 AI consultation didn't provide a working solution"
+                fi
+            fi
+            
+            if [ "$attempt" -eq "$max_attempts" ]; then
+                error "💥 Failed after $max_attempts attempts: $description"
+                return $exit_code
+            fi
+            
+            # Standard retry delay
+            local delay=$((attempt * 2))
+            log "⏳ Waiting ${delay}s before retry..."
+            sleep $delay
+        fi
+    done
 }
 
 # Error handling with retry mechanism
@@ -480,6 +691,8 @@ install_dependencies() {
         "fail2ban"
         "logrotate"
         "rsync"
+        "jq"
+        "netstat-nat"
     )
     
     for package in "${packages[@]}"; do
@@ -541,19 +754,46 @@ install_nodejs() {
     log "✓ Node.js memory limit set to ${node_mem}MB"
 }
 
-# Install pnpm
+# Install pnpm with AI assistance
 install_pnpm() {
-    log "Installing pnpm..."
+    log "Installing pnpm with AI-powered error recovery..."
     
-    retry_command "npm install -g pnpm@$PNPM_VERSION" "Installing pnpm globally"
+    # Try multiple pnpm installation methods
+    local install_methods=(
+        "npm install -g pnpm@$PNPM_VERSION"
+        "curl -fsSL https://get.pnpm.io/install.sh | sh -"
+        "wget -qO- https://get.pnpm.io/install.sh | sh -"
+    )
+    
+    for method in "${install_methods[@]}"; do
+        log "Trying pnpm installation method: $method"
+        if execute_with_ai_backup "$method" "Installing pnpm via $method" 2; then
+            break
+        fi
+    done
+    
+    # Verify installation and setup environment
+    execute_with_ai_backup "export PATH=\"\$HOME/.local/share/pnpm:\$PATH\" && pnpm --version" "Verifying pnpm installation"
+    
+    # Set up global pnpm path
+    if [ ! -f /usr/local/bin/pnpm ]; then
+        local pnpm_path=$(which pnpm 2>/dev/null || find / -name pnpm -type f 2>/dev/null | head -1)
+        if [ -n "$pnpm_path" ]; then
+            ln -sf "$pnpm_path" /usr/local/bin/pnpm
+        fi
+    fi
     
     local pnpm_version=$(pnpm --version 2>/dev/null || echo "")
     if [ -z "$pnpm_version" ]; then
-        error "pnpm installation failed"
+        error "❌ pnpm installation verification failed"
+        # Let AI figure out what went wrong
+        if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
+            consult_ai "pnpm installation completed but verification failed" "pnpm --version" "Command not found or no output"
+        fi
         exit 1
     fi
     
-    log "✓ pnpm installed: $pnpm_version"
+    log "✅ pnpm installed successfully: $pnpm_version"
 }
 
 # Create application user
@@ -674,57 +914,60 @@ setup_application() {
     fi
     chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.bashrc"
     
-    # Install dependencies with self-healing
-    log "Installing application dependencies..."
+    # AI-powered dependency installation
+    log "🚀 Installing dependencies with AI-powered error recovery..."
     
-    # Clear any cache issues first
-    sudo -u "$USER_NAME" pnpm store prune 2>/dev/null || true
-    
-    # Attempt installation with retry
-    local install_success=false
-    for attempt in {1..3}; do
-        log "Dependency installation attempt $attempt/3..."
+    # Comprehensive pnpm setup for the user
+    execute_with_ai_backup "
+        # Remove any existing pnpm installations for clean start
+        rm -rf /home/$USER_NAME/.local/share/pnpm 2>/dev/null || true
+        rm -rf /home/$USER_NAME/.config/pnpm 2>/dev/null || true
+        rm -rf /home/$USER_NAME/.cache/pnpm 2>/dev/null || true
         
-        if sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=4096" pnpm install --no-frozen-lockfile 2>&1 | tee /tmp/pnpm-install.log; then
-            install_success=true
-            log "✓ Dependencies installed successfully"
-            rm -f /tmp/pnpm-install.log
-            break
-        else
-            # Analyze installation failure
-            if grep -q "ECONNREFUSED\|ETIMEDOUT\|ENOTFOUND" /tmp/pnpm-install.log; then
-                warn "Network issues detected"
-                self_heal "dns_resolution"
-                
-                # Try with different registry
-                log "Switching to alternative npm registry..."
-                sudo -u "$USER_NAME" pnpm config set registry https://registry.npmmirror.com
-            elif grep -q "ENOSPC\|EACCES" /tmp/pnpm-install.log; then
-                warn "Disk space or permission issues"
-                
-                # Fix permissions
-                chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
-                
-                # Clean up
-                rm -rf node_modules
-                rm -rf ~/.pnpm-store
-                self_heal "memory_issues"
-            fi
-            
-            if [ $attempt -lt 3 ]; then
-                sleep 10
-            fi
-        fi
-    done
+        # Create fresh pnpm environment
+        sudo -u $USER_NAME mkdir -p /home/$USER_NAME/.local/share/pnpm
+        sudo -u $USER_NAME mkdir -p /home/$USER_NAME/.config/pnpm  
+        sudo -u $USER_NAME mkdir -p /home/$USER_NAME/.cache/pnpm
+        
+        # Set proper ownership
+        chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local
+        chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.config
+        chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.cache
+        
+        # Install pnpm for the user specifically
+        sudo -u $USER_NAME bash -c 'curl -fsSL https://get.pnpm.io/install.sh | sh -'
+        
+        # Ensure pnpm is in PATH for the user
+        sudo -u $USER_NAME bash -c 'echo \"export PNPM_HOME=/home/$USER_NAME/.local/share/pnpm\" >> /home/$USER_NAME/.bashrc'
+        sudo -u $USER_NAME bash -c 'echo \"export PATH=\\\$PNPM_HOME:\\\$PATH\" >> /home/$USER_NAME/.bashrc'
+        
+        # Source the environment
+        sudo -u $USER_NAME bash -c 'source /home/$USER_NAME/.bashrc'
+    " "Setting up clean pnpm environment for user"
     
-    if ! $install_success; then
-        error "Failed to install dependencies after multiple attempts"
-        [ -f /tmp/pnpm-install.log ] && tail -50 /tmp/pnpm-install.log
-        return 1
+    # Clean any existing node_modules
+    execute_with_ai_backup "
+        cd $APP_DIR
+        rm -rf node_modules package-lock.json yarn.lock 2>/dev/null || true
+        sudo -u $USER_NAME /home/$USER_NAME/.local/share/pnpm/pnpm store prune 2>/dev/null || true
+    " "Cleaning existing dependencies"
+    
+    # Install dependencies with multiple fallback strategies
+    local pnpm_install_command="cd $APP_DIR && sudo -u $USER_NAME PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:\$PATH NODE_OPTIONS='--max-old-space-size=4096' /home/$USER_NAME/.local/share/pnpm/pnpm install --no-frozen-lockfile"
+    
+    if ! execute_with_ai_backup "$pnpm_install_command" "Installing dependencies with pnpm" 3; then
+        # If pnpm fails, try alternative approaches
+        warn "🔄 pnpm failed, trying alternative package managers..."
+        
+        # Fallback to npm
+        execute_with_ai_backup "
+            cd $APP_DIR
+            npm install --legacy-peer-deps
+        " "Installing dependencies with npm as fallback"
     fi
     
-    # Build application with self-healing
-    log "Building application..."
+    # AI-powered application build
+    log "🏗️ Building application with AI-powered optimization..."
     
     # Check available memory before building
     local available_mem=$(free -m | awk '/^Available:/ {print $2}')
@@ -732,61 +975,24 @@ setup_application() {
         available_mem=$(free -m | awk '/^Mem:/ {print $7}')
     fi
     
-    if [ "$available_mem" -lt 1024 ]; then
-        warn "Low available memory: ${available_mem}MB. Optimizing..."
+    # Memory optimization
+    local node_mem=4096
+    if [ "$available_mem" -lt 4096 ]; then
+        node_mem=$((available_mem * 3 / 4))
+        warn "⚡ Optimizing memory allocation: ${node_mem}MB (available: ${available_mem}MB)"
         self_heal "memory_issues"
     fi
     
-    # Attempt build with retry and memory optimization
-    local build_success=false
-    local node_mem=4096
+    # Try building with pnpm first
+    local build_command="cd $APP_DIR && sudo -u $USER_NAME PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:\$PATH NODE_OPTIONS='--max-old-space-size=$node_mem' /home/$USER_NAME/.local/share/pnpm/pnpm run build"
     
-    for attempt in {1..3}; do
-        log "Build attempt $attempt/3 with ${node_mem}MB memory..."
-        
-        if sudo -u "$USER_NAME" NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm run build 2>&1 | tee /tmp/build.log; then
-            build_success=true
-            log "✓ Build completed successfully"
-            rm -f /tmp/build.log
-            break
-        else
-            # Analyze build failure
-            if grep -q "JavaScript heap out of memory" /tmp/build.log; then
-                warn "Build failed due to memory issues"
-                
-                # Reduce memory allocation and try again
-                node_mem=$((node_mem * 3 / 4))
-                warn "Reducing Node.js memory to ${node_mem}MB"
-                
-                # Free up more memory
-                self_heal "memory_issues"
-            elif grep -q "ENOSPC" /tmp/build.log; then
-                warn "Build failed due to disk space"
-                
-                # Clean up disk space
-                log "Cleaning up disk space..."
-                rm -rf node_modules/.cache
-                rm -rf .parcel-cache
-                rm -rf build
-                pnpm store prune
-                
-                # System cleanup
-                apt-get clean
-                apt-get autoremove -y
-            else
-                warn "Build failed with unknown error"
-            fi
-            
-            if [ $attempt -lt 3 ]; then
-                sleep 5
-            fi
-        fi
-    done
-    
-    if ! $build_success; then
-        error "Build failed after multiple attempts"
-        [ -f /tmp/build.log ] && cat /tmp/build.log
-        return 1
+    if ! execute_with_ai_backup "$build_command" "Building application with pnpm" 3; then
+        # Fallback to npm build
+        warn "🔄 pnpm build failed, trying npm..."
+        execute_with_ai_backup "
+            cd $APP_DIR
+            sudo -u $USER_NAME NODE_OPTIONS='--max-old-space-size=$node_mem' npm run build
+        " "Building application with npm as fallback"
     fi
     
     # Create environment file
@@ -1795,8 +2001,38 @@ print_success() {
 }
 
 # Pre-flight checks
+# Test AI connectivity
+test_ai_connection() {
+    if [ "$AI_CONSULTATION_ENABLED" = "true" ] && [ -n "$ANTHROPIC_API_KEY" ]; then
+        log "🧪 Testing AI connectivity..."
+        
+        local test_response=$(curl -s -X POST https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d '{
+                "model": "'$ANTHROPIC_MODEL'",
+                "max_tokens": 50,
+                "messages": [{"role": "user", "content": "Say hello"}]
+            }' 2>/dev/null)
+        
+        if echo "$test_response" | jq -r '.content[0].text' 2>/dev/null | grep -qi "hello"; then
+            log "✅ AI consultation system is ready!"
+        else
+            warn "⚠️ AI consultation test failed. Continuing without AI assistance."
+            warn "Response: $test_response"
+            AI_CONSULTATION_ENABLED=false
+        fi
+    else
+        warn "⚠️ AI consultation disabled (no API key provided)"
+    fi
+}
+
 preflight_check() {
     log "Running pre-flight checks..."
+    
+    # Test AI first
+    test_ai_connection
     
     # Check for previous failed installations
     if [ -f "/var/log/bolt-gives-install.failed" ]; then
