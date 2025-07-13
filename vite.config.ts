@@ -19,6 +19,34 @@ export default defineConfig((config) => {
     },
     build: {
       target: 'esnext',
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            // Vendor libraries
+            if (id.includes('node_modules')) {
+              // Large UI libraries
+              if (id.includes('@monaco-editor') || id.includes('monaco-editor')) {
+                return 'monaco';
+              }
+              if (id.includes('@codemirror') || id.includes('codemirror')) {
+                return 'codemirror';
+              }
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'react';
+              }
+              if (id.includes('@remix-run')) {
+                return 'remix';
+              }
+              if (id.includes('xterm') || id.includes('@xterm')) {
+                return 'xterm';
+              }
+              // Other vendor libraries
+              return 'vendor';
+            }
+          },
+        },
+      },
     },
     plugins: [
       nodePolyfills({

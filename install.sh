@@ -499,6 +499,20 @@ setup_application() {
     
     cd "$APP_DIR"
     
+    # Ensure proper ownership of all files and directories
+    chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
+    
+    # Create and set permissions for pnpm directories
+    log "Setting up pnpm environment for user $USER_NAME..."
+    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.local/share/pnpm"
+    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.config/pnpm"
+    sudo -u "$USER_NAME" mkdir -p "/home/$USER_NAME/.cache/pnpm"
+    
+    # Set proper permissions
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.cache" 2>/dev/null || true
+    
     # Install dependencies with self-healing
     log "Installing application dependencies..."
     
@@ -925,7 +939,8 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name $DOMAIN;
     
     # SSL configuration
@@ -1070,32 +1085,42 @@ EOF
 create_systemd_service() {
     log "Creating systemd service..."
     
+    # Get the actual node and pnpm paths
+    local node_path=$(which node)
+    local pnpm_path=$(which pnpm)
+    
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=Bolt.gives Application
-After=network.target
+After=network.target nginx.service
+Wants=nginx.service
 
 [Service]
 Type=simple
 User=$USER_NAME
+Group=$USER_NAME
 WorkingDirectory=$APP_DIR
 Environment=NODE_ENV=production
 Environment=NODE_OPTIONS="--max-old-space-size=4096"
 Environment=PORT=3000
 Environment=HOST=0.0.0.0
-ExecStart=/usr/bin/pnpm run start
+Environment=HOME=/home/$USER_NAME
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
+ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config || true'
+ExecStart=$pnpm_path run start
 Restart=always
 RestartSec=10
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal
+StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
 
 # Security settings
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$APP_DIR
+ProtectHome=false
+ReadWritePaths=$APP_DIR /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache
 
 [Install]
 WantedBy=multi-user.target
@@ -1198,21 +1223,92 @@ start_services() {
 verify_installation() {
     log "Verifying installation..."
     
-    # Test local application
-    local http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3000" || echo "000")
-    if [ "$http_code" = "200" ] || [ "$http_code" = "301" ]; then
-        log "✓ Application is responding locally"
+    # Wait for services to be fully ready
+    log "Waiting for services to be ready..."
+    sleep 10
+    
+    # Check if application service is running
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        log "✓ Bolt.gives service is running"
     else
-        warn "Application may not be responding correctly (HTTP $http_code)"
+        warn "Bolt.gives service is not running"
+        systemctl status "$SERVICE_NAME" --no-pager -l || true
+        return 1
     fi
     
-    # Test external access
-    local external_code=$(curl -s -o /dev/null -w "%{http_code}" "https://$DOMAIN" || echo "000")
-    if [ "$external_code" = "200" ]; then
-        log "✓ Application is accessible externally via HTTPS"
+    # Check if nginx is running
+    if systemctl is-active --quiet nginx; then
+        log "✓ Nginx service is running"
     else
-        warn "External HTTPS access may not be working correctly (HTTP $external_code)"
+        warn "Nginx service is not running"
+        return 1
     fi
+    
+    # Test local application with retries
+    local max_attempts=6
+    local attempt=1
+    local http_code="000"
+    
+    while [ $attempt -le $max_attempts ]; do
+        log "Testing local application (attempt $attempt/$max_attempts)..."
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3000" || echo "000")
+        
+        if [ "$http_code" = "200" ] || [ "$http_code" = "301" ] || [ "$http_code" = "302" ]; then
+            log "✓ Application is responding locally (HTTP $http_code)"
+            break
+        else
+            if [ $attempt -eq $max_attempts ]; then
+                warn "Application may not be responding correctly after $max_attempts attempts (HTTP $http_code)"
+                # Show service logs for debugging
+                log "Recent service logs:"
+                journalctl -u "$SERVICE_NAME" --no-pager -n 10 || true
+            else
+                log "Waiting 10 seconds before retry..."
+                sleep 10
+            fi
+        fi
+        attempt=$((attempt + 1))
+    done
+    
+    # Test external access with retries
+    attempt=1
+    local external_code="000"
+    
+    while [ $attempt -le $max_attempts ]; do
+        log "Testing external HTTPS access (attempt $attempt/$max_attempts)..."
+        external_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "https://$DOMAIN" || echo "000")
+        
+        if [ "$external_code" = "200" ]; then
+            log "✓ Application is accessible externally via HTTPS"
+            break
+        elif [ "$external_code" = "301" ] || [ "$external_code" = "302" ]; then
+            log "✓ Application is accessible externally (redirecting: HTTP $external_code)"
+            break
+        else
+            if [ $attempt -eq $max_attempts ]; then
+                warn "External HTTPS access may not be working correctly after $max_attempts attempts (HTTP $external_code)"
+                # Test nginx configuration
+                log "Testing nginx configuration:"
+                nginx -t || true
+                
+                # Check SSL certificate
+                log "Checking SSL certificate:"
+                openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" </dev/null 2>/dev/null | openssl x509 -noout -dates 2>/dev/null || true
+            else
+                log "Waiting 10 seconds before retry..."
+                sleep 10
+            fi
+        fi
+        attempt=$((attempt + 1))
+    done
+    
+    # Final status summary
+    log "=== Installation Verification Summary ==="
+    log "Service Status: $(systemctl is-active "$SERVICE_NAME")"
+    log "Nginx Status: $(systemctl is-active nginx)"
+    log "Local Access: HTTP $http_code"
+    log "External Access: HTTP $external_code"
+    log "Domain: https://$DOMAIN"
     
     log "✓ Installation verification completed"
 }
