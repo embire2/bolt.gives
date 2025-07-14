@@ -18,7 +18,7 @@ NODE_VERSION="20"
 PNPM_VERSION="latest"
 NGINX_CONF_PATH="/etc/nginx/sites-available/bolt-gives"
 NGINX_ENABLED_PATH="/etc/nginx/sites-enabled/bolt-gives"
-APP_DIR="/opt/bolt-gives"
+APP_DIR="/opt/bolt.gives"
 SERVICE_NAME="bolt-gives"
 USER_NAME="bolt"
 DEFAULT_PORT="3000"
@@ -101,6 +101,79 @@ warn() {
 
 error() {
     echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+}
+
+debug() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] DEBUG: $1${NC}"
+}
+
+# Advanced error logging function
+log_error_details() {
+    local error_type="$1"
+    local context="$2"
+    
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "🚨 ADVANCED ERROR DIAGNOSTICS - $error_type"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Context: $context"
+    echo "Time: $(date)"
+    echo "User: $(whoami)"
+    echo "Directory: $(pwd)"
+    echo ""
+    
+    case "$error_type" in
+        "PNPM_PERMISSION")
+            echo "🔍 PNPM Permission Analysis:"
+            echo "├── Global PNPM: $(which pnpm 2>/dev/null || echo 'NOT FOUND')"
+            echo "├── PNPM Version: $(pnpm --version 2>/dev/null || echo 'FAILED')"
+            echo "├── User Home: /home/$USER_NAME"
+            echo "├── User Exists: $(id $USER_NAME 2>/dev/null && echo 'YES' || echo 'NO')"
+            echo ""
+            echo "📁 Directory Analysis:"
+            ls -la "/home/$USER_NAME/.local/share/pnpm" 2>/dev/null || echo "❌ .local/share/pnpm does not exist"
+            ls -la "/home/$USER_NAME/.local/share/pnpm/.tools" 2>/dev/null || echo "❌ .tools does not exist"
+            ls -la "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin" 2>/dev/null || echo "❌ 9.4.0/bin does not exist"
+            echo ""
+            echo "🔑 Permission Analysis:"
+            echo "├── /home/$USER_NAME ownership: $(ls -ld /home/$USER_NAME 2>/dev/null | awk '{print $3":"$4}' || echo 'ERROR')"
+            echo "├── .local ownership: $(ls -ld /home/$USER_NAME/.local 2>/dev/null | awk '{print $3":"$4}' || echo 'ERROR')"
+            echo "└── .local permissions: $(ls -ld /home/$USER_NAME/.local 2>/dev/null | awk '{print $1}' || echo 'ERROR')"
+            ;;
+        "SERVICE_STARTUP")
+            echo "🔍 Service Startup Analysis:"
+            echo "├── Service Status: $(systemctl is-active $SERVICE_NAME 2>/dev/null || echo 'INACTIVE')"
+            echo "├── Service Enabled: $(systemctl is-enabled $SERVICE_NAME 2>/dev/null || echo 'DISABLED')"
+            echo "├── Port $APP_PORT in use: $(netstat -tlnp | grep :$APP_PORT && echo 'YES' || echo 'NO')"
+            echo ""
+            echo "📋 Recent Service Logs (last 20 lines):"
+            journalctl -u $SERVICE_NAME --no-pager -n 20 2>/dev/null || echo "❌ No service logs"
+            echo ""
+            echo "🔧 Service File Content:"
+            cat "/etc/systemd/system/$SERVICE_NAME.service" 2>/dev/null || echo "❌ Service file not found"
+            ;;
+        "AI_CONSULTATION")
+            echo "🔍 AI Consultation Analysis:"
+            echo "├── AI Enabled: $AI_CONSULTATION_ENABLED"
+            echo "├── API Key Present: $([ -n "$ANTHROPIC_API_KEY" ] && echo 'YES' || echo 'NO')"
+            echo "├── API Key Length: ${#ANTHROPIC_API_KEY}"
+            echo "├── API Key Prefix: ${ANTHROPIC_API_KEY:0:20}..."
+            echo "├── Model: $ANTHROPIC_MODEL"
+            echo "├── Max Retries: $MAX_AI_RETRIES"
+            echo ""
+            echo "🌐 Connectivity Test:"
+            curl -s --connect-timeout 5 https://api.anthropic.com/ && echo "✅ Can reach Anthropic API" || echo "❌ Cannot reach Anthropic API"
+            ;;
+    esac
+    
+    echo ""
+    echo "📋 Full System Context:"
+    echo "├── OS: $(uname -a)"
+    echo "├── Memory: $(free -h | head -2)"
+    echo "├── Disk: $(df -h /opt 2>/dev/null | tail -1)"
+    echo "└── Load: $(uptime)"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
 }
 
 # AI Consultation System - Revolutionary Self-Healing
@@ -941,11 +1014,29 @@ EOF
     cat > "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin/pnpm" << EOF
 #!/bin/bash
 # PNPM version-specific wrapper
+export PNPM_HOME="/home/$USER_NAME/.local/share/pnpm"
+export PATH="\$PNPM_HOME:\$PATH"
 exec $global_pnpm "\$@"
 EOF
     
     chmod +x "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin/pnpm"
     chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local/share/pnpm/.tools"
+    
+    # Create additional version directories that might be expected
+    for version in "9.4.0" "latest" "current"; do
+        local version_dir="/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/$version/bin"
+        mkdir -p "$version_dir"
+        
+        cat > "$version_dir/pnpm" << EOF
+#!/bin/bash
+# PNPM wrapper for version $version
+export PNPM_HOME="/home/$USER_NAME/.local/share/pnpm"
+export PATH="\$PNPM_HOME:\$PATH"
+exec $global_pnpm "\$@"
+EOF
+        chmod +x "$version_dir/pnpm"
+        chown -R "$USER_NAME:$USER_NAME" "$version_dir"
+    done
     
     # Create symlinks for all possible PNPM locations
     ln -sf "$global_pnpm" "/home/$USER_NAME/.local/share/pnpm/pnpm" 2>/dev/null || true
@@ -979,6 +1070,30 @@ EOF
     chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.cache"
     find "/home/$USER_NAME/.local" -type d -exec chmod 755 {} \;
     find "/home/$USER_NAME/.local" -type f -name "pnpm" -exec chmod 755 {} \;
+    
+    # Comprehensive PNPM verification
+    log "🔍 Verifying PNPM setup..."
+    
+    # Test all possible PNPM executables
+    local test_commands=(
+        "/home/$USER_NAME/.local/bin/pnpm --version"
+        "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin/pnpm --version"
+        "sudo -u $USER_NAME /home/$USER_NAME/.local/bin/pnpm --version"
+        "sudo -u $USER_NAME bash -c 'cd ~ && source ~/.bashrc && pnpm --version'"
+    )
+    
+    for cmd in "${test_commands[@]}"; do
+        debug "Testing: $cmd"
+        if eval "$cmd" >/dev/null 2>&1; then
+            log "✅ SUCCESS: $cmd"
+        else
+            warn "❌ FAILED: $cmd"
+        fi
+    done
+    
+    # Show final directory structure
+    debug "Final PNPM directory structure:"
+    find "/home/$USER_NAME/.local/share/pnpm" -type f -name "pnpm" -exec ls -la {} \; 2>/dev/null || true
     
     log "✓ PNPM setup completed with all permission fixes for user $USER_NAME"
 }
@@ -1857,6 +1972,9 @@ start_services() {
                 warn "PNPM-related errors detected"
                 local pnpm_error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50)
                 
+                # Show advanced error diagnostics
+                log_error_details "PNPM_PERMISSION" "Service startup attempt $i - PNPM errors detected"
+                
                 # Try basic pnpm fixes first
                 log "Clearing pnpm cache and reinstalling..."
                 sudo -u $USER_NAME pnpm store prune
@@ -1867,12 +1985,16 @@ start_services() {
                 # If AI is enabled, get additional intelligent solutions
                 if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
                     warn "🤖 Consulting AI for advanced PNPM error resolution..."
+                    log_error_details "AI_CONSULTATION" "About to call AI for PNPM error resolution"
                     local pnpm_context="PNPM installation/execution errors during bolt.gives service startup on attempt $i"
                     if consult_ai "$pnpm_context" "pnpm install and service startup" "$pnpm_error_logs" "$i"; then
                         log "🎯 AI provided PNPM-specific fixes"
                     else
                         warn "🤔 AI couldn't provide PNPM solutions, continuing with standard recovery"
                     fi
+                else
+                    warn "🚫 AI consultation is DISABLED - cannot get intelligent PNPM fixes"
+                    log_error_details "AI_CONSULTATION" "AI consultation disabled during PNPM error"
                 fi
                 
                 error_found=true
