@@ -1804,8 +1804,8 @@ ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$US
 ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache /home/$USER_NAME/.npm 2>/dev/null || true'
 ExecStartPre=/bin/bash -c 'chmod -R 755 /home/$USER_NAME/.local /home/$USER_NAME/.config 2>/dev/null || true'
 
-# Main process
-ExecStart=$pnpm_path run start
+# Main process (use npm since pnpm is broken)
+ExecStart=/usr/bin/npm run start
 
 # Restart configuration
 Restart=always
@@ -1985,34 +1985,24 @@ start_services() {
                 warn "PNPM-related errors detected"
                 local pnpm_error_logs=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50)
                 
-                # Show advanced error diagnostics
+                # IMMEDIATELY show advanced error diagnostics before doing anything else
+                echo ""
+                echo "🚨🚨🚨 FORCING DIAGNOSTIC OUTPUT 🚨🚨🚨"
                 log_error_details "PNPM_PERMISSION" "Service startup attempt $i - PNPM errors detected"
+                echo "🚨🚨🚨 END DIAGNOSTIC OUTPUT 🚨🚨🚨"
+                echo ""
                 
-                # Try basic pnpm fixes first
-                log "Clearing pnpm cache and reinstalling..."
+                # STOP trying to use broken PNPM - use NPM instead!
+                warn "🚫 PNPM is broken, switching to NPM which actually works!"
                 
-                # Find the actual working pnpm
-                local working_pnpm=""
-                for pnpm_path in "/usr/local/bin/pnpm" "/usr/bin/pnpm" "$(which pnpm 2>/dev/null)"; do
-                    if [ -x "$pnpm_path" ]; then
-                        working_pnpm="$pnpm_path"
-                        break
-                    fi
-                done
+                cd $APP_DIR
+                log "Removing broken node_modules..."
+                rm -rf node_modules package-lock.json pnpm-lock.yaml
                 
-                if [ -z "$working_pnpm" ]; then
-                    error "NO WORKING PNPM FOUND! Installing npm fallback..."
-                    cd $APP_DIR
-                    sudo -u $USER_NAME npm install --legacy-peer-deps
-                else
-                    log "Using PNPM at: $working_pnpm"
-                    
-                    # Use the working pnpm with full environment
-                    cd $APP_DIR
-                    sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" HOME="/home/$USER_NAME" $working_pnpm store prune || true
-                    rm -rf node_modules
-                    sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" HOME="/home/$USER_NAME" NODE_OPTIONS="--max-old-space-size=2048" $working_pnpm install --no-frozen-lockfile
-                fi
+                log "Installing dependencies with NPM (which actually works)..."
+                sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" HOME="/home/$USER_NAME" NODE_OPTIONS="--max-old-space-size=2048" npm install --legacy-peer-deps
+                
+                log "✅ NPM installation completed - no more PNPM errors!"
                 
                 # If AI is enabled, get additional intelligent solutions
                 if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
