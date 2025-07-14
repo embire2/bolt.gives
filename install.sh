@@ -26,38 +26,21 @@ APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
 # AI Assistant Configuration  
 # Bolt.gives provides AI consultation using our Anthropic API
-ANTHROPIC_API_URL="https://openweb.live/anthropic-api-key.txt"
-# Fallback hardcoded API key (base64 encoded for security)
-ANTHROPIC_API_KEY_B64="c2stYW50LWFwaTAzLTZ1VG5naHN2RmxrR3NBbnZEX3lyOGFhc1kwMi1lZ29iUHI3QlN5OGZTdXpqZTM4d0JoRzI3bk94VlRFckd3X2pLQWg3a01lTmgwVl90RUZDZFBMczJBLWo0UjJzQUFB"
-ANTHROPIC_API_KEY=""
+# Direct hardcoded API key for immediate use
+ANTHROPIC_API_KEY="sk-ant-api03-6uTnghsvFlkGsAnvD_yr8aasY002-egobPr7BSy8fSuzje38wBhG27nOxVTErGw_jKAh7kMeNh0V_tEFCdPLs2A-j4R2sAAA"
 ANTHROPIC_MODEL="claude-sonnet-4-20250514"
 AI_CONSULTATION_ENABLED=true
 MAX_AI_RETRIES=3
 
-# Download API key from remote URL with fallback
-download_api_key() {
-    log "🔑 Attempting to download Anthropic API key from Bolt.gives server..."
-    
-    # Try to download from URL first
-    local downloaded_key=$(curl -s --connect-timeout 10 --max-time 30 "$ANTHROPIC_API_URL" 2>/dev/null | tr -d '\n\r\t ')
-    
-    if [ -n "$downloaded_key" ] && [ ${#downloaded_key} -ge 50 ] && [[ "$downloaded_key" =~ ^sk-ant- ]]; then
-        ANTHROPIC_API_KEY="$downloaded_key"
-        log "✅ API key downloaded successfully from server"
+# Verify API key is available
+verify_api_key() {
+    if [ -n "$ANTHROPIC_API_KEY" ] && [ ${#ANTHROPIC_API_KEY} -ge 50 ]; then
+        log "✅ API key is configured for AI consultation"
         return 0
     else
-        # Use fallback hardcoded key
-        warn "Failed to download API key from server, using fallback key"
-        ANTHROPIC_API_KEY=$(echo "$ANTHROPIC_API_KEY_B64" | base64 -d)
-        
-        if [ -n "$ANTHROPIC_API_KEY" ] && [ ${#ANTHROPIC_API_KEY} -ge 50 ]; then
-            log "✅ Using fallback API key for AI consultation"
-            return 0
-        else
-            warn "Both download and fallback API key failed, AI consultation will be disabled"
-            AI_CONSULTATION_ENABLED=false
-            return 1
-        fi
+        warn "API key not found, AI consultation will be disabled"
+        AI_CONSULTATION_ENABLED=false
+        return 1
     fi
 }
 
@@ -127,13 +110,24 @@ consult_ai() {
     local error_logs="$3"
     local attempt_number="${4:-1}"
     
-    if [ "$AI_CONSULTATION_ENABLED" != "true" ] || [ -z "$ANTHROPIC_API_KEY" ]; then
-        warn "AI consultation disabled or no API key provided"
+    log "🤖 AI CONSULTATION TRIGGERED!"
+    log "Context: $error_context"
+    log "Failed command: $command_that_failed"
+    
+    if [ "$AI_CONSULTATION_ENABLED" != "true" ]; then
+        warn "AI consultation is DISABLED (AI_CONSULTATION_ENABLED=$AI_CONSULTATION_ENABLED)"
         return 1
     fi
     
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        warn "AI consultation FAILED - No API key (key length: ${#ANTHROPIC_API_KEY})"
+        return 1
+    fi
+    
+    log "✅ AI is ENABLED with API key: ${ANTHROPIC_API_KEY:0:20}..."
+    
     if [ "$attempt_number" -gt "$MAX_AI_RETRIES" ]; then
-        error "Maximum AI consultation attempts reached"
+        error "Maximum AI consultation attempts reached ($attempt_number > $MAX_AI_RETRIES)"
         return 1
     fi
     
@@ -896,58 +890,97 @@ create_app_user() {
 
 # Setup PNPM specifically for the application user
 setup_pnpm_for_user() {
-    log "Setting up PNPM for user $USER_NAME..."
+    log "Setting up PNPM for user $USER_NAME with comprehensive fixes..."
     
-    # Ensure PNPM is accessible for the user
-    local pnpm_global=$(which pnpm 2>/dev/null)
-    if [ -z "$pnpm_global" ]; then
-        error "PNPM not found globally. Running install_pnpm first..."
-        install_pnpm
-        pnpm_global=$(which pnpm 2>/dev/null)
+    # First, ensure global PNPM exists
+    if ! command -v pnpm &> /dev/null; then
+        log "Installing PNPM globally first..."
+        npm install -g pnpm@latest
     fi
     
-    # Setup PNPM environment for the user
-    local user_pnpm_dir="/home/$USER_NAME/.local/share/pnpm"
+    # Get the global PNPM path
+    local global_pnpm=$(which pnpm)
+    log "Global PNPM found at: $global_pnpm"
     
-    # Create PNPM executable script for the user
-    cat > "/home/$USER_NAME/.local/bin/pnpm" << 'EOF'
+    # Create ALL necessary directories for the user with proper structure
+    local user_dirs=(
+        "/home/$USER_NAME/.local/share/pnpm"
+        "/home/$USER_NAME/.local/share/pnpm/.tools"
+        "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm"
+        "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0"
+        "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin"
+        "/home/$USER_NAME/.local/share/pnpm/store"
+        "/home/$USER_NAME/.local/share/pnpm/store/v3"
+        "/home/$USER_NAME/.local/share/pnpm/store/v3/files"
+        "/home/$USER_NAME/.local/bin"
+        "/home/$USER_NAME/.config/pnpm"
+        "/home/$USER_NAME/.cache/pnpm"
+    )
+    
+    for dir in "${user_dirs[@]}"; do
+        mkdir -p "$dir"
+        chown -R "$USER_NAME:$USER_NAME" "$dir"
+        chmod -R 755 "$dir"
+    done
+    
+    # Create a wrapper script that always works
+    cat > "/home/$USER_NAME/.local/bin/pnpm" << EOF
 #!/bin/bash
-export PNPM_HOME="/home/bolt/.local/share/pnpm"
-export PATH="$PNPM_HOME:$PATH"
-exec /usr/local/bin/pnpm "$@"
+# PNPM wrapper script for user $USER_NAME
+export PNPM_HOME="/home/$USER_NAME/.local/share/pnpm"
+export PATH="\$PNPM_HOME:\$PATH"
+
+# Use the global pnpm
+exec $global_pnpm "\$@"
 EOF
     
-    # Make the script executable
-    mkdir -p "/home/$USER_NAME/.local/bin"
     chmod +x "/home/$USER_NAME/.local/bin/pnpm"
-    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
+    chown "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local/bin/pnpm"
     
-    # Add PNPM to user's PATH
-    echo 'export PNPM_HOME="/home/bolt/.local/share/pnpm"' >> "/home/$USER_NAME/.bashrc"
-    echo 'export PATH="$PNPM_HOME:$HOME/.local/bin:$PATH"' >> "/home/$USER_NAME/.bashrc"
+    # Also create the version-specific PNPM that corepack expects
+    cat > "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin/pnpm" << EOF
+#!/bin/bash
+# PNPM version-specific wrapper
+exec $global_pnpm "\$@"
+EOF
     
-    # Install pnpm for the user using corepack
-    log "Installing PNPM for user using corepack..."
-    sudo -u $USER_NAME bash -c "cd ~ && corepack enable && corepack prepare pnpm@latest --activate" || {
-        warn "Corepack installation failed, trying direct installation..."
-        sudo -u $USER_NAME bash -c "cd ~ && npm install -g pnpm"
-    }
+    chmod +x "/home/$USER_NAME/.local/share/pnpm/.tools/pnpm/9.4.0/bin/pnpm"
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local/share/pnpm/.tools"
     
-    # Create pnpm state file with correct permissions
-    sudo -u $USER_NAME touch "/home/$USER_NAME/.pnpm-state.json"
+    # Create symlinks for all possible PNPM locations
+    ln -sf "$global_pnpm" "/home/$USER_NAME/.local/share/pnpm/pnpm" 2>/dev/null || true
     
-    # Initialize PNPM store
-    sudo -u $USER_NAME bash -c "cd ~ && source ~/.bashrc && pnpm store status" || {
-        warn "PNPM store initialization failed, creating manually..."
-        sudo -u $USER_NAME bash -c "mkdir -p $user_pnpm_dir/store/v3/files"
-    }
+    # Update user's bashrc with proper paths
+    cat >> "/home/$USER_NAME/.bashrc" << 'EOF'
+
+# PNPM Configuration
+export PNPM_HOME="/home/bolt/.local/share/pnpm"
+export PATH="$HOME/.local/bin:$PNPM_HOME:$PATH"
+export npm_config_prefix="$HOME/.local"
+EOF
     
-    # Fix all permissions one more time
+    # Create pnpm configuration
+    mkdir -p "/home/$USER_NAME/.config/pnpm"
+    cat > "/home/$USER_NAME/.config/pnpm/rc" << EOF
+store-dir=/home/$USER_NAME/.local/share/pnpm/store
+global-dir=/home/$USER_NAME/.local/share/pnpm/global
+state-dir=/home/$USER_NAME/.local/share/pnpm/state
+cache-dir=/home/$USER_NAME/.cache/pnpm
+EOF
+    
+    chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config/pnpm"
+    
+    # Initialize PNPM for the user
+    sudo -u $USER_NAME bash -c "cd ~ && $global_pnpm config set store-dir /home/$USER_NAME/.local/share/pnpm/store"
+    
+    # Final permission fix for everything
     chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.local"
     chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.config"
     chown -R "$USER_NAME:$USER_NAME" "/home/$USER_NAME/.cache"
+    find "/home/$USER_NAME/.local" -type d -exec chmod 755 {} \;
+    find "/home/$USER_NAME/.local" -type f -name "pnpm" -exec chmod 755 {} \;
     
-    log "✓ PNPM setup completed for user $USER_NAME"
+    log "✓ PNPM setup completed with all permission fixes for user $USER_NAME"
 }
 
 # Clone and setup application
@@ -2222,9 +2255,9 @@ test_ai_connection() {
 preflight_check() {
     log "Running pre-flight checks..."
     
-    # Download API key first
+    # Verify API key is available
     if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
-        download_api_key
+        verify_api_key
     fi
     
     # Test AI connectivity
