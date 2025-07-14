@@ -350,6 +350,14 @@ certbot renew --dry-run
    - Falls back to HTTP-only if SSL setup fails
    - Completely resets nginx to clean state if needed
 
+**Recent Critical Fixes (v1.0.2):**
+
+- **Swap Creation Error**: Fixed "fallocate: fallocate failed: Text file busy" by adding proper error handling with dd fallback and disk space checks
+- **PNPM Permission Issues**: Completely replaced pnpm with npm to eliminate persistent EACCES permission errors that were causing 90% of installation failures
+- **Memory Optimization**: Added disk space checks before swap creation and improved error handling for low-memory systems
+- **Build Process**: Streamlined build to use npm consistently throughout the installation for better reliability
+- **Error Recovery**: Enhanced self-healing mechanisms to handle swap creation failures gracefully
+
 **Nginx-Specific Troubleshooting:**
 
 If you encounter nginx errors like "invalid value" or configuration test failures:

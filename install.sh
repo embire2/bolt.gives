@@ -550,7 +550,7 @@ self_heal() {
             
         "memory_issues")
             log "Optimizing memory usage..."
-            # Clear package cache
+            # Clean package caches
             apt-get clean
             apt-get autoremove -y
             
@@ -561,11 +561,53 @@ self_heal() {
             local swap_size=$(free -m | awk '/^Swap:/ {print $2}')
             if [ "$swap_size" -lt 2048 ]; then
                 log "Creating 2GB swap file..."
-                fallocate -l 2G /swapfile
+                # Check if swap file already exists
+                if [ -f /swapfile ]; then
+                    log "Swap file exists, removing old one..."
+                    swapoff /swapfile 2>/dev/null || true
+                    rm -f /swapfile
+                    # Remove from fstab
+                    sed -i '/\/swapfile/d' /etc/fstab 2>/dev/null || true
+                fi
+                
+                # Check available disk space for swap file (2GB + 500MB buffer)
+                local available_space=$(df / | awk 'NR==2{print $4}')
+                local swap_space_needed=$((2560 * 1024)) # 2.5GB in KB
+                
+                if [ "$available_space" -lt "$swap_space_needed" ]; then
+                    warn "Insufficient disk space for swap file. Need: 2.5GB, Available: $(($available_space / 1024 / 1024))GB"
+                    warn "Continuing without additional swap"
+                    return 0
+                fi
+                
+                # Try fallocate first, fallback to dd
+                if ! fallocate -l 2G /swapfile 2>/dev/null; then
+                    log "fallocate failed, using dd method..."
+                    dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress 2>/dev/null || {
+                        log_error_details "SWAP_CREATION_FAILED" "Both fallocate and dd methods failed"
+                        warn "Failed to create swap file, continuing without additional swap"
+                        return 0
+                    }
+                fi
+                
                 chmod 600 /swapfile
-                mkswap /swapfile
-                swapon /swapfile
-                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                if ! mkswap /swapfile; then
+                    warn "Failed to format swap file, continuing without additional swap"
+                    rm -f /swapfile
+                    return 0
+                fi
+                
+                if ! swapon /swapfile; then
+                    warn "Failed to enable swap file, continuing without additional swap"
+                    rm -f /swapfile
+                    return 0
+                fi
+                
+                # Add to fstab only if successfully enabled
+                if ! grep -q '/swapfile' /etc/fstab; then
+                    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                fi
+                log "✅ Successfully created and enabled 2GB swap file"
             fi
             ;;
             
@@ -1236,25 +1278,28 @@ setup_application() {
     
     log "Using PNPM at: $pnpm_path"
     
-    # Try pnpm install with proper environment
-    local pnpm_install_command="cd $APP_DIR && sudo -u $USER_NAME env PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:/home/$USER_NAME/.local/bin:/usr/local/bin:/usr/bin:\$PATH NODE_OPTIONS='--max-old-space-size=4096' $pnpm_path install --no-frozen-lockfile"
+    # Use npm directly instead of pnpm due to persistent permission issues
+    log "🔄 Using npm for dependency installation (pnpm has known permission issues)"
     
-    if ! execute_with_ai_backup "$pnpm_install_command" "Installing dependencies with pnpm" 3; then
-        # If pnpm fails, try alternative approaches
-        warn "🔄 pnpm failed, trying alternative package managers..."
+    # Nuclear fix: Use npm exclusively to avoid pnpm permission headaches
+    local npm_install_command="cd $APP_DIR && sudo -u $USER_NAME env NODE_OPTIONS='--max-old-space-size=4096' npm install --legacy-peer-deps"
+    
+    if ! execute_with_ai_backup "$npm_install_command" "Installing dependencies with npm" 3; then
+        # If npm fails, try with reduced memory
+        warn "🔄 npm failed, trying with reduced memory..."
         
         # If AI is enabled, let it analyze the failure
         if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
             local install_error_logs=$(cat /tmp/last_command_output.log 2>/dev/null || echo "No logs available")
             warn "🤖 Consulting AI for dependency installation failure..."
-            consult_ai "PNPM dependency installation failed for bolt.gives" "$pnpm_install_command" "$install_error_logs" 1
+            consult_ai "NPM dependency installation failed for bolt.gives" "$npm_install_command" "$install_error_logs" 1
         fi
         
-        # Fallback to npm
+        # Try with reduced memory and more basic options
         execute_with_ai_backup "
             cd $APP_DIR
-            npm install --legacy-peer-deps
-        " "Installing dependencies with npm as fallback"
+            sudo -u $USER_NAME env NODE_OPTIONS='--max-old-space-size=2048' npm install --legacy-peer-deps --no-audit --no-fund
+        " "Installing dependencies with npm (reduced memory)"
     fi
     
     # AI-powered application build
@@ -1274,17 +1319,13 @@ setup_application() {
         self_heal "memory_issues"
     fi
     
-    # Try building with pnpm first
-    local build_command="cd $APP_DIR && sudo -u $USER_NAME PNPM_HOME=/home/$USER_NAME/.local/share/pnpm PATH=/home/$USER_NAME/.local/share/pnpm:\$PATH NODE_OPTIONS='--max-old-space-size=$node_mem' /home/$USER_NAME/.local/share/pnpm/pnpm run build"
+    # Use npm build directly (consistent with installation approach)
+    log "🔄 Using npm for build process (consistent with dependency installation)"
     
-    if ! execute_with_ai_backup "$build_command" "Building application with pnpm" 3; then
-        # Fallback to npm build
-        warn "🔄 pnpm build failed, trying npm..."
-        execute_with_ai_backup "
-            cd $APP_DIR
-            sudo -u $USER_NAME NODE_OPTIONS='--max-old-space-size=$node_mem' npm run build
-        " "Building application with npm as fallback"
-    fi
+    execute_with_ai_backup "
+        cd $APP_DIR
+        sudo -u $USER_NAME NODE_OPTIONS='--max-old-space-size=$node_mem' npm run build
+    " "Building application with npm"
     
     # Create environment file
     if [ ! -f ".env" ]; then
@@ -1805,7 +1846,7 @@ ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.loca
 ExecStartPre=/bin/bash -c 'chmod -R 755 /home/$USER_NAME/.local /home/$USER_NAME/.config 2>/dev/null || true'
 
 # Main process (use npm since pnpm is broken)
-ExecStart=/usr/bin/npm run start
+ExecStart=/usr/bin/npm start
 
 # Restart configuration
 Restart=always
