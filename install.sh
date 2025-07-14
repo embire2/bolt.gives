@@ -484,8 +484,11 @@ self_heal() {
             rm -rf build dist .parcel-cache
             rm -rf node_modules/.cache
             
-            # Clear pnpm cache
-            sudo -u $USER_NAME pnpm store prune
+            # Clear pnpm cache (use global pnpm)
+            local global_pnpm=$(which pnpm 2>/dev/null || echo "/usr/local/bin/pnpm")
+            if [ -x "$global_pnpm" ]; then
+                sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" $global_pnpm store prune || true
+            fi
             
             # Try with reduced parallelism
             export JOBS=1
@@ -1767,6 +1770,12 @@ create_systemd_service() {
     
     log "Using PNPM path for service: $pnpm_path"
     
+    # If pnpm_path is still empty, use the most common location
+    if [ -z "$pnpm_path" ] || [ ! -x "$pnpm_path" ]; then
+        pnpm_path="/usr/local/bin/pnpm"
+        warn "PNPM path not found, defaulting to: $pnpm_path"
+    fi
+    
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=Bolt.gives Application
@@ -1786,7 +1795,11 @@ Environment=HOME=/home/$USER_NAME
 Environment=PATH=/home/$USER_NAME/.local/bin:/home/$USER_NAME/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
 
-# Pre-start permission fixes
+# Pre-start permission fixes and debugging
+ExecStartPre=/bin/bash -c 'echo "DEBUG: Starting bolt.gives service as user $USER_NAME"'
+ExecStartPre=/bin/bash -c 'echo "DEBUG: PATH=$PATH"'
+ExecStartPre=/bin/bash -c 'echo "DEBUG: which pnpm = $(which pnpm 2>/dev/null || echo NOT FOUND)"'
+ExecStartPre=/bin/bash -c 'echo "DEBUG: pnpm location = $pnpm_path"'
 ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$USER_NAME/.config/pnpm /home/$USER_NAME/.cache/pnpm'
 ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache /home/$USER_NAME/.npm 2>/dev/null || true'
 ExecStartPre=/bin/bash -c 'chmod -R 755 /home/$USER_NAME/.local /home/$USER_NAME/.config 2>/dev/null || true'
@@ -1977,10 +1990,29 @@ start_services() {
                 
                 # Try basic pnpm fixes first
                 log "Clearing pnpm cache and reinstalling..."
-                sudo -u $USER_NAME pnpm store prune
-                rm -rf $APP_DIR/node_modules
-                cd $APP_DIR
-                sudo -u $USER_NAME pnpm install --no-frozen-lockfile
+                
+                # Find the actual working pnpm
+                local working_pnpm=""
+                for pnpm_path in "/usr/local/bin/pnpm" "/usr/bin/pnpm" "$(which pnpm 2>/dev/null)"; do
+                    if [ -x "$pnpm_path" ]; then
+                        working_pnpm="$pnpm_path"
+                        break
+                    fi
+                done
+                
+                if [ -z "$working_pnpm" ]; then
+                    error "NO WORKING PNPM FOUND! Installing npm fallback..."
+                    cd $APP_DIR
+                    sudo -u $USER_NAME npm install --legacy-peer-deps
+                else
+                    log "Using PNPM at: $working_pnpm"
+                    
+                    # Use the working pnpm with full environment
+                    cd $APP_DIR
+                    sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" HOME="/home/$USER_NAME" $working_pnpm store prune || true
+                    rm -rf node_modules
+                    sudo -u $USER_NAME env PATH="/usr/local/bin:/usr/bin:$PATH" HOME="/home/$USER_NAME" NODE_OPTIONS="--max-old-space-size=2048" $working_pnpm install --no-frozen-lockfile
+                fi
                 
                 # If AI is enabled, get additional intelligent solutions
                 if [ "$AI_CONSULTATION_ENABLED" = "true" ]; then
