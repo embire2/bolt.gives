@@ -27,7 +27,9 @@ APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 # AI Assistant Configuration  
 # Bolt.gives provides AI consultation using our Anthropic API
 # Direct hardcoded API key for immediate use
-ANTHROPIC_API_KEY="sk-ant-api03-6uTnghsvFlkGsAnvD_yr8aasY002-egobPr7BSy8fSuzje38wBhG27nOxVTErGw_jKAh7kMeNh0V_tEFCdPLs2A-j4R2sAAA"
+# ANTHROPIC_API_KEY should be provided by the user or set as environment variable
+# Example: export ANTHROPIC_API_KEY="your-api-key-here"
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 ANTHROPIC_MODEL="claude-sonnet-4-20250514"
 AI_CONSULTATION_ENABLED=true
 MAX_AI_RETRIES=3
@@ -678,6 +680,24 @@ detect_server_ip() {
 
 # Get domain from user
 get_domain() {
+    # Check if domain was already configured in a previous run
+    if [ -f /var/log/bolt-gives-domain.conf ]; then
+        DOMAIN=$(cat /var/log/bolt-gives-domain.conf)
+        log "Found previously configured domain: $DOMAIN"
+        
+        # Verify DNS is still correctly configured
+        local resolved_ip=$(dig +short "$DOMAIN" @8.8.8.8 2>/dev/null | tail -n1)
+        if [ "$resolved_ip" = "$SERVER_IP" ]; then
+            log "✓ DNS still correctly configured for $DOMAIN"
+            return 0
+        else
+            warn "DNS configuration has changed for $DOMAIN"
+            warn "Previously resolved to: $SERVER_IP"
+            warn "Now resolves to: $resolved_ip"
+            rm -f /var/log/bolt-gives-domain.conf
+        fi
+    fi
+    
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║                    DOMAIN CONFIGURATION                       ║"
@@ -732,6 +752,9 @@ get_domain() {
     done
     
     log "Using domain: $DOMAIN"
+    
+    # Save domain configuration for future runs
+    echo "$DOMAIN" > /var/log/bolt-gives-domain.conf
 }
 
 # Check system compatibility
@@ -804,6 +827,22 @@ check_system() {
 # Update system
 update_system() {
     log "Updating system packages..."
+    
+    # Configure DNS for better reliability
+    log "Configuring DNS servers for improved reliability..."
+    if [ -f /etc/resolv.conf ]; then
+        # Backup original resolv.conf
+        cp /etc/resolv.conf /etc/resolv.conf.backup
+        
+        # Add reliable DNS servers
+        cat > /etc/resolv.conf << EOF
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+EOF
+        log "✓ DNS servers configured (Cloudflare and Google)"
+    fi
     
     # Self-heal package locks if needed
     if ! dpkg --configure -a 2>/dev/null; then
@@ -1159,8 +1198,28 @@ setup_application() {
     
     cd "$APP_DIR"
     
+    # Verify repository was cloned successfully
+    if [ ! -f "$APP_DIR/package.json" ]; then
+        error "Repository clone failed - package.json not found"
+        error "Contents of $APP_DIR:"
+        ls -la "$APP_DIR" || echo "Directory not accessible"
+        exit 1
+    fi
+    
     # Ensure proper ownership of all files and directories
     chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
+    
+    # Fix execute permissions for shell scripts
+    log "Setting execute permissions for shell scripts..."
+    find "$APP_DIR" -name "*.sh" -type f -exec chmod +x {} \;
+    # Specifically ensure bindings.sh has execute permissions
+    [ -f "$APP_DIR/bindings.sh" ] && chmod +x "$APP_DIR/bindings.sh"
+    
+    # Log the status of critical files
+    log "Verifying critical files:"
+    [ -f "$APP_DIR/bindings.sh" ] && log "✓ bindings.sh found" || warn "✗ bindings.sh NOT found"
+    [ -f "$APP_DIR/package.json" ] && log "✓ package.json found" || warn "✗ package.json NOT found"
+    [ -d "$APP_DIR/app" ] && log "✓ app directory found" || warn "✗ app directory NOT found"
     
     # Check if default port is available
     if lsof -ti :$DEFAULT_PORT >/dev/null 2>&1; then
@@ -2517,12 +2576,25 @@ get_state() {
 main() {
     print_header
     
-    # Create state file if starting fresh
-    if [ ! -f /var/log/bolt-gives-install.state ]; then
+    # Create state file if starting fresh or if explicitly requested
+    if [ ! -f /var/log/bolt-gives-install.state ] || [ "$1" = "--restart" ]; then
         save_state "start"
     else
         local last_state=$(get_state)
         log "Resuming installation from: $last_state"
+        
+        # If installation was previously completed, ask if user wants to restart
+        if [ "$last_state" = "verified" ]; then
+            echo "Installation was previously completed."
+            read -p "Do you want to run the installation again? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                log "Exiting. Installation already completed."
+                exit 0
+            else
+                save_state "start"
+            fi
+        fi
     fi
     
     # Run pre-flight checks

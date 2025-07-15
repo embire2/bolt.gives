@@ -281,10 +281,11 @@ After successful installation, your Bolt.gives instance will be:
 
 #### AI Consultation Options
 
-The installation script includes Claude Sonnet AI consultation by default:
+The installation script includes Claude Sonnet AI consultation support:
 
 ```bash
-# Standard installation with AI assistance (default)
+# Standard installation (AI consultation requires API key)
+export ANTHROPIC_API_KEY="your-api-key-here"
 sudo ./install.sh
 
 # Disable AI consultation if preferred
@@ -293,6 +294,8 @@ sudo ./install.sh --no-ai
 # View AI consultation options
 sudo ./install.sh --help
 ```
+
+**Note:** As of v1.0.3, the Anthropic API key must be provided via environment variable for AI consultation to work.
 
 The AI system automatically:
 - Analyzes installation errors in real-time
@@ -349,6 +352,15 @@ certbot renew --dry-run
    - Tests nginx configuration before applying changes
    - Falls back to HTTP-only if SSL setup fails
    - Completely resets nginx to clean state if needed
+
+**Recent Critical Fixes (v1.0.3):**
+
+- **API Key Configuration**: Removed hardcoded invalid Anthropic API key; now supports environment variable configuration
+- **bindings.sh Permission Error**: Fixed "Permission denied" error by adding automatic execute permissions for all shell scripts
+- **Installation State Management**: Fixed installation loop issues by implementing proper state persistence and resume capability
+- **Domain Configuration Loop**: Script now saves domain configuration to avoid repeated DNS setup prompts
+- **DNS Server Configuration**: Added automatic configuration of Cloudflare (1.1.1.1) and Google DNS for improved reliability
+- **Application Deployment Verification**: Enhanced repository cloning with verification checks for critical files
 
 **Recent Critical Fixes (v1.0.2):**
 
