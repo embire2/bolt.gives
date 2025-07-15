@@ -185,21 +185,21 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 
 ### Automated Installation Script
 
-Bolt.gives includes a revolutionary AI-powered installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script features **Claude Sonnet AI consultation** with hardcoded API access and advanced self-healing capabilities.
+Bolt.gives includes a production-ready installation script (`install.sh`) that sets up everything needed for a production deployment on Ubuntu/Debian servers. The script has been thoroughly tested and fixed based on real-world deployment experiences.
 
-#### Self-Healing Features
+#### Key Features
 
-**AI-Powered Error Resolution:**
-- **Claude Sonnet Integration**: Real-time AI consultation for intelligent error analysis and resolution
-- **Context-Aware Solutions**: AI analyzes system state, error logs, and installation context to provide targeted fixes
-- **Automatic Fix Application**: AI-generated solutions are automatically tested and applied
-- **No API Key Required**: Uses hardcoded Bolt.gives API credentials for seamless user experience
+**Reliable Installation Process:**
+- **PNPM Package Manager**: Uses PNPM exclusively for dependency management (no NPM fallbacks)
+- **Correct Port Configuration**: Properly configured for port 8788 (wrangler's default port)
+- **State Management**: Saves installation progress and can resume from failures
+- **Domain Configuration Persistence**: Prevents configuration loops by saving domain settings
 
 **Automatic Issue Detection & Resolution:**
 - **Permission Management**: Comprehensive permission fixes for all pnpm and user directories
 - **Nginx Configuration Validation**: Automatically detects and fixes common nginx syntax errors
 - **Memory Management**: Dynamically adjusts Node.js memory allocation based on available system resources
-- **Dynamic Port Detection**: Automatically finds available ports if default port 3000 is in use
+- **Dynamic Port Detection**: Automatically finds available ports if default port 8788 is in use
 - **Port Conflict Resolution**: Detects conflicts and intelligently switches to available ports
 - **DNS Resolution Fixes**: Automatically configures DNS servers if resolution issues are detected
 - **Package Lock Recovery**: Cleans up APT locks and fixes broken packages
@@ -248,12 +248,10 @@ Bolt.gives includes a revolutionary AI-powered installation script (`install.sh`
    chmod +x install.sh
    ```
 
-2. **Run the AI-powered installation script as root:**
+2. **Run the installation script as root:**
    ```bash
    sudo ./install.sh
    ```
-   
-   The script automatically enables AI consultation using Claude Sonnet 4 for intelligent error resolution. No API key setup required!
 
 3. **Follow the prompts:**
    - The script will detect your server's public IP address
@@ -323,32 +321,14 @@ After successful installation, your Bolt.gives instance will be:
 - **Logs:** `journalctl -u bolt-gives -f`
 - **Configuration:** `/opt/bolt-gives/.env`
 
-#### AI Consultation Options
-
-The installation script includes Claude Sonnet AI consultation support:
+#### Installation Options
 
 ```bash
-# Standard installation (automatically fetches API key)
+# Standard installation
 sudo ./install.sh
-
-# Installation with custom API key
-export ANTHROPIC_API_KEY="your-api-key-here"
-sudo ./install.sh
-
-# Disable AI consultation if preferred
-sudo ./install.sh --no-ai
-
-# View AI consultation options
-sudo ./install.sh --help
 ```
 
-**Note:** As of v1.0.4, the script automatically fetches the Anthropic API key from https://openweb.live/anthropic-api-key.txt if not provided via environment variable.
-
-The AI system automatically:
-- Analyzes installation errors in real-time
-- Provides context-aware solutions
-- Applies fixes automatically when safe
-- Falls back to standard retry mechanisms if AI solutions fail
+The script includes comprehensive error handling and automatic recovery mechanisms to ensure a smooth installation process.
 
 #### Service Management Commands
 
@@ -400,12 +380,15 @@ certbot renew --dry-run
    - Falls back to HTTP-only if SSL setup fails
    - Completely resets nginx to clean state if needed
 
-**Recent Critical Fixes (v1.0.4):**
+**Recent Critical Fixes (v2.0.0):**
 
-- **Automatic API Key Fetching**: Script now automatically fetches Anthropic API key from https://openweb.live/anthropic-api-key.txt
-- **Early DNS Configuration**: DNS servers (1.1.1.1) are configured immediately at script start for reliable network operations
-- **Non-Stop Installation**: Script no longer exits on errors; uses self-healing and AI consultation to continue
-- **Enhanced Error Recovery**: All critical errors now attempt AI-assisted recovery before falling back to warnings
+- **Removed AI Consultation**: Simplified installation by removing AI features that were causing issues
+- **Fixed Port Configuration**: Now correctly uses port 8788 for wrangler instead of 3000
+- **Fixed Domain Loop**: Added domain configuration persistence to prevent repeated prompts
+- **Fixed Permission Errors**: Comprehensive permission fixes for all PNPM directories and bindings.sh
+- **PNPM Only**: Removed all NPM fallbacks; uses PNPM exclusively as designed
+- **Proper Build Process**: Uses `pnpm run build` for correct Remix/Vite builds
+- **Service Configuration**: Correctly configured to use `pnpm run start` command
 
 **Recent Critical Fixes (v1.0.3):**
 
@@ -419,7 +402,7 @@ certbot renew --dry-run
 **Recent Critical Fixes (v1.0.2):**
 
 - **Swap Creation Error**: Fixed "fallocate: fallocate failed: Text file busy" by adding proper error handling with dd fallback and disk space checks
-- **PNPM Permission Issues**: Completely replaced pnpm with npm to eliminate persistent EACCES permission errors that were causing 90% of installation failures
+- **PNPM Permission Issues**: Fixed persistent EACCES permission errors by implementing comprehensive directory creation and permission management
 - **Memory Optimization**: Added disk space checks before swap creation and improved error handling for low-memory systems
 - **Build Process**: Streamlined build to use npm consistently throughout the installation for better reliability
 - **Error Recovery**: Enhanced self-healing mechanisms to handle swap creation failures gracefully

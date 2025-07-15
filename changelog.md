@@ -1,3 +1,34 @@
+# 🚀 Release v2.0.0
+
+## What's Changed 🌟
+
+### 🔄 Major Installation Script Overhaul
+
+This release includes a complete rewrite of the production installation script based on real-world deployment feedback.
+
+### 🐛 Critical Installation Fixes
+
+* **Removed AI consultation feature** - Simplified installation by removing problematic AI features
+* **Fixed port configuration** - Now correctly uses port 8788 (wrangler's default) instead of 3000
+* **Fixed domain configuration loop** - Added persistent domain storage to prevent repeated prompts
+* **Fixed permission errors (exit code 126)** - Comprehensive permission fixes for all PNPM directories and bindings.sh
+* **Fixed package manager issues** - Uses PNPM exclusively as designed (removed all NPM fallbacks)
+* **Fixed build process** - Uses proper `pnpm run build` for Remix/Vite builds
+* **Fixed service configuration** - Correctly uses `pnpm run start` command with wrangler
+* **Enhanced error recovery** - Improved retry mechanisms and error diagnostics
+* **Added installation state management** - Script can now resume from failures
+
+### ✨ Installation Improvements
+
+* Comprehensive permission management system with `fix_all_permissions()` function
+* Automatic port conflict detection and resolution
+* Better memory management for low-resource systems
+* Improved nginx configuration handling
+* Enhanced service startup validation with multiple retry attempts
+* Domain configuration persistence to prevent loops
+
+---
+
 # 🚀 Release v1.0.1
 
 ## What's Changed 🌟
