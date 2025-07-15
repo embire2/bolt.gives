@@ -43,6 +43,7 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 - **Base Provider**: All providers extend `BaseProvider` class
 - **Registry**: Auto-registers providers from `providers/` directory
 - **Supported Providers**: OpenAI, Anthropic, Ollama, Google, Mistral, xAI, DeepSeek, Groq, etc.
+- **Multi-Model Orchestration**: NEW! Coordinate multiple AI models working together
 
 #### 2. **WebContainer Integration** (`app/lib/webcontainer/`)
 - **Sandboxed Environment**: Uses `@webcontainer/api` for isolated Node.js execution
@@ -73,6 +74,8 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 - **Artifact System**: Manages generated code artifacts and their execution
 - **Context Management**: Maintains conversation history and context
 - **Import/Export**: Chat history backup and restoration
+- **Mode Selection**: Choose between Standard Mode and Multi-Model Orchestration
+- **Multi-Model Selector**: Interface for selecting 2 AI models with API key configuration
 
 ### Data Flow
 
@@ -114,14 +117,55 @@ bolt.gives is a Remix-based web application that provides an AI-powered full-sta
 - `POST /api/auth/logout` - Session termination
 - `GET /api/auth/me` - Current user information
 
+### Multi-Model Orchestration System
+
+#### Components
+1. **ModeSelector** (`app/components/chat/ModeSelector.tsx`)
+   - Initial mode selection interface
+   - Comparison between Standard and Orchestration modes
+   - Triggers MultiModelSelector when orchestration is chosen
+
+2. **MultiModelSelector** (`app/components/chat/MultiModelSelector.tsx`)
+   - Grid-based provider selection (exactly 2 models)
+   - Dynamic model fetching per provider
+   - Individual API key configuration
+   - Detailed explanation of orchestration benefits
+
+3. **OrchestrationManager** (`app/lib/modules/orchestration/OrchestrationManager.ts`)
+   - Singleton pattern for orchestration coordination
+   - Task decomposition (code, review, test, documentation)
+   - Parallel model execution with streaming
+   - Consensus analysis for result validation
+
+4. **OrchestrationStore** (`app/lib/stores/orchestration.ts`)
+   - Session and task state management
+   - Real-time metrics tracking
+   - Panel visibility control
+
+5. **OrchestrationPanel** (`app/components/chat/OrchestrationPanel.tsx`)
+   - Real-time task monitoring UI
+   - Metrics display (total, active, completed, failed)
+   - Task status visualization with icons
+
+#### Orchestration Flow
+1. User selects "Multi-Model Orchestration" mode
+2. MultiModelSelector opens for choosing 2 AI models
+3. API keys configured for each selected model
+4. OrchestrationManager decomposes user request into tasks
+5. Tasks distributed between models for parallel execution
+6. Real-time streaming of responses from both models
+7. Consensus analysis determines best solutions
+8. Combined results presented to user
+
 ### Key Design Patterns
 
-- **Singleton Pattern**: LLMManager for centralized provider management
+- **Singleton Pattern**: LLMManager and OrchestrationManager for centralized management
 - **Observer Pattern**: Nanostores for reactive state management
 - **Queue Pattern**: Sequential execution of actions to prevent conflicts
 - **Factory Pattern**: Provider registration and instantiation
-- **Store Pattern**: Centralized state management with WorkbenchStore
+- **Store Pattern**: Centralized state management with WorkbenchStore and OrchestrationStore
 - **Guard Pattern**: AuthGuard component protects authenticated routes
+- **Strategy Pattern**: Different execution strategies for Standard vs Orchestration modes
 
 ### Environment Configuration
 

@@ -19,10 +19,11 @@ Bolt.gives is a revolutionary web-based development platform that combines:
 ## ✨ Key Features
 
 ### 🧠 AI-Powered Development
-- **Multi-Model Orchestration**: Leverage multiple AI models working in harmony
+- **Multi-Model Orchestration**: NEW! Select any 2 AI models to collaborate on your project
 - **Intelligent Code Generation**: Context-aware code suggestions and completions
 - **Smart Debugging**: AI-assisted error detection and resolution
 - **Natural Language Processing**: Describe what you want to build in plain English
+- **Real-Time Task Monitoring**: Live orchestration panel shows AI collaboration progress
 
 ### 🛠️ Advanced Development Environment
 - **WebContainer Technology**: Sandboxed Node.js environment in the browser
@@ -129,13 +130,35 @@ Ideal for quick development and straightforward tasks:
 - Cost-effective for simple coding tasks
 - Perfect for learning and experimentation
 
-### 🔹 Multi-Model Orchestration
-Advanced mode for complex projects:
-- Multiple AI agents working in parallel
-- Intelligent task decomposition and delegation
-- Cross-model validation and consensus
-- Advanced error detection and self-healing
-- Best for large-scale development projects
+### 🔹 Multi-Model Orchestration (Live Feature!)
+Advanced mode for complex projects that harnesses the power of multiple AI models:
+- **Dual AI Collaboration**: Select any 2 AI models to work together
+- **Intelligent Task Distribution**: Automatic task decomposition and parallel execution
+- **Cross-Model Validation**: Models review each other's work for higher quality
+- **Real-Time Monitoring**: Live orchestration panel shows task progress
+- **Consensus-Based Results**: Best solutions selected through AI consensus
+- **Individual API Keys**: Configure separate API keys for each model
+
+#### How to Use Multi-Model Orchestration:
+1. **Start a New Chat**: Click the chat button to begin
+2. **Select Orchestration Mode**: Choose "Multi-Model Orchestration" from the mode selector
+3. **Choose Your Models**: 
+   - Select exactly 2 AI providers from the grid
+   - Each provider shows available model count
+   - Configure API keys for each selected provider
+4. **Start Orchestration**: Click "Start Orchestration" to begin
+5. **Monitor Progress**: 
+   - Orchestration panel appears automatically
+   - View real-time task execution status
+   - See metrics: total, active, completed, and failed tasks
+   - Toggle panel visibility with the header button
+
+#### Best Use Cases:
+- Complex software architecture design
+- Large-scale refactoring projects
+- Critical system implementations
+- Code that requires multiple perspectives
+- Projects needing extensive validation
 
 ## 🛠️ Development Commands
 

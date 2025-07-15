@@ -31,6 +31,8 @@ import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { LlmErrorAlertType } from '~/types/actions';
+import { OrchestrationManager } from '~/lib/modules/orchestration/OrchestrationManager';
+import { orchestrationStore } from '~/lib/stores/orchestration';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -152,6 +154,7 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const [aiMode, setAiMode] = useState<'standard' | 'orchestration' | undefined>(undefined);
+    const [orchestrationModels, setOrchestrationModels] = useState<any[]>([]);
     const {
       messages,
       isLoading,
@@ -371,6 +374,77 @@ export const ChatImpl = memo(
       setChatStarted(true);
     };
 
+    const handleOrchestrationMessage = async (messageContent: string) => {
+      runAnimation();
+
+      // Show panel automatically when starting orchestration
+      orchestrationStore.showPanel.set(true);
+
+      // Add user message to chat
+      append({
+        role: 'user',
+        content: messageContent,
+      });
+
+      setInput('');
+
+      try {
+        const orchestrationManager = OrchestrationManager.getInstance();
+
+        // Create a temporary assistant message for streaming
+        const assistantMessageId = `orchestration_${Date.now()}`;
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          createdAt: new Date(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        let combinedResponse = '';
+        const modelResponses: Record<number, string> = {};
+
+        await orchestrationManager.orchestrate({
+          message: messageContent,
+          models: orchestrationModels,
+          onStream: (text, modelIndex) => {
+            modelResponses[modelIndex] = (modelResponses[modelIndex] || '') + text;
+
+            // Combine responses with model indicators
+            combinedResponse = Object.entries(modelResponses)
+              .map(([idx, resp]) => {
+                const model = orchestrationModels[parseInt(idx)];
+                return `### ${model.provider.name} (${model.model}):\n${resp}`;
+              })
+              .join('\n\n---\n\n');
+
+            // Update the assistant message
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === assistantMessageId ? { ...msg, content: combinedResponse } : msg)),
+            );
+          },
+          onComplete: (results) => {
+            logStore.logInfo('Orchestration completed', {
+              type: 'orchestration',
+              message: `Completed orchestration with ${results.length} results`,
+              resultsCount: results.length,
+              totalLength: results.reduce((sum, r) => sum + r.response.length, 0),
+            });
+          },
+          onError: (error) => {
+            toast.error(`Orchestration failed: ${error.message}`);
+            logStore.logError('Orchestration error', error);
+          },
+        });
+      } catch (error) {
+        logStore.logError('Failed to send orchestration message', error);
+        toast.error('Failed to process orchestration request');
+      } finally {
+        // Loading state handled by parent
+      }
+    };
+
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       const messageContent = messageInput || input;
 
@@ -380,6 +454,12 @@ export const ChatImpl = memo(
 
       if (isLoading) {
         abort();
+        return;
+      }
+
+      // Handle orchestration mode
+      if (aiMode === 'orchestration' && orchestrationModels.length === 2) {
+        await handleOrchestrationMessage(messageContent);
         return;
       }
 
@@ -653,7 +733,19 @@ export const ChatImpl = memo(
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
         aiMode={aiMode}
-        onModeSelect={setAiMode}
+        onModeSelect={(mode, models) => {
+          setAiMode(mode);
+
+          if (models) {
+            setOrchestrationModels(models);
+            logStore.logInfo('Chat: Orchestration mode selected', {
+              type: 'orchestration',
+              message: 'Orchestration mode selected with models',
+              models: models.map((m) => ({ provider: m.provider.name, model: m.model })),
+            });
+          }
+        }}
+        orchestrationModels={orchestrationModels}
       />
     );
   },

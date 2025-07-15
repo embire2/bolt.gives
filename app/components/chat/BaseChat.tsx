@@ -34,8 +34,8 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
 
-// Note: Orchestration features temporarily disabled pending type fixes
 import { ModeSelector } from './ModeSelector';
+import { OrchestrationPanel } from './OrchestrationPanel';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -84,7 +84,8 @@ interface BaseChatProps {
   selectedElement?: ElementInfo | null;
   setSelectedElement?: (element: ElementInfo | null) => void;
   aiMode?: 'standard' | 'orchestration';
-  onModeSelect?: (mode: 'standard' | 'orchestration') => void;
+  onModeSelect?: (mode: 'standard' | 'orchestration', models?: any[]) => void;
+  orchestrationModels?: any[];
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -133,6 +134,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setSelectedElement,
       aiMode,
       onModeSelect,
+      orchestrationModels,
     },
     ref,
   ) => {
@@ -179,10 +181,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setShowModeSelector(!chatStarted && !selectedAiMode);
     }, [chatStarted, selectedAiMode]);
 
-    const handleModeSelect = (mode: 'standard' | 'orchestration') => {
+    const handleModeSelect = (mode: 'standard' | 'orchestration', models?: any[]) => {
       setSelectedAiMode(mode);
       setShowModeSelector(false);
-      onModeSelect?.(mode);
+      onModeSelect?.(mode, models);
     };
 
     useEffect(() => {
@@ -386,6 +388,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       />
                       <span className="text-sm font-medium text-bolt-elements-textPrimary">
                         {selectedAiMode === 'orchestration' ? 'Multi-Model Orchestration Mode' : 'Standard Mode'}{' '}
+                        {selectedAiMode === 'orchestration' &&
+                          orchestrationModels &&
+                          orchestrationModels.length > 0 && (
+                            <span className="text-xs text-bolt-elements-textSecondary">
+                              ({orchestrationModels.map((m: any) => m.provider.name).join(' + ')})
+                            </span>
+                          )}
                         Selected
                       </span>
                       <button
@@ -567,7 +576,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       </div>
     );
 
-    return <Tooltip.Provider delayDuration={200}>{baseChat}</Tooltip.Provider>;
+    return (
+      <Tooltip.Provider delayDuration={200}>
+        {baseChat}
+        {selectedAiMode === 'orchestration' && <OrchestrationPanel />}
+      </Tooltip.Provider>
+    );
   },
 );
 
