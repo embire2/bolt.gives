@@ -2,7 +2,20 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.0.1 - Fixed DNS resolution with multiple fallback methods
+# Version 2.0.2 - Enhanced IP detection and early root check
+
+# Check if running as root first
+if [ "$EUID" -ne 0 ]; then 
+    echo "This script must be run as root. Please use: sudo ./install.sh"
+    exit 1
+fi
+
+# Ensure basic tools are available
+if ! command -v curl &> /dev/null; then
+    echo "Installing curl..."
+    apt-get update -qq
+    apt-get install -y curl
+fi
 
 # Configure DNS immediately for reliable network operations
 echo "Configuring DNS servers for reliable network access..."
@@ -48,7 +61,7 @@ print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.0.1                              ║"
+    echo "║                    Version 2.0.2                              ║"
     echo "║              All Critical Issues Fixed                        ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -294,27 +307,42 @@ detect_server_ip() {
     
     # Try multiple methods to get the public IP
     local ip_methods=(
-        "curl -s ifconfig.me"
-        "curl -s icanhazip.com"
-        "curl -s ipecho.net/plain"
-        "curl -s api.ipify.org"
+        "curl -s --connect-timeout 5 ifconfig.me"
+        "curl -s --connect-timeout 5 icanhazip.com"
+        "curl -s --connect-timeout 5 ipecho.net/plain"
+        "curl -s --connect-timeout 5 api.ipify.org"
         "dig +short myip.opendns.com @resolver1.opendns.com"
     )
     
+    local attempt=0
     for method in "${ip_methods[@]}"; do
-        SERVER_IP=$($method 2>/dev/null | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' | head -1)
+        ((attempt++))
+        log "Attempting IP detection method $attempt: $method"
+        local raw_output=$($method 2>/dev/null)
+        SERVER_IP=$(echo "$raw_output" | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' | head -1)
+        
         if [ -n "$SERVER_IP" ]; then
+            log "Successfully detected IP: $SERVER_IP"
             break
+        else
+            log "Method $attempt failed or returned invalid IP"
         fi
     done
     
     if [ -z "$SERVER_IP" ]; then
         # Fallback to local IP
+        log "Falling back to local IP detection..."
         SERVER_IP=$(hostname -I | awk '{print $1}')
+        
+        if [ -n "$SERVER_IP" ]; then
+            warn "Using local IP address: $SERVER_IP (this may not be your public IP)"
+        fi
     fi
     
     if [ -z "$SERVER_IP" ]; then
         error "Could not detect server IP address"
+        error "Please check your internet connection and try again"
+        error "You can also manually set the IP by editing this script"
         exit 1
     fi
     
