@@ -13,18 +13,35 @@ export default class GroqProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
-    { name: 'llama-3.1-8b-instant', label: 'Llama 3.1 8b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
-    { name: 'llama-3.2-11b-vision-preview', label: 'Llama 3.2 11b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
-    { name: 'llama-3.2-90b-vision-preview', label: 'Llama 3.2 90b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
-    { name: 'llama-3.2-3b-preview', label: 'Llama 3.2 3b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
-    { name: 'llama-3.2-1b-preview', label: 'Llama 3.2 1b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
-    { name: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70b (Groq)', provider: 'Groq', maxTokenAllowed: 8000 },
+    { name: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', provider: 'Groq', maxTokenAllowed: 128000 },
+    { name: 'llama-3.3-70b-specdec', label: 'Llama 3.3 70B SpecDec', provider: 'Groq', maxTokenAllowed: 128000 },
+    { name: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', provider: 'Groq', maxTokenAllowed: 128000 },
+    { name: 'llama-3.2-1b-preview', label: 'Llama 3.2 1B Preview', provider: 'Groq', maxTokenAllowed: 8192 },
+    { name: 'llama-3.2-3b-preview', label: 'Llama 3.2 3B Preview', provider: 'Groq', maxTokenAllowed: 8192 },
+    { name: 'llama-3.2-11b-vision-preview', label: 'Llama 3.2 11B Vision', provider: 'Groq', maxTokenAllowed: 8192 },
+    { name: 'llama-3.2-90b-vision-preview', label: 'Llama 3.2 90B Vision', provider: 'Groq', maxTokenAllowed: 8192 },
     {
-      name: 'deepseek-r1-distill-llama-70b',
-      label: 'Deepseek R1 Distill Llama 70b (Groq)',
+      name: 'deepseek-r1-distill-llama-70b-specdec',
+      label: 'DeepSeek R1 Distill Llama 70B SpecDec',
       provider: 'Groq',
       maxTokenAllowed: 131072,
     },
+    {
+      name: 'deepseek-r1-distill-llama-70b',
+      label: 'DeepSeek R1 Distill Llama 70B',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+    },
+    {
+      name: 'deepseek-r1-distill-qwen-32b',
+      label: 'DeepSeek R1 Distill Qwen 32B',
+      provider: 'Groq',
+      maxTokenAllowed: 32768,
+    },
+    { name: 'qwen-2.5-32b', label: 'Qwen 2.5 32B', provider: 'Groq', maxTokenAllowed: 32768 },
+    { name: 'qwen-2.5-coder-32b', label: 'Qwen 2.5 Coder 32B', provider: 'Groq', maxTokenAllowed: 32768 },
+    { name: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B', provider: 'Groq', maxTokenAllowed: 32768 },
+    { name: 'llama-guard-4-12b', label: 'Llama Guard 4 12B', provider: 'Groq', maxTokenAllowed: 32768 },
   ];
 
   async getDynamicModels(

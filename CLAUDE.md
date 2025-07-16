@@ -539,3 +539,106 @@ The installation script implements security best practices:
 - System packages should be updated monthly
 - Monitor disk space and clean logs as needed
 - Review security logs in `/var/log/auth.log`
+
+## Recent Updates
+
+### Multi-Model Orchestration Enhancement (2025-07-16)
+
+#### Updated Provider Model Lists
+
+All AI providers have been updated with the latest 2025 model offerings:
+
+**OpenAI:**
+- GPT-4o (Multimodal) - 128k context
+- GPT-4o Mini - 128k context
+- GPT-4 Turbo & GPT-4 Turbo Preview - 128k context
+- GPT-3.5 Turbo variants (0125, 1106) - 16k context
+
+**Anthropic:**
+- Claude Opus 4 & Claude Sonnet 4 - 200k context
+- Claude 3.7 Sonnet - 128k context
+- Claude 3.5 Sonnet (new), Claude 3.5 Haiku - 200k context
+- Claude 3 series (Opus, Sonnet, Haiku) - 200k context
+
+**Google Gemini:**
+- Gemini 2.5 series (Pro, Flash, Flash Lite, Flash Live) - 1M+ context
+- Gemini 2.0 series (Flash, Flash Lite, Pro Experimental) - 1M+ context
+- Gemini 1.5 series (Flash, Flash 8B, Pro) - up to 2M context
+
+**Mistral:**
+- Mistral Medium 3, Small 3.1, Small 3 - 32k-128k context
+- Mistral Large (24.11) - 128k context
+- Codestral 2, Devstral Small - 32k context
+- Magistral Small/Medium (Reasoning models) - 32k-128k context
+
+**xAI:**
+- Grok 4 & Grok 4 Heavy - 131k context
+- Grok 3 & Grok 3 Mini - 131k context
+- Grok 2 series - 32k context
+
+**Groq:**
+- Llama 3.3 70B (Versatile, SpecDec) - 128k context
+- DeepSeek R1 Distill models - 131k context
+- Qwen 2.5 series - 32k context
+- Updated Mixtral and Llama Guard models
+
+**DeepSeek:**
+- DeepSeek Chat (V3) - 128k context
+- DeepSeek Reasoner (R1) - 64k context
+- DeepSeek Coder - 128k context
+
+#### UI/UX Improvements
+
+**MultiModelSelector Component:**
+1. **Model Preview Display**
+   - Shows first 3 available models below each provider card
+   - Displays model labels with context window sizes
+   - Shows "+X more models" indicator for providers with many options
+
+2. **Enhanced Model Selection**
+   - Dropdown organized into "Available Models" and "Additional Models" groups
+   - Shows both display name and API name (e.g., "GPT-4o (Multimodal) (gpt-4o)")
+   - Uses static models for immediate selection without API calls
+   - Fetches dynamic models in background for better performance
+
+3. **Visual Improvements**
+   - Enhanced card styling with shadows and hover effects
+   - Better selected state indication with blue borders
+   - Improved disabled state (opacity-50) for unavailable providers
+   - Responsive grid layout for different screen sizes
+
+4. **Button Contrast Fix**
+   - Changed from `bg-bolt-elements-focus` to `bg-blue-600`
+   - Added hover state `hover:bg-blue-700`
+   - White text with font-medium for better readability
+   - Proper disabled state styling
+
+5. **Validation Messages**
+   - Updated to use `bg-orange-500/10` with proper opacity
+   - Dark mode support with `dark:text-orange-400`
+   - Improved icon sizing and spacing
+   - Better visibility in all themes
+
+#### Code Changes
+
+**Provider Updates:**
+- `app/lib/modules/llm/providers/openai.ts` - Updated with latest GPT models
+- `app/lib/modules/llm/providers/anthropic.ts` - Added Claude 4 series
+- `app/lib/modules/llm/providers/google.ts` - Added Gemini 2.5/2.0 series
+- `app/lib/modules/llm/providers/mistral.ts` - Updated with dated versions
+- `app/lib/modules/llm/providers/xai.ts` - Added Grok 4/3 series
+- `app/lib/modules/llm/providers/groq.ts` - Updated Llama and DeepSeek models
+- `app/lib/modules/llm/providers/deepseek.ts` - Updated with V3 and R1 models
+
+**Component Updates:**
+- `app/components/chat/MultiModelSelector.tsx` - Enhanced UI with model previews and better styling
+
+#### Testing & Verification
+
+All changes have been tested and verified:
+- ✅ Provider model lists updated with 2025 latest models
+- ✅ UI displays model previews correctly
+- ✅ Button contrast issue resolved for accessibility
+- ✅ Model selection shows both names and API identifiers
+- ✅ Static models load immediately without API calls
+- ✅ Validation messages are clearly visible in all themes

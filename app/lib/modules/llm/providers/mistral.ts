@@ -13,15 +13,20 @@ export default class MistralProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
-    { name: 'open-mistral-7b', label: 'Mistral 7B', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'open-mixtral-8x7b', label: 'Mistral 8x7B', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'open-mixtral-8x22b', label: 'Mistral 8x22B', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'open-codestral-mamba', label: 'Codestral Mamba', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'open-mistral-nemo', label: 'Mistral Nemo', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'ministral-8b-latest', label: 'Mistral 8B', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'mistral-small-latest', label: 'Mistral Small', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'codestral-latest', label: 'Codestral', provider: 'Mistral', maxTokenAllowed: 8000 },
-    { name: 'mistral-large-latest', label: 'Mistral Large Latest', provider: 'Mistral', maxTokenAllowed: 8000 },
+    { name: 'mistral-medium-2505', label: 'Mistral Medium 3', provider: 'Mistral', maxTokenAllowed: 128000 },
+    { name: 'mistral-small-2503', label: 'Mistral Small 3.1', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'mistral-small-2501', label: 'Mistral Small 3', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'mistral-large-2411', label: 'Mistral Large (24.11)', provider: 'Mistral', maxTokenAllowed: 128000 },
+    { name: 'codestral-2501', label: 'Codestral 2', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'devstral-small-2505', label: 'Devstral Small', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'mistral-ocr-2505', label: 'Mistral OCR 2', provider: 'Mistral', maxTokenAllowed: 128000 },
+    { name: 'mistral-saba-2502', label: 'Mistral Saba', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'pixtral-large-2411', label: 'Pixtral Large', provider: 'Mistral', maxTokenAllowed: 128000 },
+    { name: 'mistral-large-latest', label: 'Mistral Large (Latest)', provider: 'Mistral', maxTokenAllowed: 128000 },
+    { name: 'mistral-small-latest', label: 'Mistral Small (Latest)', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'codestral-latest', label: 'Codestral (Latest)', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'magistral-small', label: 'Magistral Small (Reasoning)', provider: 'Mistral', maxTokenAllowed: 32768 },
+    { name: 'magistral-medium', label: 'Magistral Medium (Reasoning)', provider: 'Mistral', maxTokenAllowed: 128000 },
   ];
 
   getModelInstance(options: {

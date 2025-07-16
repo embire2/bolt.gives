@@ -96,11 +96,11 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
         message: `Removed provider ${provider.name} from selection`,
       });
     } else if (selectedModels.length < 2) {
-      // Add new model (limit to 2 for orchestration)
-      await fetchModelsForProvider(provider);
-
-      const models = availableModels[provider.name] || [];
-      const defaultModel = models[0] || '';
+      /*
+       * Add new model (limit to 2 for orchestration)
+       * Use static models as default, fetch dynamic models in background
+       */
+      const defaultModel = provider.staticModels[0]?.name || '';
 
       setSelectedModels((prev) => [
         ...prev,
@@ -110,6 +110,9 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
           apiKey: apiKeys[provider.name],
         },
       ]);
+
+      // Fetch dynamic models in the background (non-blocking)
+      fetchModelsForProvider(provider);
 
       logStore.logInfo(`MultiModelSelector: Added provider ${provider.name} with model ${defaultModel}`, {
         type: 'provider_selection',
@@ -277,10 +280,10 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                 return (
                   <div
                     key={provider.name}
-                    className={`border-2 rounded-lg p-4 transition-all ${
+                    className={`border-2 rounded-lg p-4 transition-all relative overflow-hidden ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-bolt-elements-borderColor hover:border-bolt-elements-focus'
+                        ? 'border-blue-500 bg-blue-500/10 shadow-lg'
+                        : 'border-bolt-elements-borderColor hover:border-bolt-elements-focus hover:shadow-md'
                     } ${selectedModels.length >= 2 && !isSelected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     onClick={() => {
                       if (selectedModels.length < 2 || isSelected) {
@@ -289,10 +292,10 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                     }}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <div>
+                      <div className="flex-1">
                         <h4 className="font-medium text-bolt-elements-textPrimary">{provider.name}</h4>
                         <p className="text-xs text-bolt-elements-textSecondary">
-                          {provider.staticModels.length} models
+                          {provider.staticModels.length} models available
                         </p>
                       </div>
                       {isSelected && (
@@ -301,6 +304,33 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                         </div>
                       )}
                     </div>
+
+                    {/* Display available models preview */}
+                    {!isSelected && provider.staticModels.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-xs text-bolt-elements-textSecondary font-medium">Popular models:</div>
+                        <div className="space-y-1">
+                          {provider.staticModels.slice(0, 3).map((model, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between text-xs bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary px-2 py-1 rounded"
+                            >
+                              <span className="truncate flex-1">{model.label || model.name}</span>
+                              <span className="text-bolt-elements-textTertiary ml-2 text-[10px]">
+                                {model.maxTokenAllowed >= 100000
+                                  ? '100k+'
+                                  : Math.round(model.maxTokenAllowed / 1000) + 'k'}
+                              </span>
+                            </div>
+                          ))}
+                          {provider.staticModels.length > 3 && (
+                            <div className="text-xs text-bolt-elements-textTertiary text-center pt-1">
+                              +{provider.staticModels.length - 3} more models
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {isSelected && (
                       <div className="space-y-3 mt-3" onClick={(e) => e.stopPropagation()}>
@@ -335,14 +365,31 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                               }
                               className="w-full mt-1 px-2 py-1 text-sm bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded focus:outline-none focus:border-bolt-elements-focus"
                             >
-                              {models.length === 0 ? (
+                              {models.length === 0 && provider.staticModels.length === 0 ? (
                                 <option>No models available</option>
                               ) : (
-                                models.map((model) => (
-                                  <option key={model} value={model}>
-                                    {model}
-                                  </option>
-                                ))
+                                <>
+                                  {/* Show static models first */}
+                                  {provider.staticModels.length > 0 && (
+                                    <optgroup label="Available Models">
+                                      {provider.staticModels.map((model) => (
+                                        <option key={model.name} value={model.name}>
+                                          {model.label} ({model.name})
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                  {/* Show dynamic models if any */}
+                                  {models.length > 0 && (
+                                    <optgroup label="Additional Models">
+                                      {models.map((model) => (
+                                        <option key={model} value={model}>
+                                          {model}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                </>
                               )}
                             </select>
                           )}
@@ -357,9 +404,9 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
 
           {/* Validation Message */}
           {!validation.valid && validation.error && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <p className="text-sm text-orange-800 flex items-center gap-2">
-                <div className="i-ph:warning" />
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+              <p className="text-sm text-orange-600 dark:text-orange-400 flex items-center gap-2 font-medium">
+                <div className="i-ph:warning text-lg" />
                 {validation.error}
               </p>
             </div>
@@ -383,9 +430,9 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                 variant="default"
                 onClick={handleConfirm}
                 disabled={!validation.valid}
-                className="bg-bolt-elements-focus hover:bg-bolt-elements-focus/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
-                <div className="i-ph:users-three text-sm mr-1" />
+                <div className="i-ph:users-three text-lg mr-2" />
                 Start Orchestration
               </Button>
             </div>

@@ -13,11 +13,14 @@ export default class OpenAIProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
-    { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 8000 },
-    { name: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', maxTokenAllowed: 8000 },
-    { name: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI', maxTokenAllowed: 8000 },
+    { name: 'gpt-4o', label: 'GPT-4o (Multimodal)', provider: 'OpenAI', maxTokenAllowed: 128000 },
+    { name: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', maxTokenAllowed: 128000 },
+    { name: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI', maxTokenAllowed: 128000 },
+    { name: 'gpt-4-turbo-preview', label: 'GPT-4 Turbo Preview', provider: 'OpenAI', maxTokenAllowed: 128000 },
     { name: 'gpt-4', label: 'GPT-4', provider: 'OpenAI', maxTokenAllowed: 8000 },
-    { name: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI', maxTokenAllowed: 8000 },
+    { name: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI', maxTokenAllowed: 16384 },
+    { name: 'gpt-3.5-turbo-0125', label: 'GPT-3.5 Turbo (Latest)', provider: 'OpenAI', maxTokenAllowed: 16384 },
+    { name: 'gpt-3.5-turbo-1106', label: 'GPT-3.5 Turbo (Nov 2023)', provider: 'OpenAI', maxTokenAllowed: 16384 },
   ];
 
   async getDynamicModels(
