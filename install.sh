@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.0.2 - Enhanced IP detection and early root check
+# Version 2.1.0 - Dynamic RAM allocation (80% of system memory)
 
 # Check if running as root first
 if [ "$EUID" -ne 0 ]; then 
@@ -61,7 +61,7 @@ print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.0.2                              ║"
+    echo "║                    Version 2.1.0                              ║"
     echo "║              All Critical Issues Fixed                        ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -551,13 +551,21 @@ install_nodejs() {
     log "✓ Node.js installed: $node_version"
     log "✓ npm installed: $npm_version"
     
-    # Configure Node.js memory limit based on available memory
+    # Configure Node.js memory limit to 80% of available memory
     local total_mem=$(free -m | awk '/^Mem:/{print $2}')
-    if [ "$total_mem" -lt 4096 ]; then
-        echo "export NODE_OPTIONS='--max-old-space-size=2048'" >> /etc/profile
-    else
-        echo "export NODE_OPTIONS='--max-old-space-size=4096'" >> /etc/profile
+    local node_mem=$((total_mem * 80 / 100))
+    
+    # Ensure minimum of 512MB and maximum reasonable limit
+    if [ "$node_mem" -lt 512 ]; then
+        node_mem=512
+        warn "System has very low memory. Setting Node.js to minimum 512MB"
+    elif [ "$node_mem" -gt 32768 ]; then
+        node_mem=32768
+        log "Capping Node.js memory at 32GB for stability"
     fi
+    
+    log "System RAM: ${total_mem}MB, allocating ${node_mem}MB (80%) to Node.js"
+    echo "export NODE_OPTIONS='--max-old-space-size=$node_mem'" >> /etc/profile
     
     save_state "nodejs_installed"
 }
@@ -660,13 +668,27 @@ install_app_dependencies() {
     rm -f pnpm-lock.yaml package-lock.json yarn.lock 2>/dev/null || true
     rm -rf node_modules .pnpm 2>/dev/null || true
     
+    # Calculate memory for Node.js (80% of total)
+    local total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    local node_mem=$((total_mem * 80 / 100))
+    
+    # Ensure minimum of 512MB
+    if [ "$node_mem" -lt 512 ]; then
+        node_mem=512
+    fi
+    
     # Install dependencies using pnpm as the bolt user
-    log "Running pnpm install..."
-    sudo -u $USER_NAME env PNPM_HOME="$PNPM_HOME" PATH="$PATH" NODE_OPTIONS="--max-old-space-size=4096" pnpm install
+    log "Running pnpm install with ${node_mem}MB memory allocation..."
+    sudo -u $USER_NAME env PNPM_HOME="$PNPM_HOME" PATH="$PATH" NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm install
     
     if [ $? -ne 0 ]; then
-        warn "First install attempt failed, retrying with reduced memory..."
-        sudo -u $USER_NAME env PNPM_HOME="$PNPM_HOME" PATH="$PATH" NODE_OPTIONS="--max-old-space-size=2048" pnpm install
+        # Retry with 50% of memory if first attempt fails
+        local reduced_mem=$((total_mem * 50 / 100))
+        if [ "$reduced_mem" -lt 512 ]; then
+            reduced_mem=512
+        fi
+        warn "First install attempt failed, retrying with ${reduced_mem}MB..."
+        sudo -u $USER_NAME env PNPM_HOME="$PNPM_HOME" PATH="$PATH" NODE_OPTIONS="--max-old-space-size=$reduced_mem" pnpm install
     fi
     
     log "✓ Dependencies installed"
@@ -677,21 +699,27 @@ build_application() {
     log "Building application with Remix/Vite..."
     cd "$APP_DIR"
     
-    # Get available memory
+    # Calculate memory for Node.js (80% of total)
     local total_mem=$(free -m | awk '/^Mem:/{print $2}')
-    local node_mem=4096
-    if [ "$total_mem" -lt 4096 ]; then
-        node_mem=2048
-        warn "Limited memory: using ${node_mem}MB for Node.js"
+    local node_mem=$((total_mem * 80 / 100))
+    
+    # Ensure minimum of 512MB
+    if [ "$node_mem" -lt 512 ]; then
+        node_mem=512
     fi
     
     # Build using pnpm (proper Remix build)
-    log "Running pnpm run build..."
+    log "Running pnpm run build with ${node_mem}MB memory allocation..."
     sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm run build
     
     if [ $? -ne 0 ]; then
-        error "Build failed, retrying with minimal memory..."
-        sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=1536" pnpm run build
+        # Retry with 50% of memory if build fails
+        local reduced_mem=$((total_mem * 50 / 100))
+        if [ "$reduced_mem" -lt 512 ]; then
+            reduced_mem=512
+        fi
+        error "Build failed, retrying with ${reduced_mem}MB..."
+        sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=$reduced_mem" pnpm run build
     fi
     
     log "✓ Application built successfully"
@@ -883,6 +911,19 @@ create_service() {
         exit 1
     fi
     
+    # Calculate memory for Node.js (80% of total)
+    local total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    local node_mem=$((total_mem * 80 / 100))
+    
+    # Ensure minimum of 512MB and maximum reasonable limit
+    if [ "$node_mem" -lt 512 ]; then
+        node_mem=512
+    elif [ "$node_mem" -gt 32768 ]; then
+        node_mem=32768
+    fi
+    
+    log "Configuring service with ${node_mem}MB memory allocation for Node.js"
+    
     # Create systemd service file with proper pnpm run start command
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
@@ -901,6 +942,7 @@ Environment=PORT=$APP_PORT
 Environment=WRANGLER_LOCAL=true
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
+Environment=NODE_OPTIONS=--max-old-space-size=$node_mem
 
 # Pre-start permission fixes
 ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$USER_NAME/.config/pnpm /home/$USER_NAME/.cache/pnpm'
@@ -1106,6 +1148,15 @@ verify_installation() {
 
 # Display final summary
 display_summary() {
+    # Get system memory info for display
+    local total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    local node_mem=$((total_mem * 80 / 100))
+    if [ "$node_mem" -lt 512 ]; then
+        node_mem=512
+    elif [ "$node_mem" -gt 32768 ]; then
+        node_mem=32768
+    fi
+    
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║           🎉 BOLT.GIVES INSTALLATION COMPLETE! 🎉            ║${NC}"
@@ -1115,6 +1166,7 @@ display_summary() {
     echo -e "  📁 Directory: ${BLUE}$APP_DIR${NC}"
     echo -e "  👤 User: ${BLUE}$USER_NAME${NC}"
     echo -e "  🔌 Application Port: ${BLUE}$APP_PORT${NC}"
+    echo -e "  💾 RAM Allocation: ${BLUE}${node_mem}MB${NC} of ${total_mem}MB (80%)"
     echo -e "  📊 Service: ${BLUE}systemctl status $SERVICE_NAME${NC}"
     echo -e "  📜 Logs: ${BLUE}journalctl -u $SERVICE_NAME -f${NC}"
     echo ""
