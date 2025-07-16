@@ -231,7 +231,7 @@ export function ModeSelector({ onModeSelect, onClose }: ModeSelectorProps) {
                   variant="default"
                   onClick={handleConfirm}
                   disabled={!selectedMode}
-                  className="bg-bolt-elements-focus hover:bg-bolt-elements-focus/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 >
                   <div className="i-ph:arrow-right text-sm mr-1" />
                   Start {selectedMode ? modes.find((m) => m.id === selectedMode)?.title : 'Session'}

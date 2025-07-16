@@ -365,31 +365,29 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
                               }
                               className="w-full mt-1 px-2 py-1 text-sm bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded focus:outline-none focus:border-bolt-elements-focus"
                             >
-                              {models.length === 0 && provider.staticModels.length === 0 ? (
+                              {/* Always show static models first */}
+                              {provider.staticModels.length > 0 && (
+                                <optgroup label="Available Models">
+                                  {provider.staticModels.map((model) => (
+                                    <option key={model.name} value={model.name}>
+                                      {model.label} ({model.name})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {/* Show dynamic models if any */}
+                              {models.length > 0 && (
+                                <optgroup label="Additional Models">
+                                  {models.map((model) => (
+                                    <option key={model} value={model}>
+                                      {model}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {/* Fallback if no models at all */}
+                              {models.length === 0 && provider.staticModels.length === 0 && (
                                 <option>No models available</option>
-                              ) : (
-                                <>
-                                  {/* Show static models first */}
-                                  {provider.staticModels.length > 0 && (
-                                    <optgroup label="Available Models">
-                                      {provider.staticModels.map((model) => (
-                                        <option key={model.name} value={model.name}>
-                                          {model.label} ({model.name})
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                  {/* Show dynamic models if any */}
-                                  {models.length > 0 && (
-                                    <optgroup label="Additional Models">
-                                      {models.map((model) => (
-                                        <option key={model} value={model}>
-                                          {model}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                </>
                               )}
                             </select>
                           )}
