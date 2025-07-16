@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.0.0 - All critical issues fixed based on production testing
+# Version 2.0.1 - Fixed DNS resolution with multiple fallback methods
 
 # Configure DNS immediately for reliable network operations
 echo "Configuring DNS servers for reliable network access..."
@@ -48,7 +48,7 @@ print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.0.0                              ║"
+    echo "║                    Version 2.0.1                              ║"
     echo "║              All Critical Issues Fixed                        ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -361,16 +361,45 @@ get_domain_name() {
         echo -e "${YELLOW}Checking DNS configuration...${NC}"
         
         # Check if domain resolves to our IP
-        local resolved_ip=$(dig +short A "$DOMAIN_NAME" @1.1.1.1 2>/dev/null | tail -1)
+        # First try with dig, then fallback to other methods
+        local resolved_ips=$(dig +short A "$DOMAIN_NAME" @1.1.1.1 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
         
-        if [ "$resolved_ip" = "$SERVER_IP" ]; then
+        if [ -z "$resolved_ips" ]; then
+            # Fallback to Google DNS
+            resolved_ips=$(dig +short A "$DOMAIN_NAME" @8.8.8.8 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+        fi
+        
+        if [ -z "$resolved_ips" ]; then
+            # Fallback to nslookup
+            resolved_ips=$(nslookup "$DOMAIN_NAME" 2>/dev/null | grep -A2 "Name:" | grep "Address:" | awk '{print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+        fi
+        
+        if [ -z "$resolved_ips" ]; then
+            # Final fallback to getent
+            resolved_ips=$(getent hosts "$DOMAIN_NAME" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+        fi
+        
+        # Check if our IP is in the list of resolved IPs
+        local ip_found=false
+        if [ -n "$resolved_ips" ]; then
+            while IFS= read -r ip; do
+                if [ "$ip" = "$SERVER_IP" ]; then
+                    ip_found=true
+                    break
+                fi
+            done <<< "$resolved_ips"
+        fi
+        
+        if [ "$ip_found" = true ]; then
             echo -e "${GREEN}✓ Domain correctly points to this server${NC}"
+            echo -e "${DIM}Resolved IPs: $(echo $resolved_ips | tr '\n' ', ' | sed 's/, $//')${NC}"
             break
-        elif [ -z "$resolved_ip" ]; then
+        elif [ -z "$resolved_ips" ]; then
             echo -e "${RED}⚠ Domain does not resolve to any IP${NC}"
             echo -e "${YELLOW}Please add an A record pointing to $SERVER_IP${NC}"
+            echo -e "${DIM}Note: DNS propagation can take 5-30 minutes${NC}"
         else
-            echo -e "${RED}⚠ Domain points to different IP: $resolved_ip${NC}"
+            echo -e "${RED}⚠ Domain points to different IP(s): $(echo $resolved_ips | tr '\n' ', ' | sed 's/, $//')${NC}"
             echo -e "${YELLOW}Please update the A record to point to $SERVER_IP${NC}"
         fi
         
@@ -457,6 +486,7 @@ install_dependencies() {
         unzip
         jq
         lsof
+        dnsutils
     )
     
     for package in "${packages[@]}"; do
