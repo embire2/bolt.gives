@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.2.0 - Cloudflare Pages deployment with proper wrangler support
+# Version 2.3.0 - CRITICAL FIXES: Service creation, startup verification, fallback methods
 
 # Check if running as root first
 if [ "$EUID" -ne 0 ]; then 
@@ -58,11 +58,11 @@ exec 1> >(tee -a "$LOG_FILE")
 exec 2> >(tee -a "$LOG_FILE" >&2)
 
 print_header() {
-    echo -e "${BLUE}"
+    echo -e "${GREEN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.2.0                              ║"
-    echo "║           Cloudflare Pages Deployment Ready                   ║"
+    echo "║                    Version 2.3.0                              ║"
+    echo "║            CRITICAL FIXES: Service & Startup Issues           ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
     echo ""
@@ -81,7 +81,7 @@ error() {
 }
 
 debug() {
-    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] DEBUG: $1${NC}"
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] DEBUG: $1${NC}"
 }
 
 # Advanced error logging function
@@ -361,9 +361,9 @@ get_domain_name() {
     fi
     
     echo ""
-    echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
     echo -e "${YELLOW}📌 DOMAIN SETUP${NC}"
-    echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo -e "${GREEN}Your server IP address is: ${YELLOW}$SERVER_IP${NC}"
     echo ""
@@ -811,18 +811,7 @@ EOF
     chown $USER_NAME:$USER_NAME "$APP_DIR/.env"
     chmod 600 "$APP_DIR/.env"
     
-    # Install wrangler globally for the user
-    log "Installing Wrangler CLI for Cloudflare Pages..."
-    sudo -u $USER_NAME pnpm add -g wrangler
-    
-    # Verify wrangler installation
-    if sudo -u $USER_NAME wrangler --version >/dev/null 2>&1; then
-        local wrangler_version=$(sudo -u $USER_NAME wrangler --version)
-        log "✓ Wrangler installed: $wrangler_version"
-    else
-        error "❌ Wrangler installation failed"
-        return 1
-    fi
+    # Note: Wrangler is available via pnpm exec wrangler from the application dependencies
     
     # Create wrangler configuration file
     cat > "$APP_DIR/wrangler.toml" << EOF
@@ -981,6 +970,208 @@ setup_ssl() {
     fi
 }
 
+# Comprehensive dependency verification
+verify_dependencies() {
+    log "Verifying all dependencies..."
+    
+    local errors=0
+    
+    # Check Node.js
+    if ! command -v node &> /dev/null; then
+        error "❌ Node.js not found"
+        errors=$((errors + 1))
+    else
+        local node_version=$(node --version)
+        log "✅ Node.js found: $node_version"
+    fi
+    
+    # Check pnpm
+    if ! command -v pnpm &> /dev/null; then
+        error "❌ pnpm not found"
+        errors=$((errors + 1))
+    else
+        local pnpm_version=$(pnpm --version)
+        log "✅ pnpm found: $pnpm_version"
+    fi
+    
+    # Check if application directory exists
+    if [ ! -d "$APP_DIR" ]; then
+        error "❌ Application directory not found: $APP_DIR"
+        errors=$((errors + 1))
+    else
+        log "✅ Application directory found"
+    fi
+    
+    # Check if dependencies are installed
+    if [ ! -d "$APP_DIR/node_modules" ]; then
+        error "❌ node_modules directory not found in $APP_DIR"
+        errors=$((errors + 1))
+    else
+        log "✅ Node modules installed"
+    fi
+    
+    # Check if build exists
+    if [ ! -d "$APP_DIR/build" ]; then
+        error "❌ build directory not found in $APP_DIR"
+        errors=$((errors + 1))
+    else
+        log "✅ Build directory found"
+    fi
+    
+    # Check if client build exists
+    if [ ! -d "$APP_DIR/build/client" ]; then
+        error "❌ build/client directory not found"
+        errors=$((errors + 1))
+    else
+        log "✅ Client build found"
+    fi
+    
+    # Check critical files
+    if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then
+        error "❌ functions/[[path]].ts not found"
+        errors=$((errors + 1))
+    else
+        log "✅ Serverless function found"
+    fi
+    
+    if [ ! -f "$APP_DIR/package.json" ]; then
+        error "❌ package.json not found"
+        errors=$((errors + 1))
+    else
+        log "✅ package.json found"
+    fi
+    
+    if [ $errors -eq 0 ]; then
+        log "✅ All dependencies verified successfully"
+        return 0
+    else
+        error "❌ $errors dependency issues found"
+        return 1
+    fi
+}
+
+# Check for wrangler availability
+check_wrangler() {
+    log "Checking for wrangler availability..."
+    
+    # Check if wrangler is available via pnpm in the application directory
+    if sudo -u $USER_NAME bash -c "cd '$APP_DIR' && pnpm exec wrangler --version" &> /dev/null; then
+        log "✅ Wrangler found via pnpm exec"
+        return 0
+    fi
+    
+    # Check if wrangler is globally available
+    if sudo -u $USER_NAME which wrangler &> /dev/null; then
+        log "✅ Wrangler found globally"
+        return 0
+    fi
+    
+    # Check in pnpm global directory
+    if [ -f "/home/$USER_NAME/.local/share/pnpm/wrangler" ]; then
+        log "✅ Wrangler found in pnpm global directory"
+        return 0
+    fi
+    
+    error "❌ Wrangler not found! This is required for Cloudflare Pages deployment."
+    error "Make sure 'pnpm install' has been completed successfully."
+    return 1
+}
+
+# Fallback startup method when systemd service fails
+start_fallback_service() {
+    warn "⚠️ Starting application using fallback method (nohup)"
+    
+    # Kill any existing processes
+    pkill -f "wrangler pages dev" 2>/dev/null || true
+    pkill -f "pnpm run start" 2>/dev/null || true
+    
+    # Wait for processes to die
+    sleep 3
+    
+    # Start with nohup
+    log "Starting application in background..."
+    nohup sudo -u $USER_NAME bash -c "cd '$APP_DIR' && pnpm run start" > /var/log/bolt-gives-app.log 2>&1 &
+    
+    # Wait for startup
+    log "Waiting for application to start..."
+    sleep 15
+    
+    # Check if it's running
+    local fallback_attempts=0
+    local max_fallback_attempts=20
+    
+    while [ $fallback_attempts -lt $max_fallback_attempts ]; do
+        if netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
+            log "✅ Application started successfully using fallback method"
+            warn "⚠️ Application is running but will not auto-restart on reboot"
+            warn "⚠️ To restart: sudo pkill -f wrangler; then re-run this section"
+            warn "⚠️ To stop: sudo pkill -f wrangler"
+            warn "⚠️ Logs: tail -f /var/log/bolt-gives-app.log"
+            return 0
+        fi
+        
+        fallback_attempts=$((fallback_attempts + 1))
+        sleep 3
+    done
+    
+    error "❌ Fallback startup method also failed"
+    error "Check logs: tail -f /var/log/bolt-gives-app.log"
+    return 1
+}
+
+# Verify service startup
+verify_service_startup() {
+    log "Starting and verifying bolt-gives service..."
+    
+    # Start the service
+    if ! systemctl start "$SERVICE_NAME"; then
+        error "❌ Failed to start service"
+        return 1
+    fi
+    
+    # Wait for service to start
+    local attempts=0
+    local max_attempts=30
+    
+    while [ $attempts -lt $max_attempts ]; do
+        if systemctl is-active --quiet "$SERVICE_NAME"; then
+            log "✅ Service started successfully"
+            break
+        fi
+        
+        attempts=$((attempts + 1))
+        sleep 2
+    done
+    
+    if [ $attempts -eq $max_attempts ]; then
+        error "❌ Service failed to start after $max_attempts attempts"
+        error "Check logs: journalctl -u $SERVICE_NAME -n 20"
+        return 1
+    fi
+    
+    # Wait a bit more for wrangler to initialize
+    log "Waiting for wrangler to initialize..."
+    sleep 10
+    
+    # Verify port is listening
+    local port_attempts=0
+    local max_port_attempts=15
+    
+    while [ $port_attempts -lt $max_port_attempts ]; do
+        if netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
+            log "✅ Application is listening on port $APP_PORT"
+            return 0
+        fi
+        
+        port_attempts=$((port_attempts + 1))
+        sleep 2
+    done
+    
+    error "❌ Application not listening on port $APP_PORT after $max_port_attempts attempts"
+    error "Check service logs: journalctl -u $SERVICE_NAME -n 50"
+    return 1
+}
+
 # Create systemd service for Cloudflare Pages
 create_service() {
     log "Creating systemd service for Cloudflare Pages..."
@@ -992,15 +1183,16 @@ create_service() {
         exit 1
     fi
     
-    # Find wrangler path
-    local wrangler_path=$(sudo -u $USER_NAME which wrangler 2>/dev/null)
-    if [ -z "$wrangler_path" ]; then
-        # Check in pnpm global directory
-        wrangler_path="/home/$USER_NAME/.local/share/pnpm/wrangler"
-        if [ ! -f "$wrangler_path" ]; then
-            error "❌ Wrangler not found! This is required for Cloudflare Pages deployment."
-            return 1
-        fi
+    # Verify all dependencies first
+    if ! verify_dependencies; then
+        error "❌ Dependencies not satisfied, cannot create service"
+        return 1
+    fi
+    
+    # Check wrangler availability
+    if ! check_wrangler; then
+        error "❌ Cannot create service without wrangler"
+        return 1
     fi
     
     # Calculate memory for Node.js (80% of total)
@@ -1043,13 +1235,8 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
 Environment=NODE_OPTIONS=--max-old-space-size=$node_mem
 
-# Pre-start validation and permission fixes
-ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$USER_NAME/.config/pnpm /home/$USER_NAME/.cache/pnpm'
-ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache 2>/dev/null || true'
+# Pre-start validation
 ExecStartPre=/bin/bash -c 'chmod +x $APP_DIR/bindings.sh 2>/dev/null || true'
-ExecStartPre=/bin/bash -c 'find $APP_DIR -name "*.sh" -type f -exec chmod +x {} \\; 2>/dev/null || true'
-
-# Validate Cloudflare Pages build before starting
 ExecStartPre=/bin/bash -c 'if [ ! -d "$APP_DIR/build/client" ]; then echo "❌ ERROR: build/client directory not found! Run: pnpm run build"; exit 1; fi'
 ExecStartPre=/bin/bash -c 'if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then echo "❌ ERROR: functions/[[path]].ts not found! Cloudflare Pages functions missing"; exit 1; fi'
 
@@ -1071,12 +1258,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
 
-# Security settings
+# Security settings (relaxed for wrangler to work)
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$APP_DIR /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache
+PrivateTmp=false
+ProtectSystem=false
+ProtectHome=false
 
 # Resource limits
 LimitNOFILE=65536
@@ -1092,10 +1278,17 @@ EOF
     # Enable service
     systemctl enable "$SERVICE_NAME"
     
+    # Create necessary directories with proper permissions before service starts
+    log "Creating necessary directories for service..."
+    mkdir -p "/home/$USER_NAME/.local/share/pnpm" "/home/$USER_NAME/.config/pnpm" "/home/$USER_NAME/.cache/pnpm"
+    mkdir -p "/home/$USER_NAME/.local/bin" "/home/$USER_NAME/.config" "/home/$USER_NAME/.cache"
+    chown -R $USER_NAME:$USER_NAME "/home/$USER_NAME/.local" "/home/$USER_NAME/.config" "/home/$USER_NAME/.cache"
+    
     save_state "service_created"
     log "✓ Systemd service created for Cloudflare Pages"
     log "✓ Service will validate build output before starting"
     log "✓ Service configured with proper wrangler environment"
+    log "✓ Required directories created with proper permissions"
 }
 
 # Setup monitoring
@@ -1156,128 +1349,113 @@ start_services() {
         fi
     fi
     
-    # Start the service with multiple attempts
-    local attempts=0
-    local max_attempts=5
-    
-    while [ $attempts -lt $max_attempts ]; do
-        attempts=$((attempts + 1))
-        log "Starting service (attempt $attempts/$max_attempts)..."
-        
-        if systemctl start "$SERVICE_NAME"; then
-            log "Service started, waiting for it to stabilize..."
-            sleep 10
-            
-            # Check if service is running
-            if systemctl is-active --quiet "$SERVICE_NAME"; then
-                # Check if responding on the correct port
-                if curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT | grep -q "[23][0-9][0-9]"; then
-                    log "✓ Bolt.gives service started successfully and responding"
-                    save_state "services_started"
-                    break
-                else
-                    warn "Service is running but not responding on port $APP_PORT"
-                    
-                    # Check actual port from logs
-                    local actual_port=$(journalctl -u "$SERVICE_NAME" --no-pager -n 50 | grep -oP "localhost:\K[0-9]+" | tail -1)
-                    if [ -n "$actual_port" ] && [ "$actual_port" != "$APP_PORT" ]; then
-                        warn "Service is actually using port $actual_port"
-                        update_port_configuration $actual_port
-                    fi
-                fi
-            else
-                error "Service is not active"
-                log_error_details "SERVICE_START" "Service not active after start"
-            fi
-        else
-            error "Failed to start service"
-            log_error_details "SERVICE_START" "Systemctl start failed"
-        fi
-        
-        if [ $attempts -lt $max_attempts ]; then
-            warn "Attempting to fix issues and retry..."
-            fix_all_permissions
-            sleep 5
-        fi
-    done
-    
-    # Start nginx
+    # Start nginx first
     systemctl start nginx
     systemctl enable nginx
     
-    log "✓ All services started"
+    # Try to start the service with verification
+    log "Attempting to start bolt-gives service..."
+    if verify_service_startup; then
+        log "✅ Bolt.gives service started successfully"
+        save_state "services_started"
+        return 0
+    else
+        error "❌ Systemd service startup failed"
+        
+        # Try fallback method
+        log "Attempting fallback startup method..."
+        if start_fallback_service; then
+            warn "✅ Application started using fallback method"
+            save_state "services_started"
+            return 0
+        else
+            error "❌ Both systemd and fallback methods failed"
+            error "Please check logs and try manual startup:"
+            error "sudo -u bolt bash -c 'cd $APP_DIR && pnpm run start'"
+            return 1
+        fi
+    fi
 }
 
-# Verify installation
-verify_installation() {
-    log "Verifying installation..."
+# Comprehensive final verification
+final_verification() {
+    log "Performing final system verification..."
     
-    local all_good=true
+    local errors=0
     
-    # Check service status
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        log "✅ Bolt.gives service is active"
+    # Check service file exists
+    if [ ! -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+        error "❌ Systemd service file not found"
+        errors=$((errors + 1))
     else
-        error "❌ Bolt.gives service is not running"
-        all_good=false
+        log "✅ Systemd service file exists"
     fi
     
-    # Check nginx
-    if systemctl is-active --quiet nginx; then
-        log "✅ Nginx is active"
+    # Check service is running
+    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        error "❌ Service is not running"
+        errors=$((errors + 1))
     else
+        log "✅ Service is running"
+    fi
+    
+    # Check nginx is running
+    if ! systemctl is-active --quiet nginx; then
         error "❌ Nginx is not running"
-        all_good=false
+        errors=$((errors + 1))
+    else
+        log "✅ Nginx is running"
     fi
     
-    # Check local access (with retry for Cloudflare Pages startup)
-    log "Testing local access on port $APP_PORT..."
-    local local_code="000"
-    local attempts=0
-    local max_attempts=10
+    # Check port is listening
+    if ! netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
+        error "❌ Application not listening on port $APP_PORT"
+        errors=$((errors + 1))
+    else
+        log "✅ Application listening on port $APP_PORT"
+    fi
     
-    while [ $attempts -lt $max_attempts ]; do
-        attempts=$((attempts + 1))
-        local_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:$APP_PORT || echo "000")
-        
-        if [ "$local_code" = "200" ] || [ "$local_code" = "301" ] || [ "$local_code" = "302" ]; then
-            log "✅ Local access working (HTTP $local_code)"
-            break
-        else
-            if [ $attempts -lt $max_attempts ]; then
-                log "⏳ Waiting for Cloudflare Pages to start (attempt $attempts/$max_attempts)..."
-                sleep 3
-            fi
-        fi
-    done
-    
-    if [ "$local_code" != "200" ] && [ "$local_code" != "301" ] && [ "$local_code" != "302" ]; then
+    # Check local access
+    log "Testing local access..."
+    local local_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:$APP_PORT || echo "000")
+    if [ "$local_code" = "200" ] || [ "$local_code" = "301" ] || [ "$local_code" = "302" ]; then
+        log "✅ Local access working (HTTP $local_code)"
+    else
         error "❌ Local access failed (HTTP $local_code)"
-        error "Cloudflare Pages may be taking longer to start than expected"
-        all_good=false
+        errors=$((errors + 1))
     fi
     
-    # Check external access
+    # Check external access if domain is configured
     if [ -n "$DOMAIN_NAME" ]; then
+        log "Testing external access..."
         local external_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://$DOMAIN_NAME" || echo "000")
         if [ "$external_code" = "200" ] || [ "$external_code" = "301" ] || [ "$external_code" = "302" ]; then
             log "✅ External HTTPS access working (HTTP $external_code)"
         else
-            warn "⚠ External HTTPS access returned HTTP $external_code"
             # Try HTTP as fallback
             external_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$DOMAIN_NAME" || echo "000")
             if [ "$external_code" = "200" ] || [ "$external_code" = "301" ] || [ "$external_code" = "302" ]; then
                 log "✅ External HTTP access working (HTTP $external_code)"
+            else
+                error "❌ External access failed (HTTP $external_code)"
+                errors=$((errors + 1))
             fi
         fi
     fi
     
-    if [ "$all_good" = true ]; then
+    if [ $errors -eq 0 ]; then
+        log "✅ All systems verified successfully"
         save_state "verified"
         return 0
     else
+        error "❌ $errors critical issues found"
         return 1
     fi
+}
+
+# Legacy verification function for backward compatibility
+verify_installation() {
+    return $(final_verification)
 }
 
 # Display final summary
@@ -1296,31 +1474,31 @@ display_summary() {
     echo -e "${GREEN}║    🎉 BOLT.GIVES CLOUDFLARE PAGES INSTALLATION COMPLETE! 🎉  ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  🌐 URL: ${BLUE}https://$DOMAIN_NAME${NC}"
-    echo -e "  📁 Directory: ${BLUE}$APP_DIR${NC}"
-    echo -e "  👤 User: ${BLUE}$USER_NAME${NC}"
-    echo -e "  🔌 Application Port: ${BLUE}$APP_PORT${NC} (via Wrangler)"
-    echo -e "  💾 RAM Allocation: ${BLUE}${node_mem}MB${NC} of ${total_mem}MB (80%)"
-    echo -e "  🚀 Deployment: ${BLUE}Cloudflare Pages${NC}"
-    echo -e "  📊 Service: ${BLUE}systemctl status $SERVICE_NAME${NC}"
-    echo -e "  📜 Logs: ${BLUE}journalctl -u $SERVICE_NAME -f${NC}"
+    echo -e "  🌐 URL: ${GREEN}https://$DOMAIN_NAME${NC}"
+    echo -e "  📁 Directory: ${GREEN}$APP_DIR${NC}"
+    echo -e "  👤 User: ${GREEN}$USER_NAME${NC}"
+    echo -e "  🔌 Application Port: ${GREEN}$APP_PORT${NC} (via Wrangler)"
+    echo -e "  💾 RAM Allocation: ${GREEN}${node_mem}MB${NC} of ${total_mem}MB (80%)"
+    echo -e "  🚀 Deployment: ${GREEN}Cloudflare Pages${NC}"
+    echo -e "  📊 Service: ${GREEN}systemctl status $SERVICE_NAME${NC}"
+    echo -e "  📜 Logs: ${GREEN}journalctl -u $SERVICE_NAME -f${NC}"
     echo ""
     echo -e "${YELLOW}⚡ Cloudflare Pages Features:${NC}"
     echo -e "  ✅ Static assets served via Cloudflare CDN"
     echo -e "  ✅ Serverless functions running on Cloudflare Workers"
-    echo -e "  ✅ Automatic builds via ${BLUE}pnpm run build${NC}"
-    echo -e "  ✅ Production runtime via ${BLUE}pnpm run start${NC} (wrangler)"
+    echo -e "  ✅ Automatic builds via ${GREEN}pnpm run build${NC}"
+    echo -e "  ✅ Production runtime via ${GREEN}pnpm run start${NC} (wrangler)"
     echo ""
     echo -e "${YELLOW}⚡ Next Steps:${NC}"
-    echo -e "  1. Add your LLM API keys to ${BLUE}$APP_DIR/.env${NC}"
-    echo -e "  2. Restart the service: ${BLUE}systemctl restart $SERVICE_NAME${NC}"
-    echo -e "  3. Monitor logs: ${BLUE}journalctl -u $SERVICE_NAME -f${NC}"
-    echo -e "  4. Test build manually: ${BLUE}cd $APP_DIR && pnpm run build${NC}"
+    echo -e "  1. Add your LLM API keys to ${GREEN}$APP_DIR/.env${NC}"
+    echo -e "  2. Restart the service: ${GREEN}systemctl restart $SERVICE_NAME${NC}"
+    echo -e "  3. Monitor logs: ${GREEN}journalctl -u $SERVICE_NAME -f${NC}"
+    echo -e "  4. Test build manually: ${GREEN}cd $APP_DIR && pnpm run build${NC}"
     echo ""
     echo -e "${YELLOW}🔧 Troubleshooting:${NC}"
-    echo -e "  • Build issues: Check ${BLUE}build/client/${NC} directory exists"
-    echo -e "  • Service issues: Check ${BLUE}functions/[[path]].ts${NC} exists"
-    echo -e "  • Wrangler issues: Run ${BLUE}wrangler --version${NC} as user bolt"
+    echo -e "  • Build issues: Check ${GREEN}build/client/${NC} directory exists"
+    echo -e "  • Service issues: Check ${GREEN}functions/[[path]].ts${NC} exists"
+    echo -e "  • Wrangler issues: Run ${GREEN}wrangler --version${NC} as user bolt"
     echo ""
     echo -e "${GREEN}✨ Enjoy using Bolt.gives on Cloudflare Pages!${NC}"
     echo ""
@@ -1382,7 +1560,7 @@ main() {
             start_services
             ;&
         "services_started")
-            verify_installation
+            final_verification
             ;&
         "verified")
             display_summary
