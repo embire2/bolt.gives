@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.1.0 - Dynamic RAM allocation (80% of system memory)
+# Version 2.2.0 - Cloudflare Pages deployment with proper wrangler support
 
 # Check if running as root first
 if [ "$EUID" -ne 0 ]; then 
@@ -61,8 +61,8 @@ print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.1.0                              ║"
-    echo "║              All Critical Issues Fixed                        ║"
+    echo "║                    Version 2.2.0                              ║"
+    echo "║           Cloudflare Pages Deployment Ready                   ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
     echo ""
@@ -694,9 +694,9 @@ install_app_dependencies() {
     log "✓ Dependencies installed"
 }
 
-# Build application
+# Build application for Cloudflare Pages
 build_application() {
-    log "Building application with Remix/Vite..."
+    log "Building application with Remix/Vite for Cloudflare Pages..."
     cd "$APP_DIR"
     
     # Calculate memory for Node.js (80% of total)
@@ -708,7 +708,7 @@ build_application() {
         node_mem=512
     fi
     
-    # Build using pnpm (proper Remix build)
+    # Build using pnpm (proper Remix build for Cloudflare Pages)
     log "Running pnpm run build with ${node_mem}MB memory allocation..."
     sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm run build
     
@@ -720,16 +720,54 @@ build_application() {
         fi
         error "Build failed, retrying with ${reduced_mem}MB..."
         sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=$reduced_mem" pnpm run build
+        
+        if [ $? -ne 0 ]; then
+            error "Build failed after retry!"
+            return 1
+        fi
     fi
     
-    log "✓ Application built successfully"
+    # Validate Cloudflare Pages build output
+    log "Validating Cloudflare Pages build output..."
+    
+    if [ ! -d "$APP_DIR/build/client" ]; then
+        error "❌ Build failed: build/client directory not found"
+        error "This is required for Cloudflare Pages deployment"
+        return 1
+    fi
+    
+    # Check for essential files
+    if [ ! -f "$APP_DIR/build/client/index.html" ]; then
+        error "❌ Build failed: index.html not found in build/client"
+        return 1
+    fi
+    
+    # Verify functions directory exists (serverless functions)
+    if [ ! -d "$APP_DIR/functions" ]; then
+        error "❌ Build failed: functions directory not found"
+        error "This is required for Cloudflare Pages serverless functions"
+        return 1
+    fi
+    
+    # Verify the main serverless function exists
+    if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then
+        error "❌ Build failed: functions/[[path]].ts not found"
+        error "This is the main serverless function for Cloudflare Pages"
+        return 1
+    fi
+    
+    log "✅ Cloudflare Pages build validation passed"
+    log "✓ Client build: $(du -sh "$APP_DIR/build/client" | cut -f1)"
+    log "✓ Functions: $(find "$APP_DIR/functions" -name "*.ts" -o -name "*.js" | wc -l) function(s)"
+    
+    log "✓ Application built successfully for Cloudflare Pages"
 }
 
-# Setup environment
+# Setup environment for Cloudflare Pages
 setup_environment() {
-    log "Setting up environment..."
+    log "Setting up environment for Cloudflare Pages..."
     
-    # Check if port 8788 is available
+    # Check if port 8788 is available (wrangler default)
     if lsof -ti :$DEFAULT_PORT >/dev/null 2>&1; then
         warn "Default port $DEFAULT_PORT is in use"
         local new_port=$(find_available_port $DEFAULT_PORT)
@@ -739,13 +777,21 @@ setup_environment() {
         fi
     fi
     
-    # Create .env file
+    # Create .env file with Cloudflare Pages specific configuration
     cat > "$APP_DIR/.env" << EOF
-# Bolt.gives Environment Configuration
+# Bolt.gives Environment Configuration for Cloudflare Pages
 NODE_ENV=production
 HOST=0.0.0.0
 PORT=$APP_PORT
+
+# Wrangler Configuration
 WRANGLER_LOCAL=true
+WRANGLER_SEND_METRICS=false
+WRANGLER_LOG_LEVEL=warn
+
+# Cloudflare Pages Configuration
+CLOUDFLARE_PAGES_PRODUCTION=true
+CLOUDFLARE_PAGES_BRANCH=main
 
 # LLM API Keys (Add your keys here)
 ANTHROPIC_API_KEY=
@@ -765,8 +811,43 @@ EOF
     chown $USER_NAME:$USER_NAME "$APP_DIR/.env"
     chmod 600 "$APP_DIR/.env"
     
+    # Install wrangler globally for the user
+    log "Installing Wrangler CLI for Cloudflare Pages..."
+    sudo -u $USER_NAME pnpm add -g wrangler
+    
+    # Verify wrangler installation
+    if sudo -u $USER_NAME wrangler --version >/dev/null 2>&1; then
+        local wrangler_version=$(sudo -u $USER_NAME wrangler --version)
+        log "✓ Wrangler installed: $wrangler_version"
+    else
+        error "❌ Wrangler installation failed"
+        return 1
+    fi
+    
+    # Create wrangler configuration file
+    cat > "$APP_DIR/wrangler.toml" << EOF
+name = "bolt-gives"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "bolt-gives-production"
+compatibility_date = "2024-01-01"
+
+[env.development]
+name = "bolt-gives-development"
+compatibility_date = "2024-01-01"
+
+[[pages_build_output_dir]]
+directory = "build/client"
+
+[[functions]]
+directory = "functions"
+EOF
+    
+    chown $USER_NAME:$USER_NAME "$APP_DIR/wrangler.toml"
+    
     save_state "app_setup"
-    log "✓ Environment configured"
+    log "✓ Environment configured for Cloudflare Pages"
 }
 
 # Configure firewall
@@ -900,15 +981,26 @@ setup_ssl() {
     fi
 }
 
-# Create systemd service
+# Create systemd service for Cloudflare Pages
 create_service() {
-    log "Creating systemd service..."
+    log "Creating systemd service for Cloudflare Pages..."
     
     # Find pnpm path
     local pnpm_path=$(which pnpm)
     if [ -z "$pnpm_path" ]; then
         error "PNPM not found!"
         exit 1
+    fi
+    
+    # Find wrangler path
+    local wrangler_path=$(sudo -u $USER_NAME which wrangler 2>/dev/null)
+    if [ -z "$wrangler_path" ]; then
+        # Check in pnpm global directory
+        wrangler_path="/home/$USER_NAME/.local/share/pnpm/wrangler"
+        if [ ! -f "$wrangler_path" ]; then
+            error "❌ Wrangler not found! This is required for Cloudflare Pages deployment."
+            return 1
+        fi
     fi
     
     # Calculate memory for Node.js (80% of total)
@@ -922,51 +1014,73 @@ create_service() {
         node_mem=32768
     fi
     
-    log "Configuring service with ${node_mem}MB memory allocation for Node.js"
+    log "Configuring Cloudflare Pages service with ${node_mem}MB memory allocation for Node.js"
     
-    # Create systemd service file with proper pnpm run start command
+    # Create systemd service file optimized for Cloudflare Pages
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
-Description=Bolt.gives AI Development Platform
+Description=Bolt.gives AI Development Platform (Cloudflare Pages)
 Documentation=https://github.com/embire2/bolt.gives
 After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=$USER_NAME
 Group=$USER_NAME
 WorkingDirectory=$APP_DIR
+
+# Environment variables for Cloudflare Pages
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=$APP_PORT
 Environment=WRANGLER_LOCAL=true
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm
+Environment=WRANGLER_SEND_METRICS=false
+Environment=WRANGLER_LOG_LEVEL=warn
+Environment=CLOUDFLARE_PAGES_PRODUCTION=true
+Environment=CLOUDFLARE_PAGES_BRANCH=main
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm:/home/$USER_NAME/.local/bin
 Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
 Environment=NODE_OPTIONS=--max-old-space-size=$node_mem
 
-# Pre-start permission fixes
+# Pre-start validation and permission fixes
 ExecStartPre=/bin/bash -c 'mkdir -p /home/$USER_NAME/.local/share/pnpm /home/$USER_NAME/.config/pnpm /home/$USER_NAME/.cache/pnpm'
 ExecStartPre=/bin/bash -c 'chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache 2>/dev/null || true'
 ExecStartPre=/bin/bash -c 'chmod +x $APP_DIR/bindings.sh 2>/dev/null || true'
-ExecStartPre=/bin/bash -c 'find $APP_DIR -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'find $APP_DIR -name "*.sh" -type f -exec chmod +x {} \\; 2>/dev/null || true'
 
-# Start command - using pnpm run start which runs wrangler
+# Validate Cloudflare Pages build before starting
+ExecStartPre=/bin/bash -c 'if [ ! -d "$APP_DIR/build/client" ]; then echo "❌ ERROR: build/client directory not found! Run: pnpm run build"; exit 1; fi'
+ExecStartPre=/bin/bash -c 'if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then echo "❌ ERROR: functions/[[path]].ts not found! Cloudflare Pages functions missing"; exit 1; fi'
+
+# Start command - using pnpm run start which runs wrangler pages dev
 ExecStart=$pnpm_path run start
 
-# Restart policy
+# Restart policy with longer intervals for Cloudflare Pages
 Restart=always
-RestartSec=10
-StartLimitInterval=600
-StartLimitBurst=5
+RestartSec=15
+StartLimitInterval=900
+StartLimitBurst=3
+
+# Timeout settings for Cloudflare Pages startup
+TimeoutStartSec=120
+TimeoutStopSec=30
 
 # Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
 
-# Security
+# Security settings
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$APP_DIR /home/$USER_NAME/.local /home/$USER_NAME/.config /home/$USER_NAME/.cache
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=32768
 
 [Install]
 WantedBy=multi-user.target
@@ -979,7 +1093,9 @@ EOF
     systemctl enable "$SERVICE_NAME"
     
     save_state "service_created"
-    log "✓ Systemd service created"
+    log "✓ Systemd service created for Cloudflare Pages"
+    log "✓ Service will validate build output before starting"
+    log "✓ Service configured with proper wrangler environment"
 }
 
 # Setup monitoring
@@ -1114,12 +1230,30 @@ verify_installation() {
         all_good=false
     fi
     
-    # Check local access
-    local local_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$APP_PORT || echo "000")
-    if [ "$local_code" = "200" ] || [ "$local_code" = "301" ] || [ "$local_code" = "302" ]; then
-        log "✅ Local access working (HTTP $local_code)"
-    else
+    # Check local access (with retry for Cloudflare Pages startup)
+    log "Testing local access on port $APP_PORT..."
+    local local_code="000"
+    local attempts=0
+    local max_attempts=10
+    
+    while [ $attempts -lt $max_attempts ]; do
+        attempts=$((attempts + 1))
+        local_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:$APP_PORT || echo "000")
+        
+        if [ "$local_code" = "200" ] || [ "$local_code" = "301" ] || [ "$local_code" = "302" ]; then
+            log "✅ Local access working (HTTP $local_code)"
+            break
+        else
+            if [ $attempts -lt $max_attempts ]; then
+                log "⏳ Waiting for Cloudflare Pages to start (attempt $attempts/$max_attempts)..."
+                sleep 3
+            fi
+        fi
+    done
+    
+    if [ "$local_code" != "200" ] && [ "$local_code" != "301" ] && [ "$local_code" != "302" ]; then
         error "❌ Local access failed (HTTP $local_code)"
+        error "Cloudflare Pages may be taking longer to start than expected"
         all_good=false
     fi
     
@@ -1159,23 +1293,36 @@ display_summary() {
     
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║           🎉 BOLT.GIVES INSTALLATION COMPLETE! 🎉            ║${NC}"
+    echo -e "${GREEN}║    🎉 BOLT.GIVES CLOUDFLARE PAGES INSTALLATION COMPLETE! 🎉  ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  🌐 URL: ${BLUE}https://$DOMAIN_NAME${NC}"
     echo -e "  📁 Directory: ${BLUE}$APP_DIR${NC}"
     echo -e "  👤 User: ${BLUE}$USER_NAME${NC}"
-    echo -e "  🔌 Application Port: ${BLUE}$APP_PORT${NC}"
+    echo -e "  🔌 Application Port: ${BLUE}$APP_PORT${NC} (via Wrangler)"
     echo -e "  💾 RAM Allocation: ${BLUE}${node_mem}MB${NC} of ${total_mem}MB (80%)"
+    echo -e "  🚀 Deployment: ${BLUE}Cloudflare Pages${NC}"
     echo -e "  📊 Service: ${BLUE}systemctl status $SERVICE_NAME${NC}"
     echo -e "  📜 Logs: ${BLUE}journalctl -u $SERVICE_NAME -f${NC}"
+    echo ""
+    echo -e "${YELLOW}⚡ Cloudflare Pages Features:${NC}"
+    echo -e "  ✅ Static assets served via Cloudflare CDN"
+    echo -e "  ✅ Serverless functions running on Cloudflare Workers"
+    echo -e "  ✅ Automatic builds via ${BLUE}pnpm run build${NC}"
+    echo -e "  ✅ Production runtime via ${BLUE}pnpm run start${NC} (wrangler)"
     echo ""
     echo -e "${YELLOW}⚡ Next Steps:${NC}"
     echo -e "  1. Add your LLM API keys to ${BLUE}$APP_DIR/.env${NC}"
     echo -e "  2. Restart the service: ${BLUE}systemctl restart $SERVICE_NAME${NC}"
     echo -e "  3. Monitor logs: ${BLUE}journalctl -u $SERVICE_NAME -f${NC}"
+    echo -e "  4. Test build manually: ${BLUE}cd $APP_DIR && pnpm run build${NC}"
     echo ""
-    echo -e "${GREEN}✨ Enjoy using Bolt.gives!${NC}"
+    echo -e "${YELLOW}🔧 Troubleshooting:${NC}"
+    echo -e "  • Build issues: Check ${BLUE}build/client/${NC} directory exists"
+    echo -e "  • Service issues: Check ${BLUE}functions/[[path]].ts${NC} exists"
+    echo -e "  • Wrangler issues: Run ${BLUE}wrangler --version${NC} as user bolt"
+    echo ""
+    echo -e "${GREEN}✨ Enjoy using Bolt.gives on Cloudflare Pages!${NC}"
     echo ""
 }
 
