@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.3.0 - CRITICAL FIXES: Service creation, startup verification, fallback methods
+# Version 2.4.0 - CRITICAL FIXES: Port detection, API key handling, service reliability
 
 # Check if running as root first
 if [ "$EUID" -ne 0 ]; then 
@@ -61,8 +61,8 @@ print_header() {
     echo -e "${GREEN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.3.0                              ║"
-    echo "║            CRITICAL FIXES: Service & Startup Issues           ║"
+    echo "║                    Version 2.4.0                              ║"
+    echo "║         CRITICAL FIXES: Port Detection & API Key Handling     ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
     echo ""
@@ -1119,13 +1119,14 @@ start_fallback_service() {
     return 1
 }
 
-# Verify service startup
+# Verify service startup with comprehensive port detection
 verify_service_startup() {
     log "Starting and verifying bolt-gives service..."
     
     # Start the service
     if ! systemctl start "$SERVICE_NAME"; then
         error "❌ Failed to start service"
+        log_error_details "SERVICE_START" "systemctl start failed"
         return 1
     fi
     
@@ -1145,31 +1146,53 @@ verify_service_startup() {
     
     if [ $attempts -eq $max_attempts ]; then
         error "❌ Service failed to start after $max_attempts attempts"
-        error "Check logs: journalctl -u $SERVICE_NAME -n 20"
+        log_error_details "SERVICE_START" "Service failed to become active"
         return 1
     fi
     
     # Wait a bit more for wrangler to initialize
     log "Waiting for wrangler to initialize..."
-    sleep 10
+    sleep 15
     
-    # Verify port is listening
+    # Verify port is listening - but also detect what port it's actually using
     local port_attempts=0
-    local max_port_attempts=15
+    local max_port_attempts=20
+    local actual_port=""
     
     while [ $port_attempts -lt $max_port_attempts ]; do
+        # Check if the expected port is listening
         if netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
-            log "✅ Application is listening on port $APP_PORT"
-            return 0
+            actual_port=$APP_PORT
+            log "✅ Application is listening on expected port $APP_PORT"
+            break
+        fi
+        
+        # Check if wrangler is listening on any port
+        local wrangler_port=$(netstat -tulpn | grep -E "node|wrangler" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
+        if [ -n "$wrangler_port" ]; then
+            actual_port=$wrangler_port
+            warn "⚠️  Application is listening on port $wrangler_port instead of expected $APP_PORT"
+            break
         fi
         
         port_attempts=$((port_attempts + 1))
-        sleep 2
+        sleep 3
     done
     
-    error "❌ Application not listening on port $APP_PORT after $max_port_attempts attempts"
-    error "Check service logs: journalctl -u $SERVICE_NAME -n 50"
-    return 1
+    if [ -z "$actual_port" ]; then
+        error "❌ Application not listening on any port after $max_port_attempts attempts"
+        log_error_details "PORT_CONFLICT" "No listening port found"
+        return 1
+    fi
+    
+    # If the actual port differs from expected, update configurations
+    if [ "$actual_port" != "$APP_PORT" ]; then
+        warn "🔧 Updating configurations to use actual port $actual_port"
+        update_port_configuration $actual_port
+    fi
+    
+    log "✅ Service verification completed - application running on port $actual_port"
+    return 0
 }
 
 # Create systemd service for Cloudflare Pages
@@ -1330,54 +1353,139 @@ EOF
     log "✓ Monitoring and logging configured"
 }
 
-# Start services with comprehensive error handling
+# Start services with comprehensive error handling and recovery
 start_services() {
     log "Starting services..."
     
     # Fix permissions one final time
     fix_all_permissions
     
-    # Check for port conflicts
+    # Comprehensive pre-start checks
+    log "🔍 Performing pre-start system checks..."
+    
+    # Kill any existing conflicting processes
+    local existing_processes=$(pgrep -f "wrangler\|pnpm.*start" | wc -l)
+    if [ "$existing_processes" -gt 0 ]; then
+        warn "🧹 Cleaning up existing processes..."
+        pkill -f "wrangler pages dev" 2>/dev/null || true
+        pkill -f "pnpm run start" 2>/dev/null || true
+        pkill -f "pnpm.*start" 2>/dev/null || true
+        sleep 5
+    fi
+    
+    # Check for port conflicts and resolve
     if lsof -ti :$APP_PORT >/dev/null 2>&1; then
-        warn "Port $APP_PORT is in use, finding alternative..."
-        local new_port=$(find_available_port $APP_PORT)
-        if [ -n "$new_port" ]; then
-            update_port_configuration $new_port
-        else
-            error "No available ports found!"
-            return 1
+        warn "Port $APP_PORT is in use, attempting to resolve..."
+        local blocking_pid=$(lsof -ti :$APP_PORT)
+        local blocking_process=$(ps -p $blocking_pid -o comm= 2>/dev/null || echo "unknown")
+        
+        if [ -n "$blocking_pid" ]; then
+            warn "Process $blocking_process (PID: $blocking_pid) is using port $APP_PORT"
+            
+            # Try to kill if it's a node/wrangler process
+            if echo "$blocking_process" | grep -qE "node|wrangler|pnpm"; then
+                warn "Terminating conflicting process..."
+                kill $blocking_pid 2>/dev/null || true
+                sleep 3
+            fi
+        fi
+        
+        # If port is still in use, find alternative
+        if lsof -ti :$APP_PORT >/dev/null 2>&1; then
+            warn "Port still in use, finding alternative..."
+            local new_port=$(find_available_port $APP_PORT)
+            if [ -n "$new_port" ]; then
+                update_port_configuration $new_port
+            else
+                error "No available ports found!"
+                return 1
+            fi
         fi
     fi
     
     # Start nginx first
-    systemctl start nginx
+    log "🔧 Starting nginx..."
+    if ! systemctl start nginx; then
+        error "❌ Failed to start nginx"
+        # Try to fix nginx configuration issues
+        if ! nginx -t; then
+            warn "🔧 Nginx configuration test failed, attempting auto-fix..."
+            # Reset nginx to clean state
+            rm -f "$NGINX_CONF_PATH" "$NGINX_ENABLED_PATH"
+            configure_nginx
+        fi
+        systemctl start nginx
+    fi
     systemctl enable nginx
     
-    # Try to start the service with verification
-    log "Attempting to start bolt-gives service..."
-    if verify_service_startup; then
-        log "✅ Bolt.gives service started successfully"
-        save_state "services_started"
-        return 0
-    else
-        error "❌ Systemd service startup failed"
+    # Multiple service startup attempts with different strategies
+    log "🚀 Attempting service startup..."
+    local startup_attempts=0
+    local max_startup_attempts=3
+    
+    while [ $startup_attempts -lt $max_startup_attempts ]; do
+        startup_attempts=$((startup_attempts + 1))
+        log "Startup attempt $startup_attempts/$max_startup_attempts"
         
-        # Try fallback method
-        log "Attempting fallback startup method..."
-        if start_fallback_service; then
-            warn "✅ Application started using fallback method"
-            save_state "services_started"
-            return 0
-        else
-            error "❌ Both systemd and fallback methods failed"
-            error "Please check logs and try manual startup:"
-            error "sudo -u bolt bash -c 'cd $APP_DIR && pnpm run start'"
-            return 1
+        # Strategy 1: Normal systemd service
+        if [ $startup_attempts -eq 1 ]; then
+            log "Strategy 1: Normal systemd service startup"
+            if verify_service_startup; then
+                log "✅ Bolt.gives service started successfully"
+                save_state "services_started"
+                return 0
+            fi
         fi
-    fi
+        
+        # Strategy 2: Restart service and try again
+        if [ $startup_attempts -eq 2 ]; then
+            log "Strategy 2: Service restart and retry"
+            systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+            sleep 3
+            # Clear any port conflicts that might have developed
+            pkill -f "wrangler\|pnpm.*start" 2>/dev/null || true
+            sleep 2
+            if verify_service_startup; then
+                log "✅ Bolt.gives service started successfully after restart"
+                save_state "services_started"
+                return 0
+            fi
+        fi
+        
+        # Strategy 3: Fallback method
+        if [ $startup_attempts -eq 3 ]; then
+            log "Strategy 3: Fallback startup method"
+            systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+            if start_fallback_service; then
+                warn "✅ Application started using fallback method"
+                save_state "services_started"
+                return 0
+            fi
+        fi
+        
+        # Wait between attempts
+        if [ $startup_attempts -lt $max_startup_attempts ]; then
+            warn "Startup attempt $startup_attempts failed, waiting before retry..."
+            sleep 10
+        fi
+    done
+    
+    # All attempts failed
+    error "❌ All service startup attempts failed"
+    log_error_details "SERVICE_START" "All startup strategies failed"
+    
+    # Final troubleshooting information
+    error "🔍 Troubleshooting Information:"
+    error "  • Check service logs: journalctl -u $SERVICE_NAME -n 50"
+    error "  • Check application logs: tail -f /var/log/bolt-gives-app.log"
+    error "  • Manual start: sudo -u bolt bash -c 'cd $APP_DIR && pnpm run start'"
+    error "  • Check port usage: netstat -tulpn | grep :$APP_PORT"
+    error "  • Verify build: ls -la $APP_DIR/build/client/"
+    
+    return 1
 }
 
-# Comprehensive final verification
+# Comprehensive final verification with enhanced port detection
 final_verification() {
     log "Performing final system verification..."
     
@@ -1407,12 +1515,29 @@ final_verification() {
         log "✅ Nginx is running"
     fi
     
-    # Check port is listening
-    if ! netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
-        error "❌ Application not listening on port $APP_PORT"
+    # Detect the actual port being used by the application
+    local actual_port=$(netstat -tulpn | grep -E "node|wrangler" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
+    
+    if [ -z "$actual_port" ]; then
+        error "❌ Application not listening on any port"
         errors=$((errors + 1))
     else
-        log "✅ Application listening on port $APP_PORT"
+        log "✅ Application listening on port $actual_port"
+        
+        # Update APP_PORT to match actual port for remaining checks
+        if [ "$actual_port" != "$APP_PORT" ]; then
+            warn "⚠️  Application using port $actual_port instead of configured $APP_PORT"
+            APP_PORT=$actual_port
+        fi
+    fi
+    
+    # Verify nginx configuration matches actual port
+    if [ -n "$actual_port" ]; then
+        local nginx_port=$(grep "proxy_pass" "$NGINX_CONF_PATH" | grep -o ':[0-9]*' | cut -d':' -f2)
+        if [ "$nginx_port" != "$actual_port" ]; then
+            warn "🔧 Nginx configuration mismatch - updating to port $actual_port"
+            update_port_configuration $actual_port
+        fi
     fi
     
     # Check local access
@@ -1440,6 +1565,20 @@ final_verification() {
                 error "❌ External access failed (HTTP $external_code)"
                 errors=$((errors + 1))
             fi
+        fi
+    fi
+    
+    # Final port consistency check
+    if [ -n "$actual_port" ]; then
+        log "🔍 Final port consistency check..."
+        local service_port=$(grep "PORT=" "/etc/systemd/system/$SERVICE_NAME.service" | cut -d'=' -f2)
+        local nginx_port=$(grep "proxy_pass" "$NGINX_CONF_PATH" | grep -o ':[0-9]*' | cut -d':' -f2)
+        
+        if [ "$service_port" = "$nginx_port" ] && [ "$nginx_port" = "$actual_port" ]; then
+            log "✅ All port configurations are consistent ($actual_port)"
+        else
+            warn "⚠️  Port configuration inconsistency detected:"
+            warn "   Service: $service_port, Nginx: $nginx_port, Actual: $actual_port"
         fi
     fi
     

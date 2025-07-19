@@ -60,6 +60,8 @@ interface ChatBoxProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: ((element: ElementInfo | null) => void) | undefined;
+  aiMode?: 'standard' | 'orchestration';
+  orchestrationModels?: any[];
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
@@ -102,9 +104,30 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         <rect className={classNames(styles.PromptShine)} x="48" y="24" width="70" height="1"></rect>
       </svg>
       <div>
+        {/* Multi-Model Orchestration Indicator */}
+        {props.aiMode === 'orchestration' && props.orchestrationModels && props.orchestrationModels.length > 0 && (
+          <div className="mb-3 p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="i-ph:users-three text-lg text-purple-500" />
+              <span className="text-sm font-medium text-bolt-elements-textPrimary">
+                Multi-Model Orchestration Active
+              </span>
+            </div>
+            <div className="flex gap-3 text-xs text-bolt-elements-textSecondary">
+              {props.orchestrationModels.map((model, index) => (
+                <div key={index} className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">{model.provider.name}</span>
+                  <span className="text-bolt-elements-textTertiary">({model.model})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <ClientOnly>
           {() => (
-            <div className={props.isModelSettingsCollapsed ? 'hidden' : ''}>
+            <div className={props.isModelSettingsCollapsed || props.aiMode === 'orchestration' ? 'hidden' : ''}>
               <ModelSelector
                 key={props.provider?.name + ':' + props.modelList.length}
                 model={props.model}
@@ -302,20 +325,22 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
               </IconButton>
             )}
-            <IconButton
-              title="Model Settings"
-              className={classNames('transition-all flex items-center gap-1', {
-                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                  props.isModelSettingsCollapsed,
-                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                  !props.isModelSettingsCollapsed,
-              })}
-              onClick={() => props.setIsModelSettingsCollapsed(!props.isModelSettingsCollapsed)}
-              disabled={!props.providerList || props.providerList.length === 0}
-            >
-              <div className={`i-ph:caret-${props.isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-              {props.isModelSettingsCollapsed ? <span className="text-xs">{props.model}</span> : <span />}
-            </IconButton>
+            {props.aiMode !== 'orchestration' && (
+              <IconButton
+                title="Model Settings"
+                className={classNames('transition-all flex items-center gap-1', {
+                  'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
+                    props.isModelSettingsCollapsed,
+                  'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
+                    !props.isModelSettingsCollapsed,
+                })}
+                onClick={() => props.setIsModelSettingsCollapsed(!props.isModelSettingsCollapsed)}
+                disabled={!props.providerList || props.providerList.length === 0}
+              >
+                <div className={`i-ph:caret-${props.isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
+                {props.isModelSettingsCollapsed ? <span className="text-xs">{props.model}</span> : <span />}
+              </IconButton>
+            )}
           </div>
           {props.input.length > 3 ? (
             <div className="text-xs text-bolt-elements-textTertiary">

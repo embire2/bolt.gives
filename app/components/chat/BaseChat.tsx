@@ -514,6 +514,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   setDesignScheme={setDesignScheme}
                   selectedElement={selectedElement}
                   setSelectedElement={setSelectedElement}
+                  aiMode={selectedAiMode}
+                  orchestrationModels={orchestrationModels}
                 />
               </div>
             </StickToBottom>

@@ -27,23 +27,13 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
   // Load saved API keys on mount
   useEffect(() => {
     const cookies = getApiKeysFromCookies();
-    const keys: Record<string, string> = {};
 
-    Object.entries(cookies).forEach(([key, value]) => {
-      if (value) {
-        const provider = PROVIDER_LIST.find((p) => p.config?.apiTokenKey === key);
-
-        if (provider) {
-          keys[provider.name] = value;
-        }
-      }
-    });
-
-    setApiKeys(keys);
+    // The cookies already store keys by provider name, so we can use them directly
+    setApiKeys(cookies);
     logStore.logInfo('MultiModelSelector: Loaded API keys from cookies', {
       type: 'api_keys',
-      message: `Loaded ${Object.keys(keys).length} API keys from cookies`,
-      providers: Object.keys(keys),
+      message: `Loaded ${Object.keys(cookies).length} API keys from cookies`,
+      providers: Object.keys(cookies),
     });
   }, []);
 
@@ -133,16 +123,15 @@ export function MultiModelSelector({ onModelsSelect, onClose }: MultiModelSelect
     setApiKeys((prev) => ({ ...prev, [providerName]: apiKey }));
     setSelectedModels((prev) => prev.map((m) => (m.provider.name === providerName ? { ...m, apiKey } : m)));
 
-    // Save to cookies
-    const provider = PROVIDER_LIST.find((p) => p.name === providerName);
+    // Save to cookies - use the same method as APIKeyManager
+    const currentKeys = getApiKeysFromCookies();
+    const newKeys = { ...currentKeys, [providerName]: apiKey };
+    Cookies.set('apiKeys', JSON.stringify(newKeys), { expires: 365 });
 
-    if (provider && provider.config?.apiTokenKey) {
-      Cookies.set(provider.config.apiTokenKey, apiKey, { expires: 365 });
-      logStore.logInfo(`MultiModelSelector: Updated API key for ${providerName}`, {
-        type: 'api_key_update',
-        message: `Updated API key for ${providerName}`,
-      });
-    }
+    logStore.logInfo(`MultiModelSelector: Updated API key for ${providerName}`, {
+      type: 'api_key_update',
+      message: `Updated API key for ${providerName}`,
+    });
   };
 
   const validateSelection = () => {
