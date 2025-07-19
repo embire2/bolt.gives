@@ -1,7 +1,7 @@
-import type { ActionFunctionArgs, LoaderFunction } from '@remix-run/cloudflare';
-import { json } from '@remix-run/cloudflare';
+import type { ActionFunctionArgs, LoaderFunction } from '@remix-run/node';
+import { json } from '@remix-run/node';
 
-// Only import child_process if we're not in a Cloudflare environment
+// Import child_process for Node.js environment
 let execSync: any;
 
 try {
@@ -12,8 +12,8 @@ try {
     execSync = childProcess.execSync;
   }
 } catch {
-  // In Cloudflare environment, this will fail, which is expected
-  console.log('Running in Cloudflare environment, child_process not available');
+  // In browser environment, this will fail, which is expected
+  console.log('Running in browser environment, child_process not available');
 }
 
 // For development environments, we'll always provide mock data if real data isn't available
@@ -31,7 +31,7 @@ interface DiskInfo {
 }
 
 const getDiskInfo = (): DiskInfo[] => {
-  // If we're in a Cloudflare environment and not in development, return error
+  // If we're in a browser environment and not in development, return error
   if (!execSync && !isDevelopment) {
     return [
       {

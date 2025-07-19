@@ -2,7 +2,7 @@
 
 # Bolt.gives Production Installation Script
 # For Ubuntu/Debian servers - Sets up everything from scratch
-# Version 2.4.0 - CRITICAL FIXES: Port detection, API key handling, service reliability
+# Version 3.0.0 - Self-hosted Node.js server
 
 # Check if running as root first
 if [ "$EUID" -ne 0 ]; then 
@@ -27,7 +27,7 @@ nameserver 1.0.0.1
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 EOF
-    echo "✓ DNS configured to use Cloudflare (1.1.1.1) and Google DNS"
+    echo "✓ DNS configured to use primary (1.1.1.1) and Google DNS"
 fi
 
 # Don't exit on errors - we have self-healing mechanisms
@@ -48,8 +48,8 @@ NGINX_ENABLED_PATH="/etc/nginx/sites-enabled/bolt-gives"
 APP_DIR="/opt/bolt.gives"
 SERVICE_NAME="bolt-gives"
 USER_NAME="bolt"
-# IMPORTANT: The application runs on port 8788 with wrangler, NOT 3000
-DEFAULT_PORT="8788"
+# IMPORTANT: The application runs on port 8080 with Node.js server
+DEFAULT_PORT="8080"
 APP_PORT="$DEFAULT_PORT"  # Will be updated if port is in use
 
 # Logging
@@ -61,8 +61,8 @@ print_header() {
     echo -e "${GREEN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║               BOLT.GIVES PRODUCTION INSTALLER                 ║"
-    echo "║                    Version 2.4.0                              ║"
-    echo "║         CRITICAL FIXES: Port Detection & API Key Handling     ║"
+    echo "║                    Version 3.0.0                              ║"
+    echo "║              Self-Hosted Node.js Server Setup                 ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
     echo ""
@@ -105,10 +105,10 @@ log_error_details() {
             journalctl -u "$SERVICE_NAME" --no-pager -n 50
             echo ""
             echo "Port status:"
-            netstat -tlnp | grep -E ":8788|:3000|:5173|:4173" || echo "No relevant ports found"
+            netstat -tlnp | grep -E ":8080|:3000|:5173|:4173" || echo "No relevant ports found"
             echo ""
             echo "Process status:"
-            ps aux | grep -E "bolt|pnpm|wrangler|node" | grep -v grep || echo "No relevant processes found"
+            ps aux | grep -E "bolt|pnpm|node" | grep -v grep || echo "No relevant processes found"
             ;;
         "PERMISSION")
             echo "File permissions in $APP_DIR:"
@@ -124,7 +124,7 @@ log_error_details() {
             netstat -tlnp
             echo ""
             echo "Checking common ports:"
-            for port in 3000 5173 4173 8787 8788 8790; do
+            for port in 3000 5173 4173 8080 8081 8082; do
                 echo -n "Port $port: "
                 if lsof -ti :$port >/dev/null 2>&1; then
                     echo "IN USE by PID $(lsof -ti :$port)"
@@ -194,7 +194,7 @@ cleanup_failed_install() {
 
 # Find available port
 find_available_port() {
-    local start_port=${1:-8788}
+    local start_port=${1:-8080}
     local port=$start_port
     
     while [ $port -lt $((start_port + 100)) ]; do
@@ -694,9 +694,9 @@ install_app_dependencies() {
     log "✓ Dependencies installed"
 }
 
-# Build application for Cloudflare Pages
+# Build application for Node.js self-hosting
 build_application() {
-    log "Building application with Remix/Vite for Cloudflare Pages..."
+    log "Building application with Remix/Vite for Node.js..."
     cd "$APP_DIR"
     
     # Calculate memory for Node.js (80% of total)
@@ -708,7 +708,7 @@ build_application() {
         node_mem=512
     fi
     
-    # Build using pnpm (proper Remix build for Cloudflare Pages)
+    # Build using pnpm (proper Remix build for Node.js)
     log "Running pnpm run build with ${node_mem}MB memory allocation..."
     sudo -u $USER_NAME env NODE_OPTIONS="--max-old-space-size=$node_mem" pnpm run build
     
@@ -727,12 +727,18 @@ build_application() {
         fi
     fi
     
-    # Validate Cloudflare Pages build output
-    log "Validating Cloudflare Pages build output..."
+    # Validate Node.js build output
+    log "Validating Node.js build output..."
     
     if [ ! -d "$APP_DIR/build/client" ]; then
         error "❌ Build failed: build/client directory not found"
-        error "This is required for Cloudflare Pages deployment"
+        error "This is required for serving static assets"
+        return 1
+    fi
+    
+    if [ ! -d "$APP_DIR/build/server" ]; then
+        error "❌ Build failed: build/server directory not found"
+        error "This is required for the Node.js server"
         return 1
     fi
     
@@ -742,32 +748,30 @@ build_application() {
         return 1
     fi
     
-    # Verify functions directory exists (serverless functions)
-    if [ ! -d "$APP_DIR/functions" ]; then
-        error "❌ Build failed: functions directory not found"
-        error "This is required for Cloudflare Pages serverless functions"
+    if [ ! -f "$APP_DIR/build/server/index.js" ]; then
+        error "❌ Build failed: server index.js not found"
         return 1
     fi
     
-    # Verify the main serverless function exists
-    if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then
-        error "❌ Build failed: functions/[[path]].ts not found"
-        error "This is the main serverless function for Cloudflare Pages"
+    # Check if server.js exists
+    if [ ! -f "$APP_DIR/server.js" ]; then
+        error "❌ server.js not found in project root"
+        error "This file is required to run the Node.js server"
         return 1
     fi
     
-    log "✅ Cloudflare Pages build validation passed"
+    log "✅ Node.js build validation passed"
     log "✓ Client build: $(du -sh "$APP_DIR/build/client" | cut -f1)"
-    log "✓ Functions: $(find "$APP_DIR/functions" -name "*.ts" -o -name "*.js" | wc -l) function(s)"
+    log "✓ Server build: $(du -sh "$APP_DIR/build/server" | cut -f1)"
     
-    log "✓ Application built successfully for Cloudflare Pages"
+    log "✓ Application built successfully for Node.js"
 }
 
-# Setup environment for Cloudflare Pages
+# Setup environment for Node.js server
 setup_environment() {
-    log "Setting up environment for Cloudflare Pages..."
+    log "Setting up environment for Node.js server..."
     
-    # Check if port 8788 is available (wrangler default)
+    # Check if port 8080 is available (Node.js default)
     if lsof -ti :$DEFAULT_PORT >/dev/null 2>&1; then
         warn "Default port $DEFAULT_PORT is in use"
         local new_port=$(find_available_port $DEFAULT_PORT)
@@ -777,21 +781,12 @@ setup_environment() {
         fi
     fi
     
-    # Create .env file with Cloudflare Pages specific configuration
+    # Create .env file with Node.js server configuration
     cat > "$APP_DIR/.env" << EOF
-# Bolt.gives Environment Configuration for Cloudflare Pages
+# Bolt.gives Environment Configuration
 NODE_ENV=production
 HOST=0.0.0.0
 PORT=$APP_PORT
-
-# Wrangler Configuration
-WRANGLER_LOCAL=true
-WRANGLER_SEND_METRICS=false
-WRANGLER_LOG_LEVEL=warn
-
-# Cloudflare Pages Configuration
-CLOUDFLARE_PAGES_PRODUCTION=true
-CLOUDFLARE_PAGES_BRANCH=main
 
 # LLM API Keys (Add your keys here)
 ANTHROPIC_API_KEY=
@@ -811,32 +806,14 @@ EOF
     chown $USER_NAME:$USER_NAME "$APP_DIR/.env"
     chmod 600 "$APP_DIR/.env"
     
-    # Note: Wrangler is available via pnpm exec wrangler from the application dependencies
-    
-    # Create wrangler configuration file
-    cat > "$APP_DIR/wrangler.toml" << EOF
-name = "bolt-gives"
-compatibility_date = "2024-01-01"
-
-[env.production]
-name = "bolt-gives-production"
-compatibility_date = "2024-01-01"
-
-[env.development]
-name = "bolt-gives-development"
-compatibility_date = "2024-01-01"
-
-[[pages_build_output_dir]]
-directory = "build/client"
-
-[[functions]]
-directory = "functions"
-EOF
-    
-    chown $USER_NAME:$USER_NAME "$APP_DIR/wrangler.toml"
+    # Ensure server.js exists for Node.js server
+    if [ ! -f "$APP_DIR/server.js" ]; then
+        error "server.js not found. Please ensure the application has been properly migrated to Node.js."
+        exit 1
+    fi
     
     save_state "app_setup"
-    log "✓ Environment configured for Cloudflare Pages"
+    log "✓ Environment configured for Node.js server"
 }
 
 # Configure firewall
@@ -890,7 +867,7 @@ server {
     access_log /var/log/nginx/bolt-gives-access.log;
     error_log /var/log/nginx/bolt-gives-error.log;
 
-    # IMPORTANT: Proxy to port 8788 where wrangler runs
+    # Proxy to Node.js server port
     location / {
         proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
@@ -1027,11 +1004,11 @@ verify_dependencies() {
     fi
     
     # Check critical files
-    if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then
-        error "❌ functions/[[path]].ts not found"
+    if [ ! -f "$APP_DIR/server.js" ]; then
+        error "❌ server.js not found"
         errors=$((errors + 1))
     else
-        log "✅ Serverless function found"
+        log "✅ Node.js server found"
     fi
     
     if [ ! -f "$APP_DIR/package.json" ]; then
@@ -1050,30 +1027,23 @@ verify_dependencies() {
     fi
 }
 
-# Check for wrangler availability
-check_wrangler() {
-    log "Checking for wrangler availability..."
+# Check for Node.js server availability
+check_node_server() {
+    log "Checking for Node.js server availability..."
     
-    # Check if wrangler is available via pnpm in the application directory
-    if sudo -u $USER_NAME bash -c "cd '$APP_DIR' && pnpm exec wrangler --version" &> /dev/null; then
-        log "✅ Wrangler found via pnpm exec"
+    # Check if server.js exists
+    if [ ! -f "$APP_DIR/server.js" ]; then
+        error "❌ server.js not found in $APP_DIR"
+        return 1
+    fi
+    
+    # Check if node can execute the server
+    if sudo -u $USER_NAME bash -c "cd '$APP_DIR' && node --version" &> /dev/null; then
+        log "✅ Node.js is available"
         return 0
     fi
     
-    # Check if wrangler is globally available
-    if sudo -u $USER_NAME which wrangler &> /dev/null; then
-        log "✅ Wrangler found globally"
-        return 0
-    fi
-    
-    # Check in pnpm global directory
-    if [ -f "/home/$USER_NAME/.local/share/pnpm/wrangler" ]; then
-        log "✅ Wrangler found in pnpm global directory"
-        return 0
-    fi
-    
-    error "❌ Wrangler not found! This is required for Cloudflare Pages deployment."
-    error "Make sure 'pnpm install' has been completed successfully."
+    error "❌ Node.js is not available for the application user"
     return 1
 }
 
@@ -1082,7 +1052,7 @@ start_fallback_service() {
     warn "⚠️ Starting application using fallback method (nohup)"
     
     # Kill any existing processes
-    pkill -f "wrangler pages dev" 2>/dev/null || true
+    pkill -f "node server.js" 2>/dev/null || true
     pkill -f "pnpm run start" 2>/dev/null || true
     
     # Wait for processes to die
@@ -1090,7 +1060,7 @@ start_fallback_service() {
     
     # Start with nohup
     log "Starting application in background..."
-    nohup sudo -u $USER_NAME bash -c "cd '$APP_DIR' && pnpm run start" > /var/log/bolt-gives-app.log 2>&1 &
+    nohup sudo -u $USER_NAME bash -c "cd '$APP_DIR' && NODE_ENV=production PORT=$APP_PORT pnpm run start" > /var/log/bolt-gives-app.log 2>&1 &
     
     # Wait for startup
     log "Waiting for application to start..."
@@ -1104,8 +1074,8 @@ start_fallback_service() {
         if netstat -tulpn | grep -q ":$APP_PORT.*LISTEN"; then
             log "✅ Application started successfully using fallback method"
             warn "⚠️ Application is running but will not auto-restart on reboot"
-            warn "⚠️ To restart: sudo pkill -f wrangler; then re-run this section"
-            warn "⚠️ To stop: sudo pkill -f wrangler"
+            warn "⚠️ To restart: sudo pkill -f 'node server.js'; then re-run this section"
+            warn "⚠️ To stop: sudo pkill -f 'node server.js'"
             warn "⚠️ Logs: tail -f /var/log/bolt-gives-app.log"
             return 0
         fi
@@ -1150,8 +1120,8 @@ verify_service_startup() {
         return 1
     fi
     
-    # Wait a bit more for wrangler to initialize
-    log "Waiting for wrangler to initialize..."
+    # Wait a bit more for server to initialize
+    log "Waiting for server to initialize..."
     sleep 15
     
     # Verify port is listening - but also detect what port it's actually using
@@ -1167,11 +1137,11 @@ verify_service_startup() {
             break
         fi
         
-        # Check if wrangler is listening on any port
-        local wrangler_port=$(netstat -tulpn | grep -E "node|wrangler" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
-        if [ -n "$wrangler_port" ]; then
-            actual_port=$wrangler_port
-            warn "⚠️  Application is listening on port $wrangler_port instead of expected $APP_PORT"
+        # Check if node is listening on any port
+        local node_port=$(netstat -tulpn | grep -E "node" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
+        if [ -n "$node_port" ]; then
+            actual_port=$node_port
+            warn "⚠️  Application is listening on port $node_port instead of expected $APP_PORT"
             break
         fi
         
@@ -1195,14 +1165,14 @@ verify_service_startup() {
     return 0
 }
 
-# Create systemd service for Cloudflare Pages
+# Create systemd service for Node.js
 create_service() {
-    log "Creating systemd service for Cloudflare Pages..."
+    log "Creating systemd service for Node.js server..."
     
-    # Find pnpm path
-    local pnpm_path=$(which pnpm)
-    if [ -z "$pnpm_path" ]; then
-        error "PNPM not found!"
+    # Find node path
+    local node_path=$(which node)
+    if [ -z "$node_path" ]; then
+        error "Node.js not found!"
         exit 1
     fi
     
@@ -1212,9 +1182,9 @@ create_service() {
         return 1
     fi
     
-    # Check wrangler availability
-    if ! check_wrangler; then
-        error "❌ Cannot create service without wrangler"
+    # Check Node.js server availability
+    if ! check_node_server; then
+        error "❌ Cannot create service without proper Node.js setup"
         return 1
     fi
     
@@ -1229,12 +1199,12 @@ create_service() {
         node_mem=32768
     fi
     
-    log "Configuring Cloudflare Pages service with ${node_mem}MB memory allocation for Node.js"
+    log "Configuring Node.js service with ${node_mem}MB memory allocation"
     
-    # Create systemd service file optimized for Cloudflare Pages
+    # Create systemd service file for Node.js
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
-Description=Bolt.gives AI Development Platform (Cloudflare Pages)
+Description=Bolt.gives AI Development Platform (Node.js)
 Documentation=https://github.com/embire2/bolt.gives
 After=network.target
 Wants=network-online.target
@@ -1245,35 +1215,32 @@ User=$USER_NAME
 Group=$USER_NAME
 WorkingDirectory=$APP_DIR
 
-# Environment variables for Cloudflare Pages
+# Environment variables for Node.js
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=$APP_PORT
-Environment=WRANGLER_LOCAL=true
-Environment=WRANGLER_SEND_METRICS=false
-Environment=WRANGLER_LOG_LEVEL=warn
-Environment=CLOUDFLARE_PAGES_PRODUCTION=true
-Environment=CLOUDFLARE_PAGES_BRANCH=main
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/$USER_NAME/.local/share/pnpm:/home/$USER_NAME/.local/bin
-Environment=PNPM_HOME=/home/$USER_NAME/.local/share/pnpm
 Environment=NODE_OPTIONS=--max-old-space-size=$node_mem
 
+# Load environment variables from .env file
+EnvironmentFile=-$APP_DIR/.env
+
 # Pre-start validation
-ExecStartPre=/bin/bash -c 'chmod +x $APP_DIR/bindings.sh 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'if [ ! -f "$APP_DIR/server.js" ]; then echo "❌ ERROR: server.js not found!"; exit 1; fi'
 ExecStartPre=/bin/bash -c 'if [ ! -d "$APP_DIR/build/client" ]; then echo "❌ ERROR: build/client directory not found! Run: pnpm run build"; exit 1; fi'
-ExecStartPre=/bin/bash -c 'if [ ! -f "$APP_DIR/functions/[[path]].ts" ]; then echo "❌ ERROR: functions/[[path]].ts not found! Cloudflare Pages functions missing"; exit 1; fi'
+ExecStartPre=/bin/bash -c 'if [ ! -d "$APP_DIR/build/server" ]; then echo "❌ ERROR: build/server directory not found! Run: pnpm run build"; exit 1; fi'
 
-# Start command - using pnpm run start which runs wrangler pages dev
-ExecStart=$pnpm_path run start
+# Start command - using node server.js
+ExecStart=$node_path server.js
 
-# Restart policy with longer intervals for Cloudflare Pages
+# Restart policy
 Restart=always
-RestartSec=15
-StartLimitInterval=900
-StartLimitBurst=3
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
 
-# Timeout settings for Cloudflare Pages startup
-TimeoutStartSec=120
+# Timeout settings
+TimeoutStartSec=60
 TimeoutStopSec=30
 
 # Logging
@@ -1281,11 +1248,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
 
-# Security settings (relaxed for wrangler to work)
+# Security settings
 NoNewPrivileges=true
-PrivateTmp=false
-ProtectSystem=false
-ProtectHome=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$APP_DIR
 
 # Resource limits
 LimitNOFILE=65536
@@ -1308,9 +1276,9 @@ EOF
     chown -R $USER_NAME:$USER_NAME "/home/$USER_NAME/.local" "/home/$USER_NAME/.config" "/home/$USER_NAME/.cache"
     
     save_state "service_created"
-    log "✓ Systemd service created for Cloudflare Pages"
+    log "✓ Systemd service created for Node.js server"
     log "✓ Service will validate build output before starting"
-    log "✓ Service configured with proper wrangler environment"
+    log "✓ Service configured with proper Node.js environment"
     log "✓ Required directories created with proper permissions"
 }
 
@@ -1364,10 +1332,10 @@ start_services() {
     log "🔍 Performing pre-start system checks..."
     
     # Kill any existing conflicting processes
-    local existing_processes=$(pgrep -f "wrangler\|pnpm.*start" | wc -l)
+    local existing_processes=$(pgrep -f "node.*server\.js\|pnpm.*start" | wc -l)
     if [ "$existing_processes" -gt 0 ]; then
         warn "🧹 Cleaning up existing processes..."
-        pkill -f "wrangler pages dev" 2>/dev/null || true
+        pkill -f "node.*server\.js" 2>/dev/null || true
         pkill -f "pnpm run start" 2>/dev/null || true
         pkill -f "pnpm.*start" 2>/dev/null || true
         sleep 5
@@ -1382,8 +1350,8 @@ start_services() {
         if [ -n "$blocking_pid" ]; then
             warn "Process $blocking_process (PID: $blocking_pid) is using port $APP_PORT"
             
-            # Try to kill if it's a node/wrangler process
-            if echo "$blocking_process" | grep -qE "node|wrangler|pnpm"; then
+            # Try to kill if it's a node process
+            if echo "$blocking_process" | grep -qE "node|pnpm"; then
                 warn "Terminating conflicting process..."
                 kill $blocking_pid 2>/dev/null || true
                 sleep 3
@@ -1443,7 +1411,7 @@ start_services() {
             systemctl stop "$SERVICE_NAME" 2>/dev/null || true
             sleep 3
             # Clear any port conflicts that might have developed
-            pkill -f "wrangler\|pnpm.*start" 2>/dev/null || true
+            pkill -f "node.*server\.js\|pnpm.*start" 2>/dev/null || true
             sleep 2
             if verify_service_startup; then
                 log "✅ Bolt.gives service started successfully after restart"
@@ -1516,7 +1484,7 @@ final_verification() {
     fi
     
     # Detect the actual port being used by the application
-    local actual_port=$(netstat -tulpn | grep -E "node|wrangler" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
+    local actual_port=$(netstat -tulpn | grep -E "node" | grep LISTEN | grep -o ':[0-9]*' | head -1 | cut -d':' -f2)
     
     if [ -z "$actual_port" ]; then
         error "❌ Application not listening on any port"
@@ -1610,23 +1578,23 @@ display_summary() {
     
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║    🎉 BOLT.GIVES CLOUDFLARE PAGES INSTALLATION COMPLETE! 🎉  ║${NC}"
+    echo -e "${GREEN}║    🎉 BOLT.GIVES SELF-HOSTED INSTALLATION COMPLETE! 🎉  ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  🌐 URL: ${GREEN}https://$DOMAIN_NAME${NC}"
     echo -e "  📁 Directory: ${GREEN}$APP_DIR${NC}"
     echo -e "  👤 User: ${GREEN}$USER_NAME${NC}"
-    echo -e "  🔌 Application Port: ${GREEN}$APP_PORT${NC} (via Wrangler)"
+    echo -e "  🔌 Application Port: ${GREEN}$APP_PORT${NC} (Node.js Server)"
     echo -e "  💾 RAM Allocation: ${GREEN}${node_mem}MB${NC} of ${total_mem}MB (80%)"
-    echo -e "  🚀 Deployment: ${GREEN}Cloudflare Pages${NC}"
+    echo -e "  🚀 Deployment: ${GREEN}Self-Hosted Node.js${NC}"
     echo -e "  📊 Service: ${GREEN}systemctl status $SERVICE_NAME${NC}"
     echo -e "  📜 Logs: ${GREEN}journalctl -u $SERVICE_NAME -f${NC}"
     echo ""
-    echo -e "${YELLOW}⚡ Cloudflare Pages Features:${NC}"
-    echo -e "  ✅ Static assets served via Cloudflare CDN"
-    echo -e "  ✅ Serverless functions running on Cloudflare Workers"
+    echo -e "${YELLOW}⚡ Self-Hosting Features:${NC}"
+    echo -e "  ✅ Full control over your deployment"
+    echo -e "  ✅ No third-party dependencies"
     echo -e "  ✅ Automatic builds via ${GREEN}pnpm run build${NC}"
-    echo -e "  ✅ Production runtime via ${GREEN}pnpm run start${NC} (wrangler)"
+    echo -e "  ✅ Production runtime via ${GREEN}pnpm run start${NC} (Node.js)"
     echo ""
     echo -e "${YELLOW}⚡ Next Steps:${NC}"
     echo -e "  1. Add your LLM API keys to ${GREEN}$APP_DIR/.env${NC}"
@@ -1636,10 +1604,10 @@ display_summary() {
     echo ""
     echo -e "${YELLOW}🔧 Troubleshooting:${NC}"
     echo -e "  • Build issues: Check ${GREEN}build/client/${NC} directory exists"
-    echo -e "  • Service issues: Check ${GREEN}functions/[[path]].ts${NC} exists"
-    echo -e "  • Wrangler issues: Run ${GREEN}wrangler --version${NC} as user bolt"
+    echo -e "  • Service issues: Check ${GREEN}server.js${NC} exists"
+    echo -e "  • Node.js issues: Run ${GREEN}node --version${NC} as user bolt"
     echo ""
-    echo -e "${GREEN}✨ Enjoy using Bolt.gives on Cloudflare Pages!${NC}"
+    echo -e "${GREEN}✨ Enjoy your self-hosted Bolt.gives installation!${NC}"
     echo ""
 }
 

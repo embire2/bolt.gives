@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pnpm run dev` - Start development server on port 5174
 - `pnpm run build` - Build the project for production
 - `pnpm run preview` - Build and run production build locally
-- `pnpm run start` - Run built application using Wrangler Pages
-- `pnpm run deploy` - Deploy to Cloudflare Pages
+- `pnpm run start` - Run built application using Node.js server
+- `pnpm run deploy` - Build for production deployment
 
 ### Testing and Quality
 - `pnpm test` - Run test suite with Vitest

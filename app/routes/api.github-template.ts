@@ -1,21 +1,13 @@
-import { json } from '@remix-run/cloudflare';
+import { json } from '@remix-run/node';
 import JSZip from 'jszip';
 
-// Function to detect if we're running in Cloudflare
-function isCloudflareEnvironment(context: any): boolean {
-  // Check if we're in production AND have Cloudflare Pages specific env vars
-  const isProduction = process.env.NODE_ENV === 'production';
-  const hasCfPagesVars = !!(
-    context?.cloudflare?.env?.CF_PAGES ||
-    context?.cloudflare?.env?.CF_PAGES_URL ||
-    context?.cloudflare?.env?.CF_PAGES_COMMIT_SHA
-  );
-
-  return isProduction && hasCfPagesVars;
+// Function to detect if we're running in production
+function isProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production';
 }
 
-// Cloudflare-compatible method using GitHub Contents API
-async function fetchRepoContentsCloudflare(repo: string, githubToken?: string) {
+// Production-compatible method using GitHub Contents API
+async function fetchRepoContentsAPI(repo: string, githubToken?: string) {
   const baseUrl = 'https://api.github.com';
 
   // Get repository info to find default branch
@@ -201,7 +193,7 @@ async function fetchRepoContentsZip(repo: string, githubToken?: string) {
   return results.filter(Boolean);
 }
 
-export async function loader({ request, context }: { request: Request; context: any }) {
+export async function loader({ request }: { request: Request }) {
   const url = new URL(request.url);
   const repo = url.searchParams.get('repo');
 
@@ -210,13 +202,13 @@ export async function loader({ request, context }: { request: Request; context: 
   }
 
   try {
-    // Access environment variables from Cloudflare context or process.env
-    const githubToken = context?.cloudflare?.env?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+    // Access environment variables from process.env
+    const githubToken = process.env.GITHUB_TOKEN;
 
     let fileList;
 
-    if (isCloudflareEnvironment(context)) {
-      fileList = await fetchRepoContentsCloudflare(repo, githubToken);
+    if (isProductionEnvironment()) {
+      fileList = await fetchRepoContentsAPI(repo, githubToken);
     } else {
       fileList = await fetchRepoContentsZip(repo, githubToken);
     }
