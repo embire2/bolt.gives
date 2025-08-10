@@ -1,0 +1,9 @@
+FROM ghcr.io/stackblitz-labs/bolt.diy:latest
+
+# Copy the modified OpenAI provider file
+COPY app/lib/modules/llm/providers/openai.ts /app/app/lib/modules/llm/providers/openai.ts
+
+# Set memory limits
+ENV NODE_OPTIONS=--max-old-space-size=3072
+
+CMD ["pnpm", "run", "dockerstart"]
