@@ -11,33 +11,38 @@
     "build:server": "echo 'Server build complete'",
     "setup": "node setup.js"
   },
-  "keywords": ["bolt.gives", "admin", "multi-tenant", "cloud-hosting"],
+  "keywords": [
+    "bolt.gives",
+    "admin",
+    "multi-tenant",
+    "cloud-hosting"
+  ],
   "author": "OpenWeb Software Solutions",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.0.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3",
-    "node-cron": "^3.0.2",
-    "ws": "^8.14.2",
-    "node-ssh": "^13.1.0",
-    "dockerode": "^4.0.2",
-    "joi": "^17.9.2",
-    "uuid": "^9.0.0",
-    "nodemailer": "^6.9.4",
-    "multer": "^1.4.5-lts.1",
-    "rate-limiter-flexible": "^2.4.2",
     "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
     "express-validator": "^7.0.1",
-    "dotenv": "^16.3.1",
-    "winston": "^3.10.0"
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.2",
+    "node-ssh": "^13.1.0",
+    "nodemailer": "^6.9.4",
+    "pg": "^8.16.3",
+    "rate-limiter-flexible": "^2.4.2",
+    "uuid": "^9.0.1",
+    "winston": "^3.10.0",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "@types/node": "^20.5.0"
+    "@types/node": "^20.5.0",
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
