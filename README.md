@@ -1,7 +1,7 @@
 # Bolt.gives - The Most Advanced AI Development Platform 🚀
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/embire2/bolt.gives)
+[![Version](https://img.shields.io/badge/Version-1.1.0-blue.svg)](https://github.com/embire2/bolt.gives)
 [![Updates](https://img.shields.io/badge/Updates-Most%20Frequent-brightgreen.svg)](https://github.com/embire2/bolt.gives)
 [![Powered by](https://img.shields.io/badge/Powered%20by-OpenWeb%20Software-orange.svg)](https://openweb.live)
 
@@ -11,6 +11,34 @@
 
 **Powered by [OpenWeb Software Solutions](https://openweb.live)** - your trusted partner for cutting-edge AI development tools.
 
+> 🏢 **Looking for enterprise hosting?** Check out [Bolt.gives Cloud](https://bolt.gives.cloud) - our commercial managed service with multi-tenant hosting, admin panel, and enterprise features.
+
+---
+
+## 🆕 **NEW FEATURES IN v1.1.0** 
+
+### 🔐 **Production-Ready User Management System**
+- ✅ **Multi-User Authentication** - Support for up to 5 users per server + admin
+- ✅ **Secure Session Management** - JWT-based authentication with 24-hour sessions
+- ✅ **Admin Dashboard** - Complete user management interface
+- ✅ **Default Admin Account** - admin/admin with forced password change
+- ✅ **User Registration** - Self-service account creation with limits
+- ✅ **Isolated Chat Sessions** - Each user gets their own workspace
+
+### 🚀 **One-Click Production Deployment**
+- ✅ **Perfect Install Script** - Automated production setup with SSL
+- ✅ **SSL Certificate Automation** - Let's Encrypt integration
+- ✅ **Nginx Configuration** - Production-ready reverse proxy setup
+- ✅ **Systemd Service** - Auto-start and monitoring
+- ✅ **Memory Optimization** - 3.5GB Node.js memory allocation
+- ✅ **Error-Free Installation** - All documented issues resolved
+
+### ⚡ **Enhanced Performance & Reliability**
+- ✅ **4GB Build Memory** - Resolves memory issues during builds
+- ✅ **External Host Support** - Proper Vite configuration for production
+- ✅ **Background Process Management** - Robust service management
+- ✅ **Production Testing** - Fully tested deployment process
+
 ---
 
 ## ⚡ What is Bolt.gives?
@@ -18,10 +46,11 @@
 Bolt.gives is the **most advanced AI-powered development platform** that transforms how you build applications. Unlike other forks, Bolt.gives provides:
 
 - **Real-time AI coding assistance** with cutting-edge models including GPT-5
+- **Production-ready user management** with authentication and multi-user support
+- **One-click production deployment** with SSL and enterprise-grade setup
 - **Full-stack development environment** directly in your browser
 - **Instant deployment** to multiple platforms
 - **Zero configuration setup** - start coding in seconds
-- **Production-ready applications** with enterprise-grade security
 
 ### 🔥 **Why We Update More Than Any Other Fork**
 
@@ -31,6 +60,7 @@ Bolt.gives is the **most advanced AI-powered development platform** that transfo
 - ✅ **Latest AI models** - GPT-5, Claude 4, and new models added immediately
 - ✅ **Community-driven** - User feedback implemented rapidly
 - ✅ **Professional maintenance** - Backed by OpenWeb Software Solutions
+- ✅ **Production-ready features** - Enterprise-grade functionality
 
 **Compare our update frequency:**
 - **Bolt.gives**: 50+ commits/week ⚡
@@ -42,9 +72,9 @@ Bolt.gives is the **most advanced AI-powered development platform** that transfo
 
 ### 🚀 **Exclusive Features**
 - ✅ **GPT-5 Support** - First and only fork with OpenAI GPT-5 integration
-- ✅ **Enhanced Performance** - Optimized 3GB memory allocation for large projects
-- ✅ **SSL Ready** - Production-grade HTTPS configuration included
-- ✅ **Docker Optimized** - Advanced containerization with multi-stage builds
+- ✅ **User Management System** - Multi-user authentication with admin controls
+- ✅ **One-Click Production Setup** - Automated deployment with SSL
+- ✅ **Enhanced Performance** - Optimized 3.5GB memory allocation for large projects
 - ✅ **Enterprise Security** - Advanced authentication and authorization
 - ✅ **Professional Support** - Direct support from OpenWeb Software Solutions
 
@@ -54,18 +84,29 @@ Bolt.gives is the **most advanced AI-powered development platform** that transfo
 - **Instant Preview** - See changes as you code with hot reload
 - **Smart Debugging** - AI-powered error detection and automatic fixes
 - **Template Library** - Pre-built solutions for common development patterns
+- **Multi-User Workspaces** - Isolated environments for team collaboration
 
 ### 📈 **Performance Advantages**
 - **3x Faster Load Times** - Optimized asset loading and caching
-- **Memory Efficient** - 3GB heap allocation prevents memory issues
+- **Memory Efficient** - 3.5GB heap allocation prevents memory issues
 - **Edge Deployment** - Global CDN for lightning-fast access
 - **Smart Bundling** - Reduced bundle sizes with intelligent code splitting
+- **Production Optimization** - Real-world tested performance tuning
 
 ---
 
 ## 🏃‍♂️ Quick Start
 
-### 🚀 **One-Click Deploy** (Recommended)
+### 🚀 **One-Click Production Deploy** (NEW!)
+```bash
+# Download and run the perfect installer
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh | bash -s your-domain.com
+
+# 🎉 Your production AI development environment is ready at https://your-domain.com
+# Default login: admin/admin (forced password change)
+```
+
+### 🐳 **Docker Development** 
 ```bash
 git clone https://github.com/embire2/bolt.gives.git
 cd bolt.gives
@@ -94,7 +135,7 @@ docker-compose up -d
 3. **Configure environment** (optional):
    ```bash
    # Set memory optimization
-   export NODE_OPTIONS="--max-old-space-size=3072"
+   export NODE_OPTIONS="--max-old-space-size=3584"
    
    # Add your API keys
    cp .env.example .env
@@ -108,28 +149,14 @@ docker-compose up -d
 
 5. **Open your browser** to `http://localhost:5173`
 
-### 🐳 **Docker Deployment**
+### 🔐 **User Management Setup**
 
-**Development:**
-```bash
-docker build -t bolt-gives:dev --target bolt-ai-development .
-docker run -p 5173:5173 bolt-gives:dev
-```
+The user management system is automatically initialized on first run:
 
-**Production:**
-```bash
-docker build -t bolt-gives:prod --target bolt-ai-production .
-docker run -p 5173:5173 -d bolt-gives:prod
-```
-
-**Docker Compose:**
-```bash
-# Start development environment
-docker-compose up -d
-
-# Or for production
-docker-compose --profile production up -d
-```
+- **Default Admin**: Username: `admin`, Password: `admin` 
+- **Forced Password Change**: Admin must change password on first login
+- **User Limit**: Up to 5 regular users + 1 admin per server
+- **Session Security**: 24-hour JWT sessions with secure cookies
 
 ---
 
@@ -175,10 +202,16 @@ docker-compose --profile production up -d
 - **Project export** as ZIP files or direct repository creation
 
 ### **☁️ Deployment & Integration**
+- **One-click production setup** with SSL and domain configuration
 - **Docker integration** with optimized containers
 - **Deploy directly** to Netlify, Vercel, GitHub Pages, and more
 - **CI/CD workflows** - Automated testing and deployment
-- **SSL configuration** - Production-ready HTTPS setup
+
+### **👥 User Management**
+- **Multi-user authentication** with secure session management
+- **Admin dashboard** for user management and system control
+- **Isolated workspaces** - Each user gets their own environment
+- **User registration** with configurable limits
 
 ---
 
@@ -231,7 +264,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key
 
 # Performance Settings
-NODE_OPTIONS=--max-old-space-size=3072
+NODE_OPTIONS=--max-old-space-size=3584
 
 # Development Settings
 VITE_LOG_LEVEL=debug
@@ -252,19 +285,21 @@ Why choose Bolt.gives over other Bolt.diy forks?
 | Feature | **Bolt.gives** | Other Forks |
 |---------|----------------|-------------|
 | **Update Frequency** | ✅ **Daily Updates** | ❌ Weekly/Monthly |
+| **User Management** | ✅ **Multi-User System** | ❌ Single User Only |
+| **Production Setup** | ✅ **One-Click Installer** | ❌ Manual Setup |
 | **GPT-5 Support** | ✅ **First to Support** | ❌ Not Available |
-| **Performance** | ✅ **3GB Memory Optimized** | ❌ Standard Config |
-| **SSL Configuration** | ✅ **Production Ready** | ❌ Manual Setup |
+| **Performance** | ✅ **3.5GB Memory Optimized** | ❌ Standard Config |
+| **SSL Configuration** | ✅ **Automated** | ❌ Manual Setup |
 | **Enterprise Features** | ✅ **Advanced Security** | ❌ Basic Features |
 | **Professional Support** | ✅ **24/7 Support** | ❌ Community Only |
 | **Documentation** | ✅ **Comprehensive** | ❌ Limited |
 | **Docker Optimization** | ✅ **Multi-stage Builds** | ❌ Basic Docker |
 | **Model Count** | ✅ **15+ Providers** | ❌ 5-8 Providers |
-| **Active Development** | ✅ **OpenWeb Backed** | ❌ Individual Maintainers |
 
 **The numbers speak for themselves:**
 - **50+ commits per week** vs 5-10 in other forks
 - **Same-day bug fixes** vs weeks of waiting
+- **Production-ready features** vs development-only tools
 - **Professional enterprise support** vs community-only help
 
 ---
@@ -302,14 +337,6 @@ Why choose Bolt.gives over other Bolt.diy forks?
 - **Discord**: Join our development community
 - **Twitter**: [@OpenWebSoft](https://twitter.com/OpenWebSoft) for updates
 
-### **🚀 Enterprise Features**
-Contact us for enterprise-grade features:
-- **Single Sign-On (SSO)** integration
-- **Advanced security** and compliance
-- **Custom branding** and white-label options
-- **Priority feature development**
-- **Dedicated cloud instances**
-
 ---
 
 ## 🔧 Available Scripts
@@ -346,38 +373,6 @@ docker-compose --profile production up
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! This project builds upon the excellent foundation of bolt.diy while adding our own enhancements.
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Original bolt.diy project by Cole Medin and the community
-- StackBlitz team for the foundational technology
-- The open source community for continuous improvements
-
----
-
-## ⚠️ Commercial Licensing Notice
-
-**WebContainer API Licensing**: This project uses WebContainers API which requires licensing for production commercial use. For commercial deployments, please ensure compliance with WebContainer licensing terms.
-
----
-
 ## 📈 Project Statistics & Community
 
 ![GitHub stars](https://img.shields.io/github/stars/embire2/bolt.gives?style=social)
@@ -388,31 +383,52 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ### **🔮 Roadmap & Upcoming Features**
 
-#### **🚀 Next Release (v1.1.0)**
-- [ ] **Claude 4 Integration** - Latest Anthropic models
-- [ ] **Advanced Code Analytics** - AI-powered code quality insights  
-- [ ] **Team Collaboration** - Real-time collaborative coding
-- [ ] **Custom Model Training** - Fine-tune models for your projects
-- [ ] **Enhanced Security** - Advanced vulnerability scanning
+#### **🚀 Next Release (v1.2.0) - Q1 2025**
+- [ ] **Diff-Based Code Editing** - Smart, minimal AI code edits (no more full file overwrites)
+- [ ] **Enhanced Local AI Support** - Better Ollama and NPU laptop integration
+- [ ] **Multi-Image Chat Support** - Attach multiple images for enhanced visual context
+- [ ] **Advanced Git Integration** - Improved repository management and branching
+- [ ] **Performance Dashboard** - Real-time system monitoring and optimization
+- [ ] **Custom Copilot Configuration** - Personalized AI assistant settings
 
-#### **📅 Coming Soon**
-- [ ] **Mobile App Companion** - Code on your phone/tablet
-- [ ] **VS Code Extension** - Bolt.gives inside your favorite editor
-- [ ] **API Marketplace** - Integrate third-party services easily
-- [ ] **Enterprise SSO** - Single sign-on for organizations
-- [ ] **Advanced Monitoring** - Performance and usage analytics
+#### **🔥 Q2 2025 - Major Features**
+- [ ] **Team Collaboration Platform** - Real-time multi-user code editing
+- [ ] **Advanced Error Handling** - AI-powered debugging and error resolution
+- [ ] **Token Usage Optimization** - Smart token management and cost reduction
+- [ ] **Supabase Edge Functions** - Enhanced cloud database integration
+- [ ] **VS Code Extension** - Bolt.gives directly in your favorite editor
+- [ ] **Mobile App Companion** - Code review and monitoring on mobile
 
-#### **🌟 Long-term Vision**
-- [ ] **Multi-language Support** - Beyond JavaScript/TypeScript
-- [ ] **Visual Programming** - Drag-and-drop development interface
-- [ ] **AI Model Marketplace** - Community-contributed models
-- [ ] **Blockchain Integration** - Web3 development features
+#### **⚡ Q3 2025 - Enterprise Features**
+- [ ] **Enterprise SSO Integration** - Single sign-on for organizations
+- [ ] **Advanced Security Scanning** - Automated vulnerability detection
+- [ ] **Custom Model Training** - Fine-tune models for specific projects
+- [ ] **API Marketplace** - Third-party service integrations
+- [ ] **Deployment Pipeline Automation** - CI/CD workflow builder
+- [ ] **Cross-Origin Security Enhancements** - Advanced browser compatibility
+
+#### **🌟 Long-term Vision (2025-2026)**
+- [ ] **Multi-Language Support** - Python, Go, Rust, and more
+- [ ] **Visual Programming Interface** - Drag-and-drop development
+- [ ] **AI Model Marketplace** - Community-contributed AI models
+- [ ] **Blockchain/Web3 Integration** - Decentralized app development
+- [ ] **Advanced Analytics Platform** - Code quality and performance insights
+- [ ] **White-label Solutions** - Custom branded deployments
+
+#### **🎯 Community-Requested Features**
+Based on bolt.diy community feedback:
+- [ ] **Enhanced Deployment Reliability** - Resolve deployment errors
+- [ ] **Better Context Management** - Improved prompt and context handling
+- [ ] **Advanced Tools Invocation** - More flexible AI capabilities
+- [ ] **Repository-Wide Context** - AI understands entire project structure
+- [ ] **Model Comparison Tools** - Performance evaluation and selection
+- [ ] **Accessibility Improvements** - Better keyboard shortcuts and UX
 
 ---
 
-## 🤝 Contributing to the Future
+## 🤝 Contributing
 
-Help us maintain the most up-to-date Bolt.diy fork! We welcome contributions from developers of all skill levels.
+We welcome contributions! This project builds upon the excellent foundation of bolt.diy while adding our own enhancements.
 
 ### **🎯 How to Contribute:**
 
@@ -437,9 +453,9 @@ Help us maintain the most up-to-date Bolt.diy fork! We welcome contributions fro
 
 ---
 
-## 📜 License & Legal
+## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ### **⚠️ Important Notices:**
 

@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+# Install required packages
+RUN apk add --no-cache git python3 make g++
+
+WORKDIR /app
+
+# Copy the entire Bolt.gives application
+COPY . .
+
+# Install dependencies with legacy peer deps
+RUN npm install --legacy-peer-deps
+
+# Expose port
+EXPOSE 5173
+
+# Set environment variables
+ENV NODE_OPTIONS="--max-old-space-size=3072"
+
+# Start the application
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

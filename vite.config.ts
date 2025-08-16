@@ -16,6 +16,10 @@ export default defineConfig((config) => {
     build: {
       target: 'esnext',
     },
+    server: {
+      host: true,
+      allowedHosts: ['user4106.openweb.live', 'localhost'],
+    },
     plugins: [
       nodePolyfills({
         include: ['buffer', 'process', 'util', 'stream'],

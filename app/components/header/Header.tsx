@@ -23,7 +23,12 @@ export function Header() {
           <span className="ml-2 text-sm font-medium">Bolt.gives</span>
         </a>
         <div className="ml-3 text-xs text-bolt-elements-textSecondary">
-          <a href="https://openweb.live" target="_blank" rel="noopener noreferrer" className="hover:text-bolt-elements-textPrimary transition-colors">
+          <a
+            href="https://openweb.live"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-bolt-elements-textPrimary transition-colors"
+          >
             Powered by OpenWeb Software
           </a>
         </div>
