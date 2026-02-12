@@ -9,7 +9,10 @@ import * as Y from 'yjs';
 import { docs, setContentInitializor, setupWSConnection } from '@y/websocket-server/utils';
 
 const HOST = process.env.COLLAB_HOST || process.env.HOST || 'localhost';
-const PORT = Number(process.env.COLLAB_PORT || process.env.PORT || 1234);
+// Never default to process.env.PORT here. Many setups use PORT for the web app (e.g. 5173),
+// which would cause the collab server to steal that port. Keep collab on 1234 unless
+// explicitly overridden via COLLAB_PORT.
+const PORT = Number(process.env.COLLAB_PORT || 1234);
 const PERSIST_DEBOUNCE_MS = Number(process.env.COLLAB_PERSIST_DEBOUNCE_MS || 750);
 const INACTIVITY_TIMEOUT_MS = Number(process.env.COLLAB_INACTIVITY_TIMEOUT_MS || 5 * 60 * 1000);
 const CLEANUP_SWEEP_MS = Number(process.env.COLLAB_CLEANUP_SWEEP_MS || 30 * 1000);
