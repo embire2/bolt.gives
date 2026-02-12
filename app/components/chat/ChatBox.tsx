@@ -20,6 +20,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
 import { WebSearch } from './WebSearch.client';
+import { SketchCanvas, type SketchElement } from './SketchCanvas';
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -63,6 +64,12 @@ interface ChatBoxProps {
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: ((element: ElementInfo | null) => void) | undefined;
+  onSaveSession?: () => void;
+  onResumeSession?: () => void;
+  onShareSession?: () => void;
+  agentMode?: 'chat' | 'plan' | 'act';
+  setAgentMode?: (mode: 'chat' | 'plan' | 'act') => void;
+  onSketchChange?: (elements: SketchElement[]) => void;
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
@@ -267,6 +274,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             <IconButton title="Upload file" className="transition-all" onClick={() => props.handleFileUpload()}>
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
+            <SketchCanvas onChange={props.onSketchChange} />
             <WebSearch onSearchResult={(result) => props.onWebSearchResult?.(result)} disabled={props.isStreaming} />
             <IconButton
               title="Enhance prompt"
@@ -307,6 +315,58 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
               </IconButton>
             )}
+            <IconButton
+              title="Plan Mode"
+              className={classNames(
+                'transition-all flex items-center gap-1 px-1.5',
+                props.agentMode === 'plan'
+                  ? '!bg-bolt-elements-item-backgroundAccent !text-bolt-elements-item-contentAccent'
+                  : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
+              )}
+              onClick={() => props.setAgentMode?.(props.agentMode === 'plan' ? 'chat' : 'plan')}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:list-checks text-xl" />
+              {props.agentMode === 'plan' ? <span>Plan</span> : <span />}
+            </IconButton>
+            <IconButton
+              title="Act Mode"
+              className={classNames(
+                'transition-all flex items-center gap-1 px-1.5',
+                props.agentMode === 'act'
+                  ? '!bg-bolt-elements-item-backgroundAccent !text-bolt-elements-item-contentAccent'
+                  : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
+              )}
+              onClick={() => props.setAgentMode?.(props.agentMode === 'act' ? 'chat' : 'act')}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:play-circle text-xl" />
+              {props.agentMode === 'act' ? <span>Act</span> : <span />}
+            </IconButton>
+            <IconButton
+              title="Save Session"
+              className="transition-all"
+              onClick={() => props.onSaveSession?.()}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:floppy-disk text-xl" />
+            </IconButton>
+            <IconButton
+              title="Resume Session"
+              className="transition-all"
+              onClick={() => props.onResumeSession?.()}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:clock-counter-clockwise text-xl" />
+            </IconButton>
+            <IconButton
+              title="Share Session"
+              className="transition-all"
+              onClick={() => props.onShareSession?.()}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:share-network text-xl" />
+            </IconButton>
             <IconButton
               title="Model Settings"
               className={classNames('transition-all flex items-center gap-1', {

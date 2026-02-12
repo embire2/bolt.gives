@@ -6,6 +6,9 @@ import { useSettings } from '~/lib/hooks/useSettings';
 import { classNames } from '~/utils/classNames';
 import { toast } from 'react-toastify';
 import { PromptLibrary } from '~/lib/common/prompt-library';
+import { PluginManager, type PluginManifest } from '~/lib/services/pluginManager';
+import { generateDeploymentFiles, type DeploymentProvider } from '~/lib/services/deploymentWizard';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 interface FeatureToggle {
   id: string;
@@ -118,6 +121,16 @@ export default function FeaturesTab() {
     setPromptId,
     promptId,
   } = useSettings();
+  const [installedPlugins, setInstalledPlugins] = React.useState<PluginManifest[]>(() => PluginManager.listInstalled());
+  const [marketplacePlugins, setMarketplacePlugins] = React.useState<PluginManifest[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = React.useState(false);
+  const [deploymentProvider, setDeploymentProvider] = React.useState<DeploymentProvider>('netlify');
+  const [projectName, setProjectName] = React.useState('bolt-gives-app');
+  const [buildCommand, setBuildCommand] = React.useState('pnpm run build');
+  const [outputDirectory, setOutputDirectory] = React.useState('dist');
+  const [rollbackProvider, setRollbackProvider] = React.useState<DeploymentProvider>('vercel');
+  const [rollbackDeploymentId, setRollbackDeploymentId] = React.useState('');
+  const [rollbackToken, setRollbackToken] = React.useState('');
 
   // Enable features by default on first load
   React.useEffect(() => {
@@ -142,6 +155,16 @@ export default function FeaturesTab() {
       setEventLogs(true); // Default: ON - Enable event logging
     }
   }, []); // Only run once on component mount
+
+  React.useEffect(() => {
+    setMarketplaceLoading(true);
+    PluginManager.fetchMarketplace()
+      .then((plugins) => setMarketplacePlugins(plugins))
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to load marketplace');
+      })
+      .finally(() => setMarketplaceLoading(false));
+  }, []);
 
   const handleToggleFeature = useCallback(
     (id: string, enabled: boolean) => {
@@ -176,6 +199,63 @@ export default function FeaturesTab() {
     },
     [enableLatestBranch, setAutoSelectTemplate, enableContextOptimization, setEventLogs],
   );
+
+  const handleInstallPlugin = useCallback((plugin: PluginManifest) => {
+    const next = PluginManager.install(plugin);
+    setInstalledPlugins(next);
+    toast.success(`Installed plugin: ${plugin.name}`);
+  }, []);
+
+  const handleUninstallPlugin = useCallback((pluginName: string) => {
+    const next = PluginManager.uninstall(pluginName);
+    setInstalledPlugins(next);
+    toast.success(`Uninstalled plugin: ${pluginName}`);
+  }, []);
+
+  const handleGenerateDeploymentFiles = useCallback(async () => {
+    try {
+      const files = generateDeploymentFiles({
+        provider: deploymentProvider,
+        projectName,
+        buildCommand,
+        outputDirectory,
+      });
+
+      for (const file of files) {
+        const path = `/home/project/${file.path}`;
+        await workbenchStore.createFile(path, file.content);
+        await workbenchStore.saveFile(path);
+      }
+
+      toast.success(`Deployment workflow generated for ${deploymentProvider}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate deployment workflow');
+    }
+  }, [deploymentProvider, projectName, buildCommand, outputDirectory]);
+
+  const handleRollback = useCallback(async () => {
+    try {
+      const response = await fetch('/api/deployment/rollback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: rollbackProvider,
+          deploymentId: rollbackDeploymentId,
+          token: rollbackToken,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      toast.success('Rollback request sent successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Rollback failed');
+    }
+  }, [rollbackProvider, rollbackDeploymentId, rollbackToken]);
 
   const features = {
     stable: [
@@ -289,6 +369,159 @@ export default function FeaturesTab() {
             ))}
           </select>
         </div>
+      </motion.div>
+
+      <motion.div
+        layout
+        className="rounded-lg bg-bolt-elements-background-depth-2 p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-bolt-elements-textPrimary">Deployment Wizard</h4>
+            <p className="text-xs text-bolt-elements-textSecondary">
+              Generate CI deployment config and trigger rollback requests.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="text-xs text-bolt-elements-textSecondary">
+            Provider
+            <select
+              value={deploymentProvider}
+              onChange={(event) => setDeploymentProvider(event.target.value as DeploymentProvider)}
+              className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-sm"
+            >
+              <option value="netlify">Netlify</option>
+              <option value="vercel">Vercel</option>
+              <option value="github-pages">GitHub Pages</option>
+            </select>
+          </label>
+          <label className="text-xs text-bolt-elements-textSecondary">
+            Project Name
+            <input
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-bolt-elements-textSecondary">
+            Build Command
+            <input
+              value={buildCommand}
+              onChange={(event) => setBuildCommand(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-bolt-elements-textSecondary">
+            Output Directory
+            <input
+              value={outputDirectory}
+              onChange={(event) => setOutputDirectory(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-sm"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            className="rounded-lg bg-accent-500 px-3 py-2 text-xs text-white"
+            onClick={() => {
+              handleGenerateDeploymentFiles().catch(() => {
+                // toast handled in callback
+              });
+            }}
+          >
+            Generate Deployment Files
+          </button>
+          <span className="text-xs text-bolt-elements-textTertiary">
+            Files are written into `/home/project/.github/workflows`.
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-4">
+          <select
+            value={rollbackProvider}
+            onChange={(event) => setRollbackProvider(event.target.value as DeploymentProvider)}
+            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-xs"
+          >
+            <option value="vercel">Vercel rollback</option>
+            <option value="netlify">Netlify rollback</option>
+          </select>
+          <input
+            value={rollbackDeploymentId}
+            onChange={(event) => setRollbackDeploymentId(event.target.value)}
+            placeholder="Deployment/Site ID"
+            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-xs"
+          />
+          <input
+            value={rollbackToken}
+            onChange={(event) => setRollbackToken(event.target.value)}
+            placeholder="API token"
+            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2 text-xs"
+            type="password"
+          />
+          <button className="rounded-lg bg-bolt-elements-background-depth-3 px-3 py-2 text-xs" onClick={handleRollback}>
+            Rollback
+          </button>
+        </div>
+      </motion.div>
+
+      <motion.div
+        layout
+        className="rounded-lg bg-bolt-elements-background-depth-2 p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-bolt-elements-textPrimary">Plugin Marketplace</h4>
+            <p className="text-xs text-bolt-elements-textSecondary">
+              Install community plugins from a registry JSON index.
+            </p>
+          </div>
+          <span className="text-xs text-bolt-elements-textTertiary">Installed: {installedPlugins.length}</span>
+        </div>
+        {marketplaceLoading ? (
+          <div className="text-xs text-bolt-elements-textSecondary">Loading marketplace...</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {marketplacePlugins.map((plugin) => {
+              const installed = installedPlugins.some((item) => item.name === plugin.name);
+
+              return (
+                <div
+                  key={`${plugin.name}-${plugin.version}`}
+                  className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-bolt-elements-textPrimary">{plugin.name}</div>
+                      <div className="text-xs text-bolt-elements-textSecondary">{plugin.description}</div>
+                      <div className="text-[10px] text-bolt-elements-textTertiary">v{plugin.version}</div>
+                    </div>
+                    {installed ? (
+                      <button
+                        className="rounded bg-bolt-elements-background-depth-1 px-2 py-1 text-xs"
+                        onClick={() => handleUninstallPlugin(plugin.name)}
+                      >
+                        Uninstall
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded bg-accent-500 px-2 py-1 text-xs text-white"
+                        onClick={() => handleInstallPlugin(plugin)}
+                      >
+                        Install
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </motion.div>
     </div>
   );

@@ -28,6 +28,17 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
+import { buildModelSelectionEnvelope, selectModelForPrompt } from '~/lib/runtime/model-orchestrator';
+import type { ModelInfo } from '~/lib/modules/llm/types';
+import { recordTokenUsage } from '~/lib/stores/performance';
+import { SessionManager } from '~/lib/services/sessionManager';
+import {
+  executeApprovedPlanSteps,
+  generatePlanSteps,
+  type AgentMode,
+  type AgentPlanStep,
+} from '~/lib/runtime/agent-workflow';
+import type { SketchElement } from '~/components/chat/SketchCanvas';
 
 const logger = createScopedLogger('Chat');
 
@@ -115,6 +126,10 @@ export const ChatImpl = memo(
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
+    const [activeSessionId, setActiveSessionId] = useState<string | undefined>();
+    const [agentMode, setAgentMode] = useState<AgentMode>('chat');
+    const [agentPlanSteps, setAgentPlanSteps] = useState<AgentPlanStep[]>([]);
+    const [sketchElements, setSketchElements] = useState<SketchElement[]>([]);
     const mcpSettings = useMCPStore((state) => state.settings);
 
     const {
@@ -161,6 +176,7 @@ export const ChatImpl = memo(
 
         if (usage) {
           console.log('Token usage:', usage);
+          recordTokenUsage(usage);
           logStore.logProvider('Chat response completed', {
             component: 'Chat',
             action: 'response',
@@ -186,7 +202,11 @@ export const ChatImpl = memo(
         runAnimation();
         append({
           role: 'user',
-          content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${prompt}`,
+          content: buildModelSelectionEnvelope({
+            model,
+            providerName: provider.name,
+            content: prompt,
+          }),
         });
       }
     }, [model, provider, searchParams]);
@@ -386,6 +406,243 @@ export const ChatImpl = memo(
       return attachments;
     };
 
+    const resolveModelSelection = useCallback(
+      async (prompt: string, currentModel: string, currentProvider: ProviderInfo) => {
+        try {
+          const response = await fetch('/api/models');
+          const data = (await response.json()) as { modelList: ModelInfo[] };
+          const decision = selectModelForPrompt({
+            prompt,
+            currentModel,
+            currentProvider,
+            availableProviders: activeProviders,
+            availableModels: data.modelList || [],
+          });
+
+          logStore.logProvider('Model orchestrator decision', {
+            component: 'model-orchestrator',
+            reason: decision.reason,
+            complexity: decision.complexity,
+            selectedProvider: decision.provider.name,
+            selectedModel: decision.model,
+            overridden: decision.overridden,
+          });
+
+          if (decision.overridden) {
+            setModel(decision.model);
+            setProvider(decision.provider);
+            Cookies.set('selectedModel', decision.model, { expires: 30 });
+            Cookies.set('selectedProvider', decision.provider.name, { expires: 30 });
+            toast.info(`Model Orchestrator: ${decision.provider.name} / ${decision.model}`);
+          }
+
+          return {
+            provider: decision.provider,
+            model: decision.model,
+            reason: decision.reason,
+          };
+        } catch (error) {
+          logger.warn('Model orchestrator failed, using selected model', error);
+          return {
+            provider: currentProvider,
+            model: currentModel,
+            reason: 'Model orchestrator failed; kept manual model selection.',
+          };
+        }
+      },
+      [activeProviders],
+    );
+
+    const buildSessionPayload = useCallback(() => {
+      const diffs = workbenchStore.getFileModifcations();
+      const diffList = Object.entries(diffs || {}).map(([path, change]) => ({
+        path,
+        diff: change.content,
+      }));
+
+      return {
+        title: description || 'Untitled Session',
+        conversation: messages,
+        prompts: messages.filter((message) => message.role === 'user'),
+        responses: messages.filter((message) => message.role === 'assistant'),
+        diffs: diffList,
+      };
+    }, [description, messages]);
+
+    const handleSaveSession = useCallback(async () => {
+      try {
+        const saved = await SessionManager.saveSession(buildSessionPayload(), activeSessionId);
+        setActiveSessionId(saved.id);
+        toast.success('Session saved');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to save session');
+      }
+    }, [activeSessionId, buildSessionPayload]);
+
+    const handleResumeSession = useCallback(async () => {
+      try {
+        const sessions = await SessionManager.listSessions();
+
+        if (sessions.length === 0) {
+          toast.info('No saved sessions found');
+          return;
+        }
+
+        const preview = sessions
+          .slice(0, 10)
+          .map((session) => `${session.id}: ${session.title}`)
+          .join('\n');
+        const selectedId = window.prompt(`Enter a session ID to resume:\n\n${preview}`);
+
+        if (!selectedId) {
+          return;
+        }
+
+        const loaded = await SessionManager.loadSessionById(selectedId.trim());
+
+        if (!loaded?.payload) {
+          toast.error('Session not found');
+          return;
+        }
+
+        const restoredMessages = loaded.payload.conversation || [
+          ...loaded.payload.prompts,
+          ...loaded.payload.responses,
+        ];
+        setMessages(restoredMessages);
+        setActiveSessionId(loaded.id);
+        toast.success('Session restored');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to resume session');
+      }
+    }, [setMessages]);
+
+    const handleShareSession = useCallback(async () => {
+      try {
+        let sessionId = activeSessionId;
+
+        if (!sessionId) {
+          const saved = await SessionManager.saveSession(buildSessionPayload(), activeSessionId);
+          sessionId = saved.id;
+          setActiveSessionId(saved.id);
+        }
+
+        const shareUrl = await SessionManager.createShareLink(sessionId);
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success('Share URL copied to clipboard');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to share session');
+      }
+    }, [activeSessionId, buildSessionPayload]);
+
+    useEffect(() => {
+      const shareSlug = searchParams.get('shareSession');
+
+      if (!shareSlug) {
+        return;
+      }
+
+      SessionManager.loadSessionByShareSlug(shareSlug)
+        .then((loaded) => {
+          if (!loaded?.payload) {
+            toast.error('Shared session not found');
+            return;
+          }
+
+          const restoredMessages = loaded.payload.conversation || [
+            ...loaded.payload.prompts,
+            ...loaded.payload.responses,
+          ];
+          setMessages(restoredMessages);
+          setActiveSessionId(loaded.id);
+          toast.success('Shared session loaded');
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : 'Failed to load shared session');
+        })
+        .finally(() => {
+          const next = new URLSearchParams(searchParams);
+          next.delete('shareSession');
+          setSearchParams(next);
+        });
+    }, [searchParams, setMessages, setSearchParams]);
+
+    const runAgentActWorkflow = useCallback(async () => {
+      if (agentPlanSteps.length === 0) {
+        toast.error('No approved plan steps available. Switch to Plan mode first.');
+        return false;
+      }
+
+      try {
+        const shell = workbenchStore.boltTerminal;
+        await shell.ready();
+
+        let socket: WebSocket | undefined;
+
+        try {
+          const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+          socket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
+        } catch {
+          socket = undefined;
+        }
+
+        const result = await executeApprovedPlanSteps({
+          steps: agentPlanSteps,
+          socket,
+          executor: {
+            executeStep: async (step, context) => {
+              const commandText = step.command.join(' ');
+              const response = await shell.executeCommand(`agent-${Date.now()}`, commandText, undefined, (chunk) =>
+                context.onStdout(chunk),
+              );
+
+              return {
+                exitCode: response?.exitCode ?? 1,
+                stdout: response?.output || '',
+                stderr: response?.exitCode === 0 ? '' : response?.output || '',
+              };
+            },
+          },
+          onEvent: (event) => {
+            workbenchStore.stepRunnerEvents.set([...workbenchStore.stepRunnerEvents.get(), event].slice(-200));
+          },
+          onCheckpoint: async (step) => {
+            const proceed = window.confirm(`Checkpoint reached:\\n\\n${step.description}\\n\\nContinue to next step?`);
+
+            if (proceed) {
+              return 'continue';
+            }
+
+            const revert = window.confirm('Stop execution and revert unsaved editor changes?');
+
+            if (revert) {
+              workbenchStore.resetCurrentDocument();
+              return 'revert';
+            }
+
+            return 'stop';
+          },
+        });
+
+        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+          socket.close();
+        }
+
+        if (result === 'complete') {
+          toast.success('Act workflow completed');
+        } else if (result === 'reverted') {
+          toast.info('Act workflow stopped and reverted');
+        } else {
+          toast.info('Act workflow stopped');
+        }
+
+        return true;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Act workflow failed');
+        return false;
+      }
+    }, [agentPlanSteps]);
+
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       const messageContent = messageInput || input;
 
@@ -407,6 +664,98 @@ export const ChatImpl = memo(
         finalMessageContent = messageContent + elementInfo;
       }
 
+      if (sketchElements.length > 0) {
+        finalMessageContent = `${finalMessageContent}\n\n[Sketch JSON]\n${JSON.stringify({
+          type: 'sketch-v1',
+          elements: sketchElements,
+        })}`;
+      }
+
+      if (agentMode === 'act') {
+        const executed = await runAgentActWorkflow();
+
+        if (executed) {
+          setInput('');
+          Cookies.remove(PROMPT_COOKIE_KEY);
+          setUploadedFiles([]);
+          setImageDataList([]);
+          setSketchElements([]);
+          resetEnhancer();
+          textareaRef.current?.blur();
+        }
+
+        return;
+      }
+
+      const selection = await resolveModelSelection(finalMessageContent, model, provider);
+      const effectiveModel = selection.model;
+      const effectiveProvider = selection.provider;
+      const selectionReason = selection.reason;
+      const buildUserMessageText = (content: string) =>
+        buildModelSelectionEnvelope({
+          model: effectiveModel,
+          providerName: effectiveProvider.name,
+          selectionReason,
+          content,
+        });
+
+      if (agentMode === 'plan') {
+        try {
+          const steps = await generatePlanSteps({
+            goal: finalMessageContent,
+            model: effectiveModel,
+            provider: effectiveProvider,
+          });
+
+          if (steps.length === 0) {
+            toast.error('No plan steps were generated. Try a more specific goal.');
+            return;
+          }
+
+          const planText = steps
+            .map((step) => {
+              const command = step.command.length > 0 ? `command: \`${step.command.join(' ')}\`` : 'command: n/a';
+              return `${step.id}. ${step.description} (${command})`;
+            })
+            .join('\n');
+          const approved = window.confirm(`Generated Plan:\\n\\n${planText}\\n\\nApprove all steps for Act mode?`);
+          const nextSteps = steps.map((step) => ({ ...step, approved }));
+
+          setAgentPlanSteps(nextSteps);
+          setAgentMode(approved ? 'act' : 'plan');
+
+          const userMessageText = buildUserMessageText(finalMessageContent);
+          setMessages([
+            ...messages,
+            {
+              id: `${Date.now()}-plan-user`,
+              role: 'user',
+              content: userMessageText,
+            },
+            {
+              id: `${Date.now()}-plan-assistant`,
+              role: 'assistant',
+              content: `Plan mode generated ${steps.length} step(s):\n\n${planText}\n\n${
+                approved
+                  ? 'All steps approved. Switch to Act mode and send a message to execute.'
+                  : 'Steps are awaiting approval. You can edit the goal and regenerate.'
+              }`,
+            },
+          ]);
+          setInput('');
+          Cookies.remove(PROMPT_COOKIE_KEY);
+          setUploadedFiles([]);
+          setImageDataList([]);
+          setSketchElements([]);
+          resetEnhancer();
+          textareaRef.current?.blur();
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Failed to generate plan');
+        }
+
+        return;
+      }
+
       runAnimation();
 
       if (!chatStarted) {
@@ -415,8 +764,8 @@ export const ChatImpl = memo(
         if (autoSelectTemplate) {
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
-            model,
-            provider,
+            model: effectiveModel,
+            provider: effectiveProvider,
           });
 
           if (template !== 'blank') {
@@ -432,7 +781,7 @@ export const ChatImpl = memo(
 
             if (temResp) {
               const { assistantMessage, userMessage } = temResp;
-              const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+              const userMessageText = buildUserMessageText(finalMessageContent);
 
               setMessages([
                 {
@@ -449,7 +798,7 @@ export const ChatImpl = memo(
                 {
                   id: `3-${new Date().getTime()}`,
                   role: 'user',
-                  content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userMessage}`,
+                  content: buildUserMessageText(userMessage),
                   annotations: ['hidden'],
                 },
               ]);
@@ -465,6 +814,7 @@ export const ChatImpl = memo(
 
               setUploadedFiles([]);
               setImageDataList([]);
+              setSketchElements([]);
 
               resetEnhancer();
 
@@ -477,7 +827,7 @@ export const ChatImpl = memo(
         }
 
         // If autoSelectTemplate is disabled or template selection failed, proceed with normal message
-        const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const userMessageText = buildUserMessageText(finalMessageContent);
         const attachments = uploadedFiles.length > 0 ? await filesToAttachments(uploadedFiles) : undefined;
 
         setMessages([
@@ -496,6 +846,7 @@ export const ChatImpl = memo(
 
         setUploadedFiles([]);
         setImageDataList([]);
+        setSketchElements([]);
 
         resetEnhancer();
 
@@ -514,7 +865,7 @@ export const ChatImpl = memo(
 
       if (modifiedFiles !== undefined) {
         const userUpdateArtifact = filesToArtifacts(modifiedFiles, `${Date.now()}`);
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userUpdateArtifact}${finalMessageContent}`;
+        const messageText = buildUserMessageText(`${userUpdateArtifact}${finalMessageContent}`);
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
@@ -530,7 +881,7 @@ export const ChatImpl = memo(
 
         workbenchStore.resetAllFileModifications();
       } else {
-        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const messageText = buildUserMessageText(finalMessageContent);
 
         const attachmentOptions =
           uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
@@ -550,6 +901,7 @@ export const ChatImpl = memo(
 
       setUploadedFiles([]);
       setImageDataList([]);
+      setSketchElements([]);
 
       resetEnhancer();
 
@@ -679,6 +1031,12 @@ export const ChatImpl = memo(
         setSelectedElement={setSelectedElement}
         addToolResult={addToolResult}
         onWebSearchResult={handleWebSearchResult}
+        onSaveSession={handleSaveSession}
+        onResumeSession={handleResumeSession}
+        onShareSession={handleShareSession}
+        agentMode={agentMode}
+        setAgentMode={setAgentMode}
+        onSketchChange={setSketchElements}
       />
     );
   },

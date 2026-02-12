@@ -5,6 +5,43 @@ import { classNames } from '~/utils/classNames';
 import { Switch } from '~/components/ui/Switch';
 import type { UserProfile } from '~/components/@settings/core/types';
 import { isMac } from '~/utils/os';
+import {
+  getModelOrchestratorSettings,
+  setModelOrchestratorSettings,
+  type ModelOrchestratorSettings,
+} from '~/lib/runtime/model-orchestrator';
+
+interface PerformanceThresholds {
+  memoryMb: number;
+  cpuPercent: number;
+  tokenTotal: number;
+}
+
+const PERFORMANCE_THRESHOLD_KEY = 'bolt_performance_thresholds';
+
+const getPerformanceThresholds = (): PerformanceThresholds => {
+  const defaults: PerformanceThresholds = {
+    memoryMb: 1200,
+    cpuPercent: 80,
+    tokenTotal: 25000,
+  };
+
+  if (typeof window === 'undefined') {
+    return defaults;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PERFORMANCE_THRESHOLD_KEY);
+
+    if (!raw) {
+      return defaults;
+    }
+
+    return { ...defaults, ...(JSON.parse(raw) as Partial<PerformanceThresholds>) };
+  } catch {
+    return defaults;
+  }
+};
 
 // Helper to get modifier key symbols/text
 const getModifierSymbol = (modifier: string): string => {
@@ -32,6 +69,12 @@ export default function SettingsTab() {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
   });
+  const [modelOrchestrator, setModelOrchestrator] = useState<ModelOrchestratorSettings>(() =>
+    getModelOrchestratorSettings(),
+  );
+  const [performanceThresholds, setPerformanceThresholds] = useState<PerformanceThresholds>(() =>
+    getPerformanceThresholds(),
+  );
 
   useEffect(() => {
     setCurrentTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -208,6 +251,111 @@ export default function SettingsTab() {
               </kbd>
             </div>
           </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="bg-white dark:bg-[#0A0A0A] rounded-lg shadow-sm dark:shadow-none p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <div className="i-ph:cpu-fill w-4 h-4 text-purple-500" />
+          <span className="text-sm font-medium text-bolt-elements-textPrimary">Model Orchestrator</span>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-bolt-elements-textSecondary">Enable automatic model selection</span>
+            <Switch
+              checked={modelOrchestrator.enabled}
+              onCheckedChange={(enabled) => {
+                const next = { ...modelOrchestrator, enabled };
+                setModelOrchestrator(next);
+                setModelOrchestratorSettings(next);
+              }}
+            />
+          </div>
+
+          <label className="block text-sm text-bolt-elements-textSecondary">
+            Prompt token threshold for local models
+            <input
+              type="number"
+              min={40}
+              max={1000}
+              value={modelOrchestrator.shortPromptTokenThreshold}
+              onChange={(event) => {
+                const shortPromptTokenThreshold = Number(event.target.value);
+                const next = { ...modelOrchestrator, shortPromptTokenThreshold };
+                setModelOrchestrator(next);
+                setModelOrchestratorSettings(next);
+              }}
+              className={classNames(
+                'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm',
+              )}
+            />
+          </label>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="bg-white dark:bg-[#0A0A0A] rounded-lg shadow-sm dark:shadow-none p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45 }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <div className="i-ph:gauge-fill w-4 h-4 text-purple-500" />
+          <span className="text-sm font-medium text-bolt-elements-textPrimary">Performance Thresholds</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <label className="text-sm text-bolt-elements-textSecondary">
+            Memory (MB)
+            <input
+              type="number"
+              value={performanceThresholds.memoryMb}
+              onChange={(event) => {
+                const next = { ...performanceThresholds, memoryMb: Number(event.target.value) };
+                setPerformanceThresholds(next);
+                localStorage.setItem(PERFORMANCE_THRESHOLD_KEY, JSON.stringify(next));
+              }}
+              className={classNames(
+                'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm',
+              )}
+            />
+          </label>
+          <label className="text-sm text-bolt-elements-textSecondary">
+            CPU (%)
+            <input
+              type="number"
+              value={performanceThresholds.cpuPercent}
+              onChange={(event) => {
+                const next = { ...performanceThresholds, cpuPercent: Number(event.target.value) };
+                setPerformanceThresholds(next);
+                localStorage.setItem(PERFORMANCE_THRESHOLD_KEY, JSON.stringify(next));
+              }}
+              className={classNames(
+                'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm',
+              )}
+            />
+          </label>
+          <label className="text-sm text-bolt-elements-textSecondary">
+            Token budget
+            <input
+              type="number"
+              value={performanceThresholds.tokenTotal}
+              onChange={(event) => {
+                const next = { ...performanceThresholds, tokenTotal: Number(event.target.value) };
+                setPerformanceThresholds(next);
+                localStorage.setItem(PERFORMANCE_THRESHOLD_KEY, JSON.stringify(next));
+              }}
+              className={classNames(
+                'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm',
+              )}
+            />
+          </label>
         </div>
       </motion.div>
     </div>

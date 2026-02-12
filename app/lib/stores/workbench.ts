@@ -18,6 +18,9 @@ import { description } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
+import { InteractiveStepRunner } from '~/lib/runtime/interactive-step-runner';
+import { createTestAndSecuritySteps, getMissingJestStubs } from '~/lib/runtime/test-security';
 
 const { saveAs } = fileSaver;
 
@@ -54,6 +57,9 @@ export class WorkbenchStore {
     import.meta.hot?.data.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
   deployAlert: WritableAtom<DeployAlert | undefined> =
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
+  interactiveStepEvents: WritableAtom<InteractiveStepRunnerEvent[]> =
+    import.meta.hot?.data.interactiveStepEvents ?? atom<InteractiveStepRunnerEvent[]>([]);
+  isTestAndScanRunning: WritableAtom<boolean> = import.meta.hot?.data.isTestAndScanRunning ?? atom<boolean>(false);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
   #globalExecutionQueue = Promise.resolve();
@@ -66,6 +72,8 @@ export class WorkbenchStore {
       import.meta.hot.data.actionAlert = this.actionAlert;
       import.meta.hot.data.supabaseAlert = this.supabaseAlert;
       import.meta.hot.data.deployAlert = this.deployAlert;
+      import.meta.hot.data.interactiveStepEvents = this.interactiveStepEvents;
+      import.meta.hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -134,6 +142,18 @@ export class WorkbenchStore {
 
   clearDeployAlert() {
     this.deployAlert.set(undefined);
+  }
+
+  get stepRunnerEvents() {
+    return this.interactiveStepEvents;
+  }
+
+  clearStepRunnerEvents() {
+    this.interactiveStepEvents.set([]);
+  }
+
+  get testAndScanRunning() {
+    return this.isTestAndScanRunning;
   }
 
   toggleTerminal(value?: boolean) {
@@ -505,6 +525,13 @@ export class WorkbenchStore {
 
           this.deployAlert.set(alert);
         },
+        (event) => {
+          if (this.#reloadedMessages.has(messageId)) {
+            return;
+          }
+
+          this.interactiveStepEvents.set([...this.interactiveStepEvents.get(), event].slice(-200));
+        },
       ),
     });
   }
@@ -645,6 +672,76 @@ export class WorkbenchStore {
     // Generate the zip file and save it
     const content = await zip.generateAsync({ type: 'blob' });
     saveAs(content, `${uniqueProjectName}.zip`);
+  }
+
+  async runTestAndSecurityScan() {
+    if (this.isTestAndScanRunning.get()) {
+      return;
+    }
+
+    this.isTestAndScanRunning.set(true);
+
+    try {
+      const changes = this.getFileModifcations() || {};
+      const changedPaths = Object.keys(changes);
+      const missingStubs = getMissingJestStubs(this.files.get(), changedPaths);
+
+      for (const stub of missingStubs) {
+        await this.createFile(stub.path, stub.content);
+      }
+
+      const shell = this.boltTerminal;
+      await shell.ready();
+
+      let eventSocket: WebSocket | undefined;
+
+      try {
+        if (typeof window !== 'undefined') {
+          const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+          eventSocket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
+        }
+      } catch {
+        eventSocket = undefined;
+      }
+
+      const steps = createTestAndSecuritySteps();
+      const runner = new InteractiveStepRunner(
+        {
+          executeStep: async (step, context) => {
+            const commandText =
+              step.command[0] === 'bash' && step.command[1] === '-lc' && step.command[2]
+                ? `bash -lc ${JSON.stringify(step.command[2])}`
+                : step.command.join(' ');
+            const resp = await shell.executeCommand(`quality-${Date.now()}`, commandText, undefined, (chunk) =>
+              context.onStdout(chunk),
+            );
+
+            return {
+              exitCode: resp?.exitCode ?? 1,
+              stdout: resp?.output || '',
+              stderr: resp?.exitCode === 0 ? '' : resp?.output || '',
+            };
+          },
+        },
+        eventSocket,
+      );
+
+      runner.addEventListener('event', (event) => {
+        const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+        this.interactiveStepEvents.set([...this.interactiveStepEvents.get(), detail].slice(-250));
+      });
+
+      await runner.run(steps);
+
+      if (
+        eventSocket &&
+        (eventSocket.readyState === WebSocket.OPEN || eventSocket.readyState === WebSocket.CONNECTING)
+      ) {
+        eventSocket.close();
+      }
+    } finally {
+      this.isTestAndScanRunning.set(false);
+    }
   }
 
   async syncFiles(targetHandle: FileSystemDirectoryHandle) {

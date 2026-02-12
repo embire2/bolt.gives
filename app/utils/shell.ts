@@ -90,6 +90,7 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
 }
 
 export type ExecutionResult = { output: string; exitCode: number } | undefined;
+export type ShellOutputHandler = (chunk: string) => void;
 
 export class BoltShell {
   #initialized: (() => void) | undefined;
@@ -215,7 +216,12 @@ export class BoltShell {
     return this.#process;
   }
 
-  async executeCommand(sessionId: string, command: string, abort?: () => void): Promise<ExecutionResult> {
+  async executeCommand(
+    sessionId: string,
+    command: string,
+    abort?: () => void,
+    onOutput?: ShellOutputHandler,
+  ): Promise<ExecutionResult> {
     if (!this.process || !this.terminal) {
       return undefined;
     }
@@ -241,7 +247,7 @@ export class BoltShell {
     this.terminal.input(command.trim() + '\n');
 
     //wait for the execution to finish
-    const executionPromise = this.getCurrentExecutionResult();
+    const executionPromise = this.getCurrentExecutionResult(onOutput);
     this.executionState.set({ sessionId, active: true, executionPrms: executionPromise, abort });
 
     const resp = await executionPromise;
@@ -258,14 +264,14 @@ export class BoltShell {
     return resp;
   }
 
-  async getCurrentExecutionResult(): Promise<ExecutionResult> {
-    const { output, exitCode } = await this.waitTillOscCode('exit');
+  async getCurrentExecutionResult(onOutput?: ShellOutputHandler): Promise<ExecutionResult> {
+    const { output, exitCode } = await this.waitTillOscCode('exit', onOutput);
     return { output, exitCode };
   }
 
   onQRCodeDetected?: (qrCode: string) => void;
 
-  async waitTillOscCode(waitCode: string) {
+  async waitTillOscCode(waitCode: string, onOutput?: ShellOutputHandler) {
     let fullOutput = '';
     let exitCode: number = 0;
     let buffer = ''; // <-- Add a buffer to accumulate output
@@ -289,6 +295,7 @@ export class BoltShell {
       const text = value || '';
       fullOutput += text;
       buffer += text; // <-- Accumulate in buffer
+      onOutput?.(text);
 
       // Extract Expo URL from buffer and set store
       const expoUrlMatch = buffer.match(expoUrlRegex);

@@ -33,6 +33,8 @@ import { ChatBox } from './ChatBox';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
+import { StepRunnerFeed } from './StepRunnerFeed';
+import type { SketchElement } from './SketchCanvas';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -82,6 +84,12 @@ interface BaseChatProps {
   setSelectedElement?: (element: ElementInfo | null) => void;
   addToolResult?: ({ toolCallId, result }: { toolCallId: string; result: any }) => void;
   onWebSearchResult?: (result: string) => void;
+  onSaveSession?: () => void;
+  onResumeSession?: () => void;
+  onShareSession?: () => void;
+  agentMode?: 'chat' | 'plan' | 'act';
+  setAgentMode?: (mode: 'chat' | 'plan' | 'act') => void;
+  onSketchChange?: (elements: SketchElement[]) => void;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -132,6 +140,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         throw new Error('addToolResult not implemented');
       },
       onWebSearchResult,
+      onSaveSession,
+      onResumeSession,
+      onShareSession,
+      agentMode,
+      setAgentMode,
+      onSketchChange,
     },
     ref,
   ) => {
@@ -426,6 +440,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                <StepRunnerFeed />
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
                   setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
@@ -468,6 +483,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   selectedElement={selectedElement}
                   setSelectedElement={setSelectedElement}
                   onWebSearchResult={onWebSearchResult}
+                  onSaveSession={onSaveSession}
+                  onResumeSession={onResumeSession}
+                  onShareSession={onShareSession}
+                  agentMode={agentMode}
+                  setAgentMode={setAgentMode}
+                  onSketchChange={onSketchChange}
                 />
               </div>
             </StickToBottom>

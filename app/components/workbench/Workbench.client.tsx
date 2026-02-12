@@ -29,6 +29,7 @@ import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportCh
 import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { PerformanceMonitor } from './PerformanceMonitor';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -306,6 +307,7 @@ export const Workbench = memo(
 
     const isSmallViewport = useViewport(1024);
     const streaming = useStore(streamingState);
+    const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -404,7 +406,9 @@ export const Workbench = memo(
                     }}
                   />
                   <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
-                  <div className="ml-auto" />
+                  <div className="ml-auto mr-2">
+                    <PerformanceMonitor />
+                  </div>
                   {selectedView === 'code' && (
                     <div className="flex overflow-y-auto">
                       {/* Export Chat Button */}
@@ -462,6 +466,22 @@ export const Workbench = memo(
                         >
                           <div className="i-ph:terminal" />
                           Toggle Terminal
+                        </button>
+                      </div>
+
+                      {/* Test & Scan Button */}
+                      <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden ml-1">
+                        <button
+                          onClick={() => {
+                            workbenchStore.runTestAndSecurityScan().catch(() => {
+                              toast.error('Failed to run test and scan');
+                            });
+                          }}
+                          disabled={testAndScanRunning || streaming}
+                          className="rounded-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.7"
+                        >
+                          <div className={testAndScanRunning ? 'i-ph:spinner animate-spin' : 'i-ph:shield-check'} />
+                          {testAndScanRunning ? 'Test & Scan...' : 'Test & Scan'}
                         </button>
                       </div>
                     </div>

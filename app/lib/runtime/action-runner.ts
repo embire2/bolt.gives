@@ -6,6 +6,11 @@ import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
 import type { ActionCallbackData } from './message-parser';
 import type { BoltShell } from '~/utils/shell';
+import {
+  InteractiveStepRunner,
+  type InteractiveStep,
+  type InteractiveStepRunnerEvent,
+} from '~/lib/runtime/interactive-step-runner';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -67,11 +72,13 @@ export class ActionRunner {
   #webcontainer: Promise<WebContainer>;
   #currentExecutionPromise: Promise<void> = Promise.resolve();
   #shellTerminal: () => BoltShell;
+  #stepEventSocket?: WebSocket;
   runnerId = atom<string>(`${Date.now()}`);
   actions: ActionsMap = map({});
   onAlert?: (alert: ActionAlert) => void;
   onSupabaseAlert?: (alert: SupabaseAlert) => void;
   onDeployAlert?: (alert: DeployAlert) => void;
+  onStepRunnerEvent?: (event: InteractiveStepRunnerEvent) => void;
   buildOutput?: { path: string; exitCode: number; output: string };
 
   constructor(
@@ -80,12 +87,14 @@ export class ActionRunner {
     onAlert?: (alert: ActionAlert) => void,
     onSupabaseAlert?: (alert: SupabaseAlert) => void,
     onDeployAlert?: (alert: DeployAlert) => void,
+    onStepRunnerEvent?: (event: InteractiveStepRunnerEvent) => void,
   ) {
     this.#webcontainer = webcontainerPromise;
     this.#shellTerminal = getShellTerminal;
     this.onAlert = onAlert;
     this.onSupabaseAlert = onSupabaseAlert;
     this.onDeployAlert = onDeployAlert;
+    this.onStepRunnerEvent = onStepRunnerEvent;
   }
 
   addAction(data: ActionCallbackData) {
@@ -267,15 +276,62 @@ export class ActionRunner {
       action.content = validationResult.modifiedCommand;
     }
 
-    const resp = await shell.executeCommand(this.runnerId.get(), action.content, () => {
-      logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
-      action.abort();
-    });
-    logger.debug(`${action.type} Shell Response: [exit code:${resp?.exitCode}]`);
+    let finalOutput = '';
+    let finalExitCode = 0;
+    let stepError: string | undefined;
 
-    if (resp?.exitCode != 0) {
-      const enhancedError = this.#createEnhancedShellError(action.content, resp?.exitCode, resp?.output);
-      throw new ActionCommandError(enhancedError.title, enhancedError.details);
+    const stepSocket = this.#getStepEventSocket();
+    const stepRunner = new InteractiveStepRunner(
+      {
+        executeStep: async (_step: InteractiveStep, context) => {
+          const resp = await shell.executeCommand(
+            this.runnerId.get(),
+            action.content,
+            () => {
+              logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
+              action.abort();
+            },
+            (chunk) => {
+              context.onStdout(chunk);
+            },
+          );
+          const output = resp?.output || '';
+          const exitCode = resp?.exitCode ?? 1;
+
+          finalOutput = output;
+          finalExitCode = exitCode;
+
+          return {
+            exitCode,
+            stdout: output,
+            stderr: exitCode === 0 ? '' : output,
+          };
+        },
+      },
+      stepSocket,
+    );
+
+    stepRunner.addEventListener('event', (event) => {
+      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+      this.onStepRunnerEvent?.(detail);
+
+      if (detail.type === 'error') {
+        stepError = detail.error || 'Step execution failed';
+      }
+    });
+
+    await stepRunner.run([
+      {
+        description: `Run shell command: ${action.content}`,
+        command: [action.content],
+      },
+    ]);
+
+    logger.debug(`${action.type} Shell Response: [exit code:${finalExitCode}]`);
+
+    if (stepError || finalExitCode !== 0) {
+      const enhancedError = this.#createEnhancedShellError(action.content, finalExitCode, finalOutput);
+      throw new ActionCommandError(enhancedError.title, stepError || enhancedError.details);
     }
   }
 
@@ -306,6 +362,30 @@ export class ActionRunner {
     }
 
     return resp;
+  }
+
+  #getStepEventSocket() {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    if (
+      this.#stepEventSocket &&
+      (this.#stepEventSocket.readyState === WebSocket.OPEN || this.#stepEventSocket.readyState === WebSocket.CONNECTING)
+    ) {
+      return this.#stepEventSocket;
+    }
+
+    try {
+      const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+      const socket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
+      this.#stepEventSocket = socket;
+
+      return socket;
+    } catch (error) {
+      logger.warn('Unable to create step event socket', error);
+      return undefined;
+    }
   }
 
   async #runFileAction(action: ActionState) {

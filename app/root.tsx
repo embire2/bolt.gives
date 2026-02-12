@@ -14,6 +14,7 @@ import { cssTransition, ToastContainer } from 'react-toastify';
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
 import xtermStyles from '@xterm/xterm/css/xterm.css?url';
+import { PluginManager } from './lib/services/pluginManager';
 
 import 'virtual:uno.css';
 
@@ -142,6 +143,10 @@ export default function App() {
       .catch((error) => {
         logStore.logError('Failed to initialize debug logging', error);
       });
+
+    PluginManager.loadInstalledPlugins().catch(() => {
+      // Plugin loading is optional and should not block app startup.
+    });
   }, []);
 
   return (

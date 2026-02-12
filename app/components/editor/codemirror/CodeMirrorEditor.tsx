@@ -27,6 +27,7 @@ import { getTheme, reconfigureTheme } from './cm-theme';
 import { indentKeyBinding } from './indent';
 import { getLanguage } from './languages';
 import { createEnvMaskingExtension } from './EnvMasking';
+import { getCollaborationExtension, isCollaborationEnabled } from '~/lib/collaboration/client';
 
 const logger = createScopedLogger('CodeMirrorEditor');
 
@@ -143,6 +144,7 @@ export const CodeMirrorEditor = memo(
 
     // Add a compartment for the env masking extension
     const [envMaskingCompartment] = useState(new Compartment());
+    const [collaborationCompartment] = useState(new Compartment());
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView>();
@@ -260,6 +262,7 @@ export const CodeMirrorEditor = memo(
         const state = newEditorState('', theme, settings, onScrollRef, debounceScroll, onSaveRef, [
           languageCompartment.of([]),
           envMaskingCompartment.of([]),
+          collaborationCompartment.of([]),
         ]);
 
         view.setState(state);
@@ -278,17 +281,23 @@ export const CodeMirrorEditor = memo(
       }
 
       let state = editorStates.get(doc.filePath);
+      const collaborationExtension =
+        isCollaborationEnabled() && doc.filePath ? [getCollaborationExtension(doc.filePath, doc.value)] : [];
 
       if (!state) {
         state = newEditorState(doc.value, theme, settings, onScrollRef, debounceScroll, onSaveRef, [
           languageCompartment.of([]),
           envMaskingCompartment.of([createEnvMaskingExtension(() => docRef.current?.filePath)]),
+          collaborationCompartment.of(collaborationExtension),
         ]);
 
         editorStates.set(doc.filePath, state);
       }
 
       view.setState(state);
+      view.dispatch({
+        effects: [collaborationCompartment.reconfigure(collaborationExtension)],
+      });
 
       setEditorDocument(
         view,
