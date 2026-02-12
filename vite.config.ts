@@ -18,6 +18,8 @@ export default defineConfig((config) => {
     },
     build: {
       target: 'esnext',
+      // Lowers peak memory usage during production builds by skipping gzip/brotli size estimates.
+      reportCompressedSize: false,
     },
     plugins: [
       nodePolyfills({
