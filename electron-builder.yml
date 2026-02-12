@@ -1,5 +1,5 @@
-appId: com.stackblitz.bolt.diy
-productName: Bolt Local
+appId: com.embire2.bolt.gives
+productName: bolt.gives
 directories:
   buildResources: build
   output: dist

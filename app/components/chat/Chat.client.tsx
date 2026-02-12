@@ -33,6 +33,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import { recordTokenUsage } from '~/lib/stores/performance';
 import { SessionManager } from '~/lib/services/sessionManager';
 import { normalizeSessionPayload, restoreConversationFromPayload } from '~/lib/services/session-payload';
+import { mergePromptContext } from '~/lib/services/prompt-merge';
 import {
   executeApprovedPlanSteps,
   generatePlanSteps,
@@ -697,21 +698,11 @@ export const ChatImpl = memo(
         return;
       }
 
-      let finalMessageContent = messageContent;
-
-      if (selectedElement) {
-        console.log('Selected Element:', selectedElement);
-
-        const elementInfo = `<div class=\"__boltSelectedElement__\" data-element='${JSON.stringify(selectedElement)}'>${JSON.stringify(`${selectedElement.displayText}`)}</div>`;
-        finalMessageContent = messageContent + elementInfo;
-      }
-
-      if (sketchElements.length > 0) {
-        finalMessageContent = `${finalMessageContent}\n\n[Sketch JSON]\n${JSON.stringify({
-          type: 'sketch-v1',
-          elements: sketchElements,
-        })}`;
-      }
+      const finalMessageContent = mergePromptContext({
+        content: messageContent,
+        selectedElement,
+        sketchElements,
+      });
 
       if (agentMode === 'act') {
         const executed = await runAgentActWorkflow();

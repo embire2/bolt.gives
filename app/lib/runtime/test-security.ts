@@ -1,6 +1,11 @@
 import type { FileMap } from '~/lib/stores/files';
 
 function toTestFilePath(filePath: string) {
+  // Don't generate a test for an existing test/spec file.
+  if (/\.(test|spec)\.[jt]sx?$/.test(filePath)) {
+    return undefined;
+  }
+
   const extensionMatch = filePath.match(/\.(tsx?|jsx?)$/);
 
   if (!extensionMatch) {
@@ -15,7 +20,10 @@ function toTestFilePath(filePath: string) {
 function buildJestStub(filePath: string) {
   const fileName = filePath.split('/').pop() || filePath;
 
-  return `describe('${fileName}', () => {
+  // Use Vitest imports (bolt.gives uses Vitest for `pnpm test`).
+  return `import { describe, expect, it } from 'vitest';
+
+describe('${fileName}', () => {
   it('should have coverage for generated logic', () => {
     expect(true).toBe(true);
   });
@@ -27,6 +35,10 @@ export function getMissingJestStubs(files: FileMap, changedPaths: string[]) {
   const stubs: Array<{ path: string; content: string }> = [];
 
   changedPaths.forEach((changedPath) => {
+    if (!changedPath || changedPath.includes('node_modules')) {
+      return;
+    }
+
     const testPath = toTestFilePath(changedPath);
 
     if (!testPath) {

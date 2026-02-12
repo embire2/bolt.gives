@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/stackblitz-labs/bolt.diy.git}"
+REPO_URL="${REPO_URL:-https://github.com/embire2/bolt.gives.git}"
 TARGET_DIR="${TARGET_DIR:-bolt.gives}"
-BRANCH="${BRANCH:-stable}"
+BRANCH="${BRANCH:-main}"
 
 command -v git >/dev/null 2>&1 || { echo "git is required"; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "node is required"; exit 1; }

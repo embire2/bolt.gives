@@ -1,5 +1,28 @@
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
+
+function getSuggestedFix(event: InteractiveStepRunnerEvent): string | undefined {
+  if (event.type !== 'error') {
+    return undefined;
+  }
+
+  const description = event.description || '';
+
+  if (/eslint/i.test(description)) {
+    return 'Try `pnpm run lint -- --fix` and re-run `pnpm test`.';
+  }
+
+  if (/security scan/i.test(description)) {
+    return 'Install Snyk (`npm i -g snyk`) or run `pnpm audit` and address reported vulnerabilities.';
+  }
+
+  if (/test suite/i.test(description) || /\bpnpm test\b/i.test(description)) {
+    return 'Re-run `pnpm test` and inspect the first failing test output.';
+  }
+
+  return 'Review the step output above and re-run after applying the fix.';
+}
 
 export function StepRunnerFeed() {
   const events = useStore(workbenchStore.stepRunnerEvents);
@@ -31,6 +54,9 @@ export function StepRunnerFeed() {
                 event.error ||
                 (event.type === 'complete' ? 'all steps complete' : '')}
             </span>
+            {event.type === 'error' && (
+              <div className="ml-10 text-bolt-elements-textTertiary">hint: {getSuggestedFix(event)}</div>
+            )}
           </div>
         ))}
       </div>

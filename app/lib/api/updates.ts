@@ -55,9 +55,7 @@ export const checkForUpdates = async (): Promise<UpdateCheckResult> => {
      * Get the latest version from GitHub's main branch package.json
      * Using raw.githubusercontent.com which doesn't require authentication
      */
-    const latestPackageResponse = await fetch(
-      'https://raw.githubusercontent.com/stackblitz-labs/bolt.diy/main/package.json',
-    );
+    const latestPackageResponse = await fetch('https://raw.githubusercontent.com/embire2/bolt.gives/main/package.json');
 
     if (!latestPackageResponse.ok) {
       throw new Error(`Failed to fetch latest package.json: ${latestPackageResponse.status}`);

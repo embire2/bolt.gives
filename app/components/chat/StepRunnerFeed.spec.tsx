@@ -66,4 +66,22 @@ describe('StepRunnerFeed', () => {
 
     expect(workbenchStore.stepRunnerEvents.get()).toHaveLength(0);
   });
+
+  it('shows a suggested fix hint for error events', () => {
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        stepIndex: 0,
+        description: 'Run ESLint',
+        exitCode: 1,
+        error: 'lint failed',
+      },
+    ]);
+
+    render(<StepRunnerFeed />);
+
+    expect(screen.queryByText(/hint:/i)).toBeTruthy();
+    expect(screen.queryByText(/pnpm run lint/i)).toBeTruthy();
+  });
 });

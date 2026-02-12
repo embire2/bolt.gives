@@ -55,6 +55,11 @@ pnpm install
 cp .env.example .env.local
 ```
 
+Optional (guided env setup):
+```bash
+pnpm run setup
+```
+
 Run dev (starts the app and the collaboration server):
 ```bash
 pnpm run dev
@@ -63,6 +68,14 @@ pnpm run dev
 Defaults:
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
+
+Fresh install checklist:
+- `docs/fresh-install-checklist.md`
+
+Install script (Linux/macOS):
+```bash
+./scripts/install-bolt-gives.sh
+```
 
 ## Real-Time Collaboration
 

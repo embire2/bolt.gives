@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Setup wizard for bolt.diy local installs.
+ * Setup wizard for bolt.gives local installs.
  *
  * Goals:
  * - Make initial configuration repeatable (init .env.local, optionally sync .env for Docker Compose).
