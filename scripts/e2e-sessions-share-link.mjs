@@ -215,8 +215,8 @@ async function run() {
 
     let session;
     try {
-      // Give geckodriver a moment to start listening.
-      await new Promise((r) => setTimeout(r, 700));
+      // Wait for geckodriver to start listening.
+      await waitForHttpOk(`${driverBaseUrl}/status`, 15_000);
 
       session = await createWebDriverSession(driverBaseUrl);
 
