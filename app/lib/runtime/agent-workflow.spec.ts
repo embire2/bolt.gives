@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { executeApprovedPlanSteps, type AgentPlanStep } from './agent-workflow';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { executeApprovedPlanSteps, generatePlanSteps, parsePlanSteps, type AgentPlanStep } from './agent-workflow';
 import type { StepExecutionContext } from './interactive-step-runner';
 
 function createStep(id: number, description: string, command: string[]): AgentPlanStep {
@@ -76,5 +76,70 @@ describe('executeApprovedPlanSteps', () => {
     });
 
     expect(result).toBe('reverted');
+  });
+});
+
+describe('parsePlanSteps', () => {
+  it('parses a numbered plan with command backticks', () => {
+    const raw = [
+      '1. install deps command: `pnpm install`',
+      '2) run tests command:`pnpm test`',
+      '3. describe outcome (no command)',
+    ].join('\n');
+
+    const steps = parsePlanSteps(raw);
+
+    expect(steps.map((s) => s.id)).toEqual([1, 2, 3]);
+    expect(steps[0]?.command).toEqual(['pnpm', 'install']);
+    expect(steps[1]?.command).toEqual(['pnpm', 'test']);
+    expect(steps[2]?.command).toEqual([]);
+  });
+});
+
+describe('generatePlanSteps', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('posts to /api/llmcall and parses returned plan text', async () => {
+    const fetchSpy = vi.fn(async (input: any, init?: any) => {
+      expect(String(input)).toBe('/api/llmcall');
+      expect(init?.method).toBe('POST');
+
+      const body = JSON.parse(init?.body ?? '{}');
+      expect(body.message).toContain('Return a clear, actionable numbered list.');
+      expect(body.message).toContain('my goal');
+
+      return new Response(
+        JSON.stringify({
+          text: '1. run tests command: `pnpm test`',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    vi.stubGlobal('fetch', fetchSpy as any);
+
+    const steps = await generatePlanSteps({
+      goal: 'my goal',
+      model: 'test-model',
+      provider: { name: 'test-provider' } as any,
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.command).toEqual(['pnpm', 'test']);
+  });
+
+  it('throws when /api/llmcall fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })) as any);
+
+    await expect(
+      generatePlanSteps({
+        goal: 'x',
+        model: 'test-model',
+        provider: { name: 'test-provider' } as any,
+      }),
+    ).rejects.toThrow(/boom/);
   });
 });

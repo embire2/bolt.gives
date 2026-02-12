@@ -1,18 +1,6 @@
-import type { Message } from 'ai';
+import { normalizeSessionPayload, type SessionPayload } from './session-payload';
 
-export interface SessionDiffRecord {
-  path: string;
-  diff: string;
-}
-
-export interface SessionPayload {
-  title: string;
-  conversation: Message[];
-  prompts: Message[];
-  responses: Message[];
-  diffs: SessionDiffRecord[];
-  metadata?: Record<string, unknown>;
-}
+export type { SessionPayload, SessionDiffRecord } from './session-payload';
 
 export interface SavedSessionSummary {
   id: string;
@@ -66,9 +54,16 @@ export class SessionManager {
       throw new Error(await response.text());
     }
 
-    const data = (await response.json()) as { session: { id: string; payload: SessionPayload } | null };
+    const data = (await response.json()) as { session: { id: string; payload: unknown } | null };
 
-    return data.session;
+    if (!data.session) {
+      return null;
+    }
+
+    return {
+      ...data.session,
+      payload: normalizeSessionPayload(data.session.payload),
+    };
   }
 
   static async loadSessionByShareSlug(shareSlug: string) {
@@ -78,9 +73,16 @@ export class SessionManager {
       throw new Error(await response.text());
     }
 
-    const data = (await response.json()) as { session: { id: string; payload: SessionPayload } | null };
+    const data = (await response.json()) as { session: { id: string; payload: unknown } | null };
 
-    return data.session;
+    if (!data.session) {
+      return null;
+    }
+
+    return {
+      ...data.session,
+      payload: normalizeSessionPayload(data.session.payload),
+    };
   }
 
   static async createShareLink(sessionId: string) {

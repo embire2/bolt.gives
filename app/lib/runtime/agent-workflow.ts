@@ -32,13 +32,13 @@ export function parsePlanSteps(rawPlan: string): AgentPlanStep[] {
     const remainder = numbered[2];
     const commandMatch = remainder.match(/command\s*:\s*`([^`]+)`/i);
     const commandString = commandMatch?.[1]?.trim() || '';
-    const description = remainder.replace(/command\s*:\s*`[^`]+`/i, '').trim();
+    const description = remainder.replace(/command\s*:\s*`[^`]+`/i, '').trim() || remainder.trim();
 
     steps.push({
       id,
       approved: true,
       description,
-      command: commandString.length > 0 ? commandString.split(' ') : [],
+      command: commandString.length > 0 ? commandString.split(/\s+/).filter(Boolean) : [],
     });
   });
 
@@ -50,7 +50,15 @@ export async function generatePlanSteps(options: {
   model: string;
   provider: ProviderInfo;
 }): Promise<AgentPlanStep[]> {
-  const prompt = `Create an execution plan for this goal:\n\n${options.goal}\n\nReturn a numbered list. Each line must include \`command: \\\`...\\\`\` when a shell command is needed.`;
+  const prompt = [
+    'Create an execution plan for this goal:',
+    '',
+    options.goal,
+    '',
+    'Return a clear, actionable numbered list.',
+    'For steps that require a shell command, include: command: `...`',
+    'Prefer one command per step, suitable for a pnpm-based Node project workspace.',
+  ].join('\n');
 
   const response = await fetch('/api/llmcall', {
     method: 'POST',
@@ -66,6 +74,10 @@ export async function generatePlanSteps(options: {
       streamOutput: false,
     }),
   });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
 
   const data = (await response.json()) as { text?: string };
 

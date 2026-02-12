@@ -1,4 +1,5 @@
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { normalizeSessionPayload } from '~/lib/services/session-payload';
 
 interface SessionRecord {
   id?: string;
@@ -7,12 +8,44 @@ interface SessionRecord {
   share_slug?: string | null;
 }
 
+function isPlaceholderValue(value: unknown) {
+  if (typeof value !== 'string') {
+    return true;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return true;
+  }
+
+  // Guard against default .env.example placeholders.
+  return /your_.*_here/i.test(trimmed) || trimmed.includes('your_supabase_project_url_here');
+}
+
+function isValidUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getSupabaseConfig(context: any) {
   const env = context?.cloudflare?.env || process.env;
   const supabaseUrl = env?.VITE_SUPABASE_URL || env?.SUPABASE_URL;
   const supabaseKey = env?.SUPABASE_SERVICE_ROLE_KEY || env?.VITE_SUPABASE_ANON_KEY;
 
-  return { supabaseUrl, supabaseKey };
+  if (!isValidUrl(supabaseUrl) || isPlaceholderValue(supabaseKey)) {
+    return { supabaseUrl: undefined, supabaseKey: undefined };
+  }
+
+  return { supabaseUrl: String(supabaseUrl), supabaseKey: String(supabaseKey) };
 }
 
 function getHeaders(key: string) {
@@ -62,7 +95,23 @@ async function loadSessionById(context: any, id: string) {
 
   const rows = (await response.json()) as any[];
 
-  return json({ session: rows[0] || null });
+  const row = rows[0];
+
+  if (!row) {
+    return json({ session: null });
+  }
+
+  const normalized = normalizeSessionPayload(row.payload);
+
+  return json({
+    session: {
+      ...row,
+      payload: {
+        ...normalized,
+        title: typeof row.title === 'string' && row.title.trim().length > 0 ? row.title : normalized.title,
+      },
+    },
+  });
 }
 
 async function loadSessionByShareSlug(context: any, shareSlug: string) {
@@ -85,7 +134,23 @@ async function loadSessionByShareSlug(context: any, shareSlug: string) {
 
   const rows = (await response.json()) as any[];
 
-  return json({ session: rows[0] || null });
+  const row = rows[0];
+
+  if (!row) {
+    return json({ session: null });
+  }
+
+  const normalized = normalizeSessionPayload(row.payload);
+
+  return json({
+    session: {
+      ...row,
+      payload: {
+        ...normalized,
+        title: typeof row.title === 'string' && row.title.trim().length > 0 ? row.title : normalized.title,
+      },
+    },
+  });
 }
 
 export async function loader({ request, context }: LoaderFunctionArgs) {

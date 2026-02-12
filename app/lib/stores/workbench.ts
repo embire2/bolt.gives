@@ -291,6 +291,22 @@ export class WorkbenchStore {
     this.setCurrentDocumentContent(file.content);
   }
 
+  resetAllUnsavedFiles() {
+    const unsaved = Array.from(this.unsavedFiles.get());
+
+    for (const filePath of unsaved) {
+      const file = this.#filesStore.getFile(filePath);
+
+      if (!file || file.isBinary) {
+        continue;
+      }
+
+      this.#editorStore.updateFile(filePath, file.content);
+    }
+
+    this.unsavedFiles.set(new Set<string>());
+  }
+
   async saveAllFiles() {
     for (const filePath of this.unsavedFiles.get()) {
       await this.saveFile(filePath);
@@ -385,6 +401,35 @@ export class WorkbenchStore {
     } catch (error) {
       console.error('Failed to create file:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Write file content directly to the workspace, without relying on the editor buffer.
+   * Used for workflow checkpoint reverts and other non-editor mutations.
+   */
+  async writeFile(filePath: string, content: string) {
+    const existing = this.#filesStore.getFile(filePath);
+
+    if (existing) {
+      await this.#filesStore.saveFile(filePath, content);
+    } else {
+      await this.#filesStore.createFile(filePath, content);
+    }
+
+    // Keep editor buffers in sync for open documents.
+    const doc = this.#editorStore.documents.get()[filePath];
+
+    if (doc) {
+      this.#editorStore.updateFile(filePath, content);
+    }
+
+    // Ensure the file isn't marked as unsaved, since it's already persisted.
+    const nextUnsaved = new Set(this.unsavedFiles.get());
+
+    if (nextUnsaved.has(filePath)) {
+      nextUnsaved.delete(filePath);
+      this.unsavedFiles.set(nextUnsaved);
     }
   }
 

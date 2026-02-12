@@ -32,12 +32,19 @@ import { buildModelSelectionEnvelope, selectModelForPrompt } from '~/lib/runtime
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { recordTokenUsage } from '~/lib/stores/performance';
 import { SessionManager } from '~/lib/services/sessionManager';
+import { normalizeSessionPayload, restoreConversationFromPayload } from '~/lib/services/session-payload';
 import {
   executeApprovedPlanSteps,
   generatePlanSteps,
   type AgentMode,
   type AgentPlanStep,
 } from '~/lib/runtime/agent-workflow';
+import {
+  computeTextFileDelta,
+  computeTextSnapshotRevertOps,
+  formatCheckpointConfirmMessage,
+  snapshotTextFiles,
+} from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 
 const logger = createScopedLogger('Chat');
@@ -505,10 +512,7 @@ export const ChatImpl = memo(
           return;
         }
 
-        const restoredMessages = loaded.payload.conversation || [
-          ...loaded.payload.prompts,
-          ...loaded.payload.responses,
-        ];
+        const restoredMessages = restoreConversationFromPayload(normalizeSessionPayload(loaded.payload));
         setMessages(restoredMessages);
         setActiveSessionId(loaded.id);
         toast.success('Session restored');
@@ -549,10 +553,7 @@ export const ChatImpl = memo(
             return;
           }
 
-          const restoredMessages = loaded.payload.conversation || [
-            ...loaded.payload.prompts,
-            ...loaded.payload.responses,
-          ];
+          const restoredMessages = restoreConversationFromPayload(normalizeSessionPayload(loaded.payload));
           setMessages(restoredMessages);
           setActiveSessionId(loaded.id);
           toast.success('Shared session loaded');
@@ -577,6 +578,9 @@ export const ChatImpl = memo(
         const shell = workbenchStore.boltTerminal;
         await shell.ready();
 
+        const baselineSnapshot = snapshotTextFiles(workbenchStore.files.get());
+        const stepSnapshots = new Map<number, ReturnType<typeof snapshotTextFiles>>();
+
         let socket: WebSocket | undefined;
 
         try {
@@ -591,6 +595,9 @@ export const ChatImpl = memo(
           socket,
           executor: {
             executeStep: async (step, context) => {
+              // Snapshot file contents before each step to show diffs at the checkpoint.
+              stepSnapshots.set((step as AgentPlanStep).id, snapshotTextFiles(workbenchStore.files.get()));
+
               const commandText = step.command.join(' ');
               const response = await shell.executeCommand(`agent-${Date.now()}`, commandText, undefined, (chunk) =>
                 context.onStdout(chunk),
@@ -607,16 +614,47 @@ export const ChatImpl = memo(
             workbenchStore.stepRunnerEvents.set([...workbenchStore.stepRunnerEvents.get(), event].slice(-200));
           },
           onCheckpoint: async (step) => {
-            const proceed = window.confirm(`Checkpoint reached:\\n\\n${step.description}\\n\\nContinue to next step?`);
+            const afterSnapshot = snapshotTextFiles(workbenchStore.files.get());
+            const beforeSnapshot = stepSnapshots.get(step.id) || afterSnapshot;
+            const delta = computeTextFileDelta(beforeSnapshot, afterSnapshot);
+
+            const proceed = window.confirm(
+              formatCheckpointConfirmMessage({
+                stepDescription: step.description,
+                delta,
+              }),
+            );
 
             if (proceed) {
               return 'continue';
             }
 
-            const revert = window.confirm('Stop execution and revert unsaved editor changes?');
+            const revert = window.confirm('Stop execution and revert all changes from this Act run?');
 
             if (revert) {
-              workbenchStore.resetCurrentDocument();
+              const currentSnapshot = snapshotTextFiles(workbenchStore.files.get());
+              const ops = computeTextSnapshotRevertOps(baselineSnapshot, currentSnapshot);
+
+              // Best-effort: some paths may have been deleted/locked by the user while the workflow runs.
+              for (const filePath of ops.deletes) {
+                try {
+                  await workbenchStore.deleteFile(filePath);
+                } catch {
+                  // ignore
+                }
+              }
+
+              for (const write of ops.writes) {
+                try {
+                  await workbenchStore.writeFile(write.path, write.content);
+                } catch {
+                  // ignore
+                }
+              }
+
+              workbenchStore.resetAllUnsavedFiles();
+              workbenchStore.resetAllFileModifications();
+
               return 'revert';
             }
 
