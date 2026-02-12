@@ -515,6 +515,8 @@ export const ChatImpl = memo(
         const restoredMessages = restoreConversationFromPayload(normalizeSessionPayload(loaded.payload));
         setMessages(restoredMessages);
         setActiveSessionId(loaded.id);
+        chatStore.setKey('started', true);
+        setChatStarted(true);
         toast.success('Session restored');
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to resume session');
@@ -556,6 +558,8 @@ export const ChatImpl = memo(
           const restoredMessages = restoreConversationFromPayload(normalizeSessionPayload(loaded.payload));
           setMessages(restoredMessages);
           setActiveSessionId(loaded.id);
+          chatStore.setKey('started', true);
+          setChatStarted(true);
           toast.success('Shared session loaded');
         })
         .catch((error) => {
