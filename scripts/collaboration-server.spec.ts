@@ -3,12 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
 
 function randomPort() {
   return 14000 + Math.floor(Math.random() * 1000);
@@ -31,15 +33,15 @@ async function waitFor<T>(fn: () => Promise<T | undefined> | T | undefined, time
 }
 
 function createDocConnection(port: number, roomName: string) {
-  const webSocketPolyfill = globalThis.WebSocket;
-
-  if (!webSocketPolyfill) {
-    throw new Error('WebSocket polyfill is unavailable in this runtime');
-  }
+  // Avoid a static import so TypeScript doesn't pull ws types into the main program (keeps `pnpm run typecheck` lean).
+  // Vitest executes this in Node, so runtime require is safe here.
+  const wsModule = require('ws');
+  const WebSocket = wsModule?.default ?? wsModule?.WebSocket ?? wsModule;
 
   const doc = new Y.Doc();
   const provider = new WebsocketProvider(`ws://127.0.0.1:${port}`, roomName, doc, {
-    WebSocketPolyfill: webSocketPolyfill as any,
+    // Node.js doesn't guarantee a global WebSocket across supported versions; use ws directly.
+    WebSocketPolyfill: WebSocket as any,
   });
   const yText = doc.getText('content');
 
