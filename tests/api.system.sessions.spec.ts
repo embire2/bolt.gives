@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { action, loader } from '../app/routes/api.sessions';
 import { normalizeSessionPayload, restoreConversationFromPayload } from '../app/lib/services/session-payload';
 
@@ -60,6 +60,32 @@ async function deleteSession(sessionId: string) {
 
 describe.runIf(hasSupabase)('sessions api (supabase)', () => {
   const createdSessionIds: string[] = [];
+
+  beforeAll(async () => {
+    if (!supabaseUrl || !supabaseKey) {
+      return;
+    }
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/bolt_sessions?select=id&limit=1`, {
+      headers: getHeaders(supabaseKey),
+    });
+
+    if (response.status === 404) {
+      const text = await response.text();
+
+      if (text.includes('PGRST205') && text.includes('bolt_sessions')) {
+        throw new Error(
+          'Supabase table public.bolt_sessions does not exist. Apply docs/supabase/bolt_sessions.sql in your Supabase SQL editor, then re-run pnpm test.',
+        );
+      }
+
+      throw new Error(`Supabase returned 404 for bolt_sessions preflight: ${text}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+  });
 
   afterAll(async () => {
     await Promise.all(createdSessionIds.map((id) => deleteSession(id)));
