@@ -19,6 +19,9 @@ Chat:
 Plan prompt example:
 ![bolt.gives plan prompt](docs/screenshots/chat-plan.png)
 
+Shared session restore (e2e):
+![bolt.gives share session restore](docs/screenshots/share-session-e2e.png)
+
 ## What The App Does
 
 bolt.gives is a single workspace where you can:
@@ -85,6 +88,14 @@ Outputs:
 - `docs/screenshots/chat.png`
 - `docs/screenshots/chat-plan.png`
 
+To generate the shared-session restore screenshot (requires Supabase configured in `.env.local`):
+```bash
+node scripts/e2e-sessions-share-link.mjs
+```
+
+Output:
+- `docs/screenshots/share-session-e2e.png`
+
 ## Validation Gate
 
 Before pushing changes:
@@ -131,4 +142,3 @@ PR expectations:
 ## License
 
 MIT
-
