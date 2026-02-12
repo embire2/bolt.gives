@@ -36,12 +36,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry (optional)
+        if: ${{ secrets.GHCR_PAT != '' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Extract metadata for Docker image
         id: meta
@@ -63,13 +64,13 @@ jobs:
           # Keep publishing linux/amd64 so the workflow stays green; we can re-enable multi-arch once arm64 builds are stable.
           platforms: linux/amd64
           target: bolt-ai-production
-          push: true
+          push: ${{ secrets.GHCR_PAT != '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           
           
       - name: Check manifest
-        if: ${{ success() }}
+        if: ${{ success() && secrets.GHCR_PAT != '' }}
         shell: bash
         run: |
           set -euo pipefail
