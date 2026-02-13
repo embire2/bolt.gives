@@ -1,5 +1,6 @@
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
+import net from 'node:net';
 import path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
@@ -12,11 +13,26 @@ import { WebsocketProvider } from 'y-websocket';
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 
-function randomPort() {
-  return 14000 + Math.floor(Math.random() * 1000);
+async function getFreePort() {
+  // Avoid random-port collisions on shared/loaded runners.
+  const server = net.createServer();
+  server.unref();
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  const address = server.address();
+
+  if (!address || typeof address === 'string') {
+    server.close();
+    throw new Error('Unable to allocate ephemeral port');
+  }
+
+  const port = address.port;
+  await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  return port;
 }
 
-async function waitFor<T>(fn: () => Promise<T | undefined> | T | undefined, timeoutMs = 8000, intervalMs = 50): Promise<T> {
+async function waitFor<T>(fn: () => Promise<T | undefined> | T | undefined, timeoutMs = 20_000, intervalMs = 50): Promise<T> {
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
@@ -48,7 +64,7 @@ function createDocConnection(port: number, roomName: string) {
   return { doc, provider, yText };
 }
 
-async function waitForSync(provider: WebsocketProvider, timeoutMs = 8000) {
+async function waitForSync(provider: WebsocketProvider, timeoutMs = 20_000) {
   if ((provider as any).synced === true) {
     return;
   }
@@ -85,7 +101,7 @@ async function fetchHealth(port: number) {
 }
 
 async function waitForHealth(port: number) {
-  return waitFor(() => fetchHealth(port), 10000);
+  return waitFor(() => fetchHealth(port), 20_000);
 }
 
 async function startServer(options: {
@@ -133,12 +149,25 @@ async function stopServer(processHandle: ChildProcessWithoutNullStreams) {
   }
 
   processHandle.kill('SIGTERM');
-  await Promise.race([once(processHandle, 'exit'), new Promise((resolve) => setTimeout(resolve, 5000))]);
+
+  const exited = await Promise.race([
+    once(processHandle, 'exit').then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+  ]);
+
+  if (!exited && processHandle.exitCode === null) {
+    processHandle.kill('SIGKILL');
+    await Promise.race([once(processHandle, 'exit'), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  }
 }
 
 describe('collaboration-server', () => {
   const activeServers: ChildProcessWithoutNullStreams[] = [];
   const tempDirs: string[] = [];
+
+  // These are integration tests that spawn a real websocket server and do IO.
+  // Vitest defaults to 5s which is too tight on slow/loaded CI runners.
+  const TEST_TIMEOUT_MS = 60_000;
 
   afterEach(async () => {
     while (activeServers.length > 0) {
@@ -159,7 +188,7 @@ describe('collaboration-server', () => {
   });
 
   it('syncs edits across clients and restores persisted content after restart', async () => {
-    const port = randomPort();
+    const port = await getFreePort();
     const persistDir = await mkdtemp(path.join(os.tmpdir(), 'bolt-collab-'));
     tempDirs.push(persistDir);
 
@@ -207,14 +236,14 @@ describe('collaboration-server', () => {
     await waitFor(() => {
       const value = clientC.yText.toString();
       return value === 'hello collaboration' ? value : undefined;
-    }, 5000);
+    }, 20_000);
 
     clientC.provider.destroy();
     clientC.doc.destroy();
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('cleans up inactive documents after timeout when no clients remain', async () => {
-    const port = randomPort();
+    const port = await getFreePort();
     const persistDir = await mkdtemp(path.join(os.tmpdir(), 'bolt-collab-'));
     tempDirs.push(persistDir);
 
@@ -249,5 +278,5 @@ describe('collaboration-server', () => {
       }
       return health.docs === 0 ? health : undefined;
     }, 8000);
-  });
+  }, TEST_TIMEOUT_MS);
 });

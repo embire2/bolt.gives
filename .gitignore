@@ -34,6 +34,7 @@ functions/build/
 *.vars
 .wrangler
 _worker.bundle
+vite.config.ts.timestamp-*.mjs
 
 Modelfile
 modelfiles
