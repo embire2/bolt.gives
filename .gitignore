@@ -24,7 +24,9 @@ dist-ssr
 
 /.history
 /.cache
-/build
+*.tsbuildinfo
+/build/*
+!/build/server.d.ts
 functions/build/
 .env.local
 .env

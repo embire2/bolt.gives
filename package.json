@@ -28,7 +28,7 @@
     "dockerrun": "docker run -it -d --name bolt-ai-live -p 5173:5173 --env-file .env.local bolt-ai",
     "dockerbuild:prod": "docker build -t bolt-ai:production -t bolt-ai:latest --target bolt-ai-production .",
     "dockerbuild": "docker build -t bolt-ai:development -t bolt-ai:latest --target development .",
-    "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc",
+    "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc --pretty false --incremental",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
     "prepare": "husky",
