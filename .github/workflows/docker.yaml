@@ -42,7 +42,8 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          # Prefer an explicit PAT when provided, otherwise fall back to the workflow-scoped token.
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Docker image
         id: meta
