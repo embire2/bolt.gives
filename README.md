@@ -118,6 +118,18 @@ pnpm run lint
 pnpm test
 ```
 
+## Docker Images (GHCR)
+
+This repo includes a `Docker Publish` GitHub Actions workflow that can build and (optionally) push images to GitHub Container Registry.
+
+By default, publishing is disabled. To enable pushing to GHCR:
+1. Create an Actions variable: `GHCR_PUSH_ENABLED=true`
+2. (Optional) Create an Actions secret: `GHCR_PAT` with `read:packages` and `write:packages`
+
+Notes:
+- If `GHCR_PAT` is not set, the workflow will fall back to the built-in `GITHUB_TOKEN`.
+- Images publish to `ghcr.io/<owner>/<repo>`.
+
 ## Roadmap
 
 See `ROADMAP.md`.
