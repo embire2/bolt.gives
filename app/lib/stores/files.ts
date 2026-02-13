@@ -78,7 +78,7 @@ export class FilesStore {
 
     // Load deleted paths from localStorage if available
     try {
-      if (typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
         const deletedPathsJson = localStorage.getItem('bolt-deleted-paths');
 
         if (deletedPathsJson) {
@@ -551,6 +551,12 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
+      const lockState = this.isFileLocked(filePath);
+
+      if (lockState.locked) {
+        throw new Error(`File is locked and cannot be modified: ${filePath}`);
+      }
+
       const relativePath = path.relative(webcontainer.workdir, filePath);
 
       if (!relativePath) {
@@ -561,6 +567,11 @@ export class FilesStore {
 
       if (!oldContent && oldContent !== '') {
         unreachable('Expected content to be defined');
+      }
+
+      // Avoid unnecessary disk writes and watcher churn when nothing changed.
+      if (oldContent === content) {
+        return;
       }
 
       await webcontainer.fs.writeFile(relativePath, content);
@@ -771,6 +782,12 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
+      const folderLock = this.isFileInLockedFolder(filePath);
+
+      if (folderLock.locked) {
+        throw new Error(`Path is inside a locked folder and cannot be modified: ${filePath}`);
+      }
+
       const relativePath = path.relative(webcontainer.workdir, filePath);
 
       if (!relativePath) {
@@ -847,6 +864,12 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
+      const lockState = this.isFileLocked(filePath);
+
+      if (lockState.locked) {
+        throw new Error(`File is locked and cannot be deleted: ${filePath}`);
+      }
+
       const relativePath = path.relative(webcontainer.workdir, filePath);
 
       if (!relativePath) {
@@ -879,6 +902,12 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
+      const lockState = this.isFolderLocked(folderPath);
+
+      if (lockState.isLocked) {
+        throw new Error(`Folder is locked and cannot be deleted: ${folderPath}`);
+      }
+
       const relativePath = path.relative(webcontainer.workdir, folderPath);
 
       if (!relativePath) {
@@ -923,7 +952,7 @@ export class FilesStore {
   // method to persist deleted paths to localStorage
   #persistDeletedPaths() {
     try {
-      if (typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
         localStorage.setItem('bolt-deleted-paths', JSON.stringify([...this.#deletedPaths]));
       }
     } catch (error) {
