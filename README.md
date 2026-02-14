@@ -1,12 +1,30 @@
 # bolt.gives v1.0.0
 
-bolt.gives is a collaborative, open-source AI coding workspace based on `stackblitz-labs/bolt.diy`.
+bolt.gives is a collaborative, open-source AI coding workspace.
 
 It combines:
 - A browser-based Node.js dev environment (StackBlitz WebContainer)
 - An AI-assisted editor + terminal
 - Real-time collaborative editing
 - Agent-style workflows (Plan/Act with checkpointed execution)
+
+## Platform Support (Important)
+
+- Using bolt.gives in a browser: supported on Windows, macOS, and Linux (any modern browser).
+- Installing / self-hosting bolt.gives: supported on **Ubuntu 18.04+ only**.
+  - Windows is **not supported** for installation/self-hosting.
+  - macOS is **not supported** for installation/self-hosting.
+  - If you are on Windows or macOS, use the hosted web app (or deploy to an Ubuntu server and access it from your machine).
+
+## v1.0.0 Release Notes
+
+This `v1.0.0` release focuses on shipping a complete, end-to-end collaborative AI coding workspace:
+- Real-time collaboration via Yjs (`y-websocket`) with persisted docs and a health endpoint
+- Plan/Act agent workflow with checkpointed execution and revert support
+- Multi-provider model support (cloud + local) with an in-app model orchestrator
+- Session save/resume/share (optional Supabase-backed storage)
+- Deployment wizard and provider integrations (GitHub/GitLab + Vercel/Netlify)
+- Production builds with Cloudflare Pages support (see `wrangler.toml`)
 
 ## Screenshots
 
@@ -45,9 +63,38 @@ bolt.gives is a single workspace where you can:
 
 ## Quickstart (Local Development)
 
-Prereqs:
-- Node.js `>= 18.18.0`
-- `pnpm`
+### Prereqs (Ubuntu 18.04+ Only)
+
+- Ubuntu `18.04+` (recommended: Ubuntu `22.04+`)
+- Node.js `>= 18.18.0` (recommended: Node.js `22`)
+- `pnpm` (recommended: via `corepack`)
+- `git`
+
+### Install Node.js + pnpm (Ubuntu)
+
+This project builds a large Vite/Remix bundle and may require a larger Node heap during build.
+
+1. Install base packages:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y git curl ca-certificates build-essential
+   ```
+2. Install Node.js (recommended: `nvm`):
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+   # restart your shell, then:
+   export NVM_DIR="$HOME/.nvm"
+   . "$NVM_DIR/nvm.sh"
+   nvm install 22
+   nvm use 22
+   node -v
+   ```
+3. Enable `pnpm` via corepack:
+   ```bash
+   corepack enable
+   corepack prepare pnpm@9.15.9 --activate
+   pnpm -v
+   ```
 
 Setup:
 ```bash
@@ -69,10 +116,29 @@ Defaults:
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
 
+### Production Build (High Memory)
+
+If the build fails with "JavaScript heap out of memory", use:
+```bash
+pnpm run build:highmem
+pnpm run start
+```
+
+## Deploying To Cloudflare Pages
+
+This repo is configured for Cloudflare Pages via `wrangler.toml`:
+- Build output: `build/client`
+- Pages Functions entry: `functions/[[path]].ts`
+
+If your Pages build runs out of memory, increase Node's heap:
+- Set `NODE_OPTIONS=--max-old-space-size=6142` in Cloudflare Pages build environment
+- Or use a high-memory build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
+- Or run: `pnpm run build:highmem`
+
 Fresh install checklist:
 - `docs/fresh-install-checklist.md`
 
-Install script (Linux/macOS):
+Install script (Ubuntu 18.04+ only):
 ```bash
 ./scripts/install-bolt-gives.sh
 ```
@@ -136,7 +202,7 @@ See `ROADMAP.md`.
 
 ## Contributing (Fork + PR Workflow)
 
-We follow the standard GitHub workflow used by bolt.diy and similar StackBlitz OSS projects.
+We follow a standard GitHub fork + PR workflow.
 
 1. Fork this repository on GitHub.
 2. Clone your fork locally:

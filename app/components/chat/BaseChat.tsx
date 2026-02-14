@@ -151,6 +151,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   ) => {
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
+    const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
     const [modelList, setModelList] = useState<ModelInfo[]>([]);
     const [isModelSettingsCollapsed, setIsModelSettingsCollapsed] = useState(false);
     const [isListening, setIsListening] = useState(false);
@@ -500,6 +501,30 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
               )}
               <div className="flex flex-col gap-5">
+                {!chatStarted && !hasAnyApiKey && (
+                  <div className="mx-auto w-full max-w-[980px] rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="i-ph:rocket-launch-duotone text-2xl text-bolt-elements-textPrimary mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-bolt-elements-textPrimary font-medium">
+                          Getting started (no bolt.gives signup required)
+                        </div>
+                        <div className="text-bolt-elements-textSecondary mt-1 space-y-1">
+                          <div>1. Pick a provider (OpenAI, Anthropic, OpenRouter, Ollama, etc.) in the chat box.</div>
+                          <div>
+                            2. If you choose a cloud provider, you will need to sign up with that provider to get an API
+                            key.
+                          </div>
+                          <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
+                          <div className="text-xs mt-2">
+                            Note: keys are stored in your browser and sent with your requests to talk to your selected
+                            provider.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {!chatStarted &&
                   ExamplePrompts((event, messageInput) => {
                     if (isStreaming) {

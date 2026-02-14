@@ -6,7 +6,7 @@ body:
       value: |
         Thank you for reporting an issue :pray:.
 
-        This issue tracker is for bugs and issues found with [Bolt.diy](https://bolt.diy).
+        This issue tracker is for bugs and issues found with [bolt.gives](https://bolt.gives).
         If you experience issues related to WebContainer, please file an issue in the official [StackBlitz WebContainer repo](https://github.com/stackblitz/webcontainer-core).
 
         The more information you fill in, the better we can help you.
@@ -53,7 +53,8 @@ body:
     attributes:
       label: Platform
       value: |
-        - OS: [e.g. macOS, Windows, Linux]
+        - Client OS (your computer): [e.g. Windows/macOS/Linux]
+        - If self-hosting: Server OS (must be Ubuntu 18.04+): [e.g. Ubuntu 22.04]
         - Browser: [e.g. Chrome, Safari, Firefox]
         - Version: [e.g. 91.1]
   - type: input
