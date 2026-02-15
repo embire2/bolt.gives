@@ -10,6 +10,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
+import { resolvePromptIdForModel } from './prompt-selection';
 
 export type Messages = Message[];
 
@@ -149,8 +150,15 @@ export async function streamText(props: {
     `Token limits for model ${modelDetails.name}: maxTokens=${safeMaxTokens}, maxTokenAllowed=${modelDetails.maxTokenAllowed}, maxCompletionTokens=${modelDetails.maxCompletionTokens}`,
   );
 
+  const effectiveChatMode = chatMode || 'build';
+  const effectivePromptId = resolvePromptIdForModel({
+    promptId,
+    model: modelDetails,
+    chatMode: effectiveChatMode,
+  });
+
   let systemPrompt =
-    PromptLibrary.getPropmtFromLibrary(promptId || 'default', {
+    PromptLibrary.getPropmtFromLibrary(effectivePromptId, {
       cwd: WORK_DIR,
       allowedHtmlElements: allowedHTMLElements,
       modificationTagName: MODIFICATIONS_TAG_NAME,
@@ -162,7 +170,7 @@ export async function streamText(props: {
       },
     }) ?? getSystemPrompt();
 
-  if (chatMode === 'build' && contextFiles && contextOptimization) {
+  if (effectiveChatMode === 'build' && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
 
     systemPrompt = `${systemPrompt}
@@ -280,7 +288,7 @@ export async function streamText(props: {
       apiKeys,
       providerSettings,
     }),
-    system: chatMode === 'build' ? systemPrompt : discussPrompt(),
+    system: effectiveChatMode === 'build' ? systemPrompt : discussPrompt(),
     ...tokenParams,
     messages: convertToCoreMessages(processedMessages as any),
     ...filteredOptions,

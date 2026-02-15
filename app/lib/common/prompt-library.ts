@@ -1,6 +1,7 @@
 import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
 import { getFineTunedPrompt } from './prompts/new-prompt';
+import { getSmallModelPrompt } from './prompts/small-model';
 import type { DesignScheme } from '~/types/design-scheme';
 
 export interface PromptOptions {
@@ -41,6 +42,11 @@ export class PromptLibrary {
       label: 'Optimized Prompt (experimental)',
       description: 'An Experimental version of the prompt for lower token usage',
       get: (options) => optimized(options),
+    },
+    small: {
+      label: 'Small Model Prompt',
+      description: 'Compact prompt intended for smaller LLMs (more reliable artifact/actions)',
+      get: (options) => getSmallModelPrompt(options.cwd, options.supabase, options.designScheme),
     },
   };
   static getList() {
