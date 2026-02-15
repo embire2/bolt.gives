@@ -414,6 +414,43 @@ export const ChatImpl = memo(
       return attachments;
     };
 
+    const imageDataListToAttachments = (images: string[], files: File[]): Attachment[] => {
+      return images
+        .map((url, index) => {
+          if (!url.startsWith('data:')) {
+            // Only data URLs are expected here.
+            return null;
+          }
+
+          const file = files[index];
+          const contentType = file?.type || url.match(/^data:([^;]+);base64,/)?.[1];
+          const name = file?.name || `image-${index + 1}`;
+
+          const attachment: Attachment = { url };
+          attachment.name = name;
+
+          if (contentType) {
+            attachment.contentType = contentType;
+          }
+
+          return attachment;
+        })
+        .filter((a): a is Attachment => a !== null);
+    };
+
+    const buildChatAttachments = async (): Promise<Attachment[] | undefined> => {
+      // `imageDataList` is the canonical source for images (it can be populated without File objects).
+      const imageAttachments = imageDataListToAttachments(imageDataList, uploadedFiles);
+
+      // If we have File objects without corresponding `imageDataList` entries, include them too.
+      const extraFiles = uploadedFiles.slice(imageDataList.length);
+      const extraFileAttachments = await filesToAttachments(extraFiles);
+
+      const attachments = [...imageAttachments, ...(extraFileAttachments ?? [])];
+
+      return attachments.length > 0 ? attachments : undefined;
+    };
+
     const resolveModelSelection = useCallback(
       async (prompt: string, currentModel: string, currentProvider: ProviderInfo) => {
         try {
@@ -815,6 +852,7 @@ export const ChatImpl = memo(
             if (temResp) {
               const { assistantMessage, userMessage } = temResp;
               const userMessageText = buildUserMessageText(finalMessageContent);
+              const attachments = await buildChatAttachments();
 
               setMessages([
                 {
@@ -822,6 +860,7 @@ export const ChatImpl = memo(
                   role: 'user',
                   content: userMessageText,
                   parts: createMessageParts(userMessageText, imageDataList),
+                  experimental_attachments: attachments,
                 },
                 {
                   id: `2-${new Date().getTime()}`,
@@ -836,10 +875,7 @@ export const ChatImpl = memo(
                 },
               ]);
 
-              const reloadOptions =
-                uploadedFiles.length > 0
-                  ? { experimental_attachments: await filesToAttachments(uploadedFiles) }
-                  : undefined;
+              const reloadOptions = attachments ? { experimental_attachments: attachments } : undefined;
 
               reload(reloadOptions);
               setInput('');
@@ -861,7 +897,7 @@ export const ChatImpl = memo(
 
         // If autoSelectTemplate is disabled or template selection failed, proceed with normal message
         const userMessageText = buildUserMessageText(finalMessageContent);
-        const attachments = uploadedFiles.length > 0 ? await filesToAttachments(uploadedFiles) : undefined;
+        const attachments = await buildChatAttachments();
 
         setMessages([
           {
@@ -872,6 +908,7 @@ export const ChatImpl = memo(
             experimental_attachments: attachments,
           },
         ]);
+
         reload(attachments ? { experimental_attachments: attachments } : undefined);
         setFakeLoading(false);
         setInput('');
@@ -900,14 +937,15 @@ export const ChatImpl = memo(
         const userUpdateArtifact = filesToArtifacts(modifiedFiles, `${Date.now()}`);
         const messageText = buildUserMessageText(`${userUpdateArtifact}${finalMessageContent}`);
 
-        const attachmentOptions =
-          uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
+        const attachments = await buildChatAttachments();
+        const attachmentOptions = attachments ? { experimental_attachments: attachments } : undefined;
 
         append(
           {
             role: 'user',
             content: messageText,
             parts: createMessageParts(messageText, imageDataList),
+            experimental_attachments: attachments,
           },
           attachmentOptions,
         );
@@ -916,14 +954,15 @@ export const ChatImpl = memo(
       } else {
         const messageText = buildUserMessageText(finalMessageContent);
 
-        const attachmentOptions =
-          uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
+        const attachments = await buildChatAttachments();
+        const attachmentOptions = attachments ? { experimental_attachments: attachments } : undefined;
 
         append(
           {
             role: 'user',
             content: messageText,
             parts: createMessageParts(messageText, imageDataList),
+            experimental_attachments: attachments,
           },
           attachmentOptions,
         );
