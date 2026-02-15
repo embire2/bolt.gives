@@ -52,7 +52,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: bolt-diy-preview
+          projectName: bolt-gives-preview
           directory: build/client
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
@@ -93,7 +93,7 @@ jobs:
               | Latest commit | ${{ github.sha }} |
               | Preview URL | ${deployUrl} |
 
-              Built with ❤️ by [bolt.diy](https://bolt.diy)
+              Built with ❤️ by [bolt.gives](https://bolt.gives)
               `;
             } else {
               commentBody = `ℹ️ Preview deployment not configured
@@ -107,7 +107,7 @@ jobs:
               - \`CLOUDFLARE_API_TOKEN\` secret
               - \`CLOUDFLARE_ACCOUNT_ID\` secret
 
-              Built with ❤️ by [bolt.diy](https://bolt.diy)
+              Built with ❤️ by [bolt.gives](https://bolt.gives)
               `;
             }
 

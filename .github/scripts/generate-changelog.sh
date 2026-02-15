@@ -16,7 +16,7 @@ fi
 # Set default values for required environment variables if not in GitHub Actions
 if [ -z "$GITHUB_ACTIONS" ]; then
     : "${GITHUB_SERVER_URL:=https://github.com}"
-    : "${GITHUB_REPOSITORY:=stackblitz-labs/bolt.diy}"
+    : "${GITHUB_REPOSITORY:=embire2/bolt.gives}"
     : "${GITHUB_OUTPUT:=/tmp/github_output}"
     touch "$GITHUB_OUTPUT"
 

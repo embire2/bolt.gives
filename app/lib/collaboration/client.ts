@@ -6,7 +6,27 @@ import { logStore } from '~/lib/stores/logs';
 
 const COLLAB_SERVER_STORAGE_KEY = 'bolt_collab_server_url';
 const COLLAB_ENABLED_STORAGE_KEY = 'bolt_collab_enabled';
-const DEFAULT_COLLAB_SERVER_URL = 'ws://localhost:1234';
+const LOCAL_DEFAULT_COLLAB_SERVER_URL = 'ws://localhost:1234';
+
+export function getDefaultCollaborationServerUrl() {
+  if (typeof window === 'undefined') {
+    return LOCAL_DEFAULT_COLLAB_SERVER_URL;
+  }
+
+  const host = window.location.hostname;
+
+  /*
+   * Keep local dev behavior intact. The collab server defaults to 1234, while the
+   * web app usually runs on 5173, so using a relative URL here would break dev.
+   */
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+    return LOCAL_DEFAULT_COLLAB_SERVER_URL;
+  }
+
+  const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+  return `${wsProto}//${window.location.host}/collab`;
+}
 
 interface CollaborationBinding {
   filePath: string;
@@ -72,10 +92,10 @@ export function setCollaborationEnabled(enabled: boolean) {
 
 export function getCollaborationServerUrl() {
   if (typeof window === 'undefined') {
-    return DEFAULT_COLLAB_SERVER_URL;
+    return LOCAL_DEFAULT_COLLAB_SERVER_URL;
   }
 
-  return window.localStorage.getItem(COLLAB_SERVER_STORAGE_KEY) || DEFAULT_COLLAB_SERVER_URL;
+  return window.localStorage.getItem(COLLAB_SERVER_STORAGE_KEY) || getDefaultCollaborationServerUrl();
 }
 
 export function setCollaborationServerUrl(url: string) {

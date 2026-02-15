@@ -21,6 +21,7 @@ import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { InteractiveStepRunner } from '~/lib/runtime/interactive-step-runner';
 import { createTestAndSecuritySteps, getMissingJestStubs } from '~/lib/runtime/test-security';
+import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 
 const { saveAs } = fileSaver;
 
@@ -742,7 +743,7 @@ export class WorkbenchStore {
 
       try {
         if (typeof window !== 'undefined') {
-          const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+          const base = getCollaborationServerUrl();
           eventSocket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
         }
       } catch {

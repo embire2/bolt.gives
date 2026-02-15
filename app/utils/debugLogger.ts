@@ -847,8 +847,8 @@ class DebugLogger {
 
   private _getAppVersion(): string {
     try {
-      // Try to get version from environment or default
-      return import.meta.env?.VITE_APP_VERSION || '1.0.0';
+      // Prefer build-time injected version, with env fallback for older builds.
+      return typeof __APP_VERSION !== 'undefined' ? __APP_VERSION : import.meta.env?.VITE_APP_VERSION || '1.0.0';
     } catch {
       return '1.0.0';
     }
@@ -1157,7 +1157,7 @@ export async function downloadDebugLog(filename?: string): Promise<void> {
 // Create a human-readable summary of the debug data
 function createDebugSummary(data: DebugLogData): string {
   const summary = [
-    '=== BOLT DIY DEBUG LOG SUMMARY ===',
+    '=== BOLT.GIVES DEBUG LOG SUMMARY ===',
     `Generated: ${new Date(data.timestamp).toLocaleString()}`,
     `Session ID: ${data.sessionId}`,
     '',

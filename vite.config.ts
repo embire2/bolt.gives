@@ -5,16 +5,28 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
+import { execSync } from 'child_process';
 
 // Load environment variables from multiple files
 dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
 dotenv.config();
 
+// Get git hash with fallback (used for debugging endpoints / about info).
+const getGitHash = () => {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return 'no-git-info';
+  }
+};
+
 export default defineConfig((config) => {
   return {
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+      __COMMIT_HASH: JSON.stringify(getGitHash()),
+      __APP_VERSION: JSON.stringify(process.env.npm_package_version || '1.0.1'),
     },
     build: {
       target: 'esnext',

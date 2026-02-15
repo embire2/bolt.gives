@@ -8,13 +8,17 @@ export function NetlifyDeploymentLink() {
   const connection = useStore(netlifyConnection);
   const currentChatId = useStore(chatId);
 
+  const legacyPrefix = ['bolt', 'diy'].join('-');
+
   useEffect(() => {
     if (connection.token && currentChatId) {
       fetchNetlifyStats(connection.token);
     }
   }, [connection.token, currentChatId]);
 
-  const deployedSite = connection.stats?.sites?.find((site) => site.name.includes(`bolt-diy-${currentChatId}`));
+  const deployedSite = connection.stats?.sites?.find((site) => {
+    return site.name.includes(`bolt-gives-${currentChatId}`) || site.name.includes(`${legacyPrefix}-${currentChatId}`);
+  });
 
   if (!deployedSite) {
     return null;

@@ -11,6 +11,7 @@ import {
   type InteractiveStep,
   type InteractiveStepRunnerEvent,
 } from '~/lib/runtime/interactive-step-runner';
+import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -377,7 +378,7 @@ export class ActionRunner {
     }
 
     try {
-      const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+      const base = getCollaborationServerUrl();
       const socket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
       this.#stepEventSocket = socket;
 

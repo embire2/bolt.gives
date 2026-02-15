@@ -220,7 +220,7 @@
  * Hierarchy: Element Token -> (Element Token | Color Tokens) -> Primitives
  */
 :root {
-  --header-height: 54px;
+  --header-height: 270px;
   --chat-max-width: 33rem;
   --chat-min-width: 533px;
   --workbench-width: min(calc(100% - var(--chat-min-width)), 2536px);

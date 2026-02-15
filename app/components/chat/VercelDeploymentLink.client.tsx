@@ -10,6 +10,8 @@ export function VercelDeploymentLink() {
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const legacyPrefix = ['bolt', 'diy'].join('-');
+
   useEffect(() => {
     async function fetchProjectData() {
       if (!connection.token || !currentChatId) {
@@ -45,8 +47,10 @@ export function VercelDeploymentLink() {
         // Extract the chat number from currentChatId
         const chatNumber = currentChatId.split('-')[0];
 
-        // Find project by matching the chat number in the name
-        const project = projects.find((p: { name: string | string[] }) => p.name.includes(`bolt-diy-${chatNumber}`));
+        // Find project by matching the chat number in the name.
+        const project =
+          projects.find((p: { name: string | string[] }) => p.name.includes(`bolt-gives-${chatNumber}`)) ||
+          projects.find((p: { name: string | string[] }) => p.name.includes(`${legacyPrefix}-${chatNumber}`));
 
         if (project) {
           // Fetch project details including deployments

@@ -6,7 +6,7 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"
@@ -14,6 +14,7 @@
   "scripts": {
     "deploy": "npm run build && wrangler pages deploy",
     "build": "remix vite:build",
+    "build:highmem": "cross-env NODE_OPTIONS=--max-old-space-size=6142 remix vite:build",
     "dev": "node pre-start.cjs && concurrently \"pnpm run collab:server\" \"remix vite:dev\" --names collab,app --kill-others-on-fail",
     "collab:server": "node scripts/collaboration-server.mjs",
     "setup": "node scripts/setup.mjs",

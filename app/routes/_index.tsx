@@ -4,10 +4,11 @@ import { BaseChat } from '~/components/chat/BaseChat';
 import { Chat } from '~/components/chat/Chat.client';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
+import { APP_VERSION } from '~/lib/version';
 
 export const meta: MetaFunction = () => {
   return [
-    { title: 'bolt.gives v1.0.0' },
+    { title: `bolt.gives v${APP_VERSION}` },
     { name: 'description', content: 'Talk with bolt.gives, a collaborative AI coding assistant' },
   ];
 };
