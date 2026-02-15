@@ -1,4 +1,26 @@
-# bolt.gives v1.0.0
+<p align="center">
+  <img src="public/boltlogo2.png" alt="bolt.gives" width="360" />
+</p>
+
+<p align="center">
+  collaborative, open-source ai coding workspace
+</p>
+
+<p align="center">
+  <a href="https://bolt.gives">
+    <img alt="Join the mailing list" src="https://img.shields.io/badge/join%20the%20mailing%20list-bolt.gives-0a84ff?style=for-the-badge" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://alpha1.bolt.gives">live alpha</a> ·
+  <a href="CHANGELOG.md">changelog</a> ·
+  <a href="#quickstart-local-development">install</a>
+</p>
+
+## Version
+
+Current version: **v1.0.1**
 
 bolt.gives is a collaborative, open-source AI coding workspace.
 
@@ -15,6 +37,13 @@ It combines:
   - Windows is **not supported** for installation/self-hosting.
   - macOS is **not supported** for installation/self-hosting.
   - If you are on Windows or macOS, use the hosted web app (or deploy to an Ubuntu server and access it from your machine).
+
+## v1.0.1 Highlights
+
+- Image attachments work end-to-end on vision-capable models (client → server payload, converted into core image parts).
+- Better prompting for smaller LLMs (server-side prompt variant selection for constrained models).
+- Multi-step agent execution (default `maxLLMSteps` > 1) with streaming enabled.
+- Changelog shipped both in-repo (`CHANGELOG.md`) and in-app (`/changelog`).
 
 ## v1.0.0 Release Notes
 
@@ -37,8 +66,8 @@ Chat:
 Plan prompt example:
 ![bolt.gives plan prompt](docs/screenshots/chat-plan.png)
 
-Shared session restore (e2e):
-![bolt.gives share session restore](docs/screenshots/share-session-e2e.png)
+Changelog:
+![bolt.gives changelog](docs/screenshots/changelog.png)
 
 ## What The App Does
 
@@ -69,6 +98,10 @@ bolt.gives is a single workspace where you can:
 - Node.js `>= 18.18.0` (recommended: Node.js `22`)
 - `pnpm` (recommended: via `corepack`)
 - `git`
+
+Notes:
+- You can **use** bolt.gives on Windows/macOS in a browser.
+- You cannot **install/self-host** bolt.gives on Windows/macOS today; use an Ubuntu 18+ server instead.
 
 ### Install Node.js + pnpm (Ubuntu)
 
@@ -101,6 +134,8 @@ Setup:
 pnpm install
 cp .env.example .env.local
 ```
+
+Then edit `.env.local` and set at least one provider key you intend to use (example: OpenAI, Anthropic, etc).
 
 Optional (guided env setup):
 ```bash
@@ -166,14 +201,17 @@ Outputs:
 - `docs/screenshots/home.png`
 - `docs/screenshots/chat.png`
 - `docs/screenshots/chat-plan.png`
+- `docs/screenshots/changelog.png`
 
-To generate the shared-session restore screenshot (requires Supabase configured in `.env.local`):
+To capture screenshots from the live alpha environment instead of a local dev server:
+```bash
+SKIP_DEV_SERVER=1 BASE_URL=https://alpha1.bolt.gives ./scripts/capture-screenshots.sh
+```
+
+To generate a shared-session restore screenshot (requires Supabase configured in `.env.local`):
 ```bash
 node scripts/e2e-sessions-share-link.mjs
 ```
-
-Output:
-- `docs/screenshots/share-session-e2e.png`
 
 ## Validation Gate
 
@@ -183,6 +221,11 @@ pnpm run typecheck
 pnpm run lint
 pnpm test
 ```
+
+## Mailing List
+
+Join our mailing list for future updates and release announcements:
+- https://bolt.gives
 
 ## Docker Images (GHCR)
 

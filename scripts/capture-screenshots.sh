@@ -7,6 +7,7 @@ LOG_FILE="${ROOT_DIR}/.screenshots-dev.log"
 
 PORT="${PORT:-5173}"
 BASE_URL="${BASE_URL:-http://localhost:${PORT}}"
+SKIP_DEV_SERVER="${SKIP_DEV_SERVER:-0}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -18,28 +19,34 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "Starting dev server (logs: ${LOG_FILE})..."
-rm -f "${LOG_FILE}"
-setsid pnpm run dev >"${LOG_FILE}" 2>&1 &
-DEV_PID=$!
+if [[ "${SKIP_DEV_SERVER}" != "1" ]]; then
+  echo "Starting dev server (logs: ${LOG_FILE})..."
+  rm -f "${LOG_FILE}"
+  setsid pnpm run dev >"${LOG_FILE}" 2>&1 &
+  DEV_PID=$!
 
-echo "Waiting for ${BASE_URL} to respond..."
-for _ in $(seq 1 90); do
-  if curl -fsS "${BASE_URL}/" >/dev/null 2>&1; then
-    break
+  echo "Waiting for ${BASE_URL} to respond..."
+  for _ in $(seq 1 90); do
+    if curl -fsS "${BASE_URL}/" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
+  if ! curl -fsS "${BASE_URL}/" >/dev/null 2>&1; then
+    echo "Dev server did not become ready. See ${LOG_FILE}" >&2
+    exit 1
   fi
-  sleep 1
-done
-
-if ! curl -fsS "${BASE_URL}/" >/dev/null 2>&1; then
-  echo "Dev server did not become ready. See ${LOG_FILE}" >&2
-  exit 1
+else
+  echo "Skipping dev server startup (SKIP_DEV_SERVER=1)."
+  echo "Using BASE_URL=${BASE_URL}"
 fi
 
-echo "Capturing screenshots with Firefox..."
-firefox --headless --window-size 1440,900 --screenshot "${OUT_DIR}/home.png" "${BASE_URL}/" >/dev/null 2>&1
-firefox --headless --window-size 1440,900 --screenshot "${OUT_DIR}/chat.png" "${BASE_URL}/?prompt=Hello%20from%20bolt.gives" >/dev/null 2>&1
-firefox --headless --window-size 1440,900 --screenshot "${OUT_DIR}/chat-plan.png" "${BASE_URL}/?prompt=Plan%20a%20simple%20task%20in%203%20steps" >/dev/null 2>&1
+echo "Capturing screenshots with Playwright (Chromium)..."
+pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 8000 --viewport-size 1600,900 "${BASE_URL}/" "${OUT_DIR}/home.png" >/dev/null 2>&1
+pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 15000 --viewport-size 1600,900 "${BASE_URL}/?prompt=Say%20hello%20from%20bolt.gives%20in%20one%20short%20sentence" "${OUT_DIR}/chat.png" >/dev/null 2>&1
+pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 20000 --viewport-size 1600,900 "${BASE_URL}/?prompt=Plan%20a%20simple%20task%20in%203%20steps%20and%20then%20wait" "${OUT_DIR}/chat-plan.png" >/dev/null 2>&1
+pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 8000 --viewport-size 1600,900 "${BASE_URL}/changelog" "${OUT_DIR}/changelog.png" >/dev/null 2>&1
 
 echo "Wrote:"
 ls -1 "${OUT_DIR}" | sed 's/^/  - /'
