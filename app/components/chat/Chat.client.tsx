@@ -139,6 +139,14 @@ export const ChatImpl = memo(
     const [agentPlanSteps, setAgentPlanSteps] = useState<AgentPlanStep[]>([]);
     const [sketchElements, setSketchElements] = useState<SketchElement[]>([]);
     const mcpSettings = useMCPStore((state) => state.settings);
+    const mcpInitialized = useMCPStore((state) => state.isInitialized);
+    const initializeMcp = useMCPStore((state) => state.initialize);
+
+    useEffect(() => {
+      if (!mcpInitialized) {
+        initializeMcp();
+      }
+    }, [mcpInitialized, initializeMcp]);
 
     const {
       messages,
