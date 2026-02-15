@@ -51,5 +51,24 @@ describe('api.system.performance loader', () => {
       });
     }
   });
-});
 
+  it('returns unavailable (200) when cpuUsage throws in the runtime', async () => {
+    vi.spyOn(process, 'memoryUsage').mockReturnValue({
+      rss: 100,
+      heapTotal: 200,
+      heapUsed: 150,
+      external: 50,
+      arrayBuffers: 10,
+    });
+    vi.spyOn(process, 'cpuUsage').mockImplementation(() => {
+      throw new Error('process.cpuUsage is not implemented yet!');
+    });
+
+    const response = await loader();
+    const payload = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(payload.available).toBe(false);
+    expect(payload.reason).toContain('cpuUsage');
+  });
+});
