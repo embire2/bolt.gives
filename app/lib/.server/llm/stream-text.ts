@@ -11,6 +11,7 @@ import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
 import { resolvePromptIdForModel } from './prompt-selection';
+import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 
 export type Messages = Message[];
 
@@ -170,23 +171,7 @@ export async function streamText(props: {
       },
     }) ?? getSystemPrompt();
 
-  /*
-   * v1.0.2 prep: Encourage incremental user-visible progress updates during build flows.
-   * The chat UI already strips artifacts/actions into the workbench, so any normal text becomes "commentary".
-   */
-  systemPrompt = `${systemPrompt}
-
-  <workstyle>
-    While you work, provide frequent short progress updates in Markdown *outside* of any <boltArtifact> blocks.
-
-    Rules:
-    - Before each major step, write 1-2 sentences describing what you are about to do and why.
-    - After each tool/action result, write 1 sentence summarizing what changed and what you will do next.
-    - Keep updates short and concrete. Avoid long essays.
-    - Never output code changes outside <boltAction type="file"> blocks.
-    - Never put file contents, patches, or commands inside progress updates.
-  </workstyle>
-  `;
+  systemPrompt = withDevelopmentCommentaryWorkstyle(systemPrompt);
 
   if (effectiveChatMode === 'build' && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
