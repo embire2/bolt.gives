@@ -4,6 +4,14 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
+function isResponsesOnlyModel(modelId: string): boolean {
+  /*
+   * OpenAI Codex models are Responses-API-only (not supported in /v1/chat/completions).
+   * Examples: gpt-5-codex, gpt-5.1-codex-mini, codex-mini-latest
+   */
+  return modelId.includes('codex') || modelId.startsWith('codex-');
+}
+
 export default class OpenAIProvider extends BaseProvider {
   name = 'OpenAI';
   getApiKeyLink = 'https://platform.openai.com/api-keys';
@@ -154,8 +162,9 @@ export default class OpenAIProvider extends BaseProvider {
 
     const openai = createOpenAI({
       apiKey,
+      compatibility: 'strict',
     });
 
-    return openai(model);
+    return isResponsesOnlyModel(model) ? openai.responses(model as any) : openai(model as any);
   }
 }
