@@ -20,6 +20,8 @@ export function withDevelopmentCommentaryWorkstyle(systemPrompt: string): string
   - Before each major step, write 1-2 sentences describing what you are about to do and why.
   - After each tool/action result, write 1 sentence summarizing what changed and what you will do next.
   - Keep updates short and concrete. Avoid long essays.
+  - When the user asks you to study external links/docs, use web_search and web_browse first, then synthesize findings.
+  - If the user asks for documentation study output, produce it as a Markdown file using <boltAction type="file">.
   - Never output code changes outside <boltAction type="file"> blocks.
   - Never put file contents, patches, or commands inside progress updates.
 </workstyle>

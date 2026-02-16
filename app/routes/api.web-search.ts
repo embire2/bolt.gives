@@ -1,6 +1,7 @@
 import { json } from '@remix-run/cloudflare';
 import type { ActionFunctionArgs } from '@remix-run/cloudflare';
 import { isAllowedUrl } from '~/utils/url';
+import { browsePageWithPlaywright } from '~/lib/.server/web-browse-client';
 
 const MAX_CONTENT_LENGTH = 8000;
 
@@ -47,7 +48,7 @@ function extractTextContent(html: string): string {
     .trim();
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
@@ -63,35 +64,53 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'URL is not allowed. Only public HTTP/HTTPS URLs are accepted.' }, { status: 400 });
     }
 
-    const response = await fetch(url, {
-      headers: FETCH_HEADERS,
-      signal: AbortSignal.timeout(10_000),
-    });
+    try {
+      const page = await browsePageWithPlaywright(
+        { url, maxChars: MAX_CONTENT_LENGTH },
+        { env: context.cloudflare?.env },
+      );
 
-    if (!response.ok) {
-      return json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` }, { status: 502 });
+      return json({
+        success: true,
+        data: {
+          title: page.title,
+          description: page.description,
+          content: page.content,
+          sourceUrl: page.finalUrl || url,
+        },
+      });
+    } catch {
+      // Fallback to fetch-only extraction if the Playwright service is unavailable.
+      const response = await fetch(url, {
+        headers: FETCH_HEADERS,
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        return json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` }, { status: 502 });
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+        return json({ error: 'URL must point to an HTML or text page' }, { status: 400 });
+      }
+
+      const html = await response.text();
+      const title = extractTitle(html);
+      const description = extractMetaDescription(html);
+      const content = extractTextContent(html);
+
+      return json({
+        success: true,
+        data: {
+          title,
+          description,
+          content: content.length > MAX_CONTENT_LENGTH ? content.slice(0, MAX_CONTENT_LENGTH) + '...' : content,
+          sourceUrl: url,
+        },
+      });
     }
-
-    const contentType = response.headers.get('content-type') || '';
-
-    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      return json({ error: 'URL must point to an HTML or text page' }, { status: 400 });
-    }
-
-    const html = await response.text();
-    const title = extractTitle(html);
-    const description = extractMetaDescription(html);
-    const content = extractTextContent(html);
-
-    return json({
-      success: true,
-      data: {
-        title,
-        description,
-        content: content.length > MAX_CONTENT_LENGTH ? content.slice(0, MAX_CONTENT_LENGTH) + '...' : content,
-        sourceUrl: url,
-      },
-    });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'TimeoutError') {
       return json({ error: 'Request timed out after 10 seconds' }, { status: 504 });

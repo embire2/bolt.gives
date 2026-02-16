@@ -44,6 +44,7 @@ It combines:
 - Better prompting for smaller LLMs (server-side prompt variant selection for constrained models).
 - Multi-step agent execution (default `maxLLMSteps` > 1) with streaming enabled.
 - Changelog shipped both in-repo (`CHANGELOG.md`) and in-app (`/changelog`).
+- Built-in web browsing tools (`web_search`, `web_browse`) with Playwright-backed page study for external documentation.
 
 ## v1.0.0 Release Notes
 
@@ -82,6 +83,7 @@ bolt.gives is a single workspace where you can:
 
 - Multi-provider LLM support (cloud + local)
 - Real-time collaborative editing (Yjs + `y-websocket`)
+- Built-in web documentation browsing and synthesis tools (Playwright-backed)
 - Interactive step runner with structured events (`step-start`, `stdout`, `stderr`, `step-end`, `complete`)
 - Plan/Act workflow with checkpoints (continue/stop/revert)
 - Session save/resume/share (Supabase REST API)
@@ -142,7 +144,7 @@ Optional (guided env setup):
 pnpm run setup
 ```
 
-Run dev (starts the app and the collaboration server):
+Run dev (starts the app, collaboration server, and web browsing service):
 ```bash
 pnpm run dev
 ```
@@ -150,6 +152,7 @@ pnpm run dev
 Defaults:
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
+- Web browsing service: `http://127.0.0.1:4179`
 
 ### Production Build (High Memory)
 
@@ -177,6 +180,22 @@ Install script (Ubuntu 18.04+ only):
 ```bash
 ./scripts/install-bolt-gives.sh
 ```
+
+## Built-In Web Browsing
+
+bolt.gives can now browse docs from user prompts like:
+- `Study these API documentation: https://developers.cloudflare.com/workers/`
+
+How it works:
+- The model uses built-in tools: `web_search` and `web_browse`.
+- `web_browse` reads the target URL with Playwright and extracts title, headings, links, and body content.
+- The model can then create a Markdown study file directly in the workspace using `<boltAction type="file">`.
+
+Configuration:
+- `WEB_BROWSE_SERVICE_URL` (optional): URL for the browsing service.
+  - Default: `http://127.0.0.1:4179`
+- Browser install is handled during dependency install (`pnpm install`) via postinstall.
+  - To skip browser download: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install`
 
 ## Real-Time Collaboration
 

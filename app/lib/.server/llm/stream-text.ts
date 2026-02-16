@@ -1,4 +1,4 @@
-import { convertToCoreMessages, streamText as _streamText, type Message } from 'ai';
+import { convertToCoreMessages, streamText as _streamText, type Message, type ToolSet } from 'ai';
 import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel, type FileMap } from './constants';
 import { getSystemPrompt } from '~/lib/common/prompts/prompts';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, PROVIDER_LIST, WORK_DIR } from '~/utils/constants';
@@ -12,6 +12,7 @@ import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
 import { resolvePromptIdForModel } from './prompt-selection';
 import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
+import { createWebBrowsingTools } from './tools/web-tools';
 
 export type Messages = Message[];
 
@@ -267,6 +268,13 @@ export async function streamText(props: {
         )
       : options || {};
 
+  const mcpTools = (filteredOptions.tools || {}) as ToolSet;
+  const builtInWebTools = createWebBrowsingTools(serverEnv);
+  const mergedTools: ToolSet = {
+    ...mcpTools,
+    ...builtInWebTools,
+  };
+
   // DEBUG: Log filtered options
   logger.info(
     `DEBUG STREAM: Options filtering for model "${modelDetails.name}":`,
@@ -295,6 +303,7 @@ export async function streamText(props: {
     ...tokenParams,
     messages: convertToCoreMessages(processedMessages as any),
     ...filteredOptions,
+    tools: mergedTools,
 
     // Set temperature to 1 for reasoning models (required by OpenAI API)
     ...(isReasoning ? { temperature: 1 } : {}),
