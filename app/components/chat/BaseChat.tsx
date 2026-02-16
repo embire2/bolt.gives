@@ -491,6 +491,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   setAgentMode={setAgentMode}
                   onSketchChange={onSketchChange}
                 />
+                <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                  <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives
+                  can browse the web with Playwright, study API documentation from a URL, and generate a{' '}
+                  <code>.md</code> file with its understanding of the full API environment. No setup is required.
+                </div>
               </div>
             </StickToBottom>
             <div className="flex flex-col justify-center">
