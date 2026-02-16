@@ -60,13 +60,21 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
       description:
         'Open a specific web page and extract the main content. Use this first when the user gives a documentation URL, then synthesize the result instead of repeatedly searching.',
       parameters: z.object({
-        url: z.string().url().describe('The documentation or web page URL to read.'),
+        url: z.string().min(8).describe('The documentation or web page URL to read.'),
         maxChars: z
           .union([z.number().int().min(1000).max(40000), z.null()])
           .describe('Maximum number of characters to return. Use null to apply the default (15000).'),
       }),
       execute: async ({ url, maxChars }) => {
-        const normalizedUrl = url.trim().toLowerCase();
+        let parsedUrl: URL;
+
+        try {
+          parsedUrl = new URL(url.trim());
+        } catch {
+          throw new Error(`Invalid URL for web_browse: ${url}`);
+        }
+
+        const normalizedUrl = parsedUrl.toString().toLowerCase();
         const browseCount = (seenBrowseUrls.get(normalizedUrl) || 0) + 1;
         seenBrowseUrls.set(normalizedUrl, browseCount);
 
@@ -112,7 +120,10 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           };
         }
 
-        const page = await browsePageWithPlaywright({ url, maxChars: maxChars ?? 15000 }, { env });
+        const page = await browsePageWithPlaywright(
+          { url: parsedUrl.toString(), maxChars: maxChars ?? 15000 },
+          { env },
+        );
         browseCache.set(normalizedUrl, page);
 
         return {
