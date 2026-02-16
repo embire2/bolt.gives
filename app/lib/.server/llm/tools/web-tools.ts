@@ -24,7 +24,9 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
         'Search the web for current documentation, guides, and references. Use this when the user asks for external docs but does not provide a direct URL, or when one follow-up search is needed to fill a specific gap.',
       parameters: z.object({
         query: z.string().min(2).describe('The search query.'),
-        maxResults: z.number().int().min(1).max(8).optional().describe('How many results to return.'),
+        maxResults: z
+          .union([z.number().int().min(1).max(8), z.null()])
+          .describe('How many results to return. Use null to apply the default (5).'),
       }),
       execute: async ({ query, maxResults }) => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -41,7 +43,7 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           };
         }
 
-        const response = await searchWebWithPlaywright({ query, maxResults }, { env });
+        const response = await searchWebWithPlaywright({ query, maxResults: maxResults ?? 5 }, { env });
 
         return {
           query: response.query,
@@ -60,12 +62,8 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
       parameters: z.object({
         url: z.string().url().describe('The documentation or web page URL to read.'),
         maxChars: z
-          .number()
-          .int()
-          .min(1000)
-          .max(40000)
-          .optional()
-          .describe('Maximum number of characters to return from the page content.'),
+          .union([z.number().int().min(1000).max(40000), z.null()])
+          .describe('Maximum number of characters to return. Use null to apply the default (15000).'),
       }),
       execute: async ({ url, maxChars }) => {
         const normalizedUrl = url.trim().toLowerCase();
@@ -114,7 +112,7 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           };
         }
 
-        const page = await browsePageWithPlaywright({ url, maxChars }, { env });
+        const page = await browsePageWithPlaywright({ url, maxChars: maxChars ?? 15000 }, { env });
         browseCache.set(normalizedUrl, page);
 
         return {

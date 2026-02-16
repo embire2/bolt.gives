@@ -28,6 +28,28 @@ vi.mock('~/lib/.server/web-browse-client', () => {
 });
 
 describe('createWebBrowsingTools', () => {
+  it('requires strict-compatible tool parameters (no optional object keys)', () => {
+    const tools = createWebBrowsingTools();
+
+    const searchWithoutMaxResults = tools.web_search.parameters.safeParse({ query: 'remix loaders' });
+    expect(searchWithoutMaxResults.success).toBe(false);
+
+    const searchWithNullMaxResults = tools.web_search.parameters.safeParse({
+      query: 'remix loaders',
+      maxResults: null,
+    });
+    expect(searchWithNullMaxResults.success).toBe(true);
+
+    const browseWithoutMaxChars = tools.web_browse.parameters.safeParse({ url: 'https://example.com/docs' });
+    expect(browseWithoutMaxChars.success).toBe(false);
+
+    const browseWithNullMaxChars = tools.web_browse.parameters.safeParse({
+      url: 'https://example.com/docs',
+      maxChars: null,
+    });
+    expect(browseWithNullMaxChars.success).toBe(true);
+  });
+
   it('returns web_search and web_browse tools with executable handlers', async () => {
     const tools = createWebBrowsingTools();
 
@@ -38,7 +60,10 @@ describe('createWebBrowsingTools', () => {
     expect(searchResult?.engine).toBe('duckduckgo');
     expect(searchResult?.markdown).toContain('Remix Loader Docs');
 
-    const browseResult = await tools.web_browse.execute?.({ url: 'https://example.com/docs' }, {} as any);
+    const browseResult = await tools.web_browse.execute?.(
+      { url: 'https://example.com/docs', maxChars: null },
+      {} as any,
+    );
     expect(browseResult?.title).toBe('Example Docs');
     expect(browseResult?.markdown).toContain('## Main Content');
     expect(browseResult?.markdown).toContain('GET /v1/widgets');
@@ -54,10 +79,16 @@ describe('createWebBrowsingTools', () => {
     expect(secondSearch?.results).toEqual([]);
     expect(secondSearch?.markdown).toContain('Repeated web_search call');
 
-    const firstBrowse = await tools.web_browse.execute?.({ url: 'https://example.com/docs' }, {} as any);
+    const firstBrowse = await tools.web_browse.execute?.(
+      { url: 'https://example.com/docs', maxChars: null },
+      {} as any,
+    );
     expect(firstBrowse?.title).toBe('Example Docs');
 
-    const secondBrowse = await tools.web_browse.execute?.({ url: 'https://example.com/docs' }, {} as any);
+    const secondBrowse = await tools.web_browse.execute?.(
+      { url: 'https://example.com/docs', maxChars: null },
+      {} as any,
+    );
     expect(secondBrowse?.markdown).toContain('Repeated URL Browse Prevented');
   });
 });
