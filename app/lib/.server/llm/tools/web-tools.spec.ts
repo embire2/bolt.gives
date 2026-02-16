@@ -43,4 +43,21 @@ describe('createWebBrowsingTools', () => {
     expect(browseResult?.markdown).toContain('## Main Content');
     expect(browseResult?.markdown).toContain('GET /v1/widgets');
   });
+
+  it('guards against repeated search/browse loops for identical inputs', async () => {
+    const tools = createWebBrowsingTools();
+
+    const firstSearch = await tools.web_search.execute?.({ query: 'remix loaders', maxResults: 3 }, {} as any);
+    expect(firstSearch?.results?.length).toBeGreaterThan(0);
+
+    const secondSearch = await tools.web_search.execute?.({ query: 'remix loaders', maxResults: 3 }, {} as any);
+    expect(secondSearch?.results).toEqual([]);
+    expect(secondSearch?.markdown).toContain('Repeated web_search call');
+
+    const firstBrowse = await tools.web_browse.execute?.({ url: 'https://example.com/docs' }, {} as any);
+    expect(firstBrowse?.title).toBe('Example Docs');
+
+    const secondBrowse = await tools.web_browse.execute?.({ url: 'https://example.com/docs' }, {} as any);
+    expect(secondBrowse?.markdown).toContain('Repeated URL Browse Prevented');
+  });
 });

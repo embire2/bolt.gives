@@ -14,6 +14,10 @@ function formatLinks(links: Array<{ title: string; url: string }>): string {
 }
 
 export function createWebBrowsingTools(env?: Env): ToolSet {
+  const seenSearchQueries = new Map<string, number>();
+  const seenBrowseUrls = new Map<string, number>();
+  const browseCache = new Map<string, Awaited<ReturnType<typeof browsePageWithPlaywright>>>();
+
   return {
     web_search: tool({
       description:
@@ -23,6 +27,20 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
         maxResults: z.number().int().min(1).max(8).optional().describe('How many results to return.'),
       }),
       execute: async ({ query, maxResults }) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const searchCount = (seenSearchQueries.get(normalizedQuery) || 0) + 1;
+        seenSearchQueries.set(normalizedQuery, searchCount);
+
+        if (searchCount > 1) {
+          return {
+            query,
+            engine: 'duckduckgo',
+            results: [],
+            markdown:
+              'Repeated web_search call for the same query detected. Reuse previous search findings and continue with synthesis without calling web_search again.',
+          };
+        }
+
         const response = await searchWebWithPlaywright({ query, maxResults }, { env });
 
         return {
@@ -50,7 +68,47 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           .describe('Maximum number of characters to return from the page content.'),
       }),
       execute: async ({ url, maxChars }) => {
+        const normalizedUrl = url.trim().toLowerCase();
+        const browseCount = (seenBrowseUrls.get(normalizedUrl) || 0) + 1;
+        seenBrowseUrls.set(normalizedUrl, browseCount);
+
+        if (browseCount > 1) {
+          const cachedPage = browseCache.get(normalizedUrl);
+
+          if (cachedPage) {
+            return {
+              ...cachedPage,
+              markdown: [
+                '# Repeated URL Browse Prevented',
+                '',
+                `The URL was already browsed: ${cachedPage.finalUrl || cachedPage.url}`,
+                '',
+                'Reuse the earlier findings and continue with synthesis. Do not call web_browse on this URL again.',
+              ].join('\n'),
+            };
+          }
+
+          return {
+            url,
+            finalUrl: url,
+            status: 200,
+            title: 'Repeated URL Browse Prevented',
+            description: '',
+            content: '',
+            headings: [],
+            links: [],
+            markdown: [
+              '# Repeated URL Browse Prevented',
+              '',
+              `The URL was already browsed: ${url}`,
+              '',
+              'Reuse the earlier findings and continue with synthesis. Do not call web_browse on this URL again.',
+            ].join('\n'),
+          };
+        }
+
         const page = await browsePageWithPlaywright({ url, maxChars }, { env });
+        browseCache.set(normalizedUrl, page);
 
         return {
           ...page,
