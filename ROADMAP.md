@@ -1,47 +1,71 @@
 # Roadmap
 
-This roadmap describes what we plan to ship next after `v1.0.0`.
+Last updated: 2026-02-16
 
-## v1.0.1 (Next)
+This roadmap tracks the plan to ship `v1.0.2` in 7 days.
 
-### Collaboration
-- Presence UI: show connected collaborators per file and their cursor/selection.
-- Server hardening: better disk persistence recovery and clearer health logs.
-- File switching ergonomics: smoother binding teardown/rebind when changing files quickly.
+## Steps towards v1.0.2 - ETA: 7 days
 
-### Plan/Act Workflows
-- Plan UI: show steps as a first-class list in the chat panel with per-step approval.
-- Checkpoints with diffs: show a diff summary at each checkpoint and allow revert/continue with one click.
-- Better step streaming: render stdout/stderr incrementally with timestamps and step duration.
+## Delivery Paths (P0)
 
-### Sessions (Supabase)
-- Session list modal: searchable history with preview and restore.
-- Share link UX: show a share preview and add safer error handling for missing/partial payload fields.
-- Backward compatibility: migrate missing fields and tolerate older payload shapes.
+1. Live Development Commentary Stream
+- [ ] Stream concise step-by-step commentary while coding (`plan -> action -> verification -> next step`).
+- [ ] Separate commentary from code/actions in protocol and UI.
+- [ ] Keep commentary visible while work is in progress (not only at completion).
 
-### Test And Security
-- "Test & Scan" button: run lint + tests and surface results in the UI.
-- Vulnerability scanning: integrate a scanner (Snyk or CodeQL) with actionable output.
-- Jest stubs: improve stub generation heuristics and ensure stubs are created only when appropriate.
+2. Agent Anti-Stall + Auto-Recovery
+- [ ] Detect stuck states (repeated tool calls, no-progress loops, long inactivity/timeouts).
+- [ ] Add recovery strategies (retry/backoff, summarize-and-continue, explicit recovery prompt).
+- [ ] Surface recovery actions in the commentary timeline.
 
-### Performance
-- More accurate token accounting per provider response shape.
-- Configurable thresholds in UI with clearer recommendations.
-- Lower overhead polling and better behavior when metrics are unavailable.
+3. Execution Transparency Panel
+- [ ] Show selected model, tool invocations, active step, elapsed time, and token/cost estimate.
+- [ ] Show a short "why this action" reason for major agent steps.
+- [ ] Persist per-run execution trace for review.
 
-### Deployment
-- Deploy trigger flow from UI with status feedback.
-- Provider auth UX improvements (clear validation and error states).
-- Rollback flows with safer prompts and provider-specific guidance.
+4. Safer Autonomy Modes
+- [ ] Add explicit modes: `read-only`, `review-required`, `auto-apply-safe`, `full-auto`.
+- [ ] Add per-tool approval policy controls.
+- [ ] Display active autonomy mode in chat/workflow UI at all times.
 
-### Plugin Marketplace
-- Safer install story: signature/trust indicators and update/uninstall UX.
-- Versioning: detect updates and allow upgrade/downgrade.
-- Better error reporting for malformed registries/manifests.
+5. Reliability Guardrails For Web/Tool Tasks
+- [ ] Keep tool schemas compatible with strict providers (including Codex-style strict function validation).
+- [ ] Add robust URL/tool input validation with clear fallback errors for users.
+- [ ] Add regression tests for schema compatibility across major model families.
 
-## Beyond v1.0.1 (Draft)
+## Next Paths (P1)
 
-- Multi-user session collaboration (shared sessions with comments).
-- Built-in plugin authoring SDK and docs.
-- Richer multi-modal: improved sketch-to-component generation and voice editing tools.
+6. Persistent Project Memory (Scoped)
+- [ ] Store lightweight persistent project summaries/architecture notes between sessions.
+- [ ] Use persisted memory to reduce repeated context rebuilding.
 
+7. Sub-Agent Framework (Minimal)
+- [ ] Introduce a manager/worker pattern for long-running tasks.
+- [ ] Ship behind a feature flag.
+
+## Acceptance Criteria
+
+1. Commentary appears within 2 seconds of run start and updates at each meaningful step.
+2. At least 90% of interrupted/stalled runs auto-recover or provide a clear recovery suggestion.
+3. Users can switch autonomy mode before and during a run; mode is reflected in every tool action.
+4. Tool/schema compatibility tests pass for strict OpenAI Codex-style models and standard chat-completions models.
+5. Timeline view logs model, tools, approvals, and outcome per run.
+
+## Success Metrics
+
+- Reduce "agent got stuck" reports by at least 40%.
+- Increase successful end-to-end task completion rate by at least 20%.
+- Reduce average manual "continue" interventions per session.
+- Increase user satisfaction on "I understand what the agent is doing."
+
+## Research Sources (Playwright Browsed)
+
+- https://forum.cursor.com/c/ideas
+- https://forum.cursor.com/c/ideas/7
+- https://codeium.canny.io/feature-requests
+- https://news.ycombinator.com/item?id=44031432
+- https://news.ycombinator.com/item?id=45534880
+- https://github.com/openai/codex/issues
+- https://github.com/features/copilot
+- https://github.com/orgs/community/discussions/categories/copilot
+- https://developers.openai.com/codex/
