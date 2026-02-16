@@ -77,7 +77,14 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
 
           if (cachedPage) {
             return {
-              ...cachedPage,
+              url: cachedPage.url,
+              finalUrl: cachedPage.finalUrl,
+              status: 208,
+              title: 'Repeated URL Browse Prevented',
+              description: '',
+              content: '',
+              headings: [],
+              links: [],
               markdown: [
                 '# Repeated URL Browse Prevented',
                 '',
