@@ -30,7 +30,11 @@ export interface BrowserPageResponse {
 }
 
 function getServiceUrl(env?: Env): string {
-  const configured = env?.WEB_BROWSE_SERVICE_URL || process?.env?.WEB_BROWSE_SERVICE_URL;
+  const processEnv =
+    typeof globalThis !== 'undefined' && 'process' in globalThis
+      ? (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env
+      : undefined;
+  const configured = env?.WEB_BROWSE_SERVICE_URL || processEnv?.WEB_BROWSE_SERVICE_URL;
   const value = configured?.trim() || DEFAULT_SERVICE_URL;
 
   return value.endsWith('/') ? value.slice(0, -1) : value;
