@@ -17,7 +17,7 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
   return {
     web_search: tool({
       description:
-        'Search the web for current documentation, guides, and references. Use this when the user asks you to study external APIs, libraries, or websites.',
+        'Search the web for current documentation, guides, and references. Use this when the user asks for external docs but does not provide a direct URL, or when one follow-up search is needed to fill a specific gap.',
       parameters: z.object({
         query: z.string().min(2).describe('The search query.'),
         maxResults: z.number().int().min(1).max(8).optional().describe('How many results to return.'),
@@ -38,7 +38,7 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
 
     web_browse: tool({
       description:
-        'Open a specific web page and extract the main content. Use this to read and study API documentation links before writing code or summaries.',
+        'Open a specific web page and extract the main content. Use this first when the user gives a documentation URL, then synthesize the result instead of repeatedly searching.',
       parameters: z.object({
         url: z.string().url().describe('The documentation or web page URL to read.'),
         maxChars: z

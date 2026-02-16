@@ -8,6 +8,7 @@ describe('development commentary workstyle', () => {
     expect(prompt).toContain('<workstyle>');
     expect(prompt).toContain('frequent short progress updates');
     expect(prompt).toContain('Never output code changes outside <boltAction type="file"> blocks.');
+    expect(prompt).toContain('If the user already provided one or more direct URLs');
   });
 
   it('is idempotent when <workstyle> already exists', () => {
