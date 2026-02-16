@@ -100,6 +100,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        const collectedToolOutputs: string[] = [];
+        let forceFinalizeAttempted = false;
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -212,11 +214,25 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
           maxSteps: maxLLMSteps,
-          onStepFinish: ({ toolCalls }) => {
+          onStepFinish: ({ toolCalls, toolResults }) => {
             // add tool call annotations for frontend processing
             toolCalls.forEach((toolCall) => {
               mcpService.processToolCall(toolCall, dataStream);
             });
+
+            const normalizedToolResults = (toolResults as Array<Record<string, unknown>> | undefined) ?? [];
+
+            if (normalizedToolResults.length) {
+              for (const toolResult of normalizedToolResults) {
+                collectedToolOutputs.push(
+                  JSON.stringify({
+                    toolName: toolResult.toolName,
+                    toolCallId: toolResult.toolCallId,
+                    result: toolResult.result,
+                  }),
+                );
+              }
+            }
           },
           onFinish: async ({ text: content, finishReason, usage }) => {
             logger.debug('usage', JSON.stringify(usage));
@@ -225,6 +241,61 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               cumulativeUsage.completionTokens += usage.completionTokens || 0;
               cumulativeUsage.promptTokens += usage.promptTokens || 0;
               cumulativeUsage.totalTokens += usage.totalTokens || 0;
+            }
+
+            if (finishReason === 'tool-calls' && !forceFinalizeAttempted) {
+              forceFinalizeAttempted = true;
+
+              const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
+              const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
+
+              const toolSummary =
+                collectedToolOutputs.length > 0
+                  ? collectedToolOutputs.slice(-6).join('\n')
+                  : '(no tool results captured)';
+
+              processedMessages.push({ id: generateId(), role: 'assistant', content });
+              processedMessages.push({
+                id: generateId(),
+                role: 'user',
+                content: `[Model: ${model}]
+
+[Provider: ${provider}]
+
+You already gathered tool outputs. Now provide the final answer without any more tool calls.
+If the user asked for a markdown file, create it using <boltAction type="file">.
+
+Tool outputs:
+${toolSummary}`,
+              });
+
+              const finalizeOptions: StreamingOptions = {
+                ...options,
+                maxSteps: 1,
+                tools: {},
+                toolChoice: undefined,
+                onStepFinish: undefined,
+              };
+
+              const result = await streamText({
+                messages: [...processedMessages],
+                env: context.cloudflare?.env,
+                options: finalizeOptions,
+                apiKeys,
+                files,
+                providerSettings,
+                promptId,
+                contextOptimization,
+                contextFiles: filteredFiles,
+                summary,
+                messageSliceId,
+                chatMode,
+                designScheme,
+              });
+
+              result.mergeIntoDataStream(dataStream);
+
+              return;
             }
 
             if (finishReason !== 'length') {
