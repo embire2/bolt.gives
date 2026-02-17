@@ -20,7 +20,7 @@
 
 ## Version
 
-Current version: **v1.0.1**
+Current version: **v1.0.2**
 
 bolt.gives is a collaborative, open-source AI coding workspace.
 
@@ -30,44 +30,44 @@ It combines:
 - Real-time collaborative editing
 - Agent-style workflows (Plan/Act with checkpointed execution)
 
-## Steps towards v1.0.2 - ETA: 7 days
+## Steps towards v1.0.2 - completed
 
 ### Delivery Paths (P0)
 
 1. Live Development Commentary Stream
-- [ ] Stream concise step-by-step commentary while coding (`plan -> action -> verification -> next step`).
-- [ ] Separate commentary from code/actions in protocol and UI.
-- [ ] Keep commentary visible while work is in progress (not only at completion).
+- [x] Stream concise step-by-step commentary while coding (`plan -> action -> verification -> next step`).
+- [x] Separate commentary from code/actions in protocol and UI.
+- [x] Keep commentary visible while work is in progress (not only at completion).
 
 2. Agent Anti-Stall + Auto-Recovery
-- [ ] Detect stuck states (repeated tool calls, no-progress loops, long inactivity/timeouts).
-- [ ] Add recovery strategies (retry/backoff, summarize-and-continue, explicit recovery prompt).
-- [ ] Surface recovery actions in the commentary timeline.
+- [x] Detect stuck states (repeated tool calls, no-progress loops, long inactivity/timeouts).
+- [x] Add recovery strategies (retry/backoff, summarize-and-continue, explicit recovery prompt).
+- [x] Surface recovery actions in the commentary timeline.
 
 3. Execution Transparency Panel
-- [ ] Show selected model, tool invocations, active step, elapsed time, and token/cost estimate.
-- [ ] Show a short "why this action" reason for major agent steps.
-- [ ] Persist per-run execution trace for review.
+- [x] Show selected model, tool invocations, active step, elapsed time, and token/cost estimate.
+- [x] Show a short "why this action" reason for major agent steps.
+- [x] Persist per-run execution trace for review.
 
 4. Safer Autonomy Modes
-- [ ] Add explicit modes: `read-only`, `review-required`, `auto-apply-safe`, `full-auto`.
-- [ ] Add per-tool approval policy controls.
-- [ ] Display active autonomy mode in chat/workflow UI at all times.
+- [x] Add explicit modes: `read-only`, `review-required`, `auto-apply-safe`, `full-auto`.
+- [x] Add per-tool approval policy controls.
+- [x] Display active autonomy mode in chat/workflow UI at all times.
 
 5. Reliability Guardrails For Web/Tool Tasks
-- [ ] Keep tool schemas compatible with strict providers (including Codex-style strict function validation).
-- [ ] Add robust URL/tool input validation with clear fallback errors for users.
-- [ ] Add regression tests for schema compatibility across major model families.
+- [x] Keep tool schemas compatible with strict providers (including Codex-style strict function validation).
+- [x] Add robust URL/tool input validation with clear fallback errors for users.
+- [x] Add regression tests for schema compatibility across major model families.
 
 ### Next Paths (P1)
 
 6. Persistent Project Memory (Scoped)
-- [ ] Store lightweight persistent project summaries/architecture notes between sessions.
-- [ ] Use persisted memory to reduce repeated context rebuilding.
+- [x] Store lightweight persistent project summaries/architecture notes between sessions.
+- [x] Use persisted memory to reduce repeated context rebuilding.
 
 7. Sub-Agent Framework (Minimal)
-- [ ] Introduce a manager/worker pattern for long-running tasks.
-- [ ] Ship behind a feature flag.
+- [x] Introduce a manager/worker pattern for long-running tasks.
+- [x] Ship behind a feature flag.
 
 ### Acceptance Criteria
 
@@ -104,13 +104,15 @@ It combines:
   - macOS is **not supported** for installation/self-hosting.
   - If you are on Windows or macOS, use the hosted web app (or deploy to an Ubuntu server and access it from your machine).
 
-## v1.0.1 Highlights
+## v1.0.2 Highlights
 
-- Image attachments work end-to-end on vision-capable models (client → server payload, converted into core image parts).
-- Better prompting for smaller LLMs (server-side prompt variant selection for constrained models).
-- Multi-step agent execution (default `maxLLMSteps` > 1) with streaming enabled.
-- Changelog shipped both in-repo (`CHANGELOG.md`) and in-app (`/changelog`).
-- Built-in web browsing tools (`web_search`, `web_browse`) with Playwright-backed page study for external documentation.
+- Live development commentary stream (separate protocol event, visible during execution).
+- Anti-stall detection and auto-recovery with recovery events in timeline.
+- Execution transparency panel with model/tool/step/cost visibility and rationale.
+- Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`) with runtime enforcement.
+- Reliability guardrails for strict tool schemas with compatibility matrix endpoint and tests.
+- Persistent scoped project memory reused across runs.
+- Minimal planner/worker sub-agent framework behind feature flag (`BOLT_SUB_AGENTS_ENABLED`).
 
 ## v1.0.0 Release Notes
 

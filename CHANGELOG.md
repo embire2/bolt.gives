@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.0.2 (2026-02-17)
+
+### Added
+- Reliability guardrails for tool schemas with compatibility checks and strict-profile validation.
+- `tool-schema-matrix` endpoint and regression tests for strict vs standard provider schema compatibility.
+- Run-level acceptance instrumentation for:
+  - commentary first-event latency
+  - stall auto-recovery success rate
+  - manual intervention rate
+- Persistent project memory (scoped summary/context reuse) with stream event handoff.
+- Minimal planner/worker sub-agent framework behind `BOLT_SUB_AGENTS_ENABLED`.
+
+### Changed
+- Execution transparency panel now surfaces acceptance metrics from live run events.
+- Chat pipeline records/aggregates run metrics and uses project memory to prime build prompts.
+- Updated app and package version to `1.0.2`.
+
+### Verified
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build:highmem` passed.
+- E2E smoke passed on `https://alpha1.bolt.gives`:
+  - strict model: OpenAI `gpt-5-codex`
+  - standard model: OpenAI `gpt-4o`
+
 ## v1.0.1 (2026-02-15)
 
 ### Fixed
