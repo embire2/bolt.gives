@@ -1,52 +1,144 @@
-# Agents Notes
+# AGENTS.md
 
-## Scope (Non-Negotiable)
+## Mission
 
-- Only tackle issues that are **valid bugs** (reproducible on the current upstream codebase).
-- Only tackle issues that **no one else has fixed** (check existing PRs/commits before starting).
+Build and maintain `bolt.gives` as a production-ready agentic coding platform, with a strong focus on reliability, transparent execution, and safe autonomous behavior.
 
-## Repos & Branches
+Current release line:
+- Stable: `v1.0.1`
+- In progress: `v1.0.2`
 
-- Upstream (official): `stackblitz-labs/bolt.diy`
-- Fork (our working repo): `embire2/bolt.diy`
+Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
-Alpha testing is done on the **`alpha` branch** in `embire2/bolt.diy`.
+---
 
-## Local Workspaces (This Server)
+## Repository and Branch Rules
 
-- `/root/bolt.diy`: primary workspace (feature branches intended for upstream PRs)
-- `/root/bolt.diy.alpha`: workspace for the fork’s `alpha` branch (large/risky changes land here first)
+- Primary repo: `https://github.com/embire2/bolt.gives`
+- Primary working branch for live updates: `main`
+- Optional staging branch: `alpha` (used when risky features need live soak first)
 
-Keep changes separated:
+If both `alpha` and `main` are active:
+- Land high-risk work on `alpha`
+- Verify on `https://alpha1.bolt.gives`
+- Fast-forward or merge cleanly into `main`
 
-- Do experimental work in `/root/bolt.diy.alpha` on `alpha`.
-- When ready to upstream, **cherry-pick** into a clean, focused branch based on `upstream/main` in `/root/bolt.diy`.
+Never force-push shared branches unless explicitly approved.
 
-## PR Hygiene
+---
 
-- **One bugfix per PR.** No bundling unrelated changes.
-- PR titles must follow **Conventional Commits** and be lowercase:
-  - `fix: ...`, `feat: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`
-  - First letter after the colon should be lowercase (example: `fix: handle xyz`, not `fix: Handle xyz`).
-- PR descriptions must include:
-  - What changed and why
-  - Steps to reproduce the bug (before) + verification steps (after)
-  - Testing performed (commands + what you validated)
+## Work Scope Rules
 
-## Testing Gate (Before Opening/Updating Any PR)
+- Prioritize valid, reproducible issues or clearly approved roadmap items.
+- One logical change per commit unless a larger atomic change is required for correctness.
+- Keep behavior changes explicit in commit messages and release notes.
+- Avoid refactors during hotfixes unless needed to fix the issue safely.
 
-Run locally:
+When uncertain, choose the smallest safe change that unblocks users.
 
+---
+
+## v1.0.2 Priority Stack
+
+### Completed
+- Live Development Commentary Stream
+  - Commentary is streamed incrementally and separated from code/action events.
+- Agent Anti-Stall + Auto-Recovery
+  - Loop/no-progress/timeout detection plus recovery backoff/finalize strategy.
+
+### In Progress / Remaining
+- Execution Transparency Panel (model/tool/step/elapsed/usage visibility)
+- Safer Autonomy Modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`)
+- Reliability guardrails hardening across providers (schema and regression matrix)
+- Persistent project memory (scoped)
+- Minimal sub-agent framework (planner/executor split)
+
+---
+
+## Mandatory Implementation Workflow
+
+1. Confirm current behavior
+- Reproduce the issue or validate feature gap.
+- Record exact file(s) and runtime path affected.
+
+2. Implement minimal safe fix
+- Keep protocol contracts backward compatible.
+- Add guardrails for strict providers when touching tool schemas.
+
+3. Add/Update tests
+- Add regression tests close to the changed code.
+- Include at least one test that would fail before the fix.
+
+4. Validate locally
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 
-If the change touches chat streaming, providers, file actions, deployments, or other core user flows:
+5. Run targeted E2E smoke for core-path changes
+- Required when touching chat streaming, providers, tools, deployments, auth, or file actions.
+- Use at least one real provider path when credentials are available.
 
-- Run an **end-to-end smoke test** using at least **1 AI provider**.
-- Never commit or paste API keys/tokens in git, PRs, or logs.
+6. Commit and push
+- Use Conventional Commits:
+  - `fix: ...`
+  - `feat: ...`
+  - `docs: ...`
+  - `test: ...`
+  - `refactor: ...`
+  - `chore: ...`
 
-## Secrets
+---
 
-- Keep all secrets in `.env.local` (gitignored) or injected environment variables.
-- Never include secrets in commits, PR text, screenshots, or terminal output copied into GitHub.
+## Deployment Rules (Cloudflare + alpha1)
+
+Production-like validation target:
+- `https://alpha1.bolt.gives`
+
+When deploying:
+- Confirm build passes under Cloudflare constraints.
+- Confirm runtime starts and chat flow works.
+- Confirm static assets are fresh (logo/version/changelog visibility where applicable).
+- Confirm no auth/tool schema runtime errors in browser console and server logs.
+
+If deployment fails:
+- Capture exact error text.
+- Patch root cause, not symptoms.
+- Re-run smoke test before declaring fixed.
+
+---
+
+## Security and Secrets
+
+- Never commit API keys, tokens, cookies, session dumps, or private logs.
+- Keep secrets in `.env.local` or environment variables (gitignored).
+- Redact credentials in screenshots, issue text, and commit messages.
+- Do not paste production secrets into CI output or PR discussion.
+
+---
+
+## Documentation Rules
+
+When behavior changes, update docs in the same PR/commit set:
+- `CHANGELOG.md` for user-facing behavior
+- `README.md` for setup/usage changes
+- `1.0.2.md` for roadmap status updates
+
+Roadmap items must be marked clearly:
+- `[x]` complete
+- `[~]` partial/in progress
+- `[ ]` not started
+
+Include commit references for completed roadmap items when possible.
+
+---
+
+## Quality Bar Before Merge
+
+A change is done only when all are true:
+- Code compiles and tests pass.
+- Lint/typecheck pass.
+- Core flow still works end-to-end.
+- Docs reflect the new behavior.
+- No regressions introduced in adjacent critical paths.
+
+If any item fails, do not mark the task complete.
