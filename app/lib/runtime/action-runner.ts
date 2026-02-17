@@ -12,6 +12,7 @@ import {
   type InteractiveStepRunnerEvent,
 } from '~/lib/runtime/interactive-step-runner';
 import { getCollaborationServerUrl } from '~/lib/collaboration/client';
+import { makeCreateViteNonInteractive } from './shell-command-utils';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -662,23 +663,10 @@ export class ActionRunner {
   }> {
     const trimmedCommand = command.trim();
 
-    /*
-     * Make create-vite non-interactive by default to avoid CLI cancellations.
-     *
-     * Example problematic command:
-     *   npm create vite@latest . -- --template react
-     *
-     * create-vite supports --no-interactive.
-     */
-    if (
-      (trimmedCommand.includes('create-vite') || trimmedCommand.match(/\bnpm\s+create\s+vite(@latest)?\b/)) &&
-      !trimmedCommand.includes('--no-interactive')
-    ) {
-      return {
-        shouldModify: true,
-        modifiedCommand: `CI=1 ${trimmedCommand} --no-interactive`,
-        warning: 'Added --no-interactive to avoid scaffolding prompts in WebContainer.',
-      };
+    const createViteRewrite = makeCreateViteNonInteractive(trimmedCommand);
+
+    if (createViteRewrite.shouldModify) {
+      return createViteRewrite;
     }
 
     // Handle rm commands that might fail due to missing files
