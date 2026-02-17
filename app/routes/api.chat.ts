@@ -279,9 +279,24 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           } satisfies ProgressAnnotation);
         };
 
+        const configuredStreamTimeoutMs = Number(
+          envVars?.BOLT_STREAM_TIMEOUT_MS || process?.env?.BOLT_STREAM_TIMEOUT_MS || 120000,
+        );
+        const configuredStreamMaxRetries = Number(
+          envVars?.BOLT_STREAM_RECOVERY_MAX_RETRIES || process?.env?.BOLT_STREAM_RECOVERY_MAX_RETRIES || 2,
+        );
+        const streamTimeoutMs =
+          Number.isFinite(configuredStreamTimeoutMs) && configuredStreamTimeoutMs >= 30000
+            ? configuredStreamTimeoutMs
+            : 120000;
+        const streamMaxRetries =
+          Number.isFinite(configuredStreamMaxRetries) && configuredStreamMaxRetries >= 0
+            ? configuredStreamMaxRetries
+            : 2;
+
         const streamRecovery = new StreamRecoveryManager({
-          timeout: 45000,
-          maxRetries: 2,
+          timeout: streamTimeoutMs,
+          maxRetries: streamMaxRetries,
           onTimeout: () => {
             const signal = recoveryController.registerTimeout();
             pendingRecoveryReason = pendingRecoveryReason || signal.reason;
