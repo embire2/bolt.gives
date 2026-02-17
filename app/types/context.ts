@@ -17,6 +17,18 @@ export type ProgressAnnotation = {
   message: string;
 };
 
+export type AgentCommentaryPhase = 'plan' | 'action' | 'verification' | 'next-step' | 'recovery';
+
+export type AgentCommentaryAnnotation = {
+  type: 'agent-commentary';
+  phase: AgentCommentaryPhase;
+  status: 'in-progress' | 'complete' | 'warning' | 'recovered';
+  order: number;
+  message: string;
+  detail?: string;
+  timestamp: string;
+};
+
 export type ToolCallAnnotation = {
   type: 'toolCall';
   toolCallId: string;

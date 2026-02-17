@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { JSONValue } from 'ai';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 
 vi.mock('~/lib/stores/workbench', async () => {
@@ -52,7 +53,7 @@ describe('StepRunnerFeed', () => {
 
     render(<StepRunnerFeed />);
 
-    expect(screen.queryByText('Interactive Step Runner')).toBeTruthy();
+    expect(screen.queryByText('Execution Timeline')).toBeTruthy();
     expect(screen.queryByText('step-1')).toBeNull();
     expect(screen.queryByText('step-2')).toBeTruthy();
     expect(screen.queryByText('step-9')).toBeTruthy();
@@ -83,5 +84,31 @@ describe('StepRunnerFeed', () => {
 
     expect(screen.queryByText(/hint:/i)).toBeTruthy();
     expect(screen.queryByText(/pnpm run lint/i)).toBeTruthy();
+  });
+
+  it('renders streamed commentary events separately from runner events', () => {
+    const data = [
+      {
+        type: 'agent-commentary',
+        phase: 'plan',
+        status: 'in-progress',
+        order: 1,
+        message: 'Planning changes',
+        timestamp: new Date().toISOString(),
+      },
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'in-progress',
+        order: 2,
+        message: 'Generating response',
+      },
+    ] as JSONValue[];
+
+    render(<StepRunnerFeed data={data} />);
+
+    expect(screen.queryByText(/\[commentary\/plan\]/i)).toBeTruthy();
+    expect(screen.queryByText(/Planning changes/i)).toBeTruthy();
+    expect(screen.queryByText(/\[progress\]/i)).toBeNull();
   });
 });

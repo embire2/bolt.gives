@@ -7,7 +7,12 @@ import SwitchableStream from '~/lib/.server/llm/switchable-stream';
 import type { IProviderSetting } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 import { getFilePaths, selectContext } from '~/lib/.server/llm/select-context';
-import type { ContextAnnotation, ProgressAnnotation } from '~/types/context';
+import type {
+  AgentCommentaryAnnotation,
+  AgentCommentaryPhase,
+  ContextAnnotation,
+  ProgressAnnotation,
+} from '~/types/context';
 import { WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
@@ -102,6 +107,28 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
         const collectedToolOutputs: string[] = [];
         let forceFinalizeAttempted = false;
+        const writeCommentary = (
+          phase: AgentCommentaryPhase,
+          message: string,
+          status: AgentCommentaryAnnotation['status'] = 'in-progress',
+          detail?: string,
+        ) => {
+          const payload: AgentCommentaryAnnotation = {
+            type: 'agent-commentary',
+            phase,
+            status,
+            order: progressCounter++,
+            message,
+            timestamp: new Date().toISOString(),
+            ...(detail ? { detail } : {}),
+          };
+
+          dataStream.writeData({
+            ...payload,
+          });
+        };
+
+        writeCommentary('plan', 'Planning the implementation strategy and checking project context.');
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -109,6 +136,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         if (filePaths.length > 0 && contextOptimization) {
           logger.debug('Generating Chat Summary');
+          writeCommentary('plan', 'Summarizing recent conversation context before coding.');
           dataStream.writeData({
             type: 'progress',
             label: 'summary',
@@ -152,6 +180,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           // Update context buffer
           logger.debug('Updating Context Buffer');
+          writeCommentary('plan', 'Selecting relevant files for the current request.');
           dataStream.writeData({
             type: 'progress',
             label: 'context',
@@ -220,6 +249,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               mcpService.processToolCall(toolCall, dataStream);
             });
 
+            if (toolCalls.length > 0 || (toolResults?.length ?? 0) > 0) {
+              const toolNames = toolCalls.map((call) => call.toolName).join(', ');
+              writeCommentary(
+                'verification',
+                'Completed an execution step. Verifying results before continuing.',
+                'in-progress',
+                toolNames
+                  ? `Tools used: ${toolNames}${toolResults?.length ? ` | Results: ${toolResults.length}` : ''}`
+                  : `Results: ${toolResults?.length ?? 0}`,
+              );
+            }
+
             const normalizedToolResults = (toolResults as Array<Record<string, unknown>> | undefined) ?? [];
 
             if (normalizedToolResults.length) {
@@ -245,6 +286,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
             if (finishReason === 'tool-calls' && !forceFinalizeAttempted) {
               forceFinalizeAttempted = true;
+              writeCommentary(
+                'next-step',
+                'Tool execution finished. Producing a final user response without additional tool calls.',
+              );
 
               const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
               const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
@@ -299,6 +344,7 @@ ${toolSummary}`,
             }
 
             if (finishReason !== 'length') {
+              writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
               dataStream.writeMessageAnnotation({
                 type: 'usage',
                 value: {
@@ -377,6 +423,7 @@ ${toolSummary}`,
           order: progressCounter++,
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
+        writeCommentary('action', 'Executing the plan now and streaming progress as actions run.');
 
         const result = await streamText({
           messages: [...processedMessages],
