@@ -24,6 +24,10 @@ Current version: **v1.0.2**
 
 bolt.gives is a collaborative, open-source AI coding workspace.
 
+Release branch status (2026-02-17):
+- `main` → `v1.0.2`
+- `alpha` → `v1.0.2`
+
 It combines:
 - A browser-based Node.js dev environment (StackBlitz WebContainer)
 - An AI-assisted editor + terminal
@@ -176,6 +180,7 @@ Notes:
 ### Install Node.js + pnpm (Ubuntu)
 
 This project builds a large Vite/Remix bundle and may require a larger Node heap during build.
+Installation steps are unchanged for `v1.0.2`.
 
 1. Install base packages:
    ```bash
