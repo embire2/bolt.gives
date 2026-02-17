@@ -14,6 +14,9 @@ describe('makeCreateViteNonInteractive', () => {
 
     // Crucially: the --no-interactive flag must apply to create-vite, not the install step.
     expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive\s+&&\s+pnpm install/i);
+
+    // WebContainer's /bin/jsh is more reliable with `env CI=1` than `CI=1 cmd`.
+    expect(res.modifiedCommand).toMatch(/^env\s+CI=1\s+/i);
   });
 
   it('adds --no-interactive to direct create-vite invocations', () => {
@@ -21,6 +24,14 @@ describe('makeCreateViteNonInteractive', () => {
     const res = makeCreateViteNonInteractive(input);
     expect(res.shouldModify).toBe(true);
     expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive/i);
+    expect(res.modifiedCommand).toMatch(/^env\s+CI=1\s+/i);
+  });
+
+  it('normalizes leading env assignments to env(1) for /bin/jsh compatibility', () => {
+    const input = 'CI=1 npm create vite@latest . -- --template react --no-interactive && npm install';
+    const res = makeCreateViteNonInteractive(input);
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toMatch(/^env\s+CI=1\s+/i);
   });
 
   it('does not modify unrelated commands', () => {

@@ -8,6 +8,56 @@ const NPM_CREATE_VITE_RE = /\bnpm\s+create\s+vite(?<ver>@[^\s]+)?\b/i;
 const CREATE_VITE_HINT_RE = /\bcreate-vite\b/i;
 const HAS_NO_INTERACTIVE_RE = /\B--no-interactive\b/;
 const HAS_CI_RE = /\bCI=\S+/;
+const LEADING_ENV_ASSIGNMENTS_RE = /^((?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+\s+)+)(.+)$/;
+
+function normalizeLeadingEnvAssignments(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+
+  if (!trimmed) {
+    return { segment, modified: false };
+  }
+
+  /*
+   * WebContainer's /bin/jsh does not reliably support POSIX `KEY=value cmd` syntax.
+   * Normalizing to `env KEY=value cmd` keeps behavior consistent.
+   */
+  if (/^env\s+/i.test(trimmed)) {
+    return { segment: trimmed, modified: false };
+  }
+
+  const match = trimmed.match(LEADING_ENV_ASSIGNMENTS_RE);
+
+  if (!match) {
+    return { segment: trimmed, modified: false };
+  }
+
+  const assignments = match[1].trim();
+  const rest = match[2].trim();
+
+  if (!rest) {
+    return { segment: trimmed, modified: false };
+  }
+
+  return { segment: `env ${assignments} ${rest}`, modified: true };
+}
+
+function ensureCiEnvVar(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+
+  if (!trimmed) {
+    return { segment, modified: false };
+  }
+
+  if (HAS_CI_RE.test(trimmed)) {
+    return { segment: trimmed, modified: false };
+  }
+
+  if (/^env\s+/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^env\s+/i, 'env CI=1 '), modified: true };
+  }
+
+  return { segment: `env CI=1 ${trimmed}`, modified: true };
+}
 
 function rewriteCreateViteSegment(segment: string): {
   segment: string;
@@ -21,6 +71,10 @@ function rewriteCreateViteSegment(segment: string): {
   if (!s) {
     return { segment, modified: false, usedPnpmDlx: false };
   }
+
+  const envNormalized = normalizeLeadingEnvAssignments(s);
+  s = envNormalized.segment;
+  modified ||= envNormalized.modified;
 
   const npmCreate = s.match(NPM_CREATE_VITE_RE);
 
@@ -53,11 +107,10 @@ function rewriteCreateViteSegment(segment: string): {
     modified = true;
   }
 
-  // CI=1 nudges many CLIs to avoid prompts.
-  if (!HAS_CI_RE.test(s)) {
-    s = `CI=1 ${s}`;
-    modified = true;
-  }
+  // CI=1 nudges many CLIs to avoid prompts. Use `env` so /bin/jsh can execute it reliably.
+  const ciEnsured = ensureCiEnvVar(s);
+  s = ciEnsured.segment;
+  modified ||= ciEnsured.modified;
 
   return { segment: s, modified, usedPnpmDlx };
 }

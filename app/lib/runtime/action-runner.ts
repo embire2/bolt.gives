@@ -167,7 +167,7 @@ export class ActionRunner {
     try {
       switch (action.type) {
         case 'shell': {
-          await this.#runShellAction(action);
+          await this.#runShellAction(actionId, action);
           break;
         }
         case 'file': {
@@ -258,7 +258,7 @@ export class ActionRunner {
     }
   }
 
-  async #runShellAction(action: ActionState) {
+  async #runShellAction(actionId: string, action: ActionState) {
     if (action.type !== 'shell') {
       unreachable('Expected shell action');
     }
@@ -276,6 +276,9 @@ export class ActionRunner {
     if (validationResult.shouldModify && validationResult.modifiedCommand) {
       logger.debug(`Modified command: ${action.content} -> ${validationResult.modifiedCommand}`);
       action.content = validationResult.modifiedCommand;
+
+      // Persist the modified command so the UI and logs reflect what actually executed.
+      this.#updateAction(actionId, { ...action } as any);
     }
 
     let finalOutput = '';

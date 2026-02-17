@@ -50,6 +50,29 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
 
   const recent = events.slice(-8);
 
+  const getPrimaryText = (event: InteractiveStepRunnerEvent): string => {
+    switch (event.type) {
+      case 'stdout':
+      case 'stderr': {
+        return event.output || '';
+      }
+      case 'error': {
+        return event.error || event.output || event.description || 'error';
+      }
+      case 'step-end': {
+        const exit = typeof event.exitCode === 'number' ? ` (exit ${event.exitCode})` : '';
+        return `${event.description || 'step finished'}${exit}`;
+      }
+      case 'complete': {
+        return 'all steps complete';
+      }
+      case 'step-start':
+      default: {
+        return event.description || event.output || '';
+      }
+    }
+  };
+
   return (
     <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
       <div className="mb-2 flex items-center justify-between">
@@ -72,12 +95,10 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
         {recent.map((event, index) => (
           <div key={`${event.timestamp}-${event.type}-${index}`}>
             <span className="mr-2 text-bolt-elements-textTertiary">[{event.type}]</span>
-            <span className="text-bolt-elements-textPrimary">
-              {event.description ||
-                event.output ||
-                event.error ||
-                (event.type === 'complete' ? 'all steps complete' : '')}
-            </span>
+            <span className="text-bolt-elements-textPrimary">{getPrimaryText(event)}</span>
+            {event.type === 'step-start' && event.command && event.command.length > 0 ? (
+              <div className="ml-10 text-bolt-elements-textTertiary">{event.command.join(' ')}</div>
+            ) : null}
             {event.type === 'error' && (
               <div className="ml-10 text-bolt-elements-textTertiary">hint: {getSuggestedFix(event)}</div>
             )}
