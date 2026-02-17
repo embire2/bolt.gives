@@ -36,3 +36,20 @@ export type ToolCallAnnotation = {
   toolName: string;
   toolDescription: string;
 };
+
+export type ToolCallDataEvent = {
+  type: 'tool-call';
+  toolCallId: string;
+  serverName: string;
+  toolName: string;
+  toolDescription: string;
+  timestamp: string;
+};
+
+export type UsageDataEvent = {
+  type: 'usage';
+  completionTokens: number;
+  promptTokens: number;
+  totalTokens: number;
+  timestamp: string;
+};

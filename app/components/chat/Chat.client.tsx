@@ -47,6 +47,7 @@ import {
   snapshotTextFiles,
 } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
+import type { AutonomyMode } from '~/lib/runtime/autonomy';
 
 const logger = createScopedLogger('Chat');
 
@@ -130,6 +131,7 @@ export const ChatImpl = memo(
       return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
     });
     const { showChat } = useStore(chatStore);
+    const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
@@ -1117,6 +1119,8 @@ export const ChatImpl = memo(
         agentMode={agentMode}
         setAgentMode={setAgentMode}
         onSketchChange={setSketchElements}
+        autonomyMode={autonomyMode}
+        setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
       />
     );
   },

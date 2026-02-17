@@ -9,7 +9,7 @@ import {
 import { Experimental_StdioMCPTransport } from 'ai/mcp-stdio';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
-import type { ToolCallAnnotation } from '~/types/context';
+import type { ToolCallAnnotation, ToolCallDataEvent } from '~/types/context';
 import {
   TOOL_EXECUTION_APPROVAL,
   TOOL_EXECUTION_DENIED,
@@ -363,6 +363,19 @@ export class MCPService {
       const serverName = this._toolNamesToServerNames.get(toolName);
 
       if (serverName) {
+        const toolCallDataEvent: ToolCallDataEvent = {
+          type: 'tool-call',
+          toolCallId,
+          serverName,
+          toolName,
+          toolDescription: description,
+          timestamp: new Date().toISOString(),
+        };
+
+        dataStream.writeData({
+          ...toolCallDataEvent,
+        });
+
         dataStream.writeMessageAnnotation({
           type: 'toolCall',
           toolCallId,

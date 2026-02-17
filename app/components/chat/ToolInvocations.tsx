@@ -14,6 +14,8 @@ import { logger } from '~/utils/logger';
 import { themeStore, type Theme } from '~/lib/stores/theme';
 import { useStore } from '@nanostores/react';
 import type { ToolCallAnnotation } from '~/types/context';
+import { workbenchStore } from '~/lib/stores/workbench';
+import { getAutonomyModeLabel, getToolAutonomyResolution } from '~/lib/runtime/autonomy';
 
 const highlighterOptions = {
   langs: ['json'],
@@ -275,6 +277,8 @@ interface ToolCallsListProps {
 
 const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResult }: ToolCallsListProps) => {
   const [expanded, setExpanded] = useState<{ [id: string]: boolean }>({});
+  const [autoResolved] = useState(() => new Set<string>());
+  const autonomyMode = useStore(workbenchStore.autonomyMode);
 
   // OS detection for shortcut display
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -288,6 +292,32 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
     });
     setExpanded(expandedState);
   }, [toolInvocations]);
+
+  useEffect(() => {
+    for (const tool of toolInvocations) {
+      if (tool.toolInvocation.state !== 'call') {
+        continue;
+      }
+
+      const { toolName, toolCallId } = tool.toolInvocation;
+
+      if (autoResolved.has(toolCallId)) {
+        continue;
+      }
+
+      const resolution = getToolAutonomyResolution(autonomyMode, toolName);
+
+      if (resolution === 'manual') {
+        continue;
+      }
+
+      autoResolved.add(toolCallId);
+      addToolResult({
+        toolCallId,
+        result: resolution === 'approve' ? TOOL_EXECUTION_APPROVAL.APPROVE : TOOL_EXECUTION_APPROVAL.REJECT,
+      });
+    }
+  }, [toolInvocations, autonomyMode, addToolResult, autoResolved]);
 
   // Keyboard shortcut logic
   useEffect(() => {
@@ -334,6 +364,10 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+      <div className="mb-2 text-xs text-bolt-elements-textSecondary">
+        Tool autonomy mode:{' '}
+        <span className="font-semibold text-bolt-elements-textPrimary">{getAutonomyModeLabel(autonomyMode)}</span>
+      </div>
       <ul className="list-none space-y-4">
         {toolInvocations.map((tool, index) => {
           const toolCallState = tool.toolInvocation.state;

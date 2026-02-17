@@ -22,6 +22,12 @@ import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-
 import { InteractiveStepRunner } from '~/lib/runtime/interactive-step-runner';
 import { createTestAndSecuritySteps, getMissingJestStubs } from '~/lib/runtime/test-security';
 import { getCollaborationServerUrl } from '~/lib/collaboration/client';
+import {
+  AUTONOMY_MODE_STORAGE_KEY,
+  DEFAULT_AUTONOMY_MODE,
+  isActionAutoAllowed,
+  type AutonomyMode,
+} from '~/lib/runtime/autonomy';
 
 const { saveAs } = fileSaver;
 
@@ -58,13 +64,28 @@ export class WorkbenchStore {
     import.meta.hot?.data.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
   deployAlert: WritableAtom<DeployAlert | undefined> =
     import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
+  autonomyMode: WritableAtom<AutonomyMode> =
+    import.meta.hot?.data.autonomyMode ?? atom<AutonomyMode>(DEFAULT_AUTONOMY_MODE);
   interactiveStepEvents: WritableAtom<InteractiveStepRunnerEvent[]> =
     import.meta.hot?.data.interactiveStepEvents ?? atom<InteractiveStepRunnerEvent[]>([]);
   isTestAndScanRunning: WritableAtom<boolean> = import.meta.hot?.data.isTestAndScanRunning ?? atom<boolean>(false);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
   #globalExecutionQueue = Promise.resolve();
+  #actionDecisions = new Map<string, 'approved' | 'rejected'>();
   constructor() {
+    if (typeof window !== 'undefined') {
+      try {
+        const persisted = window.localStorage.getItem(AUTONOMY_MODE_STORAGE_KEY) as AutonomyMode | null;
+
+        if (persisted) {
+          this.autonomyMode.set(persisted);
+        }
+      } catch {
+        // no-op: persistence failures should not block startup
+      }
+    }
+
     if (import.meta.hot) {
       import.meta.hot.data.artifacts = this.artifacts;
       import.meta.hot.data.unsavedFiles = this.unsavedFiles;
@@ -73,6 +94,7 @@ export class WorkbenchStore {
       import.meta.hot.data.actionAlert = this.actionAlert;
       import.meta.hot.data.supabaseAlert = this.supabaseAlert;
       import.meta.hot.data.deployAlert = this.deployAlert;
+      import.meta.hot.data.autonomyMode = this.autonomyMode;
       import.meta.hot.data.interactiveStepEvents = this.interactiveStepEvents;
       import.meta.hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
 
@@ -139,6 +161,18 @@ export class WorkbenchStore {
 
   get DeployAlert() {
     return this.deployAlert;
+  }
+
+  setAutonomyMode(mode: AutonomyMode) {
+    this.autonomyMode.set(mode);
+
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(AUTONOMY_MODE_STORAGE_KEY, mode);
+      } catch {
+        // no-op: persistence failures should not block mode updates
+      }
+    }
   }
 
   clearDeployAlert() {
@@ -632,6 +666,62 @@ export class WorkbenchStore {
 
     if (!action || action.executed) {
       return;
+    }
+
+    const autonomyMode = this.autonomyMode.get();
+    const decisionKey = `${artifactId}:${data.actionId}`;
+    const existingDecision = this.#actionDecisions.get(decisionKey);
+
+    if (existingDecision === 'rejected') {
+      return;
+    }
+
+    if (!isActionAutoAllowed(data.action, autonomyMode)) {
+      if (autonomyMode === 'read-only') {
+        artifact.runner.actions.setKey(data.actionId, {
+          ...action,
+          status: 'failed',
+          executed: true,
+          error: 'Blocked by read-only autonomy mode',
+        } as any);
+        this.#actionDecisions.set(decisionKey, 'rejected');
+        this.actionAlert.set({
+          type: 'warning',
+          title: 'Action blocked by autonomy mode',
+          description: 'Read-only mode blocked a mutating action.',
+          content: `${data.action.type} action was blocked.`,
+        });
+
+        return;
+      }
+
+      if (existingDecision !== 'approved') {
+        if (isStreaming) {
+          return;
+        }
+
+        if (typeof window === 'undefined') {
+          return;
+        }
+
+        const approved = window.confirm(
+          `Autonomy mode (${autonomyMode}) requires review.\n\nAllow ${data.action.type} action now?`,
+        );
+
+        if (!approved) {
+          this.#actionDecisions.set(decisionKey, 'rejected');
+          artifact.runner.actions.setKey(data.actionId, {
+            ...action,
+            status: 'failed',
+            executed: true,
+            error: 'Rejected in review-required autonomy mode',
+          } as any);
+
+          return;
+        }
+
+        this.#actionDecisions.set(decisionKey, 'approved');
+      }
     }
 
     if (data.action.type === 'file') {

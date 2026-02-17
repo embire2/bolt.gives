@@ -35,6 +35,8 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
 import { StepRunnerFeed } from './StepRunnerFeed';
 import type { SketchElement } from './SketchCanvas';
+import type { AutonomyMode } from '~/lib/runtime/autonomy';
+import { ExecutionTransparencyPanel } from './ExecutionTransparencyPanel';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -90,6 +92,8 @@ interface BaseChatProps {
   agentMode?: 'chat' | 'plan' | 'act';
   setAgentMode?: (mode: 'chat' | 'plan' | 'act') => void;
   onSketchChange?: (elements: SketchElement[]) => void;
+  autonomyMode?: AutonomyMode;
+  setAutonomyMode?: (mode: AutonomyMode) => void;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -146,6 +150,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       agentMode,
       setAgentMode,
       onSketchChange,
+      autonomyMode,
+      setAutonomyMode,
     },
     ref,
   ) => {
@@ -441,6 +447,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                <ExecutionTransparencyPanel
+                  data={data}
+                  model={model}
+                  provider={provider}
+                  isStreaming={isStreaming}
+                  autonomyMode={autonomyMode}
+                />
                 <StepRunnerFeed data={data} />
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
@@ -490,6 +503,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   agentMode={agentMode}
                   setAgentMode={setAgentMode}
                   onSketchChange={onSketchChange}
+                  autonomyMode={autonomyMode}
+                  setAutonomyMode={setAutonomyMode}
                 />
                 <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
                   <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives

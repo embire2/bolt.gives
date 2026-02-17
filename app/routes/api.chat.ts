@@ -12,6 +12,7 @@ import type {
   AgentCommentaryPhase,
   ContextAnnotation,
   ProgressAnnotation,
+  UsageDataEvent,
 } from '~/types/context';
 import { WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
@@ -396,6 +397,17 @@ ${toolSummary}`,
               }
 
               writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+
+              const usageDataEvent: UsageDataEvent = {
+                type: 'usage',
+                completionTokens: cumulativeUsage.completionTokens,
+                promptTokens: cumulativeUsage.promptTokens,
+                totalTokens: cumulativeUsage.totalTokens,
+                timestamp: new Date().toISOString(),
+              };
+              dataStream.writeData({
+                ...usageDataEvent,
+              });
               dataStream.writeMessageAnnotation({
                 type: 'usage',
                 value: {

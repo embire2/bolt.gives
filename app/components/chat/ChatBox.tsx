@@ -21,6 +21,7 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
 import { WebSearch } from './WebSearch.client';
 import { SketchCanvas, type SketchElement } from './SketchCanvas';
+import { getAutonomyModeLabel, getNextAutonomyMode, type AutonomyMode } from '~/lib/runtime/autonomy';
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -70,6 +71,8 @@ interface ChatBoxProps {
   agentMode?: 'chat' | 'plan' | 'act';
   setAgentMode?: (mode: 'chat' | 'plan' | 'act') => void;
   onSketchChange?: (elements: SketchElement[]) => void;
+  autonomyMode?: AutonomyMode;
+  setAutonomyMode?: (mode: AutonomyMode) => void;
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
@@ -342,6 +345,23 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             >
               <div className="i-ph:play-circle text-xl" />
               {props.agentMode === 'act' ? <span>Act</span> : <span />}
+            </IconButton>
+            <IconButton
+              title={`Autonomy Mode: ${getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe')}`}
+              className={classNames(
+                'transition-all flex items-center gap-1 px-1.5',
+                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
+              )}
+              onClick={() => {
+                const current = props.autonomyMode || 'auto-apply-safe';
+                const next = getNextAutonomyMode(current);
+                props.setAutonomyMode?.(next);
+                toast.info(`Autonomy mode: ${getAutonomyModeLabel(next)}`);
+              }}
+              disabled={props.isStreaming}
+            >
+              <div className="i-ph:shield-check text-xl" />
+              <span>{getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe')}</span>
             </IconButton>
             <IconButton
               title="Save Session"
