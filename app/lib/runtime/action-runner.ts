@@ -662,6 +662,25 @@ export class ActionRunner {
   }> {
     const trimmedCommand = command.trim();
 
+    /*
+     * Make create-vite non-interactive by default to avoid CLI cancellations.
+     *
+     * Example problematic command:
+     *   npm create vite@latest . -- --template react
+     *
+     * create-vite supports --no-interactive.
+     */
+    if (
+      (trimmedCommand.includes('create-vite') || trimmedCommand.match(/\bnpm\s+create\s+vite(@latest)?\b/)) &&
+      !trimmedCommand.includes('--no-interactive')
+    ) {
+      return {
+        shouldModify: true,
+        modifiedCommand: `CI=1 ${trimmedCommand} --no-interactive`,
+        warning: 'Added --no-interactive to avoid scaffolding prompts in WebContainer.',
+      };
+    }
+
     // Handle rm commands that might fail due to missing files
     if (trimmedCommand.startsWith('rm ') && !trimmedCommand.includes(' -f')) {
       const rmMatch = trimmedCommand.match(/^rm\s+(.+)$/);
@@ -763,6 +782,24 @@ export class ActionRunner {
 
     // Common error patterns and their explanations
     const errorPatterns = [
+      {
+        pattern: /ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND/,
+        title: 'Missing package.json',
+        getMessage: () =>
+          `No package.json was found in the current directory.\n\nSuggestion: Scaffold a project first. For a React app:\n- pnpm dlx create-vite@latest . --template react --no-interactive\n- pnpm install`,
+      },
+      {
+        pattern: /Could not read package\.json|ENOENT: no such file or directory, open '.*package\.json'/,
+        title: 'Missing package.json',
+        getMessage: () =>
+          `The command expected a package.json but it does not exist.\n\nSuggestion: Ensure scaffolding completed successfully. If you used create-vite, re-run with --no-interactive to avoid cancellations.`,
+      },
+      {
+        pattern: /Operation cancelled|Operation canceled|cancelled/i,
+        title: 'Operation Cancelled',
+        getMessage: () =>
+          `The command was cancelled (often due to an interactive prompt).\n\nSuggestion: Re-run in non-interactive mode (e.g., add --no-interactive) or set CI=1.`,
+      },
       {
         pattern: /cannot remove.*No such file or directory/,
         title: 'File Not Found',
