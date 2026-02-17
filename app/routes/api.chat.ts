@@ -18,6 +18,7 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
+import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 
 export async function action(args: ActionFunctionArgs) {
@@ -45,14 +46,6 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const streamRecovery = new StreamRecoveryManager({
-    timeout: 45000,
-    maxRetries: 2,
-    onTimeout: () => {
-      logger.warn('Stream timeout - attempting recovery');
-    },
-  });
-
   const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
     await request.json<{
       messages: Messages;
@@ -97,16 +90,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     const dataStream = createDataStream({
       async execute(dataStream) {
-        streamRecovery.startMonitoring();
-
-        const filePaths = getFilePaths(files || {});
-        let filteredFiles: FileMap | undefined = undefined;
-        let summary: string | undefined = undefined;
-        let messageSliceId = 0;
-
-        const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
-        const collectedToolOutputs: string[] = [];
-        let forceFinalizeAttempted = false;
         const writeCommentary = (
           phase: AgentCommentaryPhase,
           message: string,
@@ -127,6 +110,33 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             ...payload,
           });
         };
+
+        const recoveryController = new AgentRecoveryController();
+        let pendingRecoveryReason: string | undefined = undefined;
+        let pendingRecoveryBackoffMs = 0;
+        let forceFinalizeRequested = false;
+
+        const streamRecovery = new StreamRecoveryManager({
+          timeout: 45000,
+          maxRetries: 2,
+          onTimeout: () => {
+            const signal = recoveryController.registerTimeout();
+            pendingRecoveryReason = pendingRecoveryReason || signal.reason;
+            pendingRecoveryBackoffMs = Math.max(pendingRecoveryBackoffMs, signal.backoffMs);
+            forceFinalizeRequested = forceFinalizeRequested || signal.forceFinalize;
+            writeCommentary('recovery', signal.message, 'warning', signal.detail);
+            logger.warn('Stream timeout - attempting recovery');
+          },
+        });
+        streamRecovery.startMonitoring();
+
+        const filePaths = getFilePaths(files || {});
+        let filteredFiles: FileMap | undefined = undefined;
+        let summary: string | undefined = undefined;
+        let messageSliceId = 0;
+        const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        const collectedToolOutputs: string[] = [];
+        let forceFinalizeAttempted = false;
 
         writeCommentary('plan', 'Planning the implementation strategy and checking project context.');
 
@@ -249,6 +259,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               mcpService.processToolCall(toolCall, dataStream);
             });
 
+            const normalizedToolResults = (toolResults as Array<Record<string, unknown>> | undefined) ?? [];
+
             if (toolCalls.length > 0 || (toolResults?.length ?? 0) > 0) {
               const toolNames = toolCalls.map((call) => call.toolName).join(', ');
               writeCommentary(
@@ -261,7 +273,17 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               );
             }
 
-            const normalizedToolResults = (toolResults as Array<Record<string, unknown>> | undefined) ?? [];
+            const recoverySignal = recoveryController.analyzeStep(
+              toolCalls.map((call) => ({ toolName: call.toolName, args: call.args })),
+              normalizedToolResults.length,
+            );
+
+            if (recoverySignal) {
+              pendingRecoveryReason = pendingRecoveryReason || recoverySignal.reason;
+              pendingRecoveryBackoffMs = Math.max(pendingRecoveryBackoffMs, recoverySignal.backoffMs);
+              forceFinalizeRequested = forceFinalizeRequested || recoverySignal.forceFinalize;
+              writeCommentary('recovery', recoverySignal.message, 'warning', recoverySignal.detail);
+            }
 
             if (normalizedToolResults.length) {
               for (const toolResult of normalizedToolResults) {
@@ -284,11 +306,27 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               cumulativeUsage.totalTokens += usage.totalTokens || 0;
             }
 
-            if (finishReason === 'tool-calls' && !forceFinalizeAttempted) {
+            const shouldForceFinalize = finishReason === 'tool-calls' || forceFinalizeRequested;
+
+            if (shouldForceFinalize && !forceFinalizeAttempted) {
               forceFinalizeAttempted = true;
+
+              if (pendingRecoveryBackoffMs > 0) {
+                writeCommentary(
+                  'recovery',
+                  'Applying auto-recovery backoff before finalize.',
+                  'warning',
+                  `Waiting ${pendingRecoveryBackoffMs}ms before continuing.`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, pendingRecoveryBackoffMs));
+              }
+
               writeCommentary(
                 'next-step',
-                'Tool execution finished. Producing a final user response without additional tool calls.',
+                pendingRecoveryReason
+                  ? 'Recovery complete. Producing final response without additional tool calls.'
+                  : 'Tool execution finished. Producing a final user response without additional tool calls.',
+                pendingRecoveryReason ? 'recovered' : 'in-progress',
               );
 
               const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
@@ -309,6 +347,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
 You already gathered tool outputs. Now provide the final answer without any more tool calls.
 If the user asked for a markdown file, create it using <boltAction type="file">.
+${pendingRecoveryReason ? `Recovery reason: ${pendingRecoveryReason}. Summarize progress and continue.` : ''}
 
 Tool outputs:
 ${toolSummary}`,
@@ -344,6 +383,18 @@ ${toolSummary}`,
             }
 
             if (finishReason !== 'length') {
+              if (pendingRecoveryReason) {
+                writeCommentary(
+                  'recovery',
+                  'Recovery path finished. Delivering stable final output.',
+                  'recovered',
+                  `Recovery reason: ${pendingRecoveryReason}`,
+                );
+                pendingRecoveryReason = undefined;
+                pendingRecoveryBackoffMs = 0;
+                forceFinalizeRequested = false;
+              }
+
               writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
               dataStream.writeMessageAnnotation({
                 type: 'usage',
