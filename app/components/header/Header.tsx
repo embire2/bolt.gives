@@ -23,7 +23,7 @@ export function Header() {
           <img
             src={`/boltlogo2.png?v=${APP_VERSION}`}
             alt="bolt.gives"
-            className="w-60 h-60 object-contain"
+            className="h-[calc(var(--header-height)-16px)] w-auto max-w-[220px] object-contain"
             loading="eager"
           />
           <span className="ml-2 px-2 py-1 rounded-full border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-xs font-mono text-bolt-elements-textSecondary">
