@@ -5,7 +5,6 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('useMessageParser');
-let testAndScanTimer: ReturnType<typeof setTimeout> | undefined;
 
 const messageParser = new EnhancedStreamingMessageParser({
   callbacks: {
@@ -19,16 +18,6 @@ const messageParser = new EnhancedStreamingMessageParser({
       logger.trace('onArtifactClose');
 
       workbenchStore.updateArtifact(data, { closed: true });
-
-      if (testAndScanTimer) {
-        clearTimeout(testAndScanTimer);
-      }
-
-      testAndScanTimer = setTimeout(() => {
-        workbenchStore.runTestAndSecurityScan().catch(() => {
-          // Keep this non-blocking for chat parsing.
-        });
-      }, 750);
     },
     onActionOpen: (data) => {
       logger.trace('onActionOpen', data.action);
