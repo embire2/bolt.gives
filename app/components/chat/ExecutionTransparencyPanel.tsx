@@ -1,7 +1,13 @@
 import type { JSONValue } from 'ai';
 import { useEffect, useMemo, useState } from 'react';
 import type { ProviderInfo } from '~/types/model';
-import type { AgentCommentaryAnnotation, ProgressAnnotation, ToolCallDataEvent, UsageDataEvent } from '~/types/context';
+import type {
+  AgentCommentaryAnnotation,
+  AgentRunMetricsDataEvent,
+  ProgressAnnotation,
+  ToolCallDataEvent,
+  UsageDataEvent,
+} from '~/types/context';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { getAutonomyModeLabel } from '~/lib/runtime/autonomy';
 
@@ -35,6 +41,14 @@ function isUsage(value: JSONValue): value is UsageDataEvent {
   }
 
   return (value as Record<string, unknown>).type === 'usage';
+}
+
+function isRunMetrics(value: JSONValue): value is AgentRunMetricsDataEvent {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  return (value as Record<string, unknown>).type === 'run-metrics';
 }
 
 function estimateCostUSD(provider: string | undefined, usage: UsageDataEvent | undefined): number {
@@ -75,6 +89,7 @@ interface ExecutionTransparencyPanelProps {
   provider?: ProviderInfo;
   isStreaming?: boolean;
   autonomyMode?: AutonomyMode;
+  latestRunMetrics?: AgentRunMetricsDataEvent | null;
 }
 
 export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProps) {
@@ -110,6 +125,8 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const commentaryEvents = useMemo(() => data.filter(isCommentary), [data]);
   const toolCalls = useMemo(() => data.filter(isToolCall).slice(-5), [data]);
   const usageEvent = useMemo(() => data.filter(isUsage).slice(-1)[0], [data]);
+  const inlineRunMetrics = useMemo(() => data.filter(isRunMetrics).slice(-1)[0], [data]);
+  const runMetrics = props.latestRunMetrics || inlineRunMetrics;
   const costEstimate = estimateCostUSD(provider?.name, usageEvent);
 
   const currentStep = (() => {
@@ -161,6 +178,25 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
         </div>
         <div>
           Cost estimate: <span className="text-bolt-elements-textPrimary">${costEstimate.toFixed(4)}</span>
+        </div>
+        <div>
+          Commentary first event:{' '}
+          <span className="text-bolt-elements-textPrimary">
+            {runMetrics?.commentaryFirstEventLatencyMs ?? 0}
+            ms
+          </span>
+        </div>
+        <div>
+          Recovery success:{' '}
+          <span className="text-bolt-elements-textPrimary">
+            {runMetrics ? `${Math.round(runMetrics.aggregate.recoverySuccessRate * 100)}%` : '0%'}
+          </span>
+        </div>
+        <div>
+          Manual intervention:{' '}
+          <span className="text-bolt-elements-textPrimary">
+            {runMetrics ? `${Math.round(runMetrics.aggregate.manualInterventionRate * 100)}%` : '0%'}
+          </span>
         </div>
       </div>
       {toolCalls.length > 0 && (

@@ -53,3 +53,36 @@ export type UsageDataEvent = {
   totalTokens: number;
   timestamp: string;
 };
+
+export type AgentRunMetricsSummary = {
+  totalRuns: number;
+  recoveryTriggeredRuns: number;
+  recoveredRuns: number;
+  manualInterventionRuns: number;
+  avgCommentaryFirstEventLatencyMs: number;
+  recoverySuccessRate: number;
+  manualInterventionRate: number;
+};
+
+export type AgentRunMetricsDataEvent = {
+  type: 'run-metrics';
+  runId: string;
+  provider: string;
+  model: string;
+  commentaryFirstEventLatencyMs: number | null;
+  recoveryTriggered: boolean;
+  recoverySucceeded: boolean;
+  manualIntervention: boolean;
+  timestamp: string;
+  aggregate: AgentRunMetricsSummary;
+};
+
+export type ProjectMemoryDataEvent = {
+  type: 'project-memory';
+  projectKey: string;
+  summary: string;
+  architecture: string;
+  latestGoal: string;
+  runCount: number;
+  updatedAt: string;
+};

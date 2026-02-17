@@ -24,7 +24,7 @@ import DeployChatAlert from '~/components/deploy/DeployAlert';
 import ChatAlert from './ChatAlert';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import ProgressCompilation from './ProgressCompilation';
-import type { ProgressAnnotation } from '~/types/context';
+import type { AgentRunMetricsDataEvent, ProgressAnnotation } from '~/types/context';
 import { SupabaseChatAlert } from '~/components/chat/SupabaseAlert';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { useStore } from '@nanostores/react';
@@ -94,6 +94,7 @@ interface BaseChatProps {
   onSketchChange?: (elements: SketchElement[]) => void;
   autonomyMode?: AutonomyMode;
   setAutonomyMode?: (mode: AutonomyMode) => void;
+  latestRunMetrics?: AgentRunMetricsDataEvent | null;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -152,6 +153,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       onSketchChange,
       autonomyMode,
       setAutonomyMode,
+      latestRunMetrics,
     },
     ref,
   ) => {
@@ -453,6 +455,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   provider={provider}
                   isStreaming={isStreaming}
                   autonomyMode={autonomyMode}
+                  latestRunMetrics={latestRunMetrics}
                 />
                 <StepRunnerFeed data={data} />
                 <ChatBox

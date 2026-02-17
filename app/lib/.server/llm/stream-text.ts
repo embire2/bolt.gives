@@ -68,6 +68,16 @@ export async function streamText(props: {
   messageSliceId?: number;
   chatMode?: 'discuss' | 'build';
   designScheme?: DesignScheme;
+  projectMemory?: {
+    projectKey: string;
+    summary: string;
+    architecture: string;
+    latestGoal: string;
+    runCount: number;
+    updatedAt: string;
+  };
+  subAgentPlan?: string;
+  enableBuiltInWebTools?: boolean;
 }) {
   const {
     messages,
@@ -82,6 +92,9 @@ export async function streamText(props: {
     summary,
     chatMode,
     designScheme,
+    projectMemory,
+    subAgentPlan,
+    enableBuiltInWebTools = true,
   } = props;
   let currentModel = DEFAULT_MODEL;
   let currentProvider = DEFAULT_PROVIDER.name;
@@ -207,6 +220,33 @@ export async function streamText(props: {
     }
   }
 
+  if (effectiveChatMode === 'build' && projectMemory) {
+    systemPrompt = `${systemPrompt}
+
+    PROJECT MEMORY (persisted across runs):
+    ---
+    Project key: ${projectMemory.projectKey}
+    Last goal: ${projectMemory.latestGoal}
+    Summary: ${projectMemory.summary}
+    Architecture: ${projectMemory.architecture}
+    Memory runs tracked: ${projectMemory.runCount}
+    Updated at: ${projectMemory.updatedAt}
+    ---
+    Use this memory as context, but prefer newer user instructions if there is any conflict.
+    `;
+  }
+
+  if (effectiveChatMode === 'build' && subAgentPlan) {
+    systemPrompt = `${systemPrompt}
+
+    SUB-AGENT PLANNER OUTPUT:
+    ---
+    ${subAgentPlan}
+    ---
+    Execute this plan incrementally. Adapt when needed, but keep verification checkpoints.
+    `;
+  }
+
   const effectiveLockedFilePaths = new Set<string>();
 
   if (files) {
@@ -269,7 +309,7 @@ export async function streamText(props: {
       : options || {};
 
   const mcpTools = (filteredOptions.tools || {}) as ToolSet;
-  const builtInWebTools = createWebBrowsingTools(serverEnv);
+  const builtInWebTools = enableBuiltInWebTools ? createWebBrowsingTools(serverEnv) : {};
   const mergedTools: ToolSet = {
     ...mcpTools,
     ...builtInWebTools,

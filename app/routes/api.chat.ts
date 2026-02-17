@@ -10,7 +10,9 @@ import { getFilePaths, selectContext } from '~/lib/.server/llm/select-context';
 import type {
   AgentCommentaryAnnotation,
   AgentCommentaryPhase,
+  AgentRunMetricsDataEvent,
   ContextAnnotation,
+  ProjectMemoryDataEvent,
   ProgressAnnotation,
   UsageDataEvent,
 } from '~/types/context';
@@ -21,12 +23,61 @@ import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
 import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
+import { recordAgentRunMetrics } from '~/lib/.server/llm/run-metrics';
+import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~/lib/.server/llm/project-memory';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
 }
 
 const logger = createScopedLogger('api.chat');
+
+function isTruthyFlag(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function extractLatestUserGoal(messages: Messages): string {
+  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+
+  if (!lastUser) {
+    return '';
+  }
+
+  const { content } = extractPropertiesFromMessage(lastUser);
+
+  return content || lastUser.content || '';
+}
+
+function detectManualIntervention(messages: Messages): boolean {
+  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+
+  if (!lastUser) {
+    return false;
+  }
+
+  const text = (lastUser.content || '').toLowerCase();
+  const hasContinueCue =
+    text.includes('\ncontinue') ||
+    text.includes('please continue') ||
+    text.includes('go on') ||
+    text.includes('resume from');
+
+  const partIntervention =
+    Array.isArray(lastUser.parts) &&
+    lastUser.parts.some((part) => {
+      if (part.type !== 'tool-invocation') {
+        return false;
+      }
+
+      return part.toolInvocation?.state === 'result';
+    });
+
+  return hasContinueCue || partIntervention;
+}
 
 function parseCookies(cookieHeader: string): Record<string, string> {
   const cookies: Record<string, string> = {};
@@ -47,24 +98,41 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
-    await request.json<{
-      messages: Messages;
-      files: any;
-      promptId?: string;
-      contextOptimization: boolean;
-      chatMode: 'discuss' | 'build';
-      designScheme?: DesignScheme;
-      supabase?: {
-        isConnected: boolean;
-        hasSelectedProject: boolean;
-        credentials?: {
-          anonKey?: string;
-          supabaseUrl?: string;
-        };
+  const {
+    messages,
+    files,
+    promptId,
+    contextOptimization,
+    supabase,
+    chatMode,
+    designScheme,
+    maxLLMSteps,
+    projectMemory,
+  } = await request.json<{
+    messages: Messages;
+    files: any;
+    promptId?: string;
+    contextOptimization: boolean;
+    chatMode: 'discuss' | 'build';
+    designScheme?: DesignScheme;
+    supabase?: {
+      isConnected: boolean;
+      hasSelectedProject: boolean;
+      credentials?: {
+        anonKey?: string;
+        supabaseUrl?: string;
       };
-      maxLLMSteps: number;
-    }>();
+    };
+    maxLLMSteps: number;
+    projectMemory?: {
+      projectKey: string;
+      summary: string;
+      architecture: string;
+      latestGoal: string;
+      runCount: number;
+      updatedAt: string;
+    } | null;
+  }>();
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
@@ -79,6 +147,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     promptTokens: 0,
     totalTokens: 0,
   };
+  const requestStartedAt = Date.now();
+  const runId = generateId();
+  const manualInterventionDetected = detectManualIntervention(messages);
+  const latestUserGoal = extractLatestUserGoal(messages);
+  const projectKey = deriveProjectMemoryKey(files);
+  const cachedProjectMemory = getProjectMemory(projectKey);
+  const effectiveProjectMemory =
+    projectMemory && projectMemory.projectKey === projectKey ? projectMemory : cachedProjectMemory;
+  const envVars = context.cloudflare?.env as unknown as Record<string, string | undefined> | undefined;
+  const subAgentsEnabled = isTruthyFlag(envVars?.BOLT_SUB_AGENTS_ENABLED || process?.env?.BOLT_SUB_AGENTS_ENABLED);
   const encoder: TextEncoder = new TextEncoder();
   let progressCounter: number = 1;
 
@@ -91,12 +169,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     const dataStream = createDataStream({
       async execute(dataStream) {
+        let firstCommentaryAt: number | null = null;
+        let recoveryTriggered = false;
+        let recoverySucceeded = false;
+        let completionEmitted = false;
+
         const writeCommentary = (
           phase: AgentCommentaryPhase,
           message: string,
           status: AgentCommentaryAnnotation['status'] = 'in-progress',
           detail?: string,
         ) => {
+          if (firstCommentaryAt === null) {
+            firstCommentaryAt = Date.now();
+          }
+
           const payload: AgentCommentaryAnnotation = {
             type: 'agent-commentary',
             phase,
@@ -117,6 +204,81 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let pendingRecoveryBackoffMs = 0;
         let forceFinalizeRequested = false;
 
+        const emitRunCompletionEvents = (finalAssistantText: string, model: string, provider: string) => {
+          if (completionEmitted) {
+            return;
+          }
+
+          completionEmitted = true;
+
+          const commentaryFirstEventLatencyMs =
+            firstCommentaryAt === null ? null : firstCommentaryAt - requestStartedAt;
+          const projectMemoryEntry = upsertProjectMemory({
+            projectKey,
+            files,
+            latestGoal: latestUserGoal,
+            summary: summary || finalAssistantText,
+          });
+          const aggregate = recordAgentRunMetrics({
+            runId,
+            provider,
+            model,
+            commentaryFirstEventLatencyMs,
+            recoveryTriggered,
+            recoverySucceeded,
+            manualIntervention: manualInterventionDetected,
+            timestamp: new Date().toISOString(),
+          });
+
+          const usageDataEvent: UsageDataEvent = {
+            type: 'usage',
+            completionTokens: cumulativeUsage.completionTokens,
+            promptTokens: cumulativeUsage.promptTokens,
+            totalTokens: cumulativeUsage.totalTokens,
+            timestamp: new Date().toISOString(),
+          };
+          const runMetricsEvent: AgentRunMetricsDataEvent = {
+            type: 'run-metrics',
+            runId,
+            provider,
+            model,
+            commentaryFirstEventLatencyMs,
+            recoveryTriggered,
+            recoverySucceeded,
+            manualIntervention: manualInterventionDetected,
+            timestamp: new Date().toISOString(),
+            aggregate,
+          };
+          const projectMemoryEvent: ProjectMemoryDataEvent = {
+            type: 'project-memory',
+            projectKey: projectMemoryEntry.projectKey,
+            summary: projectMemoryEntry.summary,
+            architecture: projectMemoryEntry.architecture,
+            latestGoal: projectMemoryEntry.latestGoal,
+            runCount: projectMemoryEntry.runCount,
+            updatedAt: projectMemoryEntry.updatedAt,
+          };
+
+          dataStream.writeData({ ...usageDataEvent });
+          dataStream.writeMessageAnnotation({
+            type: 'usage',
+            value: {
+              completionTokens: cumulativeUsage.completionTokens,
+              promptTokens: cumulativeUsage.promptTokens,
+              totalTokens: cumulativeUsage.totalTokens,
+            },
+          });
+          dataStream.writeData({ ...runMetricsEvent });
+          dataStream.writeData({ ...projectMemoryEvent });
+          dataStream.writeData({
+            type: 'progress',
+            label: 'response',
+            status: 'complete',
+            order: progressCounter++,
+            message: 'Response Generated',
+          } satisfies ProgressAnnotation);
+        };
+
         const streamRecovery = new StreamRecoveryManager({
           timeout: 45000,
           maxRetries: 2,
@@ -125,6 +287,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             pendingRecoveryReason = pendingRecoveryReason || signal.reason;
             pendingRecoveryBackoffMs = Math.max(pendingRecoveryBackoffMs, signal.backoffMs);
             forceFinalizeRequested = forceFinalizeRequested || signal.forceFinalize;
+            recoveryTriggered = true;
             writeCommentary('recovery', signal.message, 'warning', signal.detail);
             logger.warn('Stream timeout - attempting recovery');
           },
@@ -249,6 +412,82 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           // logger.debug('Code Files Selected');
         }
 
+        let subAgentPlan: string | undefined = undefined;
+
+        if (subAgentsEnabled && chatMode === 'build') {
+          writeCommentary('plan', 'Planner sub-agent is drafting an execution plan before coding.');
+
+          try {
+            const plannerMessages: Messages = [
+              ...processedMessages.slice(-4),
+              {
+                id: generateId(),
+                role: 'user',
+                content: `You are the planner sub-agent.
+Generate a concise implementation plan for the worker agent.
+Rules:
+- Return 3-7 bullet points.
+- Include verification checkpoints.
+- No code blocks or file contents.
+- Keep total output under 220 words.`,
+              },
+            ];
+
+            let plannerOutput = '';
+            const plannerResult = await streamText({
+              messages: plannerMessages,
+              env: context.cloudflare?.env,
+              options: {
+                maxSteps: 1,
+                tools: {},
+                toolChoice: undefined,
+                onFinish(resp) {
+                  if (resp.usage) {
+                    cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
+                    cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
+                    cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
+                  }
+                },
+              },
+              apiKeys,
+              files,
+              providerSettings,
+              promptId,
+              contextOptimization,
+              contextFiles: filteredFiles,
+              summary,
+              messageSliceId,
+              chatMode: 'discuss',
+              designScheme,
+              projectMemory: effectiveProjectMemory || undefined,
+              enableBuiltInWebTools: false,
+            });
+
+            for await (const textDelta of plannerResult.textStream) {
+              plannerOutput += textDelta;
+            }
+
+            const normalizedPlan = plannerOutput.trim();
+
+            if (normalizedPlan.length > 0) {
+              subAgentPlan = normalizedPlan.length > 3000 ? `${normalizedPlan.slice(0, 2997)}...` : normalizedPlan;
+              writeCommentary(
+                'plan',
+                'Planner sub-agent produced a worker execution plan.',
+                'complete',
+                subAgentPlan.slice(0, 260),
+              );
+            }
+          } catch (plannerError) {
+            writeCommentary(
+              'recovery',
+              'Planner sub-agent failed. Continuing with direct worker execution.',
+              'warning',
+              plannerError instanceof Error ? plannerError.message : 'unknown planner error',
+            );
+          }
+        }
+
         const options: StreamingOptions = {
           supabaseConnection: supabase,
           toolChoice: 'auto',
@@ -283,6 +522,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               pendingRecoveryReason = pendingRecoveryReason || recoverySignal.reason;
               pendingRecoveryBackoffMs = Math.max(pendingRecoveryBackoffMs, recoverySignal.backoffMs);
               forceFinalizeRequested = forceFinalizeRequested || recoverySignal.forceFinalize;
+              recoveryTriggered = true;
               writeCommentary('recovery', recoverySignal.message, 'warning', recoverySignal.detail);
             }
 
@@ -307,6 +547,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               cumulativeUsage.totalTokens += usage.totalTokens || 0;
             }
 
+            const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
+            const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
             const shouldForceFinalize = finishReason === 'tool-calls' || forceFinalizeRequested;
 
             if (shouldForceFinalize && !forceFinalizeAttempted) {
@@ -329,9 +571,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                   : 'Tool execution finished. Producing a final user response without additional tool calls.',
                 pendingRecoveryReason ? 'recovered' : 'in-progress',
               );
-
-              const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
-              const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
 
               const toolSummary =
                 collectedToolOutputs.length > 0
@@ -360,6 +599,29 @@ ${toolSummary}`,
                 tools: {},
                 toolChoice: undefined,
                 onStepFinish: undefined,
+                onFinish: ({ text: finalContent, usage: finalizeUsage }) => {
+                  if (finalizeUsage) {
+                    cumulativeUsage.completionTokens += finalizeUsage.completionTokens || 0;
+                    cumulativeUsage.promptTokens += finalizeUsage.promptTokens || 0;
+                    cumulativeUsage.totalTokens += finalizeUsage.totalTokens || 0;
+                  }
+
+                  if (pendingRecoveryReason) {
+                    recoverySucceeded = true;
+                    writeCommentary(
+                      'recovery',
+                      'Recovery path finished. Delivering stable final output.',
+                      'recovered',
+                      `Recovery reason: ${pendingRecoveryReason}`,
+                    );
+                    pendingRecoveryReason = undefined;
+                    pendingRecoveryBackoffMs = 0;
+                    forceFinalizeRequested = false;
+                  }
+
+                  writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+                  emitRunCompletionEvents(finalContent, model, provider);
+                },
               };
 
               const result = await streamText({
@@ -376,6 +638,8 @@ ${toolSummary}`,
                 messageSliceId,
                 chatMode,
                 designScheme,
+                projectMemory: effectiveProjectMemory || undefined,
+                subAgentPlan,
               });
 
               result.mergeIntoDataStream(dataStream);
@@ -385,6 +649,7 @@ ${toolSummary}`,
 
             if (finishReason !== 'length') {
               if (pendingRecoveryReason) {
+                recoverySucceeded = true;
                 writeCommentary(
                   'recovery',
                   'Recovery path finished. Delivering stable final output.',
@@ -397,35 +662,9 @@ ${toolSummary}`,
               }
 
               writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
-
-              const usageDataEvent: UsageDataEvent = {
-                type: 'usage',
-                completionTokens: cumulativeUsage.completionTokens,
-                promptTokens: cumulativeUsage.promptTokens,
-                totalTokens: cumulativeUsage.totalTokens,
-                timestamp: new Date().toISOString(),
-              };
-              dataStream.writeData({
-                ...usageDataEvent,
-              });
-              dataStream.writeMessageAnnotation({
-                type: 'usage',
-                value: {
-                  completionTokens: cumulativeUsage.completionTokens,
-                  promptTokens: cumulativeUsage.promptTokens,
-                  totalTokens: cumulativeUsage.totalTokens,
-                },
-              });
-              dataStream.writeData({
-                type: 'progress',
-                label: 'response',
-                status: 'complete',
-                order: progressCounter++,
-                message: 'Response Generated',
-              } satisfies ProgressAnnotation);
+              emitRunCompletionEvents(content, model, provider);
               await new Promise((resolve) => setTimeout(resolve, 0));
 
-              // stream.close();
               return;
             }
 
@@ -437,8 +676,6 @@ ${toolSummary}`,
 
             logger.info(`Reached max token limit (${MAX_TOKENS}): Continuing message (${switchesLeft} switches left)`);
 
-            const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
-            const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
             processedMessages.push({ id: generateId(), role: 'assistant', content });
             processedMessages.push({
               id: generateId(),
@@ -460,6 +697,8 @@ ${toolSummary}`,
               designScheme,
               summary,
               messageSliceId,
+              projectMemory: effectiveProjectMemory || undefined,
+              subAgentPlan,
             });
 
             result.mergeIntoDataStream(dataStream);
@@ -502,6 +741,8 @@ ${toolSummary}`,
           designScheme,
           summary,
           messageSliceId,
+          projectMemory: effectiveProjectMemory || undefined,
+          subAgentPlan,
         });
 
         (async () => {

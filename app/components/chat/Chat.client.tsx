@@ -48,8 +48,36 @@ import {
 } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
+import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent } from '~/types/context';
 
 const logger = createScopedLogger('Chat');
+const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
+
+type StoredProjectMemory = ProjectMemoryDataEvent | null;
+
+function loadStoredProjectMemory(): StoredProjectMemory {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(PROJECT_MEMORY_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ProjectMemoryDataEvent;
+
+    if (parsed?.type !== 'project-memory') {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 export function Chat() {
   renderLogger.trace('Chat');
@@ -140,6 +168,8 @@ export const ChatImpl = memo(
     const [agentMode, setAgentMode] = useState<AgentMode>('chat');
     const [agentPlanSteps, setAgentPlanSteps] = useState<AgentPlanStep[]>([]);
     const [sketchElements, setSketchElements] = useState<SketchElement[]>([]);
+    const [projectMemory, setProjectMemory] = useState<StoredProjectMemory>(() => loadStoredProjectMemory());
+    const [latestRunMetrics, setLatestRunMetrics] = useState<AgentRunMetricsDataEvent | null>(null);
     const mcpSettings = useMCPStore((state) => state.settings);
     const mcpInitialized = useMCPStore((state) => state.isInitialized);
     const initializeMcp = useMCPStore((state) => state.initialize);
@@ -182,6 +212,7 @@ export const ChatImpl = memo(
           },
         },
         maxLLMSteps: mcpSettings.maxLLMSteps,
+        projectMemory,
       },
       sendExtraMessageFields: true,
       onError: (e) => {
@@ -210,6 +241,50 @@ export const ChatImpl = memo(
       initialMessages,
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
     });
+
+    useEffect(() => {
+      if (!chatData || chatData.length === 0) {
+        return;
+      }
+
+      const lastProjectMemoryEvent = [...chatData]
+        .reverse()
+        .find(
+          (item): item is ProjectMemoryDataEvent =>
+            typeof item === 'object' &&
+            item !== null &&
+            !Array.isArray(item) &&
+            (item as any).type === 'project-memory',
+        );
+
+      if (lastProjectMemoryEvent) {
+        setProjectMemory((prev) => {
+          if (
+            prev?.updatedAt === lastProjectMemoryEvent.updatedAt &&
+            prev?.projectKey === lastProjectMemoryEvent.projectKey
+          ) {
+            return prev;
+          }
+
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(PROJECT_MEMORY_STORAGE_KEY, JSON.stringify(lastProjectMemoryEvent));
+          }
+
+          return lastProjectMemoryEvent;
+        });
+      }
+
+      const lastRunMetricsEvent = [...chatData]
+        .reverse()
+        .find(
+          (item): item is AgentRunMetricsDataEvent =>
+            typeof item === 'object' && item !== null && !Array.isArray(item) && (item as any).type === 'run-metrics',
+        );
+
+      if (lastRunMetricsEvent) {
+        setLatestRunMetrics((prev) => (prev?.runId === lastRunMetricsEvent.runId ? prev : lastRunMetricsEvent));
+      }
+    }, [chatData]);
     useEffect(() => {
       const prompt = searchParams.get('prompt');
 
@@ -1121,6 +1196,7 @@ export const ChatImpl = memo(
         onSketchChange={setSketchElements}
         autonomyMode={autonomyMode}
         setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
+        latestRunMetrics={latestRunMetrics}
       />
     );
   },
