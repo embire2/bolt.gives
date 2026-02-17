@@ -92,6 +92,33 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
 export type ExecutionResult = { output: string; exitCode: number } | undefined;
 export type ShellOutputHandler = (chunk: string) => void;
 
+export type Osc654Signal = { type: string; exitCode?: number };
+
+export function parseOsc654Signals(text: string): Osc654Signal[] {
+  const signals: Osc654Signal[] = [];
+  const re = /\x1b\]654;([^\x07=]+)=?((-?\d+):(\d+))?\x07/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    const type = match[1];
+    const codeStr = match[4];
+
+    if (type === 'exit' && typeof codeStr === 'string') {
+      const exitCode = Number.parseInt(codeStr, 10);
+
+      // Only include exitCode when it parses cleanly.
+      if (Number.isFinite(exitCode)) {
+        signals.push({ type, exitCode });
+        continue;
+      }
+    }
+
+    signals.push({ type });
+  }
+
+  return signals;
+}
+
 export class BoltShell {
   #initialized: (() => void) | undefined;
   #readyPromise: Promise<void>;
@@ -265,7 +292,11 @@ export class BoltShell {
   }
 
   async getCurrentExecutionResult(onOutput?: ShellOutputHandler): Promise<ExecutionResult> {
-    const { output, exitCode } = await this.waitTillOscCode('exit', onOutput);
+    /*
+     * Wait for the prompt instead of `exit` to avoid returning early on command chains.
+     * We still capture the exit code from OSC `exit` while waiting.
+     */
+    const { output, exitCode } = await this.waitTillOscCode('prompt', onOutput);
     return { output, exitCode };
   }
 
@@ -312,13 +343,19 @@ export class BoltShell {
       }
 
       // Check if command completion signal with exit code
-      const [, osc, , , code] = text.match(/\x1b\]654;([^\x07=]+)=?((-?\d+):(\d+))?\x07/) || [];
+      let shouldBreak = false;
 
-      if (osc === 'exit') {
-        exitCode = parseInt(code, 10);
+      for (const signal of parseOsc654Signals(text)) {
+        if (signal.type === 'exit' && typeof signal.exitCode === 'number') {
+          exitCode = signal.exitCode;
+        }
+
+        if (signal.type === waitCode) {
+          shouldBreak = true;
+        }
       }
 
-      if (osc === waitCode) {
+      if (shouldBreak) {
         break;
       }
     }
