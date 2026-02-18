@@ -15,6 +15,7 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
+  <a href="v1.0.3.md">v1.0.3 roadmap</a> ·
   <a href="#quickstart-local-development">install</a>
 </p>
 
@@ -27,6 +28,9 @@ bolt.gives is a collaborative, open-source AI coding workspace.
 Release branch status (2026-02-17):
 - `main` → `v1.0.2`
 - `alpha` → `v1.0.2`
+
+Next roadmap:
+- `v1.0.3` → `v1.0.3.md`
 
 It combines:
 - A browser-based Node.js dev environment (StackBlitz WebContainer)
