@@ -12,7 +12,7 @@ import {
   type InteractiveStepRunnerEvent,
 } from '~/lib/runtime/interactive-step-runner';
 import { getCollaborationServerUrl } from '~/lib/collaboration/client';
-import { makeCreateViteNonInteractive } from './shell-command-utils';
+import { makeCreateViteNonInteractive, makeFileChecksPortable } from './shell-command-utils';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -670,6 +670,12 @@ export class ActionRunner {
 
     if (createViteRewrite.shouldModify) {
       return createViteRewrite;
+    }
+
+    const portableFileChecksRewrite = makeFileChecksPortable(trimmedCommand);
+
+    if (portableFileChecksRewrite.shouldModify) {
+      return portableFileChecksRewrite;
     }
 
     // Handle rm commands that might fail due to missing files

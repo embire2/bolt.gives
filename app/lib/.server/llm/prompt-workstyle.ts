@@ -24,6 +24,8 @@ export function withDevelopmentCommentaryWorkstyle(systemPrompt: string): string
   - If the user already provided one or more direct URLs, call web_browse on those URLs first and do not run repeated web_search calls unless a critical gap remains.
   - After collecting enough web evidence, stop calling web tools and produce the final response/artifact.
   - If the user asks for documentation study output, produce it as a Markdown file using <boltAction type="file">.
+  - If the user asks to build/run an app, do not stop at scaffolding: install dependencies and include a <boltAction type="start"> so preview can run.
+  - For file existence checks in shell commands, prefer \`ls <file> >/dev/null 2>&1\` instead of \`test -f\` for terminal compatibility.
   - Never output code changes outside <boltAction type="file"> blocks.
   - Never put file contents, patches, or commands inside progress updates.
 </workstyle>

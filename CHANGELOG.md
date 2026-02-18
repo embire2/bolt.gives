@@ -17,6 +17,15 @@
 - Chat pipeline records/aggregates run metrics and uses project memory to prime build prompts.
 - Updated app and package version to `1.0.2`.
 
+### Fixed (2026-02-18 reliability patch)
+- Shell command portability in Bolt Terminal:
+  - `test -f <file>` checks are now rewritten to `ls <file> >/dev/null 2>&1` for `jsh` compatibility.
+- Build-run continuity guardrail:
+  - If a user asks to run/preview an app and the model only scaffolds without a `<boltAction type="start">`, the backend now auto-continues once to complete install/start actions.
+- Prompt workstyle guidance now explicitly reinforces:
+  - scaffold + install + start for run requests
+  - portable file-check commands in shell steps
+
 ### Verified
 - `pnpm run typecheck` passed.
 - `pnpm run lint` passed.

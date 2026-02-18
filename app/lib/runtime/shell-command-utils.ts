@@ -7,6 +7,7 @@ export type ShellCommandRewrite = {
 const NPM_CREATE_VITE_RE = /\bnpm\s+create\s+vite(?<ver>@[^\s]+)?\b/i;
 const CREATE_VITE_HINT_RE = /\bcreate-vite\b/i;
 const HAS_NO_INTERACTIVE_RE = /\B--no-interactive\b/;
+const TEST_FILE_CHECK_RE = /^test\s+-f\s+(.+)$/i;
 
 function rewriteCreateViteSegment(segment: string): {
   segment: string;
@@ -124,5 +125,62 @@ export function makeCreateViteNonInteractive(command: string): ShellCommandRewri
     shouldModify: true,
     modifiedCommand: rewrittenParts.join(' && '),
     warning: 'Made create-vite scaffolding non-interactive to avoid CLI prompts in WebContainer.',
+  };
+}
+
+function rewriteTestFileCheckSegment(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+
+  if (!trimmed) {
+    return { segment, modified: false };
+  }
+
+  const testMatch = trimmed.match(TEST_FILE_CHECK_RE);
+
+  if (!testMatch) {
+    return { segment, modified: false };
+  }
+
+  const filePath = testMatch[1]?.trim();
+
+  if (!filePath) {
+    return { segment, modified: false };
+  }
+
+  // jsh used by WebContainer does not support POSIX `test`; use `ls` for file existence checks.
+  return {
+    segment: `ls ${filePath} >/dev/null 2>&1`,
+    modified: true,
+  };
+}
+
+export function makeFileChecksPortable(command: string): ShellCommandRewrite {
+  const trimmed = command.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = false;
+
+  const rewrittenParts = parts.map((part) => {
+    const rewritten = rewriteTestFileCheckSegment(part);
+
+    if (rewritten.modified) {
+      modifiedAny = true;
+    }
+
+    return rewritten.segment;
+  });
+
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: 'Rewrote unsupported `test -f` checks to portable file checks for the terminal shell.',
   };
 }

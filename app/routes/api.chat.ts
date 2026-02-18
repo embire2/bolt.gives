@@ -25,6 +25,7 @@ import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { recordAgentRunMetrics } from '~/lib/.server/llm/run-metrics';
 import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~/lib/.server/llm/project-memory';
+import { shouldForceRunContinuation } from '~/lib/.server/llm/run-continuation';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -316,6 +317,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
         const collectedToolOutputs: string[] = [];
         let forceFinalizeAttempted = false;
+        let runContinuationAttempted = false;
 
         writeCommentary('plan', 'Planning the implementation strategy and checking project context.');
 
@@ -563,7 +565,12 @@ Rules:
             }
 
             const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
-            const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
+            const extractedLastUser = extractPropertiesFromMessage(lastUserMessage);
+            const { model, provider } = extractedLastUser;
+            const lastUserContent =
+              typeof extractedLastUser.content === 'string'
+                ? extractedLastUser.content
+                : JSON.stringify(extractedLastUser.content);
             const shouldForceFinalize = finishReason === 'tool-calls' || forceFinalizeRequested;
 
             if (shouldForceFinalize && !forceFinalizeAttempted) {
@@ -658,6 +665,71 @@ ${toolSummary}`,
               });
 
               result.mergeIntoDataStream(dataStream);
+
+              return;
+            }
+
+            const shouldContinueForRunIntent = shouldForceRunContinuation({
+              chatMode: chatMode || 'build',
+              lastUserContent,
+              assistantContent: content,
+              alreadyAttempted: runContinuationAttempted,
+            });
+
+            if (shouldContinueForRunIntent) {
+              runContinuationAttempted = true;
+              writeCommentary(
+                'recovery',
+                'Detected scaffold-only output for a run request. Continuing automatically to start the app.',
+                'warning',
+              );
+
+              processedMessages.push({ id: generateId(), role: 'assistant', content });
+              processedMessages.push({
+                id: generateId(),
+                role: 'user',
+                content: `[Model: ${model}]
+
+[Provider: ${provider}]
+
+You scaffolded a project but did not complete runtime startup.
+Continue now and do ALL of the following:
+1) install dependencies if not already installed.
+2) include a <boltAction type="start"> command that launches the dev server.
+3) keep the final response concise and execution-focused.
+`,
+              });
+
+              const result = await streamText({
+                messages: [...processedMessages],
+                env: context.cloudflare?.env,
+                options,
+                apiKeys,
+                files,
+                providerSettings,
+                promptId,
+                contextOptimization,
+                contextFiles: filteredFiles,
+                chatMode,
+                designScheme,
+                summary,
+                messageSliceId,
+                projectMemory: effectiveProjectMemory || undefined,
+                subAgentPlan,
+              });
+
+              result.mergeIntoDataStream(dataStream);
+
+              (async () => {
+                for await (const part of result.fullStream) {
+                  if (part.type === 'error') {
+                    const error: any = part.error;
+                    logger.error(`${error}`);
+
+                    return;
+                  }
+                }
+              })();
 
               return;
             }

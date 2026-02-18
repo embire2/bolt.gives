@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeCreateViteNonInteractive } from './shell-command-utils';
+import { makeCreateViteNonInteractive, makeFileChecksPortable } from './shell-command-utils';
 
 describe('makeCreateViteNonInteractive', () => {
   it('rewrites npm create vite + npm install chains to non-interactive pnpm dlx', () => {
@@ -26,6 +26,26 @@ describe('makeCreateViteNonInteractive', () => {
   it('does not modify unrelated commands', () => {
     const input = 'pnpm -v';
     const res = makeCreateViteNonInteractive(input);
+    expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makeFileChecksPortable', () => {
+  it('rewrites test -f checks in command chains for jsh compatibility', () => {
+    const input =
+      'mkdir -p /home/project && test -f docs-summary.md && echo FILE_OK && cd /home/project && test -f docs-summary.md && echo FILE_OK';
+    const res = makeFileChecksPortable(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).not.toContain('test -f');
+    expect(res.modifiedCommand).toContain('ls docs-summary.md >/dev/null 2>&1');
+    expect(res.modifiedCommand).toContain('&& echo FILE_OK');
+  });
+
+  it('does not modify commands without test -f checks', () => {
+    const input = 'ls -la && echo done';
+    const res = makeFileChecksPortable(input);
+
     expect(res.shouldModify).toBe(false);
   });
 });
