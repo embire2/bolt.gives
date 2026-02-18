@@ -7,6 +7,7 @@ describe('withDevelopmentCommentaryWorkstyle', () => {
 
     expect(prompt).toContain('If the user asks to build/run an app');
     expect(prompt).toContain('ls <file> >/dev/null 2>&1');
+    expect(prompt).toContain('include the exact created file path');
   });
 
   it('does not append duplicate workstyle blocks', () => {

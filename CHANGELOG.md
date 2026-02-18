@@ -25,6 +25,7 @@
 - Prompt workstyle guidance now explicitly reinforces:
   - scaffold + install + start for run requests
   - portable file-check commands in shell steps
+  - explicit reporting of created file paths in final responses (for doc-generation and web-browse workflows)
 
 ### Verified
 - `pnpm run typecheck` passed.
