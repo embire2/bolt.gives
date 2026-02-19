@@ -12,6 +12,10 @@ const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 
+function normalizeCommandDelimiters(command: string): string {
+  return command.replace(/&amp;&amp;/g, '&&');
+}
+
 function rewriteCreateViteSegment(segment: string): {
   segment: string;
   modified: boolean;
@@ -83,7 +87,7 @@ function rewriteNpmInstallSegment(segment: string): { segment: string; modified:
  *   pnpm dlx create-vite@latest . --template react --no-interactive && pnpm install
  */
 export function makeCreateViteNonInteractive(command: string): ShellCommandRewrite {
-  const trimmed = command.trim();
+  const trimmed = normalizeCommandDelimiters(command).trim();
 
   if (!trimmed) {
     return { shouldModify: false };
@@ -158,7 +162,7 @@ function rewriteTestFileCheckSegment(segment: string): { segment: string; modifi
 }
 
 export function makeFileChecksPortable(command: string): ShellCommandRewrite {
-  const trimmed = command.trim();
+  const trimmed = normalizeCommandDelimiters(command).trim();
 
   if (!trimmed) {
     return { shouldModify: false };
@@ -218,7 +222,7 @@ function hasScaffoldHint(segments: string[], cdTarget: string): boolean {
  *   mkdir -p mini-react-e2e && cd mini-react-e2e && npm install
  */
 export function makeInstallCommandsProjectAware(command: string): ShellCommandRewrite {
-  const trimmed = command.trim();
+  const trimmed = normalizeCommandDelimiters(command).trim();
 
   if (!trimmed) {
     return { shouldModify: false };
