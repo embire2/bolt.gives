@@ -1,9 +1,20 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWebBrowsingTools } from './web-tools';
+import { browsePageWithPlaywright, searchWebWithPlaywright } from '~/lib/.server/web-browse-client';
 
 vi.mock('~/lib/.server/web-browse-client', () => {
   return {
-    searchWebWithPlaywright: vi.fn(async () => ({
+    searchWebWithPlaywright: vi.fn(),
+    browsePageWithPlaywright: vi.fn(),
+  };
+});
+
+describe('createWebBrowsingTools', () => {
+  beforeEach(() => {
+    vi.mocked(searchWebWithPlaywright).mockReset();
+    vi.mocked(browsePageWithPlaywright).mockReset();
+
+    vi.mocked(searchWebWithPlaywright).mockResolvedValue({
       query: 'remix loaders',
       engine: 'duckduckgo',
       results: [
@@ -13,8 +24,9 @@ vi.mock('~/lib/.server/web-browse-client', () => {
           snippet: 'How loaders work in Remix.',
         },
       ],
-    })),
-    browsePageWithPlaywright: vi.fn(async () => ({
+    });
+
+    vi.mocked(browsePageWithPlaywright).mockResolvedValue({
       url: 'https://example.com/docs',
       finalUrl: 'https://example.com/docs',
       status: 200,
@@ -23,11 +35,9 @@ vi.mock('~/lib/.server/web-browse-client', () => {
       content: 'GET /v1/widgets returns all widgets.',
       headings: ['Overview', 'Authentication'],
       links: [{ title: 'Auth', url: 'https://example.com/docs/auth' }],
-    })),
-  };
-});
+    });
+  });
 
-describe('createWebBrowsingTools', () => {
   it('requires strict-compatible tool parameters (no optional object keys)', () => {
     const tools = createWebBrowsingTools();
 
@@ -90,5 +100,28 @@ describe('createWebBrowsingTools', () => {
       {} as any,
     );
     expect(secondBrowse?.markdown).toContain('Repeated URL Browse Prevented');
+  });
+
+  it('returns a non-throwing result for blocked local/private URLs', async () => {
+    const tools = createWebBrowsingTools();
+
+    const result = await tools.web_browse.execute?.({ url: 'http://127.0.0.1:5173', maxChars: null }, {} as any);
+
+    expect(result?.status).toBe(400);
+    expect(result?.title).toBe('URL Not Allowed');
+    expect(result?.markdown).toContain('Localhost/private network URLs are not allowed');
+    expect(vi.mocked(browsePageWithPlaywright)).not.toHaveBeenCalled();
+  });
+
+  it('returns a non-throwing result when web browsing fails upstream', async () => {
+    vi.mocked(browsePageWithPlaywright).mockRejectedValueOnce(new Error('navigation timeout'));
+
+    const tools = createWebBrowsingTools();
+
+    const result = await tools.web_browse.execute?.({ url: 'https://example.com/docs', maxChars: null }, {} as any);
+
+    expect(result?.status).toBe(502);
+    expect(result?.title).toBe('Web Browse Failed');
+    expect(result?.markdown).toContain('navigation timeout');
   });
 });

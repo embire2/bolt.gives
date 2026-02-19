@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import { browsePageWithPlaywright, searchWebWithPlaywright } from '~/lib/.server/web-browse-client';
+import { isAllowedUrl } from '~/utils/url';
 
 function formatLinks(links: Array<{ title: string; url: string }>): string {
   if (!links.length) {
@@ -11,6 +12,30 @@ function formatLinks(links: Array<{ title: string; url: string }>): string {
     .slice(0, 10)
     .map((link, index) => `${index + 1}. ${link.title || '(untitled)'} - ${link.url}`)
     .join('\n');
+}
+
+function buildBrowseFailureResult(params: { url: string; title: string; message: string; status?: number }) {
+  const status = params.status ?? 400;
+
+  return {
+    url: params.url,
+    finalUrl: params.url,
+    status,
+    title: params.title,
+    description: params.message,
+    content: '',
+    headings: [],
+    links: [],
+    markdown: [
+      `# ${params.title}`,
+      '',
+      `URL: ${params.url}`,
+      '',
+      params.message,
+      '',
+      'If you need web browsing, provide a public HTTP/HTTPS URL.',
+    ].join('\n'),
+  };
 }
 
 export function createWebBrowsingTools(env?: Env): ToolSet {
@@ -71,10 +96,26 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
         try {
           parsedUrl = new URL(url.trim());
         } catch {
-          throw new Error(`Invalid URL for web_browse: ${url}`);
+          return buildBrowseFailureResult({
+            url,
+            title: 'Invalid URL',
+            message: 'The URL could not be parsed. Provide a valid public HTTP/HTTPS URL.',
+            status: 400,
+          });
         }
 
-        const normalizedUrl = parsedUrl.toString().toLowerCase();
+        const normalizedSourceUrl = parsedUrl.toString();
+
+        if (!isAllowedUrl(normalizedSourceUrl)) {
+          return buildBrowseFailureResult({
+            url: normalizedSourceUrl,
+            title: 'URL Not Allowed',
+            message: 'This URL is blocked for security. Localhost/private network URLs are not allowed.',
+            status: 400,
+          });
+        }
+
+        const normalizedUrl = normalizedSourceUrl.toLowerCase();
         const browseCount = (seenBrowseUrls.get(normalizedUrl) || 0) + 1;
         seenBrowseUrls.set(normalizedUrl, browseCount);
 
@@ -120,36 +161,47 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           };
         }
 
-        const page = await browsePageWithPlaywright(
-          { url: parsedUrl.toString(), maxChars: maxChars ?? 15000 },
-          { env },
-        );
-        browseCache.set(normalizedUrl, page);
+        try {
+          const page = await browsePageWithPlaywright(
+            { url: normalizedSourceUrl, maxChars: maxChars ?? 15000 },
+            { env },
+          );
+          browseCache.set(normalizedUrl, page);
 
-        return {
-          ...page,
-          markdown: [
-            `# ${page.title || 'Untitled page'}`,
-            '',
-            `Source: ${page.finalUrl}`,
-            '',
-            page.description ? `Description: ${page.description}` : '',
-            '',
-            '## Headings',
-            page.headings
-              .slice(0, 20)
-              .map((heading) => `- ${heading}`)
-              .join('\n') || '- (none)',
-            '',
-            '## Main Content',
-            page.content,
-            '',
-            '## Links',
-            formatLinks(page.links),
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        };
+          return {
+            ...page,
+            markdown: [
+              `# ${page.title || 'Untitled page'}`,
+              '',
+              `Source: ${page.finalUrl}`,
+              '',
+              page.description ? `Description: ${page.description}` : '',
+              '',
+              '## Headings',
+              page.headings
+                .slice(0, 20)
+                .map((heading) => `- ${heading}`)
+                .join('\n') || '- (none)',
+              '',
+              '## Main Content',
+              page.content,
+              '',
+              '## Links',
+              formatLinks(page.links),
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown web browse error';
+
+          return buildBrowseFailureResult({
+            url: normalizedSourceUrl,
+            title: 'Web Browse Failed',
+            message: `Could not browse this URL: ${message}`,
+            status: 502,
+          });
+        }
       },
     }),
   };
