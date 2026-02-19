@@ -13,6 +13,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import { resolvePromptIdForModel } from './prompt-selection';
 import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
+import { shouldEnableBuiltInWebTools } from './tool-intent';
 
 export type Messages = Message[];
 
@@ -309,7 +310,8 @@ export async function streamText(props: {
       : options || {};
 
   const mcpTools = (filteredOptions.tools || {}) as ToolSet;
-  const builtInWebTools = enableBuiltInWebTools ? createWebBrowsingTools(serverEnv) : {};
+  const webToolIntentDetected = shouldEnableBuiltInWebTools(processedMessages);
+  const builtInWebTools = enableBuiltInWebTools && webToolIntentDetected ? createWebBrowsingTools(serverEnv) : {};
   const mergedTools: ToolSet = {
     ...mcpTools,
     ...builtInWebTools,
@@ -326,6 +328,8 @@ export async function streamText(props: {
         originalOptionsKeys: options ? Object.keys(options) : [],
         filteredOptionsKeys: Object.keys(filteredOptions),
         removedParams: options ? Object.keys(options).filter((key) => !(key in filteredOptions)) : [],
+        webToolIntentDetected,
+        builtInWebToolsEnabled: Object.keys(builtInWebTools).length > 0,
       },
       null,
       2,
