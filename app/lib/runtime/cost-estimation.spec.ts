@@ -13,6 +13,17 @@ describe('cost-estimation', () => {
     expect(usage?.completionTokens).toBe(500);
   });
 
+  it('normalizes usage aliases from providers that return input/output tokens', () => {
+    const usage = normalizeUsageEvent({
+      inputTokens: 1500,
+      outputTokens: 250,
+    });
+
+    expect(usage?.promptTokens).toBe(1500);
+    expect(usage?.completionTokens).toBe(250);
+    expect(usage?.totalTokens).toBe(1750);
+  });
+
   it('returns a non-zero estimate for valid token usage', () => {
     const cost = estimateCostUSD({
       providerName: 'OpenAI',

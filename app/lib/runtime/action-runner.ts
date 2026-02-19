@@ -222,6 +222,7 @@ export class ActionRunner {
                 title: 'Dev Server Failed',
                 description: err.header,
                 content: err.output,
+                source: 'terminal',
               });
             });
 
@@ -255,6 +256,7 @@ export class ActionRunner {
         title: 'Dev Server Failed',
         description: error.header,
         content: error.output,
+        source: 'terminal',
       });
 
       // re-throw the error to be caught in the promise chain

@@ -8,6 +8,7 @@ import type {
   SubAgentMetadata,
   SubAgentState,
 } from './types';
+import { normalizeUsage } from '~/lib/runtime/usage';
 
 export function createPlannerExecutor(
   getStreamTextParams: (
@@ -92,7 +93,7 @@ Rules:
           ? `${normalizedPlan.slice(0, 2997)}...`
           : normalizedPlan
         : '';
-    const usage = plannerResult.usage ? await plannerResult.usage : undefined;
+    const usage = plannerResult.usage ? normalizeUsage((await plannerResult.usage) as any) : undefined;
 
     const metadata: SubAgentMetadata = {
       id: agentId,
@@ -105,9 +106,9 @@ Rules:
       plan: finalPlan,
       tokenUsage: usage
         ? {
-            promptTokens: usage.promptTokens || 0,
-            completionTokens: usage.completionTokens || 0,
-            totalTokens: usage.totalTokens || 0,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            totalTokens: usage.totalTokens,
           }
         : undefined,
     };

@@ -45,6 +45,12 @@ import {
 } from '~/lib/runtime/model-selection';
 import { normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
 import {
+  ARCHITECT_NAME,
+  buildArchitectAutoHealPrompt,
+  decideArchitectAutoHeal,
+  diagnoseArchitectIssue,
+} from '~/lib/runtime/architect';
+import {
   executeApprovedPlanSteps,
   generatePlanSteps,
   type AgentMode,
@@ -212,6 +218,8 @@ export const ChatImpl = memo(
     const [latestRunMetrics, setLatestRunMetrics] = useState<AgentRunMetricsDataEvent | null>(null);
     const [latestUsage, setLatestUsage] = useState<UsageDataEvent | null>(null);
     const selectionBootstrapRef = useRef(false);
+    const architectAttemptCountsRef = useRef<Record<string, number>>({});
+    const architectInFlightRef = useRef(false);
     const mcpSettings = useMCPStore((state) => state.settings);
     const mcpInitialized = useMCPStore((state) => state.isInitialized);
     const initializeMcp = useMCPStore((state) => state.initialize);
@@ -1173,6 +1181,60 @@ export const ChatImpl = memo(
 
       textareaRef.current?.blur();
     };
+
+    useEffect(() => {
+      if (!actionAlert || isLoading || architectInFlightRef.current) {
+        return;
+      }
+
+      const diagnosis = diagnoseArchitectIssue(actionAlert);
+
+      if (!diagnosis) {
+        return;
+      }
+
+      const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
+      const decision = decideArchitectAutoHeal({
+        autonomyMode,
+        diagnosis,
+        attemptsForFingerprint,
+      });
+
+      if (!decision.shouldAutoHeal) {
+        return;
+      }
+
+      const attemptNumber = attemptsForFingerprint + 1;
+      architectAttemptCountsRef.current[diagnosis.fingerprint] = attemptNumber;
+      architectInFlightRef.current = true;
+
+      workbenchStore.clearAlert();
+      toast.info(`${ARCHITECT_NAME}: auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`);
+
+      const architectPrompt = buildArchitectAutoHealPrompt({
+        alert: actionAlert,
+        diagnosis,
+        attemptNumber,
+      });
+      const payload = buildModelSelectionEnvelope({
+        model,
+        providerName: provider.name,
+        selectionReason: `${ARCHITECT_NAME} auto-heal detected: ${diagnosis.title}.`,
+        content: architectPrompt,
+      });
+
+      append({
+        id: `${Date.now()}-architect-auto-heal`,
+        role: 'user',
+        content: payload,
+      })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : `${ARCHITECT_NAME} auto-heal failed to start`);
+        })
+        .finally(() => {
+          architectInFlightRef.current = false;
+        });
+    }, [actionAlert, append, autonomyMode, isLoading, model, provider.name]);
 
     /**
      * Handles the change event for the textarea and updates the input state.

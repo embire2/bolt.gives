@@ -1,9 +1,17 @@
 import type { UsageDataEvent } from '~/types/context';
+import { normalizeUsage } from '~/lib/runtime/usage';
 
 interface UsageLike {
   completionTokens?: number;
   promptTokens?: number;
   totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 interface CostEstimationOptions {
@@ -60,24 +68,17 @@ function resolveRatesPerMillion(providerName?: string, modelName?: string): { pr
 }
 
 export function normalizeUsageEvent(usage: UsageLike | null | undefined): UsageDataEvent | null {
-  if (!usage) {
-    return null;
-  }
+  const normalizedUsage = normalizeUsage(usage);
 
-  const promptTokens = normalizeTokenCount(usage.promptTokens);
-  const completionTokens = normalizeTokenCount(usage.completionTokens);
-  const providedTotal = normalizeTokenCount(usage.totalTokens);
-  const totalTokens = providedTotal > 0 ? providedTotal : promptTokens + completionTokens;
-
-  if (totalTokens === 0 && promptTokens === 0 && completionTokens === 0) {
+  if (!normalizedUsage) {
     return null;
   }
 
   return {
     type: 'usage',
-    promptTokens,
-    completionTokens,
-    totalTokens,
+    promptTokens: normalizeTokenCount(normalizedUsage.promptTokens),
+    completionTokens: normalizeTokenCount(normalizedUsage.completionTokens),
+    totalTokens: normalizeTokenCount(normalizedUsage.totalTokens),
     timestamp: new Date().toISOString(),
   };
 }

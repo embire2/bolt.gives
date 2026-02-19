@@ -29,6 +29,7 @@ import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~
 import { shouldForceRunContinuation } from '~/lib/.server/llm/run-continuation';
 import { SubAgentManager, type SubAgentConfig, type SubAgentState } from '~/lib/.server/llm/sub-agent';
 import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-executor';
+import { addUsageTotals } from '~/lib/runtime/usage';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -344,9 +345,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             onFinish(resp) {
               if (resp.usage) {
                 logger.debug('createSummary token usage', JSON.stringify(resp.usage));
-                cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
-                cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
-                cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
+                addUsageTotals(cumulativeUsage, resp.usage as any);
               }
             },
           });
@@ -389,9 +388,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             onFinish(resp) {
               if (resp.usage) {
                 logger.debug('selectContext token usage', JSON.stringify(resp.usage));
-                cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
-                cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
-                cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
+                addUsageTotals(cumulativeUsage, resp.usage as any);
               }
             },
           });
@@ -481,9 +478,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             const plannerResult = await subAgentManager.start(plannerAgentId, processedMessages, onProgress);
 
             if (plannerResult.metadata.tokenUsage) {
-              cumulativeUsage.completionTokens += plannerResult.metadata.tokenUsage.completionTokens || 0;
-              cumulativeUsage.promptTokens += plannerResult.metadata.tokenUsage.promptTokens || 0;
-              cumulativeUsage.totalTokens += plannerResult.metadata.tokenUsage.totalTokens || 0;
+              addUsageTotals(cumulativeUsage, plannerResult.metadata.tokenUsage);
             }
 
             if (plannerResult.success && plannerResult.output) {
@@ -576,9 +571,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             logger.debug('usage', JSON.stringify(usage));
 
             if (usage) {
-              cumulativeUsage.completionTokens += usage.completionTokens || 0;
-              cumulativeUsage.promptTokens += usage.promptTokens || 0;
-              cumulativeUsage.totalTokens += usage.totalTokens || 0;
+              addUsageTotals(cumulativeUsage, usage as any);
             }
 
             const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
@@ -640,9 +633,7 @@ ${toolSummary}`,
                 onStepFinish: undefined,
                 onFinish: ({ text: finalContent, usage: finalizeUsage }) => {
                   if (finalizeUsage) {
-                    cumulativeUsage.completionTokens += finalizeUsage.completionTokens || 0;
-                    cumulativeUsage.promptTokens += finalizeUsage.promptTokens || 0;
-                    cumulativeUsage.totalTokens += finalizeUsage.totalTokens || 0;
+                    addUsageTotals(cumulativeUsage, finalizeUsage as any);
                   }
 
                   if (pendingRecoveryReason) {
