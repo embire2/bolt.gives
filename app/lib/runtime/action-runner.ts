@@ -12,7 +12,11 @@ import {
   type InteractiveStepRunnerEvent,
 } from '~/lib/runtime/interactive-step-runner';
 import { getCollaborationServerUrl } from '~/lib/collaboration/client';
-import { makeCreateViteNonInteractive, makeFileChecksPortable } from './shell-command-utils';
+import {
+  makeCreateViteNonInteractive,
+  makeFileChecksPortable,
+  makeInstallCommandsProjectAware,
+} from './shell-command-utils';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -664,18 +668,33 @@ export class ActionRunner {
     modifiedCommand?: string;
     warning?: string;
   }> {
-    const trimmedCommand = command.trim();
+    let trimmedCommand = command.trim();
+    let hasCommandRewrite = false;
+    const rewriteWarnings: string[] = [];
 
-    const createViteRewrite = makeCreateViteNonInteractive(trimmedCommand);
+    const applyRewrite = (result: { shouldModify: boolean; modifiedCommand?: string; warning?: string }) => {
+      if (!result.shouldModify || !result.modifiedCommand || result.modifiedCommand === trimmedCommand) {
+        return;
+      }
 
-    if (createViteRewrite.shouldModify) {
-      return createViteRewrite;
-    }
+      trimmedCommand = result.modifiedCommand;
+      hasCommandRewrite = true;
 
-    const portableFileChecksRewrite = makeFileChecksPortable(trimmedCommand);
+      if (result.warning) {
+        rewriteWarnings.push(result.warning);
+      }
+    };
 
-    if (portableFileChecksRewrite.shouldModify) {
-      return portableFileChecksRewrite;
+    applyRewrite(makeCreateViteNonInteractive(trimmedCommand));
+    applyRewrite(makeInstallCommandsProjectAware(trimmedCommand));
+    applyRewrite(makeFileChecksPortable(trimmedCommand));
+
+    if (hasCommandRewrite) {
+      return {
+        shouldModify: true,
+        modifiedCommand: trimmedCommand,
+        warning: rewriteWarnings.length ? rewriteWarnings.join(' ') : undefined,
+      };
     }
 
     // Handle rm commands that might fail due to missing files

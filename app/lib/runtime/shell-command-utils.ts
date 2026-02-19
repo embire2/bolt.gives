@@ -8,6 +8,9 @@ const NPM_CREATE_VITE_RE = /\bnpm\s+create\s+vite(?<ver>@[^\s]+)?\b/i;
 const CREATE_VITE_HINT_RE = /\bcreate-vite\b/i;
 const HAS_NO_INTERACTIVE_RE = /\B--no-interactive\b/;
 const TEST_FILE_CHECK_RE = /^test\s+-f\s+(.+)$/i;
+const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
+const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
+const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 
 function rewriteCreateViteSegment(segment: string): {
   segment: string;
@@ -182,5 +185,82 @@ export function makeFileChecksPortable(command: string): ShellCommandRewrite {
     shouldModify: true,
     modifiedCommand: rewrittenParts.join(' && '),
     warning: 'Rewrote unsupported `test -f` checks to portable file checks for the terminal shell.',
+  };
+}
+
+function hasInstallSegment(segment: string): boolean {
+  return INSTALL_SEGMENT_RE.test(segment.trim());
+}
+
+function hasScaffoldHint(segments: string[], cdTarget: string): boolean {
+  const normalizedTarget = cdTarget.trim();
+
+  return segments.some((segment) => {
+    const trimmed = segment.trim();
+    const mkdirMatch = trimmed.match(MKDIR_P_SEGMENT_RE);
+
+    if (mkdirMatch?.[1] === normalizedTarget) {
+      return true;
+    }
+
+    return /\bcreate-vite\b|\bcreate-react-app\b|\bnpm\s+create\b|\bpnpm\s+create\b|\bnpx\s+create\b/i.test(trimmed);
+  });
+}
+
+/**
+ * Guard against a common scaffolding failure where the model runs `npm/pnpm install`
+ * in the workspace root before changing into the newly created project directory.
+ *
+ * Example bad chain:
+ *   mkdir -p mini-react-e2e && npm install && cd mini-react-e2e && npm install
+ *
+ * Rewritten to:
+ *   mkdir -p mini-react-e2e && cd mini-react-e2e && npm install
+ */
+export function makeInstallCommandsProjectAware(command: string): ShellCommandRewrite {
+  const trimmed = command.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  const parts = trimmed.split(/\s*&&\s*/).map((part) => part.trim());
+  const cdIndex = parts.findIndex((part) => CD_SEGMENT_RE.test(part));
+
+  if (cdIndex <= 0) {
+    return { shouldModify: false };
+  }
+
+  const cdMatch = parts[cdIndex].match(CD_SEGMENT_RE);
+  const cdTarget = cdMatch?.[1]?.trim();
+
+  if (!cdTarget || cdTarget === '.') {
+    return { shouldModify: false };
+  }
+
+  const beforeCd = parts.slice(0, cdIndex);
+  const afterCd = parts.slice(cdIndex + 1);
+  const hasInstallBeforeCd = beforeCd.some(hasInstallSegment);
+  const hasInstallAfterCd = afterCd.some(hasInstallSegment);
+
+  if (!hasInstallBeforeCd || !hasInstallAfterCd) {
+    return { shouldModify: false };
+  }
+
+  if (!hasScaffoldHint(beforeCd, cdTarget)) {
+    return { shouldModify: false };
+  }
+
+  const filteredBefore = beforeCd.filter((segment) => !hasInstallSegment(segment));
+  const rewrittenParts = [...filteredBefore, parts[cdIndex], ...afterCd];
+
+  if (rewrittenParts.length === parts.length) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: `Removed install commands before "cd ${cdTarget}" to run dependency installation in the scaffolded project directory.`,
   };
 }

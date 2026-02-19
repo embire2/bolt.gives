@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { makeCreateViteNonInteractive, makeFileChecksPortable } from './shell-command-utils';
+import {
+  makeCreateViteNonInteractive,
+  makeFileChecksPortable,
+  makeInstallCommandsProjectAware,
+} from './shell-command-utils';
 
 describe('makeCreateViteNonInteractive', () => {
   it('rewrites npm create vite + npm install chains to non-interactive pnpm dlx', () => {
@@ -45,6 +49,23 @@ describe('makeFileChecksPortable', () => {
   it('does not modify commands without test -f checks', () => {
     const input = 'ls -la && echo done';
     const res = makeFileChecksPortable(input);
+
+    expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makeInstallCommandsProjectAware', () => {
+  it('removes install commands before cd when scaffolding into a subdirectory', () => {
+    const input = 'mkdir -p mini-react-e2e && npm install && cd mini-react-e2e && npm install';
+    const res = makeInstallCommandsProjectAware(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('mkdir -p mini-react-e2e && cd mini-react-e2e && npm install');
+  });
+
+  it('keeps root and nested installs when there is no scaffolding hint', () => {
+    const input = 'npm install && cd packages/web && npm install';
+    const res = makeInstallCommandsProjectAware(input);
 
     expect(res.shouldModify).toBe(false);
   });
