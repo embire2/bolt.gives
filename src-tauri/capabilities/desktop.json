@@ -1,0 +1,14 @@
+{
+  "identifier": "desktop",
+  "description": "permissions for desktop apps",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "window:default",
+    "app:default",
+    "path:default",
+    "global-shortcut:default",
+    "updater:default"
+  ]
+}
