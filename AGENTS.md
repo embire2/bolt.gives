@@ -91,14 +91,18 @@ When uncertain, choose the smallest safe change that unblocks users.
 
 ## Deployment Rules (Cloudflare + alpha1)
 
-Production-like validation target:
+Production-like validation targets:
 - `https://alpha1.bolt.gives`
+- `https://ahmad.bolt.gives`
 
 When deploying:
 - Confirm build passes under Cloudflare constraints.
 - Confirm runtime starts and chat flow works.
 - Confirm static assets are fresh (logo/version/changelog visibility where applicable).
 - Confirm no auth/tool schema runtime errors in browser console and server logs.
+- Confirm both live domains return healthy responses after deployment:
+  - `https://alpha1.bolt.gives`
+  - `https://ahmad.bolt.gives`
 
 If deployment fails:
 - Capture exact error text.
