@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  decodeHtmlCommandDelimiters,
   makeCreateViteNonInteractive,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
 } from './shell-command-utils';
+
+describe('decodeHtmlCommandDelimiters', () => {
+  it('normalizes HTML-escaped && separators in arbitrary command chains', () => {
+    const input = 'cd /home/project &amp;&amp; pnpm install &amp;&amp; pnpm run build';
+    const res = decodeHtmlCommandDelimiters(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('cd /home/project && pnpm install && pnpm run build');
+  });
+});
 
 describe('makeCreateViteNonInteractive', () => {
   it('rewrites npm create vite + npm install chains to non-interactive pnpm dlx', () => {

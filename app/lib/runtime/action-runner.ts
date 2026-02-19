@@ -13,6 +13,7 @@ import {
 } from '~/lib/runtime/interactive-step-runner';
 import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 import {
+  decodeHtmlCommandDelimiters,
   makeCreateViteNonInteractive,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
@@ -687,6 +688,7 @@ export class ActionRunner {
       }
     };
 
+    applyRewrite(decodeHtmlCommandDelimiters(trimmedCommand));
     applyRewrite(makeCreateViteNonInteractive(trimmedCommand));
     applyRewrite(makeInstallCommandsProjectAware(trimmedCommand));
     applyRewrite(makeFileChecksPortable(trimmedCommand));

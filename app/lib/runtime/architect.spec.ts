@@ -31,6 +31,18 @@ describe('diagnoseArchitectIssue', () => {
 
     expect(diagnosis).toBeNull();
   });
+
+  it('detects escaped shell separator failures from terminal output', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Dev Server Failed',
+      description: 'Command Failed',
+      content: 'jsh: ;& can only be used in a case clause',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('escaped-shell-separators');
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

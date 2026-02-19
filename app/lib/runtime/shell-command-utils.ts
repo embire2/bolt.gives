@@ -12,8 +12,18 @@ const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 
-function normalizeCommandDelimiters(command: string): string {
-  return command.replace(/&amp;&amp;/g, '&&');
+export function decodeHtmlCommandDelimiters(command: string): ShellCommandRewrite {
+  const normalized = command.replace(/&amp;&amp;/g, '&&');
+
+  if (normalized === command) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: normalized,
+    warning: 'Normalized HTML-escaped command separators for shell compatibility.',
+  };
 }
 
 function rewriteCreateViteSegment(segment: string): {
@@ -87,7 +97,9 @@ function rewriteNpmInstallSegment(segment: string): { segment: string; modified:
  *   pnpm dlx create-vite@latest . --template react --no-interactive && pnpm install
  */
 export function makeCreateViteNonInteractive(command: string): ShellCommandRewrite {
-  const trimmed = normalizeCommandDelimiters(command).trim();
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
 
   if (!trimmed) {
     return { shouldModify: false };
@@ -162,7 +174,9 @@ function rewriteTestFileCheckSegment(segment: string): { segment: string; modifi
 }
 
 export function makeFileChecksPortable(command: string): ShellCommandRewrite {
-  const trimmed = normalizeCommandDelimiters(command).trim();
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
 
   if (!trimmed) {
     return { shouldModify: false };
@@ -228,7 +242,9 @@ function hasScaffoldHint(segments: string[], cdTarget: string): boolean {
  *   mkdir -p mini-react-e2e && cd mini-react-e2e && cat package.json
  */
 export function makeInstallCommandsProjectAware(command: string): ShellCommandRewrite {
-  const trimmed = normalizeCommandDelimiters(command).trim();
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
 
   if (!trimmed) {
     return { shouldModify: false };

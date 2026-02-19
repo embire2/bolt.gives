@@ -78,6 +78,18 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
       'Continue setup only after scaffold succeeds.',
     ],
   },
+  {
+    id: 'escaped-shell-separators',
+    title: 'Escaped shell separators',
+    source: 'terminal',
+    patterns: [/jsh:\s*;&\s*can only be used in a case clause/i, /&amp;&amp;/i],
+    maxAutoAttempts: 1,
+    guidance: [
+      'Decode HTML-escaped shell separators (`&amp;&amp;` -> `&&`) before execution.',
+      'Re-run only the failed command chain after normalization.',
+      'Verify the command exits cleanly before continuing with the workflow.',
+    ],
+  },
 ];
 
 function buildFingerprint(input: string): string {
