@@ -24,7 +24,7 @@ import DeployChatAlert from '~/components/deploy/DeployAlert';
 import ChatAlert from './ChatAlert';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import ProgressCompilation from './ProgressCompilation';
-import type { AgentRunMetricsDataEvent, ProgressAnnotation } from '~/types/context';
+import type { AgentRunMetricsDataEvent, ProgressAnnotation, UsageDataEvent } from '~/types/context';
 import { SupabaseChatAlert } from '~/components/chat/SupabaseAlert';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { useStore } from '@nanostores/react';
@@ -95,6 +95,13 @@ interface BaseChatProps {
   autonomyMode?: AutonomyMode;
   setAutonomyMode?: (mode: AutonomyMode) => void;
   latestRunMetrics?: AgentRunMetricsDataEvent | null;
+  latestUsage?: UsageDataEvent | null;
+  onApiKeysUpdated?: (payload: {
+    apiKeys: Record<string, string>;
+    providerName: string;
+    apiKey: string;
+    providerModels: ModelInfo[];
+  }) => void;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -154,6 +161,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       autonomyMode,
       setAutonomyMode,
       latestRunMetrics,
+      latestUsage,
+      onApiKeysUpdated,
     },
     ref,
   ) => {
@@ -253,9 +262,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, [providerList, provider]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
-      const newApiKeys = { ...apiKeys, [providerName]: apiKey };
+      const normalizedApiKey = apiKey.trim();
+      const newApiKeys = { ...apiKeys, [providerName]: normalizedApiKey };
       setApiKeys(newApiKeys);
-      Cookies.set('apiKeys', JSON.stringify(newApiKeys));
+      Cookies.set('apiKeys', JSON.stringify(newApiKeys), { expires: 365 });
 
       setIsModelLoading(providerName);
 
@@ -275,6 +285,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return [...otherModels, ...providerModels];
       });
       setIsModelLoading(undefined);
+
+      onApiKeysUpdated?.({
+        apiKeys: newApiKeys,
+        providerName,
+        apiKey: normalizedApiKey,
+        providerModels,
+      });
     };
 
     const startListening = () => {
@@ -456,6 +473,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   isStreaming={isStreaming}
                   autonomyMode={autonomyMode}
                   latestRunMetrics={latestRunMetrics}
+                  latestUsage={latestUsage}
                 />
                 <StepRunnerFeed data={data} />
                 <ChatBox

@@ -74,13 +74,15 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
   }, [checkEnvApiKey]);
 
   const handleSave = () => {
+    const normalizedKey = tempKey.trim();
+
     // Save to parent state
-    setApiKey(tempKey);
+    setApiKey(normalizedKey);
 
     // Save to cookies
     const currentKeys = getApiKeysFromCookies();
-    const newKeys = { ...currentKeys, [provider.name]: tempKey };
-    Cookies.set('apiKeys', JSON.stringify(newKeys));
+    const newKeys = { ...currentKeys, [provider.name]: normalizedKey };
+    Cookies.set('apiKeys', JSON.stringify(newKeys), { expires: 365 });
 
     setIsEditing(false);
   };

@@ -34,6 +34,16 @@ import { recordTokenUsage } from '~/lib/stores/performance';
 import { SessionManager } from '~/lib/services/sessionManager';
 import { normalizeSessionPayload, restoreConversationFromPayload } from '~/lib/services/session-payload';
 import { mergePromptContext } from '~/lib/services/prompt-merge';
+import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+import {
+  LAST_CONFIGURED_PROVIDER_COOKIE_KEY,
+  getRememberedProviderModel,
+  parseApiKeysCookie,
+  pickPreferredProviderName,
+  rememberProviderModelSelection,
+  resolvePreferredModelName,
+} from '~/lib/runtime/model-selection';
+import { normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
 import {
   executeApprovedPlanSteps,
   generatePlanSteps,
@@ -48,12 +58,19 @@ import {
 } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
-import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent } from '~/types/context';
+import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent, UsageDataEvent } from '~/types/context';
 
 const logger = createScopedLogger('Chat');
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
+const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 
 type StoredProjectMemory = ProjectMemoryDataEvent | null;
+type ApiKeysUpdatePayload = {
+  apiKeys: Record<string, string>;
+  providerName: string;
+  apiKey: string;
+  providerModels: ModelInfo[];
+};
 
 function loadStoredProjectMemory(): StoredProjectMemory {
   if (typeof window === 'undefined') {
@@ -76,6 +93,29 @@ function loadStoredProjectMemory(): StoredProjectMemory {
     return parsed;
   } catch {
     return null;
+  }
+}
+
+function getApiKeysFromCookiesSafe(): Record<string, string> {
+  return parseApiKeysCookie(Cookies.get('apiKeys'));
+}
+
+function resolveProviderInfo(providerName: string | undefined): ProviderInfo {
+  return (PROVIDER_LIST.find((provider) => provider.name === providerName) || DEFAULT_PROVIDER) as ProviderInfo;
+}
+
+async function fetchProviderModels(providerName: string): Promise<ModelInfo[]> {
+  try {
+    const response = await fetch(`/api/models/${encodeURIComponent(providerName)}`);
+    const payload = (await response.json()) as { modelList?: ModelInfo[] };
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return payload.modelList || [];
+  } catch {
+    return [];
   }
 }
 
@@ -156,12 +196,12 @@ export const ChatImpl = memo(
     });
     const [provider, setProvider] = useState(() => {
       const savedProvider = Cookies.get('selectedProvider');
-      return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
+      return resolveProviderInfo(savedProvider);
     });
     const { showChat } = useStore(chatStore);
     const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
-    const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+    const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => getApiKeysFromCookiesSafe());
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | undefined>();
@@ -170,6 +210,8 @@ export const ChatImpl = memo(
     const [sketchElements, setSketchElements] = useState<SketchElement[]>([]);
     const [projectMemory, setProjectMemory] = useState<StoredProjectMemory>(() => loadStoredProjectMemory());
     const [latestRunMetrics, setLatestRunMetrics] = useState<AgentRunMetricsDataEvent | null>(null);
+    const [latestUsage, setLatestUsage] = useState<UsageDataEvent | null>(null);
+    const selectionBootstrapRef = useRef(false);
     const mcpSettings = useMCPStore((state) => state.settings);
     const mcpInitialized = useMCPStore((state) => state.isInitialized);
     const initializeMcp = useMCPStore((state) => state.initialize);
@@ -220,18 +262,17 @@ export const ChatImpl = memo(
         handleError(e, 'chat');
       },
       onFinish: (message, response) => {
-        const usage = response.usage;
-        setData(undefined);
+        const normalizedUsage = normalizeUsageEvent(response.usage);
 
-        if (usage) {
-          console.log('Token usage:', usage);
-          recordTokenUsage(usage);
+        if (normalizedUsage) {
+          setLatestUsage(normalizedUsage);
+          recordTokenUsage(normalizedUsage);
           logStore.logProvider('Chat response completed', {
             component: 'Chat',
             action: 'response',
             model,
             provider: provider.name,
-            usage,
+            usage: normalizedUsage,
             messageLength: message.content.length,
           });
         }
@@ -245,6 +286,28 @@ export const ChatImpl = memo(
     useEffect(() => {
       if (!chatData || chatData.length === 0) {
         return;
+      }
+
+      const lastUsageEvent = [...chatData]
+        .reverse()
+        .find(
+          (item): item is UsageDataEvent =>
+            typeof item === 'object' && item !== null && !Array.isArray(item) && (item as any).type === 'usage',
+        );
+
+      if (lastUsageEvent) {
+        const normalized = normalizeUsageEvent(lastUsageEvent);
+        setLatestUsage((prev) => {
+          if (
+            prev?.totalTokens === normalized?.totalTokens &&
+            prev?.promptTokens === normalized?.promptTokens &&
+            prev?.completionTokens === normalized?.completionTokens
+          ) {
+            return prev;
+          }
+
+          return normalized;
+        });
       }
 
       const lastProjectMemoryEvent = [...chatData]
@@ -285,6 +348,51 @@ export const ChatImpl = memo(
         setLatestRunMetrics((prev) => (prev?.runId === lastRunMetricsEvent.runId ? prev : lastRunMetricsEvent));
       }
     }, [chatData]);
+
+    useEffect(() => {
+      if (selectionBootstrapRef.current || activeProviders.length === 0) {
+        return;
+      }
+
+      const nextApiKeys = getApiKeysFromCookiesSafe();
+      setApiKeys(nextApiKeys);
+
+      const preferredProviderName = pickPreferredProviderName({
+        activeProviderNames: activeProviders.map((activeProvider) => activeProvider.name),
+        apiKeys: nextApiKeys,
+        localProviderNames: LOCAL_PROVIDERS,
+        savedProviderName: Cookies.get('selectedProvider'),
+        lastConfiguredProviderName: Cookies.get(LAST_CONFIGURED_PROVIDER_COOKIE_KEY),
+        fallbackProviderName: DEFAULT_PROVIDER.name,
+      });
+      const preferredProvider =
+        activeProviders.find((activeProvider) => activeProvider.name === preferredProviderName) ||
+        resolveProviderInfo(preferredProviderName);
+
+      setProvider(preferredProvider as ProviderInfo);
+      Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+
+      selectionBootstrapRef.current = true;
+
+      (async () => {
+        const providerModels = await fetchProviderModels(preferredProvider.name);
+        const preferredModel = resolvePreferredModelName({
+          providerName: preferredProvider.name,
+          models: providerModels,
+          rememberedModelName: getRememberedProviderModel(preferredProvider.name),
+          savedModelName: Cookies.get('selectedModel'),
+        });
+
+        if (!preferredModel) {
+          return;
+        }
+
+        setModel(preferredModel);
+        Cookies.set('selectedModel', preferredModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+        rememberProviderModelSelection(preferredProvider.name, preferredModel);
+      })();
+    }, [activeProviders]);
+
     useEffect(() => {
       const prompt = searchParams.get('prompt');
 
@@ -561,8 +669,9 @@ export const ChatImpl = memo(
           if (decision.overridden) {
             setModel(decision.model);
             setProvider(decision.provider);
-            Cookies.set('selectedModel', decision.model, { expires: 30 });
-            Cookies.set('selectedProvider', decision.provider.name, { expires: 30 });
+            Cookies.set('selectedModel', decision.model, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+            Cookies.set('selectedProvider', decision.provider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+            rememberProviderModelSelection(decision.provider.name, decision.model);
             toast.info(`Model Orchestrator: ${decision.provider.name} / ${decision.model}`);
           }
 
@@ -1085,22 +1194,54 @@ export const ChatImpl = memo(
       [],
     );
 
-    useEffect(() => {
-      const storedApiKeys = Cookies.get('apiKeys');
+    const handleApiKeysUpdated = useCallback(
+      async ({ apiKeys: updatedApiKeys, providerName, apiKey, providerModels }: ApiKeysUpdatePayload) => {
+        setApiKeys(updatedApiKeys);
+        Cookies.set('apiKeys', JSON.stringify(updatedApiKeys), { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
 
-      if (storedApiKeys) {
-        setApiKeys(JSON.parse(storedApiKeys));
-      }
-    }, []);
+        const normalizedKey = apiKey.trim();
+
+        if (!normalizedKey) {
+          return;
+        }
+
+        Cookies.set(LAST_CONFIGURED_PROVIDER_COOKIE_KEY, providerName, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+
+        const preferredProvider =
+          activeProviders.find((activeProvider) => activeProvider.name === providerName) ||
+          resolveProviderInfo(providerName);
+
+        setProvider(preferredProvider as ProviderInfo);
+        Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+
+        const modelsForProvider = providerModels.length > 0 ? providerModels : await fetchProviderModels(providerName);
+        const preferredModel = resolvePreferredModelName({
+          providerName,
+          models: modelsForProvider,
+          rememberedModelName: getRememberedProviderModel(providerName),
+          savedModelName: Cookies.get('selectedModel') || model,
+        });
+
+        if (!preferredModel) {
+          return;
+        }
+
+        setModel(preferredModel);
+        Cookies.set('selectedModel', preferredModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+        rememberProviderModelSelection(providerName, preferredModel);
+      },
+      [activeProviders, model],
+    );
 
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
-      Cookies.set('selectedModel', newModel, { expires: 30 });
+      Cookies.set('selectedModel', newModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+      rememberProviderModelSelection(provider.name, newModel);
     };
 
     const handleProviderChange = (newProvider: ProviderInfo) => {
       setProvider(newProvider);
-      Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
+      Cookies.set('selectedProvider', newProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
     };
 
     const handleWebSearchResult = useCallback(
@@ -1197,6 +1338,8 @@ export const ChatImpl = memo(
         autonomyMode={autonomyMode}
         setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
         latestRunMetrics={latestRunMetrics}
+        latestUsage={latestUsage}
+        onApiKeysUpdated={handleApiKeysUpdated}
       />
     );
   },

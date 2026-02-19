@@ -4,6 +4,7 @@ import type { KeyboardEvent } from 'react';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { classNames } from '~/utils/classNames';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
+import { getRememberedProviderModel, resolvePreferredModelName } from '~/lib/runtime/model-selection';
 
 // Fuzzy search utilities
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -134,6 +135,16 @@ export const ModelSelector = ({
   type ConnectionStatus = 'unknown' | 'connected' | 'disconnected';
 
   const [localProviderStatus, setLocalProviderStatus] = useState<Record<string, ConnectionStatus>>({});
+  const getPreferredModelForProvider = useCallback(
+    (providerName: string) =>
+      resolvePreferredModelName({
+        providerName,
+        models: modelList,
+        rememberedModelName: getRememberedProviderModel(providerName),
+        savedModelName: model,
+      }),
+    [modelList, model],
+  );
 
   // Check connectivity of local providers when provider list changes
   useEffect(() => {
@@ -366,10 +377,10 @@ export const ModelSelector = ({
           if (setProvider) {
             setProvider(selectedProvider);
 
-            const firstModel = modelList.find((m) => m.provider === selectedProvider.name);
+            const preferredModel = getPreferredModelForProvider(selectedProvider.name);
 
-            if (firstModel && setModel) {
-              setModel(firstModel.name);
+            if (preferredModel && setModel) {
+              setModel(preferredModel);
             }
           }
 
@@ -422,13 +433,13 @@ export const ModelSelector = ({
       const firstEnabledProvider = providerList[0];
       setProvider?.(firstEnabledProvider);
 
-      const firstModel = modelList.find((m) => m.provider === firstEnabledProvider.name);
+      const preferredModel = getPreferredModelForProvider(firstEnabledProvider.name);
 
-      if (firstModel) {
-        setModel?.(firstModel.name);
+      if (preferredModel) {
+        setModel?.(preferredModel);
       }
     }
-  }, [providerList, provider, setProvider, modelList, setModel]);
+  }, [providerList, provider, setProvider, setModel, getPreferredModelForProvider]);
 
   if (providerList.length === 0) {
     return (
@@ -594,10 +605,10 @@ export const ModelSelector = ({
                       if (setProvider) {
                         setProvider(providerOption);
 
-                        const firstModel = modelList.find((m) => m.provider === providerOption.name);
+                        const preferredModel = getPreferredModelForProvider(providerOption.name);
 
-                        if (firstModel && setModel) {
-                          setModel(firstModel.name);
+                        if (preferredModel && setModel) {
+                          setModel(preferredModel);
                         }
                       }
 

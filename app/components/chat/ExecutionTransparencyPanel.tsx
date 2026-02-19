@@ -11,6 +11,7 @@ import type {
 } from '~/types/context';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { getAutonomyModeLabel } from '~/lib/runtime/autonomy';
+import { estimateCostUSD, formatCostUSD, normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -60,30 +61,6 @@ function isSubAgentEvent(value: JSONValue): value is SubAgentEvent {
   return (value as Record<string, unknown>).type === 'sub-agent';
 }
 
-function estimateCostUSD(provider: string | undefined, usage: UsageDataEvent | undefined): number {
-  if (!usage) {
-    return 0;
-  }
-
-  const ratesPerMillion = (() => {
-    switch ((provider || '').toLowerCase()) {
-      case 'openai':
-        return { prompt: 5, completion: 15 };
-      case 'anthropic':
-        return { prompt: 3, completion: 15 };
-      case 'google':
-        return { prompt: 1, completion: 3 };
-      default:
-        return { prompt: 2, completion: 8 };
-    }
-  })();
-
-  const promptCost = (usage.promptTokens / 1_000_000) * ratesPerMillion.prompt;
-  const completionCost = (usage.completionTokens / 1_000_000) * ratesPerMillion.completion;
-
-  return promptCost + completionCost;
-}
-
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -99,10 +76,11 @@ interface ExecutionTransparencyPanelProps {
   isStreaming?: boolean;
   autonomyMode?: AutonomyMode;
   latestRunMetrics?: AgentRunMetricsDataEvent | null;
+  latestUsage?: UsageDataEvent | null;
 }
 
 export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProps) {
-  const { data = [], model, provider, isStreaming, autonomyMode } = props;
+  const { data = [], model, provider, isStreaming, autonomyMode, latestUsage } = props;
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -133,11 +111,18 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const progressEvents = useMemo(() => data.filter(isProgress), [data]);
   const commentaryEvents = useMemo(() => data.filter(isCommentary), [data]);
   const toolCalls = useMemo(() => data.filter(isToolCall).slice(-5), [data]);
-  const usageEvent = useMemo(() => data.filter(isUsage).slice(-1)[0], [data]);
+  const usageEvent = useMemo(() => {
+    const inlineUsageEvent = data.filter(isUsage).slice(-1)[0];
+    return normalizeUsageEvent(inlineUsageEvent || latestUsage || null) || undefined;
+  }, [data, latestUsage]);
   const inlineRunMetrics = useMemo(() => data.filter(isRunMetrics).slice(-1)[0], [data]);
   const runMetrics = props.latestRunMetrics || inlineRunMetrics;
   const subAgentEvents = useMemo(() => data.filter(isSubAgentEvent), [data]);
-  const costEstimate = estimateCostUSD(provider?.name, usageEvent);
+  const costEstimate = estimateCostUSD({
+    providerName: provider?.name,
+    modelName: model,
+    usage: usageEvent,
+  });
 
   const currentStep = (() => {
     const inProgress = progressEvents.filter((event) => event.status === 'in-progress').slice(-1)[0];
@@ -187,7 +172,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
           Tokens: <span className="text-bolt-elements-textPrimary">{usageEvent?.totalTokens ?? 0}</span>
         </div>
         <div>
-          Cost estimate: <span className="text-bolt-elements-textPrimary">${costEstimate.toFixed(4)}</span>
+          Cost estimate: <span className="text-bolt-elements-textPrimary">{formatCostUSD(costEstimate)}</span>
         </div>
         <div>
           Commentary first event:{' '}
