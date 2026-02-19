@@ -196,6 +196,10 @@ function hasInstallSegment(segment: string): boolean {
   return INSTALL_SEGMENT_RE.test(segment.trim());
 }
 
+function isProjectManifestSegment(segment: string): boolean {
+  return /\bpackage\.json\b/i.test(segment.trim());
+}
+
 function hasScaffoldHint(segments: string[], cdTarget: string): boolean {
   const normalizedTarget = cdTarget.trim();
 
@@ -212,14 +216,16 @@ function hasScaffoldHint(segments: string[], cdTarget: string): boolean {
 }
 
 /**
- * Guard against a common scaffolding failure where the model runs `npm/pnpm install`
- * in the workspace root before changing into the newly created project directory.
+ * Guard against common scaffolding failures where commands that assume a project manifest
+ * (`package.json`) are run before changing into the generated project directory.
  *
- * Example bad chain:
+ * Example bad chains:
  *   mkdir -p mini-react-e2e && npm install && cd mini-react-e2e && npm install
+ *   mkdir -p mini-react-e2e && cat package.json && cd mini-react-e2e && cat package.json
  *
  * Rewritten to:
  *   mkdir -p mini-react-e2e && cd mini-react-e2e && npm install
+ *   mkdir -p mini-react-e2e && cd mini-react-e2e && cat package.json
  */
 export function makeInstallCommandsProjectAware(command: string): ShellCommandRewrite {
   const trimmed = normalizeCommandDelimiters(command).trim();
@@ -244,10 +250,11 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
 
   const beforeCd = parts.slice(0, cdIndex);
   const afterCd = parts.slice(cdIndex + 1);
-  const hasInstallBeforeCd = beforeCd.some(hasInstallSegment);
-  const hasInstallAfterCd = afterCd.some(hasInstallSegment);
+  const isProjectScopedSegment = (segment: string) => hasInstallSegment(segment) || isProjectManifestSegment(segment);
+  const hasProjectScopedBeforeCd = beforeCd.some(isProjectScopedSegment);
+  const hasProjectScopedAfterCd = afterCd.some(isProjectScopedSegment);
 
-  if (!hasInstallBeforeCd || !hasInstallAfterCd) {
+  if (!hasProjectScopedBeforeCd || !hasProjectScopedAfterCd) {
     return { shouldModify: false };
   }
 
@@ -255,7 +262,7 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
     return { shouldModify: false };
   }
 
-  const filteredBefore = beforeCd.filter((segment) => !hasInstallSegment(segment));
+  const filteredBefore = beforeCd.filter((segment) => !isProjectScopedSegment(segment));
   const rewrittenParts = [...filteredBefore, parts[cdIndex], ...afterCd];
 
   if (rewrittenParts.length === parts.length) {
@@ -265,6 +272,6 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
   return {
     shouldModify: true,
     modifiedCommand: rewrittenParts.join(' && '),
-    warning: `Removed install commands before "cd ${cdTarget}" to run dependency installation in the scaffolded project directory.`,
+    warning: `Removed project-manifest commands before "cd ${cdTarget}" so project commands run in the scaffolded directory.`,
   };
 }
