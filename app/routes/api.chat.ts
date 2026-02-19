@@ -430,6 +430,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         if (chatMode === 'build') {
           writeCommentary('plan', 'Planner sub-agent is drafting an execution plan before coding.');
 
+          const latestPlannerSourceMessage = [...processedMessages]
+            .reverse()
+            .find((message) => message.role === 'user');
+
+          const plannerSelection = latestPlannerSourceMessage
+            ? extractPropertiesFromMessage(latestPlannerSourceMessage)
+            : undefined;
+          const plannerModel = plannerSelection?.model;
+          const plannerProvider = plannerSelection?.provider;
+
           const getPlannerParams = async (_messages: Messages, _config: SubAgentConfig) => ({
             env: context.cloudflare?.env,
             options: {
@@ -454,7 +464,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           subAgentManager.registerExecutor('planner', plannerExecutor);
 
           try {
-            plannerAgentId = await subAgentManager.spawn(undefined, { type: 'planner' });
+            plannerAgentId = await subAgentManager.spawn(undefined, {
+              type: 'planner',
+              model: plannerModel,
+              provider: plannerProvider,
+            });
 
             const onProgress = (state: SubAgentState, _output: string) => {
               if (state === 'planning') {
