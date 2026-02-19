@@ -76,6 +76,21 @@ Roadmap file: `v1.0.3.md`
 - [ ] Show in-app update notice with one-click update flow.
 - [ ] Include safe failure handling (progress logs, retry/rollback path, version confirmation).
 
+9. Architect Self-Heal + Safety Guard
+- [~] Introduce Architect diagnosis + auto-heal path for known failures.
+- [ ] Expand Architect knowledgebase for high-frequency runtime/build/package errors.
+- [ ] Ensure Architect obeys autonomy/safety policy and reports recovery events in timeline.
+
+10. Cost Estimation Accuracy (All Providers)
+- [~] Normalize provider usage fields used by the cost estimator.
+- [ ] Validate non-zero and accurate cost output for strict and standard providers.
+- [ ] Add regression + E2E checks for usage-to-cost consistency.
+
+11. Provider/Model/API Key Session Persistence
+- [~] Persist latest working API key, provider, and model per instance.
+- [ ] Auto-restore latest working selection on revisit.
+- [ ] Keep previously working providers available for quick switching.
+
 ## Steps towards v1.0.2 - completed
 
 ### Delivery Paths (P0)
