@@ -38,6 +38,44 @@ It combines:
 - Real-time collaborative editing
 - Agent-style workflows (Plan/Act with checkpointed execution)
 
+## Steps towards v1.0.3 - ETA: 7 days
+
+Roadmap file: `v1.0.3.md`
+
+### P0 Release Scope
+
+1. Commentary Cards + Phase Model
+- [ ] Normalize commentary event types and render dedicated commentary cards.
+- [ ] Show clear phase transitions: `Plan -> Doing -> Verifying -> Next`.
+
+2. Enforced Commentary Format Contract
+- [ ] Enforce concise live-update contract server-side (`micro-updates`, `Key changes:`, `Next:`).
+- [ ] Add regression tests for formatting and phase correctness.
+
+3. Sticky Working Footer
+- [ ] Keep model/provider, phase, step, elapsed time, action count, and recovery state always visible.
+
+4. First-Class Checkpoint Events
+- [ ] Surface explicit checkpoint lifecycle events in timeline (checkpoint, install complete, preview ready, tests/deploy status).
+
+5. Honesty Guardrails (No False Success)
+- [ ] Block optimistic success narration unless command/action exit status confirms success.
+- [ ] Always show failure context: command, exit code, stderr snippet, next recovery action.
+
+6. Long-Run Performance De-bloat (Server-First)
+- [ ] Reduce client-side bloat that slows long sessions.
+- [ ] Move heavy operations to server-side execution paths where possible.
+- [ ] Add telemetry for UI stall duration and client memory growth.
+
+7. Enforced Node Memory Baseline (Install + Upgrade)
+- [ ] Enforce Node memory floor `>=4096MB` for fresh install and upgrades.
+- [ ] Add preflight checks and auto-apply defaults for supported deployment paths.
+
+8. Git-Backed Auto-Update + One-Click Upgrade
+- [ ] Detect new Git versions on startup/interval.
+- [ ] Show in-app update notice with one-click update flow.
+- [ ] Include safe failure handling (progress logs, retry/rollback path, version confirmation).
+
 ## Steps towards v1.0.2 - completed
 
 ### Delivery Paths (P0)
