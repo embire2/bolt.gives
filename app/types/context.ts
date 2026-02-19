@@ -86,3 +86,21 @@ export type ProjectMemoryDataEvent = {
   runCount: number;
   updatedAt: string;
 };
+
+export type SubAgentEvent = {
+  type: 'sub-agent';
+  agentId: string;
+  agentType: string;
+  state: string;
+  model?: string;
+  provider?: string;
+  plan?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+};

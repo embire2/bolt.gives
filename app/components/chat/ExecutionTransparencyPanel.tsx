@@ -5,6 +5,7 @@ import type {
   AgentCommentaryAnnotation,
   AgentRunMetricsDataEvent,
   ProgressAnnotation,
+  SubAgentEvent,
   ToolCallDataEvent,
   UsageDataEvent,
 } from '~/types/context';
@@ -49,6 +50,14 @@ function isRunMetrics(value: JSONValue): value is AgentRunMetricsDataEvent {
   }
 
   return (value as Record<string, unknown>).type === 'run-metrics';
+}
+
+function isSubAgentEvent(value: JSONValue): value is SubAgentEvent {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  return (value as Record<string, unknown>).type === 'sub-agent';
 }
 
 function estimateCostUSD(provider: string | undefined, usage: UsageDataEvent | undefined): number {
@@ -127,6 +136,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const usageEvent = useMemo(() => data.filter(isUsage).slice(-1)[0], [data]);
   const inlineRunMetrics = useMemo(() => data.filter(isRunMetrics).slice(-1)[0], [data]);
   const runMetrics = props.latestRunMetrics || inlineRunMetrics;
+  const subAgentEvents = useMemo(() => data.filter(isSubAgentEvent), [data]);
   const costEstimate = estimateCostUSD(provider?.name, usageEvent);
 
   const currentStep = (() => {
@@ -207,6 +217,54 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
               <div key={`${toolCall.toolCallId}-${toolCall.timestamp}`}>
                 <span className="text-bolt-elements-textPrimary">{toolCall.toolName}</span>{' '}
                 <span className="text-bolt-elements-textTertiary">({toolCall.serverName})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {subAgentEvents.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-bolt-elements-textPrimary">Sub-agent Timeline</div>
+          <div className="space-y-1">
+            {subAgentEvents.map((event) => (
+              <div key={event.agentId} className="rounded border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 p-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-bolt-elements-textPrimary">
+                    {event.agentType} Agent
+                  </span>
+                  <span className={`text-xs ${
+                    event.state === 'completed'
+                      ? 'text-green-400'
+                      : event.state === 'failed'
+                        ? 'text-red-400'
+                        : event.state === 'in-progress'
+                          ? 'text-yellow-400'
+                          : 'text-bolt-elements-textSecondary'
+                  }`}>
+                    {event.state}
+                  </span>
+                </div>
+                {event.model && (
+                  <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                    Model: {event.model}
+                  </div>
+                )}
+                {event.provider && (
+                  <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                    Provider: {event.provider}
+                  </div>
+                )}
+                {event.tokenUsage && (
+                  <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                    Tokens: {event.tokenUsage.totalTokens} ({event.tokenUsage.promptTokens}+{event.tokenUsage.completionTokens})
+                  </div>
+                )}
+                {event.plan && (
+                  <div className="mt-2 text-xs text-bolt-elements-textPrimary">
+                    <div className="mb-1 font-medium">Plan:</div>
+                    <div className="whitespace-pre-wrap opacity-90">{event.plan.slice(0, 200)}{event.plan.length > 200 ? '...' : ''}</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
