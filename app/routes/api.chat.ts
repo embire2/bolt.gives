@@ -14,6 +14,7 @@ import type {
   ContextAnnotation,
   ProjectMemoryDataEvent,
   ProgressAnnotation,
+  SubAgentEvent,
   UsageDataEvent,
 } from '~/types/context';
 import { WORK_DIR } from '~/utils/constants';
@@ -26,6 +27,8 @@ import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { recordAgentRunMetrics } from '~/lib/.server/llm/run-metrics';
 import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~/lib/.server/llm/project-memory';
 import { shouldForceRunContinuation } from '~/lib/.server/llm/run-continuation';
+import { SubAgentManager, type SubAgentConfig, type SubAgentState } from '~/lib/.server/llm/sub-agent';
+import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-executor';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -157,7 +160,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const effectiveProjectMemory =
     projectMemory && projectMemory.projectKey === projectKey ? projectMemory : cachedProjectMemory;
   const envVars = context.cloudflare?.env as unknown as Record<string, string | undefined> | undefined;
-  const subAgentsEnabled = isTruthyFlag(envVars?.BOLT_SUB_AGENTS_ENABLED || process?.env?.BOLT_SUB_AGENTS_ENABLED);
+  const subAgentManager = SubAgentManager.getInstance();
   const encoder: TextEncoder = new TextEncoder();
   let progressCounter: number = 1;
 
@@ -430,64 +433,76 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         }
 
         let subAgentPlan: string | undefined = undefined;
+        let plannerAgentId: string | undefined = undefined;
 
-        if (subAgentsEnabled && chatMode === 'build') {
+        if (chatMode === 'build') {
           writeCommentary('plan', 'Planner sub-agent is drafting an execution plan before coding.');
 
+          const getPlannerParams = async (messages: Messages, config: SubAgentConfig) => ({
+            env: context.cloudflare?.env,
+            options: {
+              maxSteps: 1,
+              tools: {},
+              toolChoice: undefined,
+            } as StreamingOptions,
+            apiKeys,
+            files,
+            providerSettings,
+            promptId,
+            contextOptimization,
+            contextFiles: filteredFiles,
+            summary,
+            messageSliceId,
+            chatMode: 'discuss',
+            designScheme,
+            projectMemory: effectiveProjectMemory || undefined,
+          });
+
+          const plannerExecutor = createPlannerExecutor(getPlannerParams);
+          subAgentManager.registerExecutor('planner', plannerExecutor);
+
           try {
-            const plannerMessages: Messages = [
-              ...processedMessages.slice(-4),
-              {
-                id: generateId(),
-                role: 'user',
-                content: `You are the planner sub-agent.
-Generate a concise implementation plan for the worker agent.
-Rules:
-- Return 3-7 bullet points.
-- Include verification checkpoints.
-- No code blocks or file contents.
-- Keep total output under 220 words.`,
-              },
-            ];
+            plannerAgentId = await subAgentManager.spawn(undefined, { type: 'planner' });
 
-            let plannerOutput = '';
-            const plannerResult = await streamText({
-              messages: plannerMessages,
-              env: context.cloudflare?.env,
-              options: {
-                maxSteps: 1,
-                tools: {},
-                toolChoice: undefined,
-                onFinish(resp) {
-                  if (resp.usage) {
-                    cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
-                    cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
-                    cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
-                  }
-                },
-              },
-              apiKeys,
-              files,
-              providerSettings,
-              promptId,
-              contextOptimization,
-              contextFiles: filteredFiles,
-              summary,
-              messageSliceId,
-              chatMode: 'discuss',
-              designScheme,
-              projectMemory: effectiveProjectMemory || undefined,
-              enableBuiltInWebTools: false,
-            });
+            const onProgress = (state: SubAgentState, output: string) => {
+              if (state === 'planning') {
+                writeCommentary('plan', 'Planner sub-agent is analyzing the request...');
+              } else if (state === 'executing') {
+                writeCommentary('plan', 'Planner sub-agent is generating the execution plan...');
+              }
+            };
 
-            for await (const textDelta of plannerResult.textStream) {
-              plannerOutput += textDelta;
+            const plannerResult = await subAgentManager.start(
+              plannerAgentId,
+              processedMessages,
+              onProgress,
+            );
+
+            if (plannerResult.metadata.tokenUsage) {
+              cumulativeUsage.completionTokens += plannerResult.metadata.tokenUsage.completionTokens || 0;
+              cumulativeUsage.promptTokens += plannerResult.metadata.tokenUsage.promptTokens || 0;
+              cumulativeUsage.totalTokens += plannerResult.metadata.tokenUsage.totalTokens || 0;
             }
 
-            const normalizedPlan = plannerOutput.trim();
+            if (plannerResult.success && plannerResult.output) {
+              subAgentPlan = plannerResult.output;
 
-            if (normalizedPlan.length > 0) {
-              subAgentPlan = normalizedPlan.length > 3000 ? `${normalizedPlan.slice(0, 2997)}...` : normalizedPlan;
+              const subAgentEvent: SubAgentEvent = {
+                type: 'sub-agent',
+                agentId: plannerResult.metadata.id,
+                agentType: plannerResult.metadata.type,
+                state: plannerResult.metadata.state,
+                model: plannerResult.metadata.model,
+                provider: plannerResult.metadata.provider,
+                plan: plannerResult.metadata.plan,
+                createdAt: plannerResult.metadata.createdAt,
+                startedAt: plannerResult.metadata.startedAt,
+                completedAt: plannerResult.metadata.completedAt,
+                tokenUsage: plannerResult.metadata.tokenUsage,
+              };
+
+              dataStream.writeData(subAgentEvent);
+
               writeCommentary(
                 'plan',
                 'Planner sub-agent produced a worker execution plan.',
