@@ -17,6 +17,7 @@ import {
   makeCreateViteNonInteractive,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
+  unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
 
 const logger = createScopedLogger('ActionRunner');
@@ -688,6 +689,7 @@ export class ActionRunner {
       }
     };
 
+    applyRewrite(unwrapCommandJsonEnvelope(trimmedCommand));
     applyRewrite(decodeHtmlCommandDelimiters(trimmedCommand));
     applyRewrite(makeCreateViteNonInteractive(trimmedCommand));
     applyRewrite(makeInstallCommandsProjectAware(trimmedCommand));

@@ -43,6 +43,18 @@ describe('diagnoseArchitectIssue', () => {
 
     expect(diagnosis?.issueId).toBe('escaped-shell-separators');
   });
+
+  it('detects JSON-wrapped shell command failures', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Dev Server Failed',
+      description: 'Command Failed',
+      content: 'jsh: no such file or directory: {command:cd /home/project && pnpm install}',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('json-command-envelope');
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

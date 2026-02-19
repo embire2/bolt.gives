@@ -12,6 +12,30 @@ const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 
+export function unwrapCommandJsonEnvelope(command: string): ShellCommandRewrite {
+  const trimmed = command.trim();
+
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return { shouldModify: false };
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { command?: unknown };
+
+    if (typeof parsed.command === 'string' && parsed.command.trim().length > 0) {
+      return {
+        shouldModify: true,
+        modifiedCommand: parsed.command.trim(),
+        warning: 'Unwrapped JSON command envelope before shell execution.',
+      };
+    }
+  } catch {
+    // Not valid JSON; keep command as-is.
+  }
+
+  return { shouldModify: false };
+}
+
 export function decodeHtmlCommandDelimiters(command: string): ShellCommandRewrite {
   const normalized = command.replace(/&amp;&amp;/g, '&&');
 

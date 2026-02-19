@@ -90,6 +90,18 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
       'Verify the command exits cleanly before continuing with the workflow.',
     ],
   },
+  {
+    id: 'json-command-envelope',
+    title: 'JSON-wrapped shell command',
+    source: 'terminal',
+    patterns: [/no such file or directory:\s*\{command:/i, /Run shell command:\s*\{\"command\":/i],
+    maxAutoAttempts: 1,
+    guidance: [
+      'Extract the plain shell command string from JSON wrappers ({"command":"..."}).',
+      'Re-run the unwrapped command directly in the shell.',
+      'Continue only after the unwrapped command exits successfully.',
+    ],
+  },
 ];
 
 function buildFingerprint(input: string): string {

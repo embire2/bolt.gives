@@ -4,7 +4,25 @@ import {
   makeCreateViteNonInteractive,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
+  unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
+
+describe('unwrapCommandJsonEnvelope', () => {
+  it('unwraps JSON command envelopes emitted by models', () => {
+    const input = '{"command":"cd /home/project && pnpm install"}';
+    const res = unwrapCommandJsonEnvelope(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('cd /home/project && pnpm install');
+  });
+
+  it('does not modify plain shell commands', () => {
+    const input = 'cd /home/project && pnpm install';
+    const res = unwrapCommandJsonEnvelope(input);
+
+    expect(res.shouldModify).toBe(false);
+  });
+});
 
 describe('decodeHtmlCommandDelimiters', () => {
   it('normalizes HTML-escaped && separators in arbitrary command chains', () => {
