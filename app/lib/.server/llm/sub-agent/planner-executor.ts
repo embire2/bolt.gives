@@ -1,15 +1,14 @@
-import type { SubAgentConfig, SubAgentExecutionResult, SubAgentMetadata } from './types';
-import { streamText } from '../stream-text';
-import type { Messages, StreamingOptions } from '../stream-text';
+import { streamText } from '~/lib/.server/llm/stream-text';
+import type { Messages, StreamingOptions } from '~/lib/.server/llm/stream-text';
+import type {
+  SubAgentConfig,
+  SubAgentExecutionResult,
+  SubAgentExecutor,
+  SubAgentMetadata,
+  SubAgentState,
+} from './types';
 
-export type SubAgentExecutor = (
-  agentId: string,
-  messages: unknown[],
-  config: SubAgentConfig,
-  onProgress?: (state: SubAgentState, output: string) => void,
-) => Promise<SubAgentExecutionResult>;
-
-export async function createPlannerExecutor(
+export function createPlannerExecutor(
   getStreamTextParams: (
     messages: Messages,
     config: SubAgentConfig,
@@ -28,19 +27,21 @@ export async function createPlannerExecutor(
     designScheme?: any;
     projectMemory?: any;
   }>,
-) {
+): SubAgentExecutor {
   return async function plannerExecutor(
     agentId: string,
-    messages: Messages,
+    messages: unknown[],
     config: SubAgentConfig,
+    _onProgress?: (state: SubAgentState, output: string) => void,
   ): Promise<SubAgentExecutionResult> {
-    const streamTextParams = await getStreamTextParams(messages, config);
+    const normalizedMessages = messages as Messages;
+    const streamTextParams = await getStreamTextParams(normalizedMessages, config);
 
     let plannerOutput = '';
 
     const plannerResult = await streamText({
       messages: [
-        ...messages.slice(-4),
+        ...normalizedMessages.slice(-4),
         {
           id: agentId,
           role: 'user',
@@ -58,7 +59,6 @@ Rules:
         maxSteps: 1,
         tools: {},
         toolChoice: undefined,
-        onFinish: (resp) => {},
       },
       apiKeys: streamTextParams.apiKeys,
       files: streamTextParams.files,
@@ -79,24 +79,30 @@ Rules:
     }
 
     const normalizedPlan = plannerOutput.trim();
-    const finalPlan = normalizedPlan.length > 0
-      ? (normalizedPlan.length > 3000 ? `${normalizedPlan.slice(0, 2997)}...` : normalizedPlan)
-      : '';
+    const finalPlan =
+      normalizedPlan.length > 0
+        ? normalizedPlan.length > 3000
+          ? `${normalizedPlan.slice(0, 2997)}...`
+          : normalizedPlan
+        : '';
+    const usage = plannerResult.usage ? await plannerResult.usage : undefined;
 
     const metadata: SubAgentMetadata = {
       id: agentId,
       type: 'planner',
       state: 'completed',
-      model: streamTextParams.options.model || config.model,
-      provider: streamTextParams.options.provider || config.provider,
+      model: config.model,
+      provider: config.provider,
       createdAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
       plan: finalPlan,
-      tokenUsage: plannerResult.usage ? {
-        promptTokens: plannerResult.usage.promptTokens || 0,
-        completionTokens: plannerResult.usage.completionTokens || 0,
-        totalTokens: plannerResult.usage.totalTokens || 0,
-      } : undefined,
+      tokenUsage: usage
+        ? {
+            promptTokens: usage.promptTokens || 0,
+            completionTokens: usage.completionTokens || 0,
+            totalTokens: usage.totalTokens || 0,
+          }
+        : undefined,
     };
 
     return {

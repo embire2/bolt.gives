@@ -36,14 +36,6 @@ export async function action(args: ActionFunctionArgs) {
 
 const logger = createScopedLogger('api.chat');
 
-function isTruthyFlag(value: string | undefined): boolean {
-  if (!value) {
-    return false;
-  }
-
-  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
-}
-
 function extractLatestUserGoal(messages: Messages): string {
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
 
@@ -438,7 +430,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         if (chatMode === 'build') {
           writeCommentary('plan', 'Planner sub-agent is drafting an execution plan before coding.');
 
-          const getPlannerParams = async (messages: Messages, config: SubAgentConfig) => ({
+          const getPlannerParams = async (_messages: Messages, _config: SubAgentConfig) => ({
             env: context.cloudflare?.env,
             options: {
               maxSteps: 1,
@@ -464,7 +456,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           try {
             plannerAgentId = await subAgentManager.spawn(undefined, { type: 'planner' });
 
-            const onProgress = (state: SubAgentState, output: string) => {
+            const onProgress = (state: SubAgentState, _output: string) => {
               if (state === 'planning') {
                 writeCommentary('plan', 'Planner sub-agent is analyzing the request...');
               } else if (state === 'executing') {
@@ -472,11 +464,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               }
             };
 
-            const plannerResult = await subAgentManager.start(
-              plannerAgentId,
-              processedMessages,
-              onProgress,
-            );
+            const plannerResult = await subAgentManager.start(plannerAgentId, processedMessages, onProgress);
 
             if (plannerResult.metadata.tokenUsage) {
               cumulativeUsage.completionTokens += plannerResult.metadata.tokenUsage.completionTokens || 0;

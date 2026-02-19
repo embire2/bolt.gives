@@ -17,72 +17,88 @@ describe('Sub-Agent Framework Integration', () => {
   it('should complete full manager/worker round-trip', async () => {
     // Track messages via AgentBus
     const messages: unknown[] = [];
-    agentBus.subscribe('manager', (msg) => messages.push(msg));
+    agentBus.subscribe('manager', (msg) => {
+      messages.push(msg);
+    });
 
     // Register a planner executor
-    const plannerExecutor = vi.fn().mockImplementation(
-      async (agentId: string, msgs: unknown[], config: SubAgentConfig, onProgress?: (state: SubAgentState, output: string) => void) => {
-        onProgress?.('planning', 'Analyzing...');
-        onProgress?.('executing', 'Generating plan...');
+    const plannerExecutor = vi
+      .fn()
+      .mockImplementation(
+        async (
+          agentId: string,
+          msgs: unknown[],
+          config: SubAgentConfig,
+          onProgress?: (state: SubAgentState, output: string) => void,
+        ) => {
+          onProgress?.('planning', 'Analyzing...');
+          onProgress?.('executing', 'Generating plan...');
 
-        // Simulate some work
-        await new Promise((resolve) => setTimeout(resolve, 10));
+          // Simulate some work
+          await new Promise((resolve) => setTimeout(resolve, 10));
 
-        return {
-          success: true,
-          output: '1. Create component\n2. Add tests\n3. Update docs',
-          messages: [],
-          metadata: {
-            id: agentId,
-            type: 'planner',
-            state: 'completed' as const,
-            model: config.model,
-            provider: config.provider,
-            createdAt: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-            plan: '1. Create component\n2. Add tests\n3. Update docs',
-            tokenUsage: {
-              promptTokens: 100,
-              completionTokens: 50,
-              totalTokens: 150,
+          return {
+            success: true,
+            output: '1. Create component\n2. Add tests\n3. Update docs',
+            messages: [],
+            metadata: {
+              id: agentId,
+              type: 'planner',
+              state: 'completed' as const,
+              model: config.model,
+              provider: config.provider,
+              createdAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+              plan: '1. Create component\n2. Add tests\n3. Update docs',
+              tokenUsage: {
+                promptTokens: 100,
+                completionTokens: 50,
+                totalTokens: 150,
+              },
             },
-          },
-        } as SubAgentExecutionResult;
-      },
-    );
+          } as SubAgentExecutionResult;
+        },
+      );
 
     manager.registerExecutor('planner', plannerExecutor);
 
     // Register a worker executor
-    const workerExecutor = vi.fn().mockImplementation(
-      async (agentId: string, msgs: unknown[], config: SubAgentConfig, onProgress?: (state: SubAgentState, output: string) => void) => {
-        onProgress?.('planning', 'Understanding plan...');
-        onProgress?.('executing', 'Executing tasks...');
+    const workerExecutor = vi
+      .fn()
+      .mockImplementation(
+        async (
+          agentId: string,
+          msgs: unknown[],
+          config: SubAgentConfig,
+          onProgress?: (state: SubAgentState, output: string) => void,
+        ) => {
+          onProgress?.('planning', 'Understanding plan...');
+          onProgress?.('executing', 'Executing tasks...');
 
-        // Simulate work
-        await new Promise((resolve) => setTimeout(resolve, 10));
+          // Simulate work
+          await new Promise((resolve) => setTimeout(resolve, 10));
 
-        return {
-          success: true,
-          output: 'Component created, tests added, docs updated',
-          messages: [],
-          metadata: {
-            id: agentId,
-            type: 'worker',
-            state: 'completed' as const,
-            model: config.model,
-            provider: config.provider,
-            createdAt: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-            tokenUsage: {
-              promptTokens: 200,
-              completionTokens: 100,
-              totalTokens: 300,
+          return {
+            success: true,
+            output: 'Component created, tests added, docs updated',
+            messages: [],
+            metadata: {
+              id: agentId,
+              type: 'worker',
+              state: 'completed' as const,
+              model: config.model,
+              provider: config.provider,
+              createdAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+              tokenUsage: {
+                promptTokens: 200,
+                completionTokens: 100,
+                totalTokens: 300,
+              },
             },
-          },
-        } as SubAgentExecutionResult;
-      },
-    );
+          } as SubAgentExecutionResult;
+        },
+      );
 
     manager.registerExecutor('worker', workerExecutor);
 
@@ -112,9 +128,10 @@ describe('Sub-Agent Framework Integration', () => {
 
     // Verify agent bus received messages
     expect(messages.length).toBeGreaterThan(0);
+
     const spawnedEvent = messages.find((m: any) => m.payload?.action === 'spawned');
     expect(spawnedEvent).toBeDefined();
-    expect((spawnedEvent as any).agentId).toBe(plannerId);
+    expect((spawnedEvent as any).payload?.agentId).toBe(plannerId);
 
     // Manager spawns worker with plan context
     const workerId = await manager.spawn('manager', {
@@ -163,61 +180,72 @@ describe('Sub-Agent Framework Integration', () => {
     let shouldPause = false;
     let shouldResume = false;
 
-    const executor = vi.fn().mockImplementation(
-      async (agentId: string, msgs: unknown[], config: SubAgentConfig, onProgress?: (state: SubAgentState, output: string) => void) => {
-        onProgress?.('executing', 'Starting...');
+    const executor = vi
+      .fn()
+      .mockImplementation(
+        async (
+          agentId: string,
+          msgs: unknown[],
+          config: SubAgentConfig,
+          onProgress?: (state: SubAgentState, output: string) => void,
+        ) => {
+          onProgress?.('executing', 'Starting...');
 
-        // Simulate long-running task
-        for (let i = 0; i < 3; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          onProgress?.('executing', `Step ${i + 1}...`);
+          // Simulate long-running task
+          for (let i = 0; i < 3; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            onProgress?.('executing', `Step ${i + 1}...`);
 
-          // Simulate external pause
-          if (i === 1 && shouldPause) {
-            onProgress?.('paused', 'Paused by manager');
-            // Wait for resume
-            while (!shouldResume) {
-              await new Promise((resolve) => setTimeout(resolve, 5));
+            // Simulate external pause
+            if (i === 1 && shouldPause) {
+              onProgress?.('paused', 'Paused by manager');
+
+              // Wait for resume
+              while (!shouldResume) {
+                await new Promise((resolve) => setTimeout(resolve, 5));
+              }
+              onProgress?.('executing', 'Resumed...');
             }
-            onProgress?.('executing', 'Resumed...');
           }
-        }
 
-        return {
-          success: true,
-          output: 'Task completed',
-          messages: [],
-          metadata: {
-            id: agentId,
-            type: 'worker',
-            state: 'completed' as const,
-            createdAt: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-          },
-        } as SubAgentExecutionResult;
-      },
-    );
+          return {
+            success: true,
+            output: 'Task completed',
+            messages: [],
+            metadata: {
+              id: agentId,
+              type: 'worker',
+              state: 'completed' as const,
+              createdAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+            },
+          } as SubAgentExecutionResult;
+        },
+      );
 
     manager.registerExecutor('worker', executor);
 
     const agentId = await manager.spawn('manager', { type: 'worker' });
+    shouldPause = true;
 
     // Start execution in background
-    const executionPromise = manager.start(agentId, [], (state, output) => {
+    const executionPromise = manager.start(agentId, [], (_state, _output) => {
       // Progress callback
     });
 
-    // Wait a bit then pause
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    shouldPause = true;
-    manager.pause(agentId);
+    let agent: ReturnType<typeof manager.getAgent> | undefined;
 
-    // Verify agent is paused
-    let agent = manager.getAgent(agentId);
+    for (let i = 0; i < 20; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      agent = manager.getAgent(agentId);
+
+      if (agent?.state === 'paused') {
+        break;
+      }
+    }
+
     expect(agent?.state).toBe('paused');
 
-    // Wait a bit then resume
-    await new Promise((resolve) => setTimeout(resolve, 10));
     shouldResume = true;
     manager.resume(agentId);
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubAgentManager } from './sub-agent-manager';
-import type { SubAgentConfig, SubAgentExecutionResult, SubAgentMetadata } from './types';
+import type { SubAgentConfig, SubAgentExecutionResult, SubAgentState } from './types';
 
 describe('SubAgentManager', () => {
   let manager: SubAgentManager;
@@ -210,9 +210,15 @@ describe('SubAgentManager', () => {
     const progressCallback = vi.fn();
 
     const mockExecutor = vi.fn(
-      async (agentId: string, messages: unknown[], config: SubAgentConfig, onProgress?: (state: string, output: string) => void) => {
+      async (
+        agentId: string,
+        messages: unknown[],
+        config: SubAgentConfig,
+        onProgress?: (state: SubAgentState, output: string) => void,
+      ) => {
         onProgress?.('planning', 'Starting...');
         onProgress?.('executing', 'Working...');
+
         return {
           success: true,
           output: 'Test output',

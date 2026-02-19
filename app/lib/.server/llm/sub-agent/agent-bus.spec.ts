@@ -110,7 +110,7 @@ describe('AgentBus', () => {
   });
 
   it('should limit history size', async () => {
-    const smallBus = new AgentBus(3);
+    const smallBus = AgentBus.createForTest(3);
 
     for (let i = 0; i < 5; i++) {
       const message: SubAgentMessage = {
