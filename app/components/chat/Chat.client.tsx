@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react';
 import type { Message } from 'ai';
 import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
@@ -56,6 +56,7 @@ import {
   type AgentMode,
   type AgentPlanStep,
 } from '~/lib/runtime/agent-workflow';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import {
   computeTextFileDelta,
   computeTextSnapshotRevertOps,
@@ -69,6 +70,10 @@ import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent, UsageDataEvent }
 const logger = createScopedLogger('Chat');
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
+const MAX_CHAT_DATA_EVENTS = 320;
+const MAX_STEP_RUNNER_EVENTS = 320;
+const TELEMETRY_SAMPLE_MS = 15000;
+const TELEMETRY_OUTPUT_MAX_CHARS = 3000;
 
 type StoredProjectMemory = ProjectMemoryDataEvent | null;
 type ApiKeysUpdatePayload = {
@@ -123,6 +128,31 @@ async function fetchProviderModels(providerName: string): Promise<ModelInfo[]> {
   } catch {
     return [];
   }
+}
+
+function appendStepRunnerEvent(event: InteractiveStepRunnerEvent) {
+  const current = workbenchStore.stepRunnerEvents.get();
+  const last = current[current.length - 1];
+
+  if (
+    last &&
+    (event.type === 'stdout' || event.type === 'stderr') &&
+    last.type === event.type &&
+    last.stepIndex === event.stepIndex
+  ) {
+    const mergedOutput = `${last.output || ''}${event.output || ''}`.slice(-TELEMETRY_OUTPUT_MAX_CHARS);
+    const mergedEvent: InteractiveStepRunnerEvent = {
+      ...last,
+      timestamp: event.timestamp,
+      output: mergedOutput,
+    };
+
+    workbenchStore.stepRunnerEvents.set([...current.slice(0, -1), mergedEvent].slice(-MAX_STEP_RUNNER_EVENTS));
+
+    return;
+  }
+
+  workbenchStore.stepRunnerEvents.set([...current, event].slice(-MAX_STEP_RUNNER_EVENTS));
 }
 
 export function Chat() {
@@ -291,12 +321,19 @@ export const ChatImpl = memo(
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
     });
 
+    const boundedChatData = useMemo(() => (chatData || []).slice(-MAX_CHAT_DATA_EVENTS), [chatData]);
+    const lastDataEventAtRef = useRef(Date.now());
+    const stallReportedRef = useRef(false);
+
     useEffect(() => {
-      if (!chatData || chatData.length === 0) {
+      if (!boundedChatData || boundedChatData.length === 0) {
         return;
       }
 
-      const lastUsageEvent = [...chatData]
+      lastDataEventAtRef.current = Date.now();
+      stallReportedRef.current = false;
+
+      const lastUsageEvent = [...boundedChatData]
         .reverse()
         .find(
           (item): item is UsageDataEvent =>
@@ -318,7 +355,7 @@ export const ChatImpl = memo(
         });
       }
 
-      const lastProjectMemoryEvent = [...chatData]
+      const lastProjectMemoryEvent = [...boundedChatData]
         .reverse()
         .find(
           (item): item is ProjectMemoryDataEvent =>
@@ -345,7 +382,7 @@ export const ChatImpl = memo(
         });
       }
 
-      const lastRunMetricsEvent = [...chatData]
+      const lastRunMetricsEvent = [...boundedChatData]
         .reverse()
         .find(
           (item): item is AgentRunMetricsDataEvent =>
@@ -355,7 +392,63 @@ export const ChatImpl = memo(
       if (lastRunMetricsEvent) {
         setLatestRunMetrics((prev) => (prev?.runId === lastRunMetricsEvent.runId ? prev : lastRunMetricsEvent));
       }
-    }, [chatData]);
+    }, [boundedChatData]);
+
+    useEffect(() => {
+      const streaming = isLoading || fakeLoading;
+      let interval: number | undefined;
+
+      if (!streaming) {
+        stallReportedRef.current = false;
+      } else {
+        interval = window.setInterval(() => {
+          const performanceRecord = performance as Performance & {
+            memory?: {
+              usedJSHeapSize?: number;
+              jsHeapSizeLimit?: number;
+            };
+          };
+          const heapUsedBytes = performanceRecord.memory?.usedJSHeapSize;
+          const heapLimitBytes = performanceRecord.memory?.jsHeapSizeLimit;
+          const heapUsedMb =
+            typeof heapUsedBytes === 'number' && Number.isFinite(heapUsedBytes)
+              ? (heapUsedBytes / (1024 * 1024)).toFixed(1)
+              : 'n/a';
+          const heapLimitMb =
+            typeof heapLimitBytes === 'number' && Number.isFinite(heapLimitBytes)
+              ? (heapLimitBytes / (1024 * 1024)).toFixed(1)
+              : 'n/a';
+          const stallMs = Date.now() - lastDataEventAtRef.current;
+          const stallSeconds = Math.round(stallMs / 1000);
+          const telemetryMessage = `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
+
+          appendStepRunnerEvent({
+            type: 'telemetry',
+            timestamp: new Date().toISOString(),
+            description: 'runtime telemetry',
+            output: telemetryMessage,
+          });
+
+          if (stallMs > 45000 && !stallReportedRef.current) {
+            stallReportedRef.current = true;
+
+            appendStepRunnerEvent({
+              type: 'error',
+              timestamp: new Date().toISOString(),
+              description: 'Potential stall detected',
+              error: `No stream progress for ${stallSeconds}s`,
+              output: telemetryMessage,
+            });
+          }
+        }, TELEMETRY_SAMPLE_MS);
+      }
+
+      return () => {
+        if (interval !== undefined) {
+          window.clearInterval(interval);
+        }
+      };
+    }, [boundedChatData.length, fakeLoading, isLoading, messages.length]);
 
     useEffect(() => {
       if (selectionBootstrapRef.current || activeProviders.length === 0) {
@@ -855,7 +948,7 @@ export const ChatImpl = memo(
             },
           },
           onEvent: (event) => {
-            workbenchStore.stepRunnerEvents.set([...workbenchStore.stepRunnerEvents.get(), event].slice(-200));
+            appendStepRunnerEvent(event);
           },
           onCheckpoint: async (step) => {
             const afterSnapshot = snapshotTextFiles(workbenchStore.files.get());
@@ -1381,7 +1474,7 @@ export const ChatImpl = memo(
         clearDeployAlert={() => workbenchStore.clearDeployAlert()}
         llmErrorAlert={llmErrorAlert}
         clearLlmErrorAlert={clearApiErrorAlert}
-        data={chatData}
+        data={boundedChatData}
         chatMode={chatMode}
         setChatMode={setChatMode}
         append={append}

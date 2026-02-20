@@ -86,6 +86,22 @@ describe('StepRunnerFeed', () => {
     expect(screen.queryByText(/pnpm run lint/i)).toBeTruthy();
   });
 
+  it('renders telemetry runner events', () => {
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'runtime telemetry',
+        output: 'memory 120/512 MB | stall 3s',
+      },
+    ]);
+
+    render(<StepRunnerFeed />);
+
+    expect(screen.queryByText(/\[telemetry\]/i)).toBeTruthy();
+    expect(screen.queryByText(/memory 120\/512 MB/i)).toBeTruthy();
+  });
+
   it('renders streamed commentary events separately from runner events', () => {
     const data = [
       {
