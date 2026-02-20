@@ -27,6 +27,33 @@ interface ResolvePreferredModelNameOptions {
   savedModelName?: string;
 }
 
+type ProviderApiKeyValidator = (rawKey: string) => boolean;
+
+function isValidBedrockConfig(rawKey: string): boolean {
+  try {
+    const parsed = JSON.parse(rawKey) as {
+      region?: unknown;
+      accessKeyId?: unknown;
+      secretAccessKey?: unknown;
+    };
+
+    return (
+      typeof parsed.region === 'string' &&
+      parsed.region.trim().length > 0 &&
+      typeof parsed.accessKeyId === 'string' &&
+      parsed.accessKeyId.trim().length > 0 &&
+      typeof parsed.secretAccessKey === 'string' &&
+      parsed.secretAccessKey.trim().length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+const PROVIDER_API_KEY_VALIDATORS: Record<string, ProviderApiKeyValidator> = {
+  AmazonBedrock: isValidBedrockConfig,
+};
+
 function parseRecord(raw: string | null | undefined): Record<string, unknown> {
   if (!raw) {
     return {};
@@ -124,7 +151,23 @@ export function rememberInstanceSelection(
 }
 
 export function hasUsableApiKey(apiKeys: Record<string, string>, providerName: string): boolean {
-  return typeof apiKeys[providerName] === 'string' && apiKeys[providerName].trim().length > 0;
+  if (typeof apiKeys[providerName] !== 'string') {
+    return false;
+  }
+
+  const trimmedKey = apiKeys[providerName].trim();
+
+  if (trimmedKey.length === 0) {
+    return false;
+  }
+
+  const validator = PROVIDER_API_KEY_VALIDATORS[providerName];
+
+  if (!validator) {
+    return true;
+  }
+
+  return validator(trimmedKey);
 }
 
 export function pickPreferredProviderName(options: PickPreferredProviderNameOptions): string | undefined {

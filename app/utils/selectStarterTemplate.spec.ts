@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getTemplates } from './selectStarterTemplate';
+import type { ProviderInfo } from '~/types/model';
+import { getTemplates, inferTemplateFromPrompt, selectStarterTemplate } from './selectStarterTemplate';
+
+const openAIProvider: ProviderInfo = {
+  name: 'OpenAI',
+  staticModels: [],
+};
 
 describe('getTemplates', () => {
   afterEach(() => {
@@ -62,5 +68,56 @@ describe('getTemplates', () => {
     expect(result?.assistantMessage).toContain('filePath="package.json"');
     expect(result?.userMessage).toContain('Use remote prompt');
     expect(result?.userMessage).not.toContain('Fallback starter note');
+  });
+});
+
+describe('selectStarterTemplate heuristics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('infers a React website template without waiting for LLM selection', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    const result = await selectStarterTemplate({
+      message: 'Build me a React website with a landing page and contact form',
+      model: 'gpt-4o',
+      provider: openAIProvider,
+    });
+
+    expect(result.template).toBe('Vite React');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('infers a Node Express API template for backend prompts', () => {
+    const inferred = inferTemplateFromPrompt('Create a Node Express API with a health endpoint');
+
+    expect(inferred).toEqual({
+      template: 'Node Express API',
+      title: 'Node Express API starter',
+    });
+  });
+
+  it('falls back to prompt heuristics when LLM output is invalid', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ text: 'this is not valid xml' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ) as unknown as typeof fetch,
+    );
+
+    const result = await selectStarterTemplate({
+      message: 'Create a small React dashboard app',
+      model: 'gpt-4o',
+      provider: openAIProvider,
+    });
+
+    expect(result.template).toBe('Vite React');
   });
 });

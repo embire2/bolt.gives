@@ -64,6 +64,22 @@ describe('model-selection utilities', () => {
     expect(preferred).toBe('Ollama');
   });
 
+  it('treats invalid Bedrock JSON config as unusable and picks a valid provider key', () => {
+    const preferred = pickPreferredProviderName({
+      activeProviderNames: ['AmazonBedrock', 'OpenAI', 'Ollama'],
+      apiKeys: {
+        AmazonBedrock: 'not-json',
+        OpenAI: 'sk-openai',
+      },
+      localProviderNames: ['Ollama'],
+      savedProviderName: 'AmazonBedrock',
+      lastConfiguredProviderName: 'AmazonBedrock',
+      fallbackProviderName: 'OpenAI',
+    });
+
+    expect(preferred).toBe('OpenAI');
+  });
+
   it('resolves model preference as remembered -> saved -> first model', () => {
     const models: ModelInfo[] = [
       { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },

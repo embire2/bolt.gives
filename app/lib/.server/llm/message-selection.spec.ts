@@ -3,6 +3,7 @@ import {
   ensureLatestUserMessageSelectionEnvelope,
   getMessageTextContent,
   resolvePreferredModelProvider,
+  sanitizeSelectionWithApiKeys,
 } from './message-selection';
 
 describe('message-selection', () => {
@@ -53,5 +54,41 @@ describe('message-selection', () => {
     });
 
     expect(getMessageTextContent(messages[0])).toBe(originalContent);
+  });
+
+  it('falls back from invalid Bedrock credentials to a usable provider key', () => {
+    const selection = sanitizeSelectionWithApiKeys({
+      selection: {
+        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        provider: 'AmazonBedrock',
+      },
+      selectedProviderCookie: 'AmazonBedrock',
+      apiKeys: {
+        AmazonBedrock: 'not-json',
+        OpenAI: 'sk-openai',
+      },
+    });
+
+    expect(selection.provider).toBe('OpenAI');
+  });
+
+  it('keeps Bedrock when credentials are valid JSON', () => {
+    const selection = sanitizeSelectionWithApiKeys({
+      selection: {
+        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        provider: 'AmazonBedrock',
+      },
+      selectedProviderCookie: 'AmazonBedrock',
+      apiKeys: {
+        AmazonBedrock: JSON.stringify({
+          region: 'us-east-1',
+          accessKeyId: 'abc',
+          secretAccessKey: 'xyz',
+        }),
+        OpenAI: 'sk-openai',
+      },
+    });
+
+    expect(selection.provider).toBe('AmazonBedrock');
   });
 });

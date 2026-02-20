@@ -9,6 +9,54 @@ export type ResolvedModelProvider = {
 
 type ChatMessage = Omit<Message, 'id'>;
 
+const LOCAL_PROVIDER_NAMES = new Set(['Ollama', 'LMStudio', 'OpenAILike']);
+const DEFAULT_PROVIDER_PRIORITY = ['OpenAI', 'Anthropic', 'OpenRouter', 'Google', 'Groq', 'Together'];
+
+function isValidBedrockApiKey(rawKey: string): boolean {
+  try {
+    const parsed = JSON.parse(rawKey) as {
+      region?: unknown;
+      accessKeyId?: unknown;
+      secretAccessKey?: unknown;
+    };
+
+    return (
+      typeof parsed.region === 'string' &&
+      parsed.region.trim().length > 0 &&
+      typeof parsed.accessKeyId === 'string' &&
+      parsed.accessKeyId.trim().length > 0 &&
+      typeof parsed.secretAccessKey === 'string' &&
+      parsed.secretAccessKey.trim().length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasUsableProviderCredential(providerName: string, apiKeys?: Record<string, string>): boolean {
+  if (LOCAL_PROVIDER_NAMES.has(providerName)) {
+    return true;
+  }
+
+  const rawKey = apiKeys?.[providerName];
+
+  if (typeof rawKey !== 'string') {
+    return false;
+  }
+
+  const trimmedKey = rawKey.trim();
+
+  if (trimmedKey.length === 0) {
+    return false;
+  }
+
+  if (providerName === 'AmazonBedrock') {
+    return isValidBedrockApiKey(trimmedKey);
+  }
+
+  return true;
+}
+
 export function getMessageTextContent(message: ChatMessage): string {
   const rawContent = message.content as unknown;
 
@@ -117,6 +165,46 @@ export function resolvePreferredModelProvider(
   return {
     model: taggedModel || selectedModelCookie || fallbackMessageSelection?.model || DEFAULT_MODEL,
     provider: taggedProvider || selectedProviderCookie || fallbackMessageSelection?.provider || DEFAULT_PROVIDER.name,
+  };
+}
+
+export function sanitizeSelectionWithApiKeys(options: {
+  selection: ResolvedModelProvider;
+  apiKeys?: Record<string, string>;
+  selectedProviderCookie?: string;
+  providerPriority?: string[];
+  includeLocalProviders?: boolean;
+}): ResolvedModelProvider {
+  const {
+    selection,
+    apiKeys,
+    selectedProviderCookie,
+    providerPriority = DEFAULT_PROVIDER_PRIORITY,
+    includeLocalProviders = false,
+  } = options;
+
+  if (hasUsableProviderCredential(selection.provider, apiKeys)) {
+    return selection;
+  }
+
+  const candidateProviders = [
+    selectedProviderCookie,
+    ...providerPriority,
+    DEFAULT_PROVIDER.name,
+    ...Object.keys(apiKeys || {}),
+    ...(includeLocalProviders ? Array.from(LOCAL_PROVIDER_NAMES.values()) : []),
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0);
+
+  const uniqueCandidates = Array.from(new Set(candidateProviders));
+  const fallbackProvider = uniqueCandidates.find((candidate) => hasUsableProviderCredential(candidate, apiKeys));
+
+  if (!fallbackProvider) {
+    return selection;
+  }
+
+  return {
+    ...selection,
+    provider: fallbackProvider,
   };
 }
 

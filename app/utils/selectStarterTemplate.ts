@@ -66,6 +66,131 @@ MOST IMPORTANT: YOU DONT HAVE TIME TO THINK JUST START RESPONDING BASED ON HUNCH
 
 const templates: Template[] = STARTER_TEMPLATES.filter((t) => !t.name.includes('shadcn'));
 
+type HeuristicTemplateRule = {
+  template: string;
+  patterns: RegExp[];
+  title: string;
+  match?: 'any' | 'all';
+};
+
+const HEURISTIC_TEMPLATE_RULES: HeuristicTemplateRule[] = [
+  {
+    template: 'Expo App',
+    patterns: [/react\s+native/i, /\bexpo\b/i, /\bmobile app\b/i],
+    title: 'Expo mobile application starter',
+  },
+  {
+    template: 'NextJS Shadcn',
+    patterns: [/\bnext(\.js|js)?\b/i, /\bshadcn\b/i],
+    title: 'Next.js with shadcn starter',
+    match: 'all',
+  },
+  {
+    template: 'NextJS',
+    patterns: [/\bnext(\.js|js)?\b/i],
+    title: 'Next.js application starter',
+  },
+  {
+    template: 'Vite Shadcn',
+    patterns: [/\breact\b/i, /\bshadcn\b/i],
+    title: 'Vite React with shadcn starter',
+    match: 'all',
+  },
+  {
+    template: 'Node Express API',
+    patterns: [/\bnode\b/i, /\bexpress\b/i, /\bapi\b/i],
+    title: 'Node Express API starter',
+    match: 'all',
+  },
+  {
+    template: 'Vite React',
+    patterns: [/\breact\b/i, /\bjsx\b/i, /\btsx\b/i, /\bwebsite\b/i],
+    title: 'React website starter',
+  },
+  {
+    template: 'Vue',
+    patterns: [/\bvue\b/i, /\bnuxt\b/i],
+    title: 'Vue starter',
+  },
+  {
+    template: 'Angular',
+    patterns: [/\bangular\b/i],
+    title: 'Angular starter',
+  },
+  {
+    template: 'Sveltekit',
+    patterns: [/\bsvelte\b/i, /\bsveltekit\b/i],
+    title: 'SvelteKit starter',
+  },
+  {
+    template: 'SolidJS',
+    patterns: [/\bsolid\b/i, /\bsolidjs\b/i],
+    title: 'SolidJS starter',
+  },
+  {
+    template: 'Basic Astro',
+    patterns: [/\bastro\b/i],
+    title: 'Astro starter',
+  },
+  {
+    template: 'Remix Typescript',
+    patterns: [/\bremix\b/i],
+    title: 'Remix starter',
+  },
+  {
+    template: 'Qwik Typescript',
+    patterns: [/\bqwik\b/i],
+    title: 'Qwik starter',
+  },
+  {
+    template: 'Slidev',
+    patterns: [/\bslidev\b/i, /\bpresentation\b/i, /\bslides\b/i],
+    title: 'Slidev presentation starter',
+  },
+  {
+    template: 'Vite Typescript',
+    patterns: [/\btypescript\b/i, /\btype-safe\b/i],
+    title: 'TypeScript starter',
+  },
+  {
+    template: 'Vanilla Vite',
+    patterns: [/\bvanilla\b/i, /\bjavascript\b/i, /\bhtml\b/i, /\bcss\b/i],
+    title: 'Vanilla Vite starter',
+  },
+];
+
+function templateExists(templateName: string): boolean {
+  return STARTER_TEMPLATES.some((template) => template.name === templateName);
+}
+
+export function inferTemplateFromPrompt(message: string): { template: string; title: string } | null {
+  const normalizedMessage = (message || '').trim();
+
+  if (!normalizedMessage) {
+    return null;
+  }
+
+  for (const rule of HEURISTIC_TEMPLATE_RULES) {
+    if (!templateExists(rule.template)) {
+      continue;
+    }
+
+    const isMatch =
+      rule.match === 'all'
+        ? rule.patterns.every((pattern) => pattern.test(normalizedMessage))
+        : rule.patterns.some((pattern) => pattern.test(normalizedMessage));
+
+    if (isMatch) {
+      return {
+        template: rule.template,
+        title: rule.title,
+      };
+    }
+  }
+
+  return null;
+}
+
 const parseSelectedTemplate = (llmOutput: string): { template: string; title: string } | null => {
   if (typeof llmOutput !== 'string' || llmOutput.length === 0) {
     return null;
@@ -84,6 +209,12 @@ const parseSelectedTemplate = (llmOutput: string): { template: string; title: st
 
 export const selectStarterTemplate = async (options: { message: string; model: string; provider: ProviderInfo }) => {
   const { message, model, provider } = options;
+  const heuristicSelection = inferTemplateFromPrompt(message);
+
+  if (heuristicSelection) {
+    return heuristicSelection;
+  }
+
   const requestBody = {
     message,
     model,
@@ -99,8 +230,16 @@ export const selectStarterTemplate = async (options: { message: string; model: s
   const { text } = respJson;
   const selectedTemplate = parseSelectedTemplate(text);
 
-  if (selectedTemplate) {
+  if (selectedTemplate && templateExists(selectedTemplate.template)) {
     return selectedTemplate;
+  }
+
+  if (selectedTemplate && !templateExists(selectedTemplate.template)) {
+    const fallbackFromPrompt = inferTemplateFromPrompt(message);
+
+    if (fallbackFromPrompt) {
+      return fallbackFromPrompt;
+    }
   }
 
   return {

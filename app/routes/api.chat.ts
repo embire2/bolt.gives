@@ -37,6 +37,7 @@ import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/li
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
+  sanitizeSelectionWithApiKeys,
 } from '~/lib/.server/llm/message-selection';
 
 export async function action(args: ActionFunctionArgs) {
@@ -365,7 +366,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           selectedModelCookie,
           selectedProviderCookie,
         );
-        ensureLatestUserMessageSelectionEnvelope(processedMessages, preferredSelection);
+        const sanitizedSelection = sanitizeSelectionWithApiKeys({
+          selection: preferredSelection,
+          apiKeys,
+          selectedProviderCookie,
+        });
+        ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
 
         const collectedToolOutputs: string[] = [];
         let forceFinalizeAttempted = false;
@@ -997,6 +1003,17 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
 
         if (errorMessage.includes('Invalid JSON response')) {
           return 'Custom error: The AI service returned an invalid response. This may be due to an invalid model name, API rate limiting, or server issues. Try selecting a different model or check your API key.';
+        }
+
+        if (
+          errorMessage.includes('Invalid AWS Bedrock configuration format') ||
+          errorMessage.includes('Missing required AWS credentials')
+        ) {
+          return 'Custom error: Bedrock credentials are invalid. Switch to a configured provider or update Bedrock JSON credentials in Settings.';
+        }
+
+        if (errorMessage.includes('Missing API key for')) {
+          return 'Custom error: The selected provider is not configured for this instance yet. Select a provider with a valid key and retry.';
         }
 
         if (

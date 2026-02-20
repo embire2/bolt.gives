@@ -29,6 +29,12 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
     stackLabel: 'Next.js + Tailwind',
     installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
   },
+  NextJS: {
+    scaffoldCommand:
+      'npx --yes create-next-app@latest . --ts --eslint --app --use-npm --yes --no-tailwind --no-src-dir --import-alias "@/*"',
+    stackLabel: 'Next.js + TypeScript',
+    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+  },
   'Vite Shadcn': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template react-ts',
     stackLabel: 'Vite + React + TypeScript',
@@ -62,6 +68,12 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
   'Vite React': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template react-ts',
     stackLabel: 'Vite + React + TypeScript',
+    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+  },
+  'Node Express API': {
+    scaffoldCommand:
+      "npm init -y && npm pkg set type=module scripts.start=\"node index.js\" && npm install express cors && printf \"import express from 'express';\\nimport cors from 'cors';\\nconst app = express();\\napp.use(cors());\\napp.get('/api/health', (_req, res) => res.json({ ok: true }));\\nconst port = Number(process.env.PORT || 5173);\\napp.listen(port, '0.0.0.0', () => console.log('Server running on ' + port));\\n\" > index.js",
+    stackLabel: 'Node.js + Express',
     installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
   },
   'Vite Typescript': {

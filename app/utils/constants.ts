@@ -57,6 +57,14 @@ export const STARTER_TEMPLATES: Template[] = [
     icon: 'i-bolt:nextjs',
   },
   {
+    name: 'NextJS',
+    label: 'Next.js',
+    description: 'Next.js starter template for modern React full-stack applications',
+    githubRepo: 'xKevIsDev/bolt-nextjs-template',
+    tags: ['nextjs', 'react', 'typescript', 'fullstack'],
+    icon: 'i-bolt:nextjs',
+  },
+  {
     name: 'Vite Shadcn',
     label: 'Vite with shadcn/ui',
     description: 'Vite starter fullstack template integrated with shadcn/ui components and styling system',
@@ -111,6 +119,14 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'xKevIsDev/bolt-vite-react-ts-template',
     tags: ['react', 'vite', 'frontend', 'website', 'app'],
     icon: 'i-bolt:react',
+  },
+  {
+    name: 'Node Express API',
+    label: 'Node + Express API',
+    description: 'Node.js and Express starter for backend APIs with a quick health endpoint',
+    githubRepo: 'xKevIsDev/bolt-node-express-template',
+    tags: ['node', 'express', 'api', 'backend', 'server'],
+    icon: 'i-ph:node-logo',
   },
   {
     name: 'Vite Typescript',
