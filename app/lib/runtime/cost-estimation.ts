@@ -29,10 +29,22 @@ function normalizeTokenCount(value: number | undefined): number {
 }
 
 function resolveRatesPerMillion(providerName?: string, modelName?: string): { prompt: number; completion: number } {
-  const normalizedProvider = (providerName || '').toLowerCase();
+  const normalizedProvider = (providerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const normalizedModel = (modelName || '').toLowerCase();
 
-  if (normalizedProvider === 'openai') {
+  if (normalizedProvider === 'openai' || normalizedProvider === 'azureopenai' || normalizedProvider === 'github') {
+    if (normalizedModel.includes('gpt-5.2-codex') || normalizedModel.includes('gpt-5.1-codex')) {
+      return { prompt: 1.25, completion: 10 };
+    }
+
+    if (normalizedModel.includes('gpt-5-codex') || normalizedModel.includes('codex')) {
+      return { prompt: 1.25, completion: 10 };
+    }
+
+    if (normalizedModel.includes('gpt-5-mini')) {
+      return { prompt: 0.25, completion: 2 };
+    }
+
     if (normalizedModel.includes('gpt-5')) {
       return { prompt: 1.25, completion: 10 };
     }
@@ -48,19 +60,27 @@ function resolveRatesPerMillion(providerName?: string, modelName?: string): { pr
     return { prompt: 3, completion: 9 };
   }
 
-  if (normalizedProvider === 'anthropic') {
+  if (normalizedProvider === 'anthropic' || normalizedProvider === 'amazonbedrock') {
     if (normalizedModel.includes('haiku')) {
       return { prompt: 0.25, completion: 1.25 };
+    }
+
+    if (normalizedModel.includes('sonnet')) {
+      return { prompt: 3, completion: 15 };
     }
 
     return { prompt: 3, completion: 15 };
   }
 
-  if (normalizedProvider === 'google') {
+  if (normalizedProvider === 'google' || normalizedProvider === 'vertexai') {
+    if (normalizedModel.includes('flash')) {
+      return { prompt: 0.3, completion: 0.8 };
+    }
+
     return { prompt: 1, completion: 3 };
   }
 
-  if (normalizedProvider === 'openrouter') {
+  if (normalizedProvider === 'openrouter' || normalizedProvider === 'together' || normalizedProvider === 'perplexity') {
     return { prompt: 2, completion: 8 };
   }
 
@@ -93,6 +113,11 @@ export function estimateCostUSD(options: CostEstimationOptions): number {
   const ratesPerMillion = resolveRatesPerMillion(options.providerName, options.modelName);
   const promptCost = (usage.promptTokens / 1_000_000) * ratesPerMillion.prompt;
   const completionCost = (usage.completionTokens / 1_000_000) * ratesPerMillion.completion;
+
+  if (promptCost === 0 && completionCost === 0 && usage.totalTokens > 0) {
+    const blendedRate = (ratesPerMillion.prompt + ratesPerMillion.completion) / 2;
+    return (usage.totalTokens / 1_000_000) * blendedRate;
+  }
 
   return promptCost + completionCost;
 }

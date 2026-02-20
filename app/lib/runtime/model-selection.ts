@@ -2,8 +2,14 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 
 export const PROVIDER_MODEL_SELECTION_STORAGE_KEY = 'bolt_provider_model_selection_v1';
 export const LAST_CONFIGURED_PROVIDER_COOKIE_KEY = 'lastConfiguredProvider';
+export const INSTANCE_SELECTION_STORAGE_KEY_PREFIX = 'bolt_instance_selection_v1';
 
 export type ProviderModelSelectionMap = Record<string, string>;
+export interface InstanceSelectionState {
+  providerName?: string;
+  modelName?: string;
+  updatedAt?: string;
+}
 
 interface PickPreferredProviderNameOptions {
   activeProviderNames: string[];
@@ -47,6 +53,11 @@ function getDefaultStorage(): Storage | undefined {
   return window.localStorage;
 }
 
+export function buildInstanceSelectionStorageKey(hostname: string): string {
+  const normalizedHost = hostname.trim().toLowerCase() || 'default';
+  return `${INSTANCE_SELECTION_STORAGE_KEY_PREFIX}:${normalizedHost}`;
+}
+
 export function parseApiKeysCookie(raw: string | undefined): Record<string, string> {
   const parsed = parseRecord(raw);
   const normalized: Record<string, string> = {};
@@ -66,6 +77,50 @@ export function parseApiKeysCookie(raw: string | undefined): Record<string, stri
   }
 
   return normalized;
+}
+
+export function readInstanceSelection(
+  hostname: string,
+  storage: Pick<Storage, 'getItem'> | undefined = getDefaultStorage(),
+): InstanceSelectionState {
+  if (!storage || !hostname) {
+    return {};
+  }
+
+  const key = buildInstanceSelectionStorageKey(hostname);
+  const parsed = parseRecord(storage.getItem(key));
+  const providerName = typeof parsed.providerName === 'string' ? parsed.providerName : undefined;
+  const modelName = typeof parsed.modelName === 'string' ? parsed.modelName : undefined;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : undefined;
+
+  return {
+    providerName,
+    modelName,
+    updatedAt,
+  };
+}
+
+export function rememberInstanceSelection(
+  options: {
+    hostname: string;
+    providerName?: string;
+    modelName?: string;
+  },
+  storage: Pick<Storage, 'getItem'> & Pick<Storage, 'setItem'> = getDefaultStorage() as Storage,
+): void {
+  if (!storage || !options.hostname) {
+    return;
+  }
+
+  const key = buildInstanceSelectionStorageKey(options.hostname);
+  const current = readInstanceSelection(options.hostname, storage);
+  const next: InstanceSelectionState = {
+    providerName: options.providerName || current.providerName,
+    modelName: options.modelName || current.modelName,
+    updatedAt: new Date().toISOString(),
+  };
+
+  storage.setItem(key, JSON.stringify(next));
 }
 
 export function hasUsableApiKey(apiKeys: Record<string, string>, providerName: string): boolean {

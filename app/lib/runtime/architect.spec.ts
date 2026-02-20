@@ -55,6 +55,31 @@ describe('diagnoseArchitectIssue', () => {
 
     expect(diagnosis?.issueId).toBe('json-command-envelope');
   });
+
+  it('detects invalid Bedrock configuration errors', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Planner Error',
+      description:
+        'Invalid AWS Bedrock configuration format. Please provide a valid JSON string containing region, accessKeyId, and secretAccessKey.',
+      content: '',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('bedrock-config-invalid');
+  });
+
+  it('detects web browse URL validation failures', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Tool Error',
+      description: 'Error executing tool web_browse: URL is not allowed. Only public HTTP/HTTPS URLs are accepted.',
+      content: '',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('web-browse-url-validation');
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

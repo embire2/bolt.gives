@@ -102,6 +102,30 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
       'Continue only after the unwrapped command exits successfully.',
     ],
   },
+  {
+    id: 'bedrock-config-invalid',
+    title: 'Invalid AWS Bedrock configuration',
+    source: 'terminal',
+    patterns: [/Invalid AWS Bedrock configuration format/i, /region,\s*accessKeyId,\s*and secretAccessKey/i],
+    maxAutoAttempts: 1,
+    guidance: [
+      'Do not continue with Bedrock calls until credentials are valid JSON.',
+      'Switch to another configured provider/model for this run if available.',
+      'Ask for corrected Bedrock JSON only if no alternative provider is configured.',
+    ],
+  },
+  {
+    id: 'web-browse-url-validation',
+    title: 'Web browse URL validation failure',
+    source: 'terminal',
+    patterns: [/URL is not allowed\. Only public HTTP\/HTTPS URLs are accepted/i],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Normalize and validate URLs before calling browse/search tools.',
+      'Strip markdown wrappers, braces, and trailing punctuation from the URL.',
+      'Retry with a clean public https:// URL and continue execution only after tool success.',
+    ],
+  },
 ];
 
 function buildFingerprint(input: string): string {
@@ -210,6 +234,7 @@ export function buildArchitectAutoHealPrompt(options: {
     '- Operate only within /home/project.',
     '- Do not run destructive commands (no rm -rf outside project, no sudo, no credential changes).',
     '- Apply the smallest fix that unblocks the build/preview.',
+    '- If a command fails, include command + exit code + stderr and do not claim success.',
     '- Verify the fix by rerunning the relevant command(s) and report clear pass/fail evidence.',
   ].join('\n');
 }

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import {
+  buildInstanceSelectionStorageKey,
   getRememberedProviderModel,
   parseApiKeysCookie,
   pickPreferredProviderName,
+  readInstanceSelection,
+  rememberInstanceSelection,
   rememberProviderModelSelection,
   resolvePreferredModelName,
 } from './model-selection';
@@ -93,5 +96,25 @@ describe('model-selection utilities', () => {
     rememberProviderModelSelection('OpenAI', 'gpt-5-codex', storage);
 
     expect(getRememberedProviderModel('OpenAI', storage)).toBe('gpt-5-codex');
+  });
+
+  it('stores and retrieves per-instance provider/model selection', () => {
+    const storage = createMemoryStorage();
+    const hostname = 'alpha1.bolt.gives';
+
+    rememberInstanceSelection(
+      {
+        hostname,
+        providerName: 'OpenAI',
+        modelName: 'gpt-5-codex',
+      },
+      storage,
+    );
+
+    expect(buildInstanceSelectionStorageKey(hostname)).toBe('bolt_instance_selection_v1:alpha1.bolt.gives');
+    expect(readInstanceSelection(hostname, storage)).toMatchObject({
+      providerName: 'OpenAI',
+      modelName: 'gpt-5-codex',
+    });
   });
 });

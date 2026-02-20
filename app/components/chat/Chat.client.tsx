@@ -40,6 +40,8 @@ import {
   getRememberedProviderModel,
   parseApiKeysCookie,
   pickPreferredProviderName,
+  readInstanceSelection,
+  rememberInstanceSelection,
   rememberProviderModelSelection,
   resolvePreferredModelName,
 } from '~/lib/runtime/model-selection';
@@ -458,11 +460,14 @@ export const ChatImpl = memo(
       const nextApiKeys = getApiKeysFromCookiesSafe();
       setApiKeys(nextApiKeys);
 
+      const instanceSelection =
+        typeof window !== 'undefined' ? readInstanceSelection(window.location.hostname) : undefined;
+
       const preferredProviderName = pickPreferredProviderName({
         activeProviderNames: activeProviders.map((activeProvider) => activeProvider.name),
         apiKeys: nextApiKeys,
         localProviderNames: LOCAL_PROVIDERS,
-        savedProviderName: Cookies.get('selectedProvider'),
+        savedProviderName: instanceSelection?.providerName || Cookies.get('selectedProvider'),
         lastConfiguredProviderName: Cookies.get(LAST_CONFIGURED_PROVIDER_COOKIE_KEY),
         fallbackProviderName: DEFAULT_PROVIDER.name,
       });
@@ -473,6 +478,13 @@ export const ChatImpl = memo(
       setProvider(preferredProvider as ProviderInfo);
       Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
 
+      if (typeof window !== 'undefined') {
+        rememberInstanceSelection({
+          hostname: window.location.hostname,
+          providerName: preferredProvider.name,
+        });
+      }
+
       selectionBootstrapRef.current = true;
 
       (async () => {
@@ -481,7 +493,7 @@ export const ChatImpl = memo(
           providerName: preferredProvider.name,
           models: providerModels,
           rememberedModelName: getRememberedProviderModel(preferredProvider.name),
-          savedModelName: Cookies.get('selectedModel'),
+          savedModelName: instanceSelection?.modelName || Cookies.get('selectedModel'),
         });
 
         if (!preferredModel) {
@@ -491,6 +503,14 @@ export const ChatImpl = memo(
         setModel(preferredModel);
         Cookies.set('selectedModel', preferredModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
         rememberProviderModelSelection(preferredProvider.name, preferredModel);
+
+        if (typeof window !== 'undefined') {
+          rememberInstanceSelection({
+            hostname: window.location.hostname,
+            providerName: preferredProvider.name,
+            modelName: preferredModel,
+          });
+        }
       })();
     }, [activeProviders]);
 
@@ -1369,6 +1389,13 @@ export const ChatImpl = memo(
         setProvider(preferredProvider as ProviderInfo);
         Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
 
+        if (typeof window !== 'undefined') {
+          rememberInstanceSelection({
+            hostname: window.location.hostname,
+            providerName: preferredProvider.name,
+          });
+        }
+
         const modelsForProvider = providerModels.length > 0 ? providerModels : await fetchProviderModels(providerName);
         const preferredModel = resolvePreferredModelName({
           providerName,
@@ -1384,6 +1411,14 @@ export const ChatImpl = memo(
         setModel(preferredModel);
         Cookies.set('selectedModel', preferredModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
         rememberProviderModelSelection(providerName, preferredModel);
+
+        if (typeof window !== 'undefined') {
+          rememberInstanceSelection({
+            hostname: window.location.hostname,
+            providerName,
+            modelName: preferredModel,
+          });
+        }
       },
       [activeProviders, model],
     );
@@ -1392,11 +1427,27 @@ export const ChatImpl = memo(
       setModel(newModel);
       Cookies.set('selectedModel', newModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
       rememberProviderModelSelection(provider.name, newModel);
+
+      if (typeof window !== 'undefined') {
+        rememberInstanceSelection({
+          hostname: window.location.hostname,
+          providerName: provider.name,
+          modelName: newModel,
+        });
+      }
     };
 
     const handleProviderChange = (newProvider: ProviderInfo) => {
       setProvider(newProvider);
       Cookies.set('selectedProvider', newProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+
+      if (typeof window !== 'undefined') {
+        rememberInstanceSelection({
+          hostname: window.location.hostname,
+          providerName: newProvider.name,
+          modelName: model,
+        });
+      }
     };
 
     const handleWebSearchResult = useCallback(

@@ -38,6 +38,7 @@ import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { ExecutionTransparencyPanel } from './ExecutionTransparencyPanel';
 import { ExecutionStickyFooter } from './ExecutionStickyFooter';
+import { UpdateBanner } from './UpdateBanner';
 
 const TEXTAREA_MIN_HEIGHT = 140;
 
@@ -478,6 +479,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 />
                 <StepRunnerFeed data={data} />
                 <ExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
+                <UpdateBanner />
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
                   setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
