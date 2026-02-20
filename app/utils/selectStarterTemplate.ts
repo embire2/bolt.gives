@@ -2,6 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
+import { getLocalStarterTemplateFiles } from './localStarterTemplates';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -100,14 +101,12 @@ export const selectStarterTemplate = async (options: { message: string; model: s
 
   if (selectedTemplate) {
     return selectedTemplate;
-  } else {
-    console.log('No template selected, using blank template');
-
-    return {
-      template: 'blank',
-      title: '',
-    };
   }
+
+  return {
+    template: 'blank',
+    title: '',
+  };
 };
 
 const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; path: string; content: string }[]> => {
@@ -136,7 +135,14 @@ export async function getTemplates(templateName: string, title?: string) {
   }
 
   const githubRepo = template.githubRepo;
-  const files = await getGitHubRepoContent(githubRepo);
+  const remoteFiles = await getGitHubRepoContent(githubRepo);
+  const localFallbackFiles = getLocalStarterTemplateFiles(template);
+  const usingLocalFallback = remoteFiles.length === 0 && localFallbackFiles.length > 0;
+  const files = usingLocalFallback ? localFallbackFiles : remoteFiles;
+
+  if (files.length === 0) {
+    return null;
+  }
 
   let filteredFiles = files;
 
@@ -201,6 +207,14 @@ ${file.content}
 TEMPLATE INSTRUCTIONS:
 ${templatePromptFile.content}
 
+---
+`;
+  }
+
+  if (usingLocalFallback) {
+    userMessage += `Fallback starter note:
+Remote template download was unavailable, so a built-in ${template.label} starter fallback has been loaded.
+Proceed with the scaffold instructions and continue automatically.
 ---
 `;
   }

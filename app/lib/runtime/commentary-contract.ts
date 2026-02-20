@@ -25,8 +25,20 @@ function normalizeWhitespace(input: string): string {
   return input.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
 }
 
+function toPlainEnglish(input: string): string {
+  return normalizeWhitespace(input)
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\bstderr\b/gi, 'error output')
+    .replace(/\bstdout\b/gi, 'command output')
+    .replace(/\bexit code\b/gi, 'status code')
+    .replace(/\bsub-agent\b/gi, 'assistant helper')
+    .replace(/\btool calls?\b/gi, 'actions')
+    .replace(/\bJSON\b/gi, 'structured data')
+    .replace(/\bLLM\b/gi, 'AI model');
+}
+
 function toMicroUpdate(message: string): string {
-  const normalized = normalizeWhitespace(message);
+  const normalized = toPlainEnglish(message);
 
   if (normalized.length <= COMMENTARY_MAX_MESSAGE_LENGTH) {
     return normalized;
@@ -57,7 +69,7 @@ function extractSection(detail: string | undefined, sectionName: 'Key changes' |
 }
 
 function toDetailValue(input: string, fallback = 'None yet.'): string {
-  const normalized = normalizeWhitespace(input);
+  const normalized = toPlainEnglish(input);
   return normalized.length > 0 ? normalized : fallback;
 }
 

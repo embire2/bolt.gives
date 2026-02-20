@@ -3,6 +3,8 @@ import { json, type ActionFunction, type LoaderFunction } from '@remix-run/cloud
 const NODE_MEMORY_BASELINE_MB = 4096;
 const DEFAULT_RETRY_COUNT = 1;
 const MAIN_BRANCH = 'main';
+const UPDATE_RUNTIME_UNSUPPORTED_MESSAGE =
+  'Update checks are unavailable in this runtime. Continue updates through your normal Git/Cloudflare deploy flow.';
 
 type UpdateLogEntry = {
   step: string;
@@ -65,6 +67,31 @@ function compareVersions(v1: string, v2: string): number {
   }
 
   return 0;
+}
+
+export function toUserSafeUpdateError(error: unknown): string {
+  const fallback = 'Failed to check for updates';
+
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message || fallback;
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('[unenv]') ||
+    normalized.includes('fs.readfile is not implemented') ||
+    normalized.includes('not implemented yet')
+  ) {
+    return UPDATE_RUNTIME_UNSUPPORTED_MESSAGE;
+  }
+
+  if (normalized.includes('node:fs') || normalized.includes('process is not defined')) {
+    return UPDATE_RUNTIME_UNSUPPORTED_MESSAGE;
+  }
+
+  return message;
 }
 
 async function readCurrentVersion(rootDir: string): Promise<string> {
@@ -194,7 +221,7 @@ export const loader: LoaderFunction = async () => {
   } catch (error) {
     return json({
       available: false,
-      error: error instanceof Error ? error.message : 'Failed to check for updates',
+      error: toUserSafeUpdateError(error),
     });
   }
 };

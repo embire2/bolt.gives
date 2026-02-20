@@ -145,6 +145,15 @@ describe('StepRunnerFeed', () => {
     render(<StepRunnerFeed data={data} />);
 
     expect(screen.queryByText(/checkpoint\/install-done/i)).toBeTruthy();
+
+    const technicalSummary = screen.getByText(/Technical details/i);
+    const detailsElement = technicalSummary.closest('details');
+
+    expect(technicalSummary).toBeTruthy();
+    expect(detailsElement?.hasAttribute('open')).toBe(false);
+
+    fireEvent.click(technicalSummary);
+    expect(detailsElement?.hasAttribute('open')).toBe(true);
     expect(screen.queryByText(/pnpm install/i)).toBeTruthy();
     expect(screen.queryByText(/exit 1/i)).toBeTruthy();
   });

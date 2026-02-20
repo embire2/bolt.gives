@@ -181,7 +181,7 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
         {checkpointEvents.map((event, index) => (
           <div
             key={`${event.timestamp}-${event.checkpointType}-${index}`}
-            className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2 font-mono"
+            className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2"
           >
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wide text-bolt-elements-textSecondary">
@@ -192,11 +192,18 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
               </span>
             </div>
             <div className="text-bolt-elements-textPrimary">{event.message}</div>
-            {event.command ? <div className="mt-1 text-bolt-elements-textTertiary">{event.command}</div> : null}
-            {typeof event.exitCode === 'number' ? (
-              <div className="text-bolt-elements-textTertiary">exit {event.exitCode}</div>
+            {event.command || typeof event.exitCode === 'number' || event.stderr ? (
+              <details className="mt-1">
+                <summary className="cursor-pointer text-[11px] text-bolt-elements-textTertiary">
+                  Technical details
+                </summary>
+                <div className="mt-1 space-y-1 font-mono text-[11px] text-bolt-elements-textTertiary">
+                  {event.command ? <div>{event.command}</div> : null}
+                  {typeof event.exitCode === 'number' ? <div>exit {event.exitCode}</div> : null}
+                  {event.stderr ? <div>{event.stderr}</div> : null}
+                </div>
+              </details>
             ) : null}
-            {event.stderr ? <div className="text-bolt-elements-textTertiary">{event.stderr}</div> : null}
           </div>
         ))}
         {recent.map((event, index) => (

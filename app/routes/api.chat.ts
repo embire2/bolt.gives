@@ -33,6 +33,7 @@ import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-execu
 import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
+import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -159,6 +160,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const subAgentManager = SubAgentManager.getInstance();
   const encoder: TextEncoder = new TextEncoder();
   let progressCounter: number = 1;
+  let stopCommentaryHeartbeatHandle: (() => void) | null = null;
+  const stopHeartbeatIfRunning = () => {
+    if (typeof stopCommentaryHeartbeatHandle === 'function') {
+      stopCommentaryHeartbeatHandle();
+    }
+
+    stopCommentaryHeartbeatHandle = null;
+  };
 
   try {
     const mcpService = MCPService.getInstance();
@@ -170,11 +179,22 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const dataStream = createDataStream({
       async execute(dataStream) {
         let firstCommentaryAt: number | null = null;
+        let lastCommentaryAt = Date.now();
+        let lastCommentaryPhase: AgentCommentaryPhase = 'plan';
+        let commentaryHeartbeat: ReturnType<typeof setInterval> | null = null;
         let recoveryTriggered = false;
         let recoverySucceeded = false;
         let completionEmitted = false;
         let hasExecutionFailures = false;
         let latestExecutionFailure: ReturnType<typeof extractExecutionFailure> = null;
+
+        const stopCommentaryHeartbeat = () => {
+          if (commentaryHeartbeat) {
+            clearInterval(commentaryHeartbeat);
+            commentaryHeartbeat = null;
+          }
+        };
+        stopCommentaryHeartbeatHandle = stopCommentaryHeartbeat;
 
         const writeCommentary = (
           phase: AgentCommentaryPhase,
@@ -185,6 +205,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           if (firstCommentaryAt === null) {
             firstCommentaryAt = Date.now();
           }
+
+          lastCommentaryAt = Date.now();
+          lastCommentaryPhase = phase;
 
           const contracted = enforceCommentaryContract({
             phase,
@@ -207,6 +230,22 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           });
         };
 
+        const startCommentaryHeartbeat = () => {
+          if (commentaryHeartbeat) {
+            return;
+          }
+
+          const heartbeatPollMs = Math.min(10_000, COMMENTARY_HEARTBEAT_INTERVAL_MS);
+          commentaryHeartbeat = setInterval(() => {
+            if (Date.now() - lastCommentaryAt < COMMENTARY_HEARTBEAT_INTERVAL_MS) {
+              return;
+            }
+
+            const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase);
+            writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail);
+          }, heartbeatPollMs);
+        };
+
         const recoveryController = new AgentRecoveryController();
         let pendingRecoveryReason: string | undefined = undefined;
         let pendingRecoveryBackoffMs = 0;
@@ -217,6 +256,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             return;
           }
 
+          stopCommentaryHeartbeat();
           completionEmitted = true;
 
           const commentaryFirstEventLatencyMs =
@@ -327,6 +367,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let runContinuationAttempted = false;
 
         writeCommentary('plan', 'Planning the implementation strategy and checking project context.');
+        startCommentaryHeartbeat();
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -518,12 +559,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 subAgentPlan.slice(0, 260),
               );
             }
-          } catch (plannerError) {
+          } catch {
             writeCommentary(
               'recovery',
               'Planner sub-agent failed. Continuing with direct worker execution.',
               'warning',
-              plannerError instanceof Error ? plannerError.message : 'unknown planner error',
+              `Key changes: The planning helper could not complete this step, so I switched to direct execution.
+Next: I am continuing with the main coding flow and will keep you updated.`,
             );
           }
         }
@@ -548,8 +590,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 'Completed an execution step. Verifying results before continuing.',
                 'in-progress',
                 toolNames
-                  ? `Tools used: ${toolNames}${toolResults?.length ? ` | Results: ${toolResults.length}` : ''}`
-                  : `Results: ${toolResults?.length ?? 0}`,
+                  ? `Key changes: Finished actions (${toolNames}) and collected ${(toolResults?.length ?? 0).toString()} result updates.
+Next: I am checking the output quality before moving to the next step.`
+                  : `Key changes: Finished an execution step and collected ${(toolResults?.length ?? 0).toString()} result updates.
+Next: I am validating the output before moving on.`,
               );
             }
 
@@ -579,10 +623,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               recoveryTriggered = true;
               writeCommentary(
                 'recovery',
-                'A command failed. Capturing diagnostics before continuing.',
+                'A step failed while building your project. I am diagnosing and fixing it.',
                 'warning',
-                `Key changes: Command "${executionFailure.command}" failed with exit code ${executionFailure.exitCode}. stderr: ${executionFailure.stderr}
-Next: Returning failure details and avoiding false success claims.`,
+                `Key changes: One of the recent actions did not succeed.
+Next: I will apply a fix and continue from the latest stable checkpoint.`,
               );
             }
 
@@ -633,9 +677,10 @@ Next: Returning failure details and avoiding false success claims.`,
               if (pendingRecoveryBackoffMs > 0) {
                 writeCommentary(
                   'recovery',
-                  'Applying auto-recovery backoff before finalize.',
+                  'Taking a short recovery pause before the next step.',
                   'warning',
-                  `Waiting ${pendingRecoveryBackoffMs}ms before continuing.`,
+                  `Key changes: A quick safety pause is in progress.
+Next: I will continue automatically right after this pause.`,
                 );
                 await new Promise((resolve) => setTimeout(resolve, pendingRecoveryBackoffMs));
               }
@@ -643,8 +688,8 @@ Next: Returning failure details and avoiding false success claims.`,
               writeCommentary(
                 'next-step',
                 pendingRecoveryReason
-                  ? 'Recovery complete. Producing final response without additional tool calls.'
-                  : 'Tool execution finished. Producing a final user response without additional tool calls.',
+                  ? 'Recovery is complete. I am preparing your final answer now.'
+                  : 'Execution is complete. I am preparing your final answer now.',
                 pendingRecoveryReason ? 'recovered' : 'in-progress',
               );
 
@@ -684,9 +729,10 @@ ${toolSummary}`,
                     recoverySucceeded = true;
                     writeCommentary(
                       'recovery',
-                      'Recovery path finished. Delivering stable final output.',
+                      'Recovery finished successfully.',
                       'recovered',
-                      `Recovery reason: ${pendingRecoveryReason}`,
+                      `Key changes: Recovery completed and the workflow is stable again.
+Next: I am sending the final result now.`,
                     );
                     pendingRecoveryReason = undefined;
                     pendingRecoveryBackoffMs = 0;
@@ -696,10 +742,10 @@ ${toolSummary}`,
                   if (hasExecutionFailures && latestExecutionFailure) {
                     writeCommentary(
                       'next-step',
-                      'Execution finished with failures; returning actionable diagnostics.',
+                      'Execution completed, but at least one step still needs attention.',
                       'warning',
-                      `Key changes: Failed command "${latestExecutionFailure.command}" exited with ${latestExecutionFailure.exitCode}. stderr: ${latestExecutionFailure.stderr}
-Next: Fix the failing command and re-run from the latest stable checkpoint.`,
+                      `Key changes: A previous step did not finish successfully.
+Next: I am returning clear recovery instructions to help you resolve it quickly.`,
                     );
                   } else {
                     writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
@@ -788,6 +834,7 @@ Continue now and do ALL of the following:
                   if (part.type === 'error') {
                     const error: any = part.error;
                     logger.error(`${error}`);
+                    stopCommentaryHeartbeat();
 
                     return;
                   }
@@ -802,9 +849,10 @@ Continue now and do ALL of the following:
                 recoverySucceeded = true;
                 writeCommentary(
                   'recovery',
-                  'Recovery path finished. Delivering stable final output.',
+                  'Recovery finished successfully.',
                   'recovered',
-                  `Recovery reason: ${pendingRecoveryReason}`,
+                  `Key changes: Recovery completed and the workflow is stable again.
+Next: I am sending the final result now.`,
                 );
                 pendingRecoveryReason = undefined;
                 pendingRecoveryBackoffMs = 0;
@@ -814,10 +862,10 @@ Continue now and do ALL of the following:
               if (hasExecutionFailures && latestExecutionFailure) {
                 writeCommentary(
                   'next-step',
-                  'Execution finished with failures; returning actionable diagnostics.',
+                  'Execution completed, but at least one step still needs attention.',
                   'warning',
-                  `Key changes: Failed command "${latestExecutionFailure.command}" exited with ${latestExecutionFailure.exitCode}. stderr: ${latestExecutionFailure.stderr}
-Next: Fix the failing command and re-run from the latest stable checkpoint.`,
+                  `Key changes: A previous step did not finish successfully.
+Next: I am returning clear recovery instructions to help you resolve it quickly.`,
                 );
               } else {
                 writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
@@ -869,6 +917,7 @@ Next: Fix the failing command and re-run from the latest stable checkpoint.`,
                 if (part.type === 'error') {
                   const error: any = part.error;
                   logger.error(`${error}`);
+                  stopCommentaryHeartbeat();
 
                   return;
                 }
@@ -914,6 +963,7 @@ Next: Fix the failing command and re-run from the latest stable checkpoint.`,
               const error: any = part.error;
               logger.error('Streaming error:', error);
               streamRecovery.stop();
+              stopCommentaryHeartbeat();
 
               // Enhanced error handling for common streaming issues
               if (error.message?.includes('Invalid JSON response')) {
@@ -926,10 +976,13 @@ Next: Fix the failing command and re-run from the latest stable checkpoint.`,
             }
           }
           streamRecovery.stop();
+          stopCommentaryHeartbeat();
         })();
         result.mergeIntoDataStream(dataStream);
       },
       onError: (error: any) => {
+        stopHeartbeatIfRunning();
+
         // Provide more specific error messages for common issues
         const errorMessage = error.message || 'Unknown error';
 
@@ -1011,6 +1064,7 @@ Next: Fix the failing command and re-run from the latest stable checkpoint.`,
       },
     });
   } catch (error: any) {
+    stopHeartbeatIfRunning();
     logger.error(error);
 
     const errorResponse = {

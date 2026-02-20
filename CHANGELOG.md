@@ -39,6 +39,20 @@
 - `/api/update` loader now degrades gracefully with a non-error response when checks cannot run in the current runtime.
 - Starter template release-fetch failures now degrade quietly to fallback behavior instead of noisy client console errors.
 
+### Fixed (2026-02-20 plain-English commentary + starter fallback patch)
+- Update manager now maps runtime-specific unenv/fs errors to a user-safe message instead of exposing low-level internals.
+- Chat commentary now:
+  - emits plain-English wording by default
+  - sends automatic heartbeat updates at least every 60 seconds during long runs
+  - keeps technical diagnostics out of default commentary cards
+- Execution timeline now collapses checkpoint command diagnostics under `Technical details` so default output remains readable.
+- Starter template loading now has built-in local fallback templates for every listed framework when remote template fetches fail.
+
+### Verified (2026-02-20 patch)
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+
 ### Verified
 - `pnpm run typecheck` passed.
 - `pnpm run lint` passed.

@@ -122,4 +122,25 @@ describe('UpdateBanner', () => {
       expect(screen.queryByText(/Update logs/i)).toBeTruthy();
     });
   });
+
+  it('shows a friendly message for unsupported runtime update errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          available: false,
+          error: '[unenv] fs.readFile is not implemented yet!',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<UpdateBanner />);
+    fireEvent.click(screen.getByRole('button', { name: /check/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Update checks are unavailable in this runtime/i)).toBeTruthy();
+    });
+  });
 });

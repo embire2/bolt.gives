@@ -34,4 +34,19 @@ describe('enforceCommentaryContract', () => {
     expect(result.message.length).toBeLessThanOrEqual(160);
     expect(result.message.endsWith('...') || result.message.endsWith('.')).toBe(true);
   });
+
+  it('normalizes technical jargon into plain-English wording', () => {
+    const result = enforceCommentaryContract({
+      phase: 'recovery',
+      message: 'Sub-agent failed with stderr output and exit code 1.',
+      detail: 'Key changes: Tool calls finished with JSON parse error.\nNext: Inspect stdout and retry.',
+    });
+
+    expect(result.message.toLowerCase()).toContain('assistant helper');
+    expect(result.message.toLowerCase()).toContain('error output');
+    expect(result.message.toLowerCase()).toContain('status code');
+    expect(result.detail.toLowerCase()).toContain('actions');
+    expect(result.detail.toLowerCase()).toContain('structured data');
+    expect(result.detail.toLowerCase()).toContain('command output');
+  });
 });

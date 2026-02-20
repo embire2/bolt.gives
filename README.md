@@ -168,12 +168,14 @@ Roadmap file: `v1.0.3.md`
 ## v1.0.2 Highlights
 
 - Live development commentary stream (separate protocol event, visible during execution).
+- Plain-English commentary normalization with 60-second heartbeat updates during long-running work.
 - Anti-stall detection and auto-recovery with recovery events in timeline.
 - Execution transparency panel with model/tool/step/cost visibility and rationale.
 - Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`) with runtime enforcement.
 - Reliability guardrails for strict tool schemas with compatibility matrix endpoint and tests.
 - Persistent scoped project memory reused across runs.
 - Minimal planner/worker sub-agent framework behind feature flag (`BOLT_SUB_AGENTS_ENABLED`).
+- Local starter-template fallbacks for every framework option when remote template downloads fail.
 
 ## v1.0.0 Release Notes
 
@@ -213,6 +215,7 @@ bolt.gives is a single workspace where you can:
 - Multi-provider LLM support (cloud + local)
 - Real-time collaborative editing (Yjs + `y-websocket`)
 - Built-in web documentation browsing and synthesis tools (Playwright-backed)
+- Built-in fallback starter templates for all listed frameworks (so scaffold flows keep working even if remote template fetch fails)
 - Interactive step runner with structured events (`step-start`, `stdout`, `stderr`, `step-end`, `complete`)
 - Plan/Act workflow with checkpoints (continue/stop/revert)
 - Session save/resume/share (Supabase REST API)

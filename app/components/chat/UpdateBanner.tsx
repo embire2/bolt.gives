@@ -27,6 +27,24 @@ type UpdateApplyResponse = {
   latestVersion?: string;
 };
 
+function toFriendlyUpdateError(error: string | undefined): string | undefined {
+  if (!error) {
+    return undefined;
+  }
+
+  const normalized = error.toLowerCase();
+
+  if (
+    normalized.includes('[unenv]') ||
+    normalized.includes('fs.readfile is not implemented') ||
+    normalized.includes('node:fs')
+  ) {
+    return 'Update checks are unavailable in this runtime. Continue updates through your normal Git/Cloudflare deploy flow.';
+  }
+
+  return error;
+}
+
 export function UpdateBanner() {
   const [check, setCheck] = useState<UpdateCheckResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,11 +57,14 @@ export function UpdateBanner() {
     try {
       const response = await fetch('/api/update');
       const payload = (await response.json()) as UpdateCheckResponse;
-      setCheck(payload);
+      setCheck({
+        ...payload,
+        error: toFriendlyUpdateError(payload.error),
+      });
     } catch (error) {
       setCheck({
         available: false,
-        error: error instanceof Error ? error.message : 'Failed to check updates',
+        error: toFriendlyUpdateError(error instanceof Error ? error.message : 'Failed to check updates'),
       });
     } finally {
       setLoading(false);
@@ -67,10 +88,11 @@ export function UpdateBanner() {
       setLogs(payload.logs || []);
 
       if (!response.ok || !payload.updated) {
-        toast.error(payload.error || 'Update failed');
+        const displayError = toFriendlyUpdateError(payload.error) || 'Update failed';
+        toast.error(displayError);
         setCheck((previous) => ({
           ...(previous || { available: true }),
-          error: payload.error || 'Update failed',
+          error: displayError,
         }));
 
         return;
@@ -83,10 +105,11 @@ export function UpdateBanner() {
         latestVersion: payload.latestVersion,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Update failed');
+      const displayError = toFriendlyUpdateError(error instanceof Error ? error.message : 'Update failed');
+      toast.error(displayError);
       setCheck((previous) => ({
         ...(previous || { available: true }),
-        error: error instanceof Error ? error.message : 'Update failed',
+        error: displayError,
       }));
     } finally {
       setApplying(false);
