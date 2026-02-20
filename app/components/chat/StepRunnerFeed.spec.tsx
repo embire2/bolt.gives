@@ -47,8 +47,8 @@ describe('StepRunnerFeed', () => {
     workbenchStore.stepRunnerEvents.set([]);
   });
 
-  it('renders the most recent 8 events in order', () => {
-    const events = Array.from({ length: 9 }, (_, index) => createEvent(index, `step-${index + 1}`));
+  it('renders the most recent 10 events in order', () => {
+    const events = Array.from({ length: 11 }, (_, index) => createEvent(index, `step-${index + 1}`));
     workbenchStore.stepRunnerEvents.set(events);
 
     render(<StepRunnerFeed />);
@@ -56,7 +56,7 @@ describe('StepRunnerFeed', () => {
     expect(screen.queryByText('Execution Timeline')).toBeTruthy();
     expect(screen.queryByText('step-1')).toBeNull();
     expect(screen.queryByText('step-2')).toBeTruthy();
-    expect(screen.queryByText('step-9')).toBeTruthy();
+    expect(screen.queryByText('step-11')).toBeTruthy();
   });
 
   it('clears events when the clear button is clicked', () => {
@@ -107,8 +107,29 @@ describe('StepRunnerFeed', () => {
 
     render(<StepRunnerFeed data={data} />);
 
-    expect(screen.queryByText(/\[commentary\/plan\]/i)).toBeTruthy();
+    expect(screen.queryByText(/^Plan$/i)).toBeTruthy();
     expect(screen.queryByText(/Planning changes/i)).toBeTruthy();
     expect(screen.queryByText(/\[progress\]/i)).toBeNull();
+  });
+
+  it('renders checkpoint events with command diagnostics', () => {
+    const data = [
+      {
+        type: 'checkpoint',
+        checkpointType: 'install-done',
+        status: 'error',
+        message: 'Dependency installation failed.',
+        timestamp: new Date().toISOString(),
+        command: 'pnpm install',
+        exitCode: 1,
+        stderr: 'network error',
+      },
+    ] as JSONValue[];
+
+    render(<StepRunnerFeed data={data} />);
+
+    expect(screen.queryByText(/checkpoint\/install-done/i)).toBeTruthy();
+    expect(screen.queryByText(/pnpm install/i)).toBeTruthy();
+    expect(screen.queryByText(/exit 1/i)).toBeTruthy();
   });
 });

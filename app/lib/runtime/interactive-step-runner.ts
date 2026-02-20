@@ -3,7 +3,14 @@ export interface InteractiveStep {
   command: string[];
 }
 
-export type InteractiveStepRunnerEventType = 'step-start' | 'stdout' | 'stderr' | 'step-end' | 'error' | 'complete';
+export type InteractiveStepRunnerEventType =
+  | 'step-start'
+  | 'stdout'
+  | 'stderr'
+  | 'step-end'
+  | 'error'
+  | 'complete'
+  | 'telemetry';
 
 export interface InteractiveStepRunnerEvent {
   type: InteractiveStepRunnerEventType;

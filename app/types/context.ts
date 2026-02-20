@@ -29,6 +29,19 @@ export type AgentCommentaryAnnotation = {
   timestamp: string;
 };
 
+export type CheckpointType = 'checkpoint' | 'install-done' | 'preview-ready' | 'test-result' | 'deploy-result';
+
+export type CheckpointDataEvent = {
+  type: 'checkpoint';
+  checkpointType: CheckpointType;
+  status: 'in-progress' | 'complete' | 'error';
+  message: string;
+  timestamp: string;
+  command?: string;
+  exitCode?: number;
+  stderr?: string;
+};
+
 export type ToolCallAnnotation = {
   type: 'toolCall';
   toolCallId: string;

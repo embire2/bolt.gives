@@ -37,6 +37,7 @@ import { StepRunnerFeed } from './StepRunnerFeed';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { ExecutionTransparencyPanel } from './ExecutionTransparencyPanel';
+import { ExecutionStickyFooter } from './ExecutionStickyFooter';
 
 const TEXTAREA_MIN_HEIGHT = 140;
 
@@ -476,6 +477,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   latestUsage={latestUsage}
                 />
                 <StepRunnerFeed data={data} />
+                <ExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
                   setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}

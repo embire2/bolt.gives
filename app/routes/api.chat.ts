@@ -11,6 +11,7 @@ import type {
   AgentCommentaryAnnotation,
   AgentCommentaryPhase,
   AgentRunMetricsDataEvent,
+  CheckpointDataEvent,
   ContextAnnotation,
   ProjectMemoryDataEvent,
   ProgressAnnotation,
@@ -30,6 +31,8 @@ import { shouldForceRunContinuation } from '~/lib/.server/llm/run-continuation';
 import { SubAgentManager, type SubAgentConfig, type SubAgentState } from '~/lib/.server/llm/sub-agent';
 import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-executor';
 import { addUsageTotals } from '~/lib/runtime/usage';
+import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
+import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -170,6 +173,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let recoveryTriggered = false;
         let recoverySucceeded = false;
         let completionEmitted = false;
+        let hasExecutionFailures = false;
+        let latestExecutionFailure: ReturnType<typeof extractExecutionFailure> = null;
 
         const writeCommentary = (
           phase: AgentCommentaryPhase,
@@ -181,14 +186,20 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             firstCommentaryAt = Date.now();
           }
 
+          const contracted = enforceCommentaryContract({
+            phase,
+            message,
+            detail,
+          });
+
           const payload: AgentCommentaryAnnotation = {
             type: 'agent-commentary',
             phase,
             status,
             order: progressCounter++,
-            message,
+            message: contracted.message,
             timestamp: new Date().toISOString(),
-            ...(detail ? { detail } : {}),
+            detail: contracted.detail,
           };
 
           dataStream.writeData({
@@ -272,7 +283,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             label: 'response',
             status: 'complete',
             order: progressCounter++,
-            message: 'Response Generated',
+            message: hasExecutionFailures ? 'Response Generated (with execution failures)' : 'Response Generated',
           } satisfies ProgressAnnotation);
         };
 
@@ -542,6 +553,39 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               );
             }
 
+            const checkpointEvents = extractCheckpointEvents({
+              toolCalls: toolCalls as Array<{ toolName?: string; toolCallId?: string; args?: unknown }>,
+              toolResults: normalizedToolResults as Array<{
+                toolName?: string;
+                toolCallId?: string;
+                result?: unknown;
+              }>,
+            });
+
+            checkpointEvents.forEach((event) => dataStream.writeData({ ...(event as CheckpointDataEvent) }));
+
+            const executionFailure = extractExecutionFailure({
+              toolCalls: toolCalls as Array<{ toolName?: string; toolCallId?: string; args?: unknown }>,
+              toolResults: normalizedToolResults as Array<{
+                toolName?: string;
+                toolCallId?: string;
+                result?: unknown;
+              }>,
+            });
+
+            if (executionFailure) {
+              hasExecutionFailures = true;
+              latestExecutionFailure = executionFailure;
+              recoveryTriggered = true;
+              writeCommentary(
+                'recovery',
+                'A command failed. Capturing diagnostics before continuing.',
+                'warning',
+                `Key changes: Command "${executionFailure.command}" failed with exit code ${executionFailure.exitCode}. stderr: ${executionFailure.stderr}
+Next: Returning failure details and avoiding false success claims.`,
+              );
+            }
+
             const recoverySignal = recoveryController.analyzeStep(
               toolCalls.map((call) => ({ toolName: call.toolName, args: call.args })),
               normalizedToolResults.length,
@@ -649,7 +693,18 @@ ${toolSummary}`,
                     forceFinalizeRequested = false;
                   }
 
-                  writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+                  if (hasExecutionFailures && latestExecutionFailure) {
+                    writeCommentary(
+                      'next-step',
+                      'Execution finished with failures; returning actionable diagnostics.',
+                      'warning',
+                      `Key changes: Failed command "${latestExecutionFailure.command}" exited with ${latestExecutionFailure.exitCode}. stderr: ${latestExecutionFailure.stderr}
+Next: Fix the failing command and re-run from the latest stable checkpoint.`,
+                    );
+                  } else {
+                    writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+                  }
+
                   emitRunCompletionEvents(finalContent, model, provider);
                 },
               };
@@ -756,7 +811,18 @@ Continue now and do ALL of the following:
                 forceFinalizeRequested = false;
               }
 
-              writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+              if (hasExecutionFailures && latestExecutionFailure) {
+                writeCommentary(
+                  'next-step',
+                  'Execution finished with failures; returning actionable diagnostics.',
+                  'warning',
+                  `Key changes: Failed command "${latestExecutionFailure.command}" exited with ${latestExecutionFailure.exitCode}. stderr: ${latestExecutionFailure.stderr}
+Next: Fix the failing command and re-run from the latest stable checkpoint.`,
+                );
+              } else {
+                writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+              }
+
               emitRunCompletionEvents(content, model, provider);
               await new Promise((resolve) => setTimeout(resolve, 0));
 
