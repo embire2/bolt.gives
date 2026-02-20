@@ -5,7 +5,9 @@ import {
   getRememberedProviderModel,
   parseApiKeysCookie,
   pickPreferredProviderName,
+  readProviderHistory,
   readInstanceSelection,
+  recordProviderHistory,
   rememberInstanceSelection,
   rememberProviderModelSelection,
   resolvePreferredModelName,
@@ -132,5 +134,14 @@ describe('model-selection utilities', () => {
       providerName: 'OpenAI',
       modelName: 'gpt-5-codex',
     });
+  });
+
+  it('tracks provider history by recency without duplicates', () => {
+    const storage = createMemoryStorage();
+    recordProviderHistory('OpenAI', storage);
+    recordProviderHistory('Anthropic', storage);
+    recordProviderHistory('OpenAI', storage);
+
+    expect(readProviderHistory(storage)).toEqual(['OpenAI', 'Anthropic']);
   });
 });

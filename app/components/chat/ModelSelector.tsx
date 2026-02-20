@@ -4,7 +4,11 @@ import type { KeyboardEvent } from 'react';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { classNames } from '~/utils/classNames';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
-import { getRememberedProviderModel, resolvePreferredModelName } from '~/lib/runtime/model-selection';
+import {
+  getRememberedProviderModel,
+  readProviderHistory,
+  resolvePreferredModelName,
+} from '~/lib/runtime/model-selection';
 
 // Fuzzy search utilities
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -135,6 +139,7 @@ export const ModelSelector = ({
   type ConnectionStatus = 'unknown' | 'connected' | 'disconnected';
 
   const [localProviderStatus, setLocalProviderStatus] = useState<Record<string, ConnectionStatus>>({});
+  const [providerHistory, setProviderHistory] = useState<string[]>([]);
   const getPreferredModelForProvider = useCallback(
     (providerName: string) =>
       resolvePreferredModelName({
@@ -144,6 +149,21 @@ export const ModelSelector = ({
         savedModelName: model,
       }),
     [modelList, model],
+  );
+
+  const applyProviderSelection = useCallback(
+    (selectedProvider: ProviderInfo) => {
+      if (setProvider) {
+        setProvider(selectedProvider);
+      }
+
+      const preferredModel = getPreferredModelForProvider(selectedProvider.name);
+
+      if (preferredModel && setModel) {
+        setModel(preferredModel);
+      }
+    },
+    [setProvider, getPreferredModelForProvider, setModel],
   );
 
   // Check connectivity of local providers when provider list changes
@@ -167,6 +187,17 @@ export const ModelSelector = ({
 
     checkLocalProviders();
   }, [providerList, modelList]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const nextHistory = readProviderHistory().filter((entry) =>
+      providerList.some((providerItem) => providerItem.name === entry),
+    );
+    setProviderHistory(nextHistory);
+  }, [providerList, provider?.name]);
 
   // Debounce search queries
   useEffect(() => {
@@ -261,6 +292,14 @@ export const ModelSelector = ({
       .filter((provider) => provider.searchMatches)
       .sort((a, b) => b.searchScore - a.searchScore);
   }, [providerList, debouncedProviderSearchQuery]);
+
+  const recentProviders = useMemo(() => {
+    return providerHistory
+      .filter((providerName) => providerName !== provider?.name)
+      .map((providerName) => providerList.find((providerEntry) => providerEntry.name === providerName))
+      .filter((providerEntry): providerEntry is ProviderInfo => Boolean(providerEntry))
+      .slice(0, 4);
+  }, [providerHistory, provider?.name, providerList]);
 
   // Reset free models filter when provider changes
   useEffect(() => {
@@ -373,16 +412,7 @@ export const ModelSelector = ({
 
         if (focusedProviderIndex >= 0 && focusedProviderIndex < filteredProviders.length) {
           const selectedProvider = filteredProviders[focusedProviderIndex];
-
-          if (setProvider) {
-            setProvider(selectedProvider);
-
-            const preferredModel = getPreferredModelForProvider(selectedProvider.name);
-
-            if (preferredModel && setModel) {
-              setModel(preferredModel);
-            }
-          }
+          applyProviderSelection(selectedProvider);
 
           setIsProviderDropdownOpen(false);
           setProviderSearchQuery('');
@@ -454,6 +484,22 @@ export const ModelSelector = ({
 
   return (
     <div className="flex gap-2 flex-col sm:flex-row">
+      {recentProviders.length > 0 ? (
+        <div className="flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-bolt-elements-borderColor px-2 py-1 text-xs text-bolt-elements-textSecondary sm:w-auto sm:min-w-[180px]">
+          <span className="text-bolt-elements-textTertiary">Recent:</span>
+          {recentProviders.map((providerEntry) => (
+            <button
+              key={`recent-provider-${providerEntry.name}`}
+              type="button"
+              className="rounded border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary hover:border-bolt-elements-focus hover:text-bolt-elements-textPrimary"
+              onClick={() => applyProviderSelection(providerEntry)}
+            >
+              {providerEntry.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Provider Combobox */}
       <div className="relative flex w-full" onKeyDown={handleProviderKeyDown} ref={providerDropdownRef}>
         <div
@@ -601,16 +647,7 @@ export const ModelSelector = ({
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
-
-                      if (setProvider) {
-                        setProvider(providerOption);
-
-                        const preferredModel = getPreferredModelForProvider(providerOption.name);
-
-                        if (preferredModel && setModel) {
-                          setModel(preferredModel);
-                        }
-                      }
+                      applyProviderSelection(providerOption);
 
                       setIsProviderDropdownOpen(false);
                       setProviderSearchQuery('');

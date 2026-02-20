@@ -1,10 +1,12 @@
 import type { ModelInfo } from '~/lib/modules/llm/types';
 
 export const PROVIDER_MODEL_SELECTION_STORAGE_KEY = 'bolt_provider_model_selection_v1';
+export const PROVIDER_HISTORY_STORAGE_KEY = 'bolt_provider_history_v1';
 export const LAST_CONFIGURED_PROVIDER_COOKIE_KEY = 'lastConfiguredProvider';
 export const INSTANCE_SELECTION_STORAGE_KEY_PREFIX = 'bolt_instance_selection_v1';
 
 export type ProviderModelSelectionMap = Record<string, string>;
+export type ProviderHistory = string[];
 export interface InstanceSelectionState {
   providerName?: string;
   modelName?: string;
@@ -243,6 +245,47 @@ export function writeProviderModelSelections(
   }
 
   storage.setItem(PROVIDER_MODEL_SELECTION_STORAGE_KEY, JSON.stringify(selections));
+}
+
+export function readProviderHistory(
+  storage: Pick<Storage, 'getItem'> | undefined = getDefaultStorage(),
+): ProviderHistory {
+  if (!storage) {
+    return [];
+  }
+
+  const raw = storage.getItem(PROVIDER_HISTORY_STORAGE_KEY);
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function recordProviderHistory(
+  providerName: string,
+  storage: (Pick<Storage, 'getItem'> & Pick<Storage, 'setItem'>) | undefined = getDefaultStorage(),
+): ProviderHistory {
+  if (!providerName || !storage) {
+    return [];
+  }
+
+  const current = readProviderHistory(storage).filter((entry) => entry !== providerName);
+  const next = [providerName, ...current].slice(0, 8);
+  storage.setItem(PROVIDER_HISTORY_STORAGE_KEY, JSON.stringify(next));
+
+  return next;
 }
 
 export function getRememberedProviderModel(

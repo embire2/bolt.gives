@@ -80,6 +80,30 @@ describe('diagnoseArchitectIssue', () => {
 
     expect(diagnosis?.issueId).toBe('web-browse-url-validation');
   });
+
+  it('detects npm spawn ENOENT failures and routes to pnpm fallback', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Scaffold Error',
+      description: 'Command failed',
+      content: 'jsh: spawn npm ENOENT',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('npm-spawn-enoent');
+  });
+
+  it('detects unenv fs runtime limitations for update actions', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Update Error',
+      description: 'Update manager: [unenv] fs.readFile is not implemented yet!',
+      content: '',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('update-runtime-unenv-fs');
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

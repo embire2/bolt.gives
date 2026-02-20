@@ -6,7 +6,7 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": {
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"

@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react';
+import { FixedSizeList, type ListChildComponentProps } from 'react-window';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import type { JSONValue } from 'ai';
@@ -89,6 +90,73 @@ function parseContractDetail(detail: string | undefined): { keyChanges?: string;
   };
 }
 
+function isArchitectTimelineEvent(event: InteractiveStepRunnerEvent): boolean {
+  return /architect/i.test(event.description || '');
+}
+
+type EventRowData = {
+  events: InteractiveStepRunnerEvent[];
+  getPrimaryText: (event: InteractiveStepRunnerEvent) => string;
+};
+
+function EventRow({ index, style, data }: ListChildComponentProps<EventRowData>) {
+  const event = data.events[index];
+
+  if (!event) {
+    return null;
+  }
+
+  const primaryText = data.getPrimaryText(event);
+
+  return (
+    <div style={style} className="font-mono px-1">
+      <div className="truncate">
+        <span className="mr-2 text-bolt-elements-textTertiary">[{event.type}]</span>
+        <span className="text-bolt-elements-textPrimary">{primaryText}</span>
+      </div>
+      {event.type === 'step-start' && event.command && event.command.length > 0 ? (
+        <div className="ml-10 truncate text-bolt-elements-textTertiary">{event.command.join(' ')}</div>
+      ) : null}
+      {event.type === 'error' ? (
+        <div className="ml-10 truncate text-bolt-elements-textTertiary">hint: {getSuggestedFix(event)}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderArchitectCard(event: InteractiveStepRunnerEvent, index: number) {
+  const status = event.type === 'error' ? 'warning' : event.type === 'step-end' ? 'complete' : 'in-progress';
+  const eventLabel =
+    event.type === 'step-start'
+      ? 'attempt'
+      : event.type === 'step-end'
+        ? 'outcome'
+        : event.type === 'error'
+          ? 'blocked'
+          : 'diagnosis';
+
+  return (
+    <div
+      key={`architect-${event.timestamp}-${event.type}-${index}`}
+      className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2"
+    >
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wide text-bolt-elements-textSecondary">
+          architect/{eventLabel}
+        </span>
+        <span className={`rounded border px-1.5 py-0.5 text-[10px] ${getStatusClasses(status)}`}>{status}</span>
+      </div>
+      <div className="text-bolt-elements-textPrimary">{event.description || 'Architect update'}</div>
+      {event.output || event.error ? (
+        <div className="mt-1 text-xs text-bolt-elements-textSecondary">{event.error || event.output}</div>
+      ) : null}
+      {event.command && event.command.length > 0 ? (
+        <div className="mt-1 font-mono text-[11px] text-bolt-elements-textTertiary">{event.command.join(' ')}</div>
+      ) : null}
+    </div>
+  );
+}
+
 function renderCommentaryCard(event: AgentCommentaryAnnotation, index: number) {
   const details = parseContractDetail(event.detail);
 
@@ -130,14 +198,20 @@ interface StepRunnerFeedProps {
 
 export function StepRunnerFeed(props: StepRunnerFeedProps) {
   const events = useStore(workbenchStore.stepRunnerEvents);
-  const commentaryEvents = (props.data || []).filter(isAgentCommentaryAnnotation).slice(-10);
-  const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-10);
+  const commentaryEvents = (props.data || []).filter(isAgentCommentaryAnnotation).slice(-20);
+  const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-20);
+  const architectEvents = events.filter(isArchitectTimelineEvent).slice(-20);
 
-  if (events.length === 0 && commentaryEvents.length === 0 && checkpointEvents.length === 0) {
+  if (
+    events.length === 0 &&
+    commentaryEvents.length === 0 &&
+    checkpointEvents.length === 0 &&
+    architectEvents.length === 0
+  ) {
     return null;
   }
 
-  const recent = events.slice(-10);
+  const recent = events.filter((event) => !isArchitectTimelineEvent(event)).slice(-160);
 
   const getPrimaryText = (event: InteractiveStepRunnerEvent): string => {
     switch (event.type) {
@@ -178,6 +252,7 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
       </div>
       <div className="max-h-52 space-y-2 overflow-y-auto">
         {commentaryEvents.map(renderCommentaryCard)}
+        {architectEvents.map(renderArchitectCard)}
         {checkpointEvents.map((event, index) => (
           <div
             key={`${event.timestamp}-${event.checkpointType}-${index}`}
@@ -206,18 +281,32 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
             ) : null}
           </div>
         ))}
-        {recent.map((event, index) => (
-          <div key={`${event.timestamp}-${event.type}-${index}`} className="font-mono">
-            <span className="mr-2 text-bolt-elements-textTertiary">[{event.type}]</span>
-            <span className="text-bolt-elements-textPrimary">{getPrimaryText(event)}</span>
-            {event.type === 'step-start' && event.command && event.command.length > 0 ? (
-              <div className="ml-10 text-bolt-elements-textTertiary">{event.command.join(' ')}</div>
-            ) : null}
-            {event.type === 'error' && (
-              <div className="ml-10 text-bolt-elements-textTertiary">hint: {getSuggestedFix(event)}</div>
-            )}
+        {recent.length > 32 ? (
+          <div className="h-44 overflow-hidden rounded border border-bolt-elements-borderColor/70 bg-bolt-elements-background-depth-3/40 py-1">
+            <FixedSizeList
+              height={168}
+              width="100%"
+              itemCount={recent.length}
+              itemSize={44}
+              itemData={{ events: recent, getPrimaryText }}
+            >
+              {EventRow}
+            </FixedSizeList>
           </div>
-        ))}
+        ) : (
+          recent.map((event, index) => (
+            <div key={`${event.timestamp}-${event.type}-${index}`} className="font-mono">
+              <span className="mr-2 text-bolt-elements-textTertiary">[{event.type}]</span>
+              <span className="text-bolt-elements-textPrimary">{getPrimaryText(event)}</span>
+              {event.type === 'step-start' && event.command && event.command.length > 0 ? (
+                <div className="ml-10 text-bolt-elements-textTertiary">{event.command.join(' ')}</div>
+              ) : null}
+              {event.type === 'error' && (
+                <div className="ml-10 text-bolt-elements-textTertiary">hint: {getSuggestedFix(event)}</div>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

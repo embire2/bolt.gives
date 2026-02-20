@@ -79,6 +79,18 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'npm-spawn-enoent',
+    title: 'npm executable missing in shell path',
+    source: 'terminal',
+    patterns: [/jsh:\s*spawn npm ENOENT/i, /spawn npm ENOENT/i],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Avoid npm-only flows when npm is unavailable in the shell path.',
+      'Use pnpm alternatives (pnpm dlx create-vite, pnpm install, pnpm run dev).',
+      'If npm is required, verify binary availability first with `which npm` and fall back safely.',
+    ],
+  },
+  {
     id: 'escaped-shell-separators',
     title: 'Escaped shell separators',
     source: 'terminal',
@@ -112,6 +124,42 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
       'Do not continue with Bedrock calls until credentials are valid JSON.',
       'Switch to another configured provider/model for this run if available.',
       'Ask for corrected Bedrock JSON only if no alternative provider is configured.',
+    ],
+  },
+  {
+    id: 'vite-missing-package-specifier',
+    title: 'Vite package export specifier mismatch',
+    source: 'preview',
+    patterns: [/Missing\s+["']\.[^"']+["']\s+specifier\s+in\s+["'][^"']+["']\s+package/i],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Fix invalid imports that reference non-exported package paths.',
+      'Replace deep CSS/runtime paths with supported package entrypoints from docs.',
+      'Rebuild and verify preview compiles before continuing.',
+    ],
+  },
+  {
+    id: 'update-runtime-unenv-fs',
+    title: 'Runtime lacks Node fs support for update actions',
+    source: 'terminal',
+    patterns: [/\[unenv\]\s*fs\.readFile is not implemented yet/i, /Update manager:\s*\[unenv\]/i],
+    maxAutoAttempts: 1,
+    guidance: [
+      'Do not run Node fs-based update commands in this runtime.',
+      'Show a user-safe message and route updates through Git/Cloudflare deployment flow.',
+      'Continue coding workflow without blocking the current task.',
+    ],
+  },
+  {
+    id: 'cloudflare-api-auth-10000',
+    title: 'Cloudflare API token permission error',
+    source: 'terminal',
+    patterns: [/Authentication error\s*\[code:\s*10000\]/i, /Cloudflare API.*10000/i],
+    maxAutoAttempts: 1,
+    guidance: [
+      'Do not retry deploy blindly with the same token.',
+      'Report required token scopes and account mapping clearly.',
+      'Pause deploy actions until credentials are corrected.',
     ],
   },
   {

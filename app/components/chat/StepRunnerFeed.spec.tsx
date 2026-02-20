@@ -47,15 +47,14 @@ describe('StepRunnerFeed', () => {
     workbenchStore.stepRunnerEvents.set([]);
   });
 
-  it('renders the most recent 10 events in order', () => {
-    const events = Array.from({ length: 11 }, (_, index) => createEvent(index, `step-${index + 1}`));
+  it('renders only the retained event window', () => {
+    const events = Array.from({ length: 170 }, (_, index) => createEvent(index, `step-${index + 1}`));
     workbenchStore.stepRunnerEvents.set(events);
 
     render(<StepRunnerFeed />);
 
     expect(screen.queryByText('Execution Timeline')).toBeTruthy();
     expect(screen.queryByText('step-1')).toBeNull();
-    expect(screen.queryByText('step-2')).toBeTruthy();
     expect(screen.queryByText('step-11')).toBeTruthy();
   });
 

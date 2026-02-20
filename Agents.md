@@ -8,8 +8,8 @@ Secondary objective: lay architecture foundations for `v1.0.4` client-hosted pri
 
 ## Active Release Line
 
-- Stable: `v1.0.2`
-- In progress: `v1.0.3`
+- Stable: `v1.0.3`
+- In progress: `v1.0.4`
 - Next: `v1.0.4` (client-hosted + Teams)
 
 ## Operating Principles
@@ -33,11 +33,11 @@ If changes are risky:
 ## v1.0.3 Execution Priorities
 
 ### P0 (Must ship)
-- [ ] Commentary phase model and dedicated commentary cards
-- [ ] Strict formatting contract for live updates (`Key changes`, `Next`)
-- [ ] Sticky execution footer with model/step/elapsed/actions/recovery state
-- [ ] First-class checkpoint events in timeline
-- [ ] Honesty guardrails to prevent optimistic success reporting
+- [x] Commentary phase model and dedicated commentary cards
+- [x] Strict formatting contract for live updates (`Key changes`, `Next`)
+- [x] Sticky execution footer with model/step/elapsed/actions/recovery state
+- [x] First-class checkpoint events in timeline
+- [x] Honesty guardrails to prevent optimistic success reporting
 
 ### P1 (Ship if stable)
 - [ ] Commentary verbosity controls by autonomy mode

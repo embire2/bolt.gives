@@ -1,8 +1,8 @@
 # Roadmap
 
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
-This roadmap tracks the plan to ship `v1.0.3` in 7 days.
+This roadmap tracks the completed `v1.0.3` release and next-step carry-over.
 
 Status legend:
 - `[x]` complete
@@ -11,60 +11,60 @@ Status legend:
 
 Canonical release plan doc: `v1.0.3.md`
 
-## Steps towards v1.0.3 - ETA: 7 days
+## Steps towards v1.0.3 - completed
 
 ### P0 Release Deliverables (Must ship)
 
 1. Commentary Cards + Phase Model
-- [ ] Normalize commentary event types and phase metadata.
-- [ ] Render dedicated commentary cards separate from action/code rows.
-- [ ] Show phase transitions: `Plan -> Doing -> Verifying -> Next`.
+- [x] Normalize commentary event types and phase metadata.
+- [x] Render dedicated commentary cards separate from action/code rows.
+- [x] Show phase transitions: `Plan -> Doing -> Verifying -> Next`.
 
 2. Enforced Commentary Format Contract
-- [ ] Enforce concise live-update format server-side (`micro-updates`, numbered `Key changes:`, explicit `Next:`).
-- [ ] Add regression tests for commentary format and phase correctness.
+- [x] Enforce concise live-update format server-side (`micro-updates`, numbered `Key changes:`, explicit `Next:`).
+- [x] Add regression tests for commentary format and phase correctness.
 
 3. Sticky Working Footer
-- [~] Keep active model/provider, current phase/step, elapsed time, action count, and recovery state always visible.
-- [ ] Ensure footer remains accurate while scrolling and during long runs.
+- [x] Keep active model/provider, current phase/step, elapsed time, action count, and recovery state always visible.
+- [x] Ensure footer remains accurate while scrolling and during long runs.
 
 4. First-Class Checkpoint Events
-- [ ] Surface checkpoint lifecycle events in the timeline (checkpoint created, install complete, preview ready, tests/deploy status).
-- [ ] Link checkpoint events to related actions/files where possible.
+- [x] Surface checkpoint lifecycle events in the timeline (checkpoint created, install complete, preview ready, tests/deploy status).
+- [x] Link checkpoint events to related actions/files where possible.
 
 5. Honesty Guardrails (No False Success)
-- [ ] Block optimistic completion narration unless command/action exit status confirms success.
-- [ ] Always show failure context: command, exit code, stderr snippet, and next recovery action.
-- [ ] Add tests for false-positive success prevention.
+- [x] Block optimistic completion narration unless command/action exit status confirms success.
+- [x] Always show failure context: command, exit code, stderr snippet, and next recovery action.
+- [x] Add tests for false-positive success prevention.
 
 6. Long-Run Performance De-bloat (Server-First)
-- [ ] Reduce client-side bloat that causes slowdowns in longer projects.
-- [ ] Move heavy operations to server execution paths where possible.
-- [ ] Add telemetry for UI stall duration and client memory growth.
+- [x] Reduce client-side bloat that causes slowdowns in longer projects.
+- [x] Move heavy operations to server execution paths where possible.
+- [x] Add telemetry for UI stall duration and client memory growth.
 
 7. Enforced Node Memory Baseline (Install + Upgrade)
-- [ ] Enforce Node memory floor `>=4096MB` for fresh installs and upgrades.
-- [ ] Add preflight checks and auto-apply defaults for supported paths.
+- [x] Enforce Node memory floor `>=4096MB` for fresh installs and upgrades.
+- [x] Add preflight checks and auto-apply defaults for supported paths.
 
 8. Git-Backed Auto-Update + One-Click Upgrade
-- [ ] Detect new Git versions/tags on startup and interval.
-- [ ] Show in-app update availability banner.
-- [ ] Provide one-click update flow with logs, retry/rollback, and post-update version confirmation.
+- [x] Detect new Git versions/tags on startup and interval.
+- [x] Show in-app update availability banner.
+- [x] Provide one-click update flow with logs, retry/rollback, and post-update version confirmation.
 
 9. Architect Self-Heal + Safety Guard
-- [~] Add `Architect` diagnosis + auto-heal framework for known build/runtime failures.
-- [ ] Expand Architect knowledgebase coverage for top JS/Vite/React/package-manager failure signatures.
-- [ ] Ensure Architect auto-heal always respects autonomy mode and safety policy.
+- [x] Add `Architect` diagnosis + auto-heal framework for known build/runtime failures.
+- [x] Expand Architect knowledgebase coverage for top JS/Vite/React/package-manager failure signatures.
+- [x] Ensure Architect auto-heal always respects autonomy mode and safety policy.
 
 10. Cost Estimation Accuracy Across Providers
-- [~] Normalize usage fields from multiple provider response shapes.
-- [ ] Verify non-zero, accurate estimates for strict and standard providers in UI.
-- [ ] Add regression tests for usage-to-cost calculation paths.
+- [x] Normalize usage fields from multiple provider response shapes.
+- [x] Verify non-zero, accurate estimates for strict and standard providers in UI.
+- [x] Add regression tests for usage-to-cost calculation paths.
 
 11. Provider/Model/API Key Session Persistence
-- [~] Persist latest working API key/provider/model selection per instance.
-- [ ] Auto-restore latest working selection on revisit.
-- [ ] Preserve provider history and allow reliable switching back to previous working providers.
+- [x] Persist latest working API key/provider/model selection per instance.
+- [x] Auto-restore latest working selection on revisit.
+- [x] Preserve provider history and allow reliable switching back to previous working providers.
 
 ### P1 Stretch Deliverables (Ship if stable)
 
@@ -101,8 +101,8 @@ Canonical release plan doc: `v1.0.3.md`
 
 ## Release Exit Checklist
 
-- [ ] All P0 deliverables completed or explicitly deferred with risk note
-- [ ] Acceptance criteria met
-- [ ] E2E smoke passes on both live domains
-- [ ] `CHANGELOG.md` updated
-- [ ] `README.md` and `v1.0.3.md` updated
+- [x] All P0 deliverables completed or explicitly deferred with risk note
+- [x] Acceptance criteria met
+- [x] E2E smoke passes on both live domains
+- [x] `CHANGELOG.md` updated
+- [x] `README.md` and `v1.0.3.md` updated

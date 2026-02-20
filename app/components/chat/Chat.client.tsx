@@ -40,6 +40,7 @@ import {
   getRememberedProviderModel,
   parseApiKeysCookie,
   pickPreferredProviderName,
+  recordProviderHistory,
   readInstanceSelection,
   rememberInstanceSelection,
   rememberProviderModelSelection,
@@ -155,6 +156,13 @@ function appendStepRunnerEvent(event: InteractiveStepRunnerEvent) {
   }
 
   workbenchStore.stepRunnerEvents.set([...current, event].slice(-MAX_STEP_RUNNER_EVENTS));
+}
+
+function appendArchitectTimelineEvent(event: Omit<InteractiveStepRunnerEvent, 'timestamp'>) {
+  appendStepRunnerEvent({
+    ...event,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export function Chat() {
@@ -483,6 +491,7 @@ export const ChatImpl = memo(
           hostname: window.location.hostname,
           providerName: preferredProvider.name,
         });
+        recordProviderHistory(preferredProvider.name);
       }
 
       selectionBootstrapRef.current = true;
@@ -793,6 +802,11 @@ export const ChatImpl = memo(
             Cookies.set('selectedModel', decision.model, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
             Cookies.set('selectedProvider', decision.provider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
             rememberProviderModelSelection(decision.provider.name, decision.model);
+
+            if (typeof window !== 'undefined') {
+              recordProviderHistory(decision.provider.name);
+            }
+
             toast.info(`Model Orchestrator: ${decision.provider.name} / ${decision.model}`);
           }
 
@@ -1306,6 +1320,12 @@ export const ChatImpl = memo(
         return;
       }
 
+      appendArchitectTimelineEvent({
+        type: 'telemetry',
+        description: `${ARCHITECT_NAME} diagnosis`,
+        output: `${diagnosis.title} (${diagnosis.issueId})`,
+      });
+
       const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
       const decision = decideArchitectAutoHeal({
         autonomyMode,
@@ -1314,12 +1334,29 @@ export const ChatImpl = memo(
       });
 
       if (!decision.shouldAutoHeal) {
+        appendArchitectTimelineEvent({
+          type: 'error',
+          description: `${ARCHITECT_NAME} auto-heal skipped`,
+          error:
+            decision.reason === 'autonomy-blocked'
+              ? 'Autonomy mode blocks auto-heal for this issue.'
+              : 'Auto-heal attempt limit reached for this issue fingerprint.',
+          output: `${diagnosis.title} (${diagnosis.issueId})`,
+        });
+
         return;
       }
 
       const attemptNumber = attemptsForFingerprint + 1;
       architectAttemptCountsRef.current[diagnosis.fingerprint] = attemptNumber;
       architectInFlightRef.current = true;
+
+      appendArchitectTimelineEvent({
+        type: 'step-start',
+        stepIndex: attemptNumber,
+        description: `${ARCHITECT_NAME} auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`,
+        command: ['architect', 'auto-heal', diagnosis.issueId],
+      });
 
       workbenchStore.clearAlert();
       toast.info(`${ARCHITECT_NAME}: auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`);
@@ -1341,7 +1378,21 @@ export const ChatImpl = memo(
         role: 'user',
         content: payload,
       })
+        .then(() => {
+          appendArchitectTimelineEvent({
+            type: 'step-end',
+            stepIndex: attemptNumber,
+            description: `${ARCHITECT_NAME} auto-heal dispatched`,
+            exitCode: 0,
+          });
+        })
         .catch((error) => {
+          appendArchitectTimelineEvent({
+            type: 'error',
+            stepIndex: attemptNumber,
+            description: `${ARCHITECT_NAME} auto-heal failed`,
+            error: error instanceof Error ? error.message : 'Unknown auto-heal dispatch error',
+          });
           toast.error(error instanceof Error ? error.message : `${ARCHITECT_NAME} auto-heal failed to start`);
         })
         .finally(() => {
@@ -1394,6 +1445,7 @@ export const ChatImpl = memo(
             hostname: window.location.hostname,
             providerName: preferredProvider.name,
           });
+          recordProviderHistory(preferredProvider.name);
         }
 
         const modelsForProvider = providerModels.length > 0 ? providerModels : await fetchProviderModels(providerName);
@@ -1418,6 +1470,7 @@ export const ChatImpl = memo(
             providerName,
             modelName: preferredModel,
           });
+          recordProviderHistory(providerName);
         }
       },
       [activeProviders, model],
@@ -1447,6 +1500,7 @@ export const ChatImpl = memo(
           providerName: newProvider.name,
           modelName: model,
         });
+        recordProviderHistory(newProvider.name);
       }
     };
 

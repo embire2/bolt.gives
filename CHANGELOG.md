@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.0.3 (2026-02-20)
+
+### Added
+- Provider history persistence and quick-switch UI in model selection so users can jump back to previously working providers.
+- Structured Architect recovery timeline events (`diagnosis`, `attempt`, `outcome`, `blocked`) in execution feed.
+- Architect knowledgebase signatures for additional high-frequency failures:
+  - `npm-spawn-enoent`
+  - `vite-missing-package-specifier`
+  - `update-runtime-unenv-fs`
+  - `cloudflare-api-auth-10000`
+
+### Changed
+- Execution timeline de-bloat:
+  - increased retained event window for long runs with virtualization for large feeds
+  - dedicated Architect cards separated from regular step events
+- Updated app and package version to `1.0.3`.
+
+### Verified
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- Targeted E2E smoke passed on `https://alpha1.bolt.gives`:
+  - strict model: OpenAI `gpt-5-codex`
+  - standard model: OpenAI `gpt-4o`
+
 ## v1.0.2 (2026-02-17)
 
 ### Added
