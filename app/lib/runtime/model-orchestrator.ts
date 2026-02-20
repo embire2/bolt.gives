@@ -54,6 +54,55 @@ function approximateTokenCount(prompt: string) {
   return Math.ceil(words * 1.3);
 }
 
+function isNonGeneralPurposeModel(name: string): boolean {
+  const normalized = name.toLowerCase();
+  const patterns = ['image', 'dall', 'whisper', 'tts', 'audio', 'transcribe', 'embedding', 'moderation', 'realtime'];
+
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+function scoreModelForFallback(model: ModelInfo): number {
+  const normalized = model.name.toLowerCase();
+
+  if (isNonGeneralPurposeModel(normalized)) {
+    return -1000;
+  }
+
+  let score = 0;
+
+  if (normalized.includes('codex')) {
+    score += 600;
+  }
+
+  if (normalized.includes('gpt-5')) {
+    score += 500;
+  }
+
+  if (normalized.includes('gpt-4.1')) {
+    score += 450;
+  }
+
+  if (normalized.includes('gpt-4o')) {
+    score += 425;
+  }
+
+  if (normalized.includes('claude')) {
+    score += 400;
+  }
+
+  if (normalized.includes('sonnet')) {
+    score += 100;
+  }
+
+  if (normalized.includes('mini')) {
+    score -= 10;
+  }
+
+  score += Math.min(Math.floor((model.maxTokenAllowed || 0) / 1000), 50);
+
+  return score;
+}
+
 function detectComplexity(prompt: string, settings: ModelOrchestratorSettings): 'low' | 'medium' | 'high' {
   const normalized = prompt.toLowerCase();
   const keywordHits = COMPLEXITY_KEYWORDS.reduce((count, keyword) => {
@@ -72,7 +121,15 @@ function detectComplexity(prompt: string, settings: ModelOrchestratorSettings): 
 }
 
 function pickFirstModel(models: ModelInfo[], providerName: string): string | undefined {
-  return models.find((model) => model.provider === providerName)?.name;
+  const providerModels = models.filter((model) => model.provider === providerName);
+
+  if (providerModels.length === 0) {
+    return undefined;
+  }
+
+  const ranked = [...providerModels].sort((a, b) => scoreModelForFallback(b) - scoreModelForFallback(a));
+
+  return ranked[0].name;
 }
 
 function hasModelForProvider(models: ModelInfo[], providerName: string, modelName: string): boolean {

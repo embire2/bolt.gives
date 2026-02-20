@@ -31,6 +31,12 @@ const models: ModelInfo[] = [
     maxTokenAllowed: 200000,
   },
   {
+    name: 'chatgpt-image-latest',
+    label: 'ChatGPT Image',
+    provider: 'OpenAI',
+    maxTokenAllowed: 32000,
+  },
+  {
     name: 'gpt-4.1-mini',
     label: 'GPT-4.1 Mini',
     provider: 'OpenAI',
@@ -192,5 +198,26 @@ describe('model-orchestrator', () => {
     expect(decision.provider.name).toBe('OpenAI');
     expect(decision.model).toBe('gpt-4.1-mini');
     expect(decision.reason).toContain('Adjusted invalid provider/model pair');
+  });
+
+  it('avoids image-only models when selecting a fallback model', () => {
+    const decision = selectModelForPrompt({
+      prompt: 'Scaffold a React app and run tests.',
+      currentModel: 'non-existent-model',
+      currentProvider: providerByName('LMStudio'),
+      availableProviders: providers,
+      availableModels: models,
+      settings: {
+        enabled: true,
+        shortPromptTokenThreshold: 180,
+        lowComplexityKeywordThreshold: 2,
+        localPreferredProvider: 'Ollama',
+        cloudFallbackProvider: 'OpenAI',
+      },
+    });
+
+    expect(decision.provider.name).toBe('OpenAI');
+    expect(decision.model).toBe('gpt-4.1-mini');
+    expect(decision.model).not.toContain('image');
   });
 });
