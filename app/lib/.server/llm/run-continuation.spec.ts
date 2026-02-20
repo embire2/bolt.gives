@@ -26,6 +26,28 @@ describe('shouldForceRunContinuation', () => {
     expect(shouldForce).toBe(false);
   });
 
+  it('returns true when run intent exists but assistant only performed inspection commands', () => {
+    const shouldForce = shouldForceRunContinuation({
+      chatMode: 'build',
+      lastUserContent: 'Create and run a mini React app, then show preview.',
+      assistantContent: '<boltArtifact id="a1" title="Inspect"><boltAction type="shell">ls</boltAction></boltArtifact>',
+      alreadyAttempted: false,
+    });
+
+    expect(shouldForce).toBe(true);
+  });
+
+  it('returns true when run intent exists but assistant returned no bolt actions', () => {
+    const shouldForce = shouldForceRunContinuation({
+      chatMode: 'build',
+      lastUserContent: 'Create and run a mini React app, then show preview.',
+      assistantContent: 'I created the project and installed dependencies.',
+      alreadyAttempted: false,
+    });
+
+    expect(shouldForce).toBe(true);
+  });
+
   it('returns false outside build mode or after one continuation attempt', () => {
     expect(
       shouldForceRunContinuation({
