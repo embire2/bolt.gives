@@ -132,4 +132,26 @@ describe('model-orchestrator', () => {
     expect(envelope).toContain('[Model Selection: Selected cloud provider OpenAI for a high-complexity prompt');
     expect(envelope).toContain('Implement the feature.');
   });
+
+  it('auto-corrects invalid provider/model combinations before orchestration', () => {
+    const decision = selectModelForPrompt({
+      prompt: 'Create a simple todo list.',
+      currentModel: 'gpt-4.1-mini',
+      currentProvider: providers[0], // Ollama does not have gpt-4.1-mini
+      availableProviders: providers,
+      availableModels: models,
+      settings: {
+        enabled: true,
+        shortPromptTokenThreshold: 180,
+        lowComplexityKeywordThreshold: 2,
+        localPreferredProvider: 'Ollama',
+        cloudFallbackProvider: 'Anthropic',
+      },
+    });
+
+    expect(decision.provider.name).toBe('Ollama');
+    expect(decision.model).toBe('llama3.1:8b');
+    expect(decision.overridden).toBe(true);
+    expect(decision.reason).toContain('Adjusted invalid model selection');
+  });
 });

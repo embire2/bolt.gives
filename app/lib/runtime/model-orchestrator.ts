@@ -73,6 +73,10 @@ function pickFirstModel(models: ModelInfo[], providerName: string): string | und
   return models.find((model) => model.provider === providerName)?.name;
 }
 
+function hasModelForProvider(models: ModelInfo[], providerName: string, modelName: string): boolean {
+  return models.some((model) => model.provider === providerName && model.name === modelName);
+}
+
 export function buildModelSelectionEnvelope(options: {
   model: string;
   providerName: string;
@@ -124,19 +128,54 @@ export function selectModelForPrompt(options: {
   settings?: ModelOrchestratorSettings;
 }): ModelSelectionDecision {
   const settings = options.settings || getModelOrchestratorSettings();
+  const promptTokens = approximateTokenCount(options.prompt);
+  const complexity = detectComplexity(options.prompt, settings);
+
+  const currentSelectionIsValid = hasModelForProvider(
+    options.availableModels,
+    options.currentProvider.name,
+    options.currentModel,
+  );
+
+  if (!currentSelectionIsValid) {
+    const currentProviderFallbackModel = pickFirstModel(options.availableModels, options.currentProvider.name);
+
+    if (currentProviderFallbackModel) {
+      return {
+        provider: options.currentProvider,
+        model: currentProviderFallbackModel,
+        reason: `Adjusted invalid model selection for ${options.currentProvider.name}; selected ${currentProviderFallbackModel}.`,
+        complexity,
+        overridden: true,
+      };
+    }
+
+    const fallbackProvider = options.availableProviders.find((provider) =>
+      pickFirstModel(options.availableModels, provider.name),
+    );
+
+    if (fallbackProvider) {
+      const fallbackModel = pickFirstModel(options.availableModels, fallbackProvider.name)!;
+
+      return {
+        provider: fallbackProvider,
+        model: fallbackModel,
+        reason: `Adjusted invalid provider/model pair and switched to ${fallbackProvider.name}/${fallbackModel}.`,
+        complexity,
+        overridden: true,
+      };
+    }
+  }
 
   if (!settings.enabled) {
     return {
       provider: options.currentProvider,
       model: options.currentModel,
       reason: 'Model orchestrator is disabled.',
-      complexity: 'medium',
+      complexity,
       overridden: false,
     };
   }
-
-  const promptTokens = approximateTokenCount(options.prompt);
-  const complexity = detectComplexity(options.prompt, settings);
 
   const localProvider = options.availableProviders.find(
     (provider) => provider.name === settings.localPreferredProvider,
