@@ -25,13 +25,20 @@ function normalizeWhitespace(input: string): string {
   return input.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
 }
 
+function stripCommentaryPrefix(input: string): string {
+  return input.replace(/^\s*\[commentary\/[^\]]+\]\s*/i, '').trim();
+}
+
 function toPlainEnglish(input: string): string {
-  return normalizeWhitespace(input)
+  return normalizeWhitespace(stripCommentaryPrefix(input))
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\bstderr\b/gi, 'error output')
     .replace(/\bstdout\b/gi, 'command output')
     .replace(/\bexit code\b/gi, 'status code')
     .replace(/\bsub-agent\b/gi, 'assistant helper')
+    .replace(/\bplanner sub-agent\b/gi, 'planning helper')
+    .replace(/\bexecution plan\b/gi, 'step-by-step plan')
+    .replace(/\bdiagnosing\b/gi, 'checking')
     .replace(/\btool calls?\b/gi, 'actions')
     .replace(/\bJSON\b/gi, 'structured data')
     .replace(/\bLLM\b/gi, 'AI model');

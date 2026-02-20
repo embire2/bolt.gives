@@ -49,4 +49,14 @@ describe('enforceCommentaryContract', () => {
     expect(result.detail.toLowerCase()).toContain('structured data');
     expect(result.detail.toLowerCase()).toContain('command output');
   });
+
+  it('removes bracketed commentary tags and keeps plain text', () => {
+    const result = enforceCommentaryContract({
+      phase: 'plan',
+      message: '[commentary/plan]Planning the execution plan now.',
+    });
+
+    expect(result.message).not.toContain('[commentary/');
+    expect(result.message.toLowerCase()).toContain('step-by-step plan');
+  });
 });

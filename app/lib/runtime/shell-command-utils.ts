@@ -292,9 +292,8 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
   const afterCd = parts.slice(cdIndex + 1);
   const isProjectScopedSegment = (segment: string) => hasInstallSegment(segment) || isProjectManifestSegment(segment);
   const hasProjectScopedBeforeCd = beforeCd.some(isProjectScopedSegment);
-  const hasProjectScopedAfterCd = afterCd.some(isProjectScopedSegment);
 
-  if (!hasProjectScopedBeforeCd || !hasProjectScopedAfterCd) {
+  if (!hasProjectScopedBeforeCd) {
     return { shouldModify: false };
   }
 
@@ -303,15 +302,22 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
   }
 
   const filteredBefore = beforeCd.filter((segment) => !isProjectScopedSegment(segment));
-  const rewrittenParts = [...filteredBefore, parts[cdIndex], ...afterCd];
+  const movedProjectScopedSegments = beforeCd.filter((segment) => isProjectScopedSegment(segment));
+  const hasProjectScopedAfterCd = afterCd.some((segment) => isProjectScopedSegment(segment));
+  const rewrittenParts = hasProjectScopedAfterCd
+    ? [...filteredBefore, parts[cdIndex], ...afterCd]
+    : [...filteredBefore, parts[cdIndex], ...movedProjectScopedSegments, ...afterCd];
 
-  if (rewrittenParts.length === parts.length) {
+  const rewrittenCommand = rewrittenParts.join(' && ');
+  const originalCommand = parts.join(' && ');
+
+  if (rewrittenCommand === originalCommand) {
     return { shouldModify: false };
   }
 
   return {
     shouldModify: true,
-    modifiedCommand: rewrittenParts.join(' && '),
+    modifiedCommand: rewrittenCommand,
     warning: `Removed project-manifest commands before "cd ${cdTarget}" so project commands run in the scaffolded directory.`,
   };
 }

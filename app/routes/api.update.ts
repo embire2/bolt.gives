@@ -34,6 +34,46 @@ type ExecFileFn = (
 
 let execFileAsync: ExecFileFn | null = null;
 
+function isWorkerLikeRuntime(): boolean {
+  const globalScope = globalThis as unknown as {
+    WebSocketPair?: unknown;
+    caches?: unknown;
+    navigator?: unknown;
+  };
+
+  return typeof globalScope.WebSocketPair !== 'undefined' && typeof globalScope.caches !== 'undefined';
+}
+
+async function canRunNodeFileSystem(): Promise<boolean> {
+  try {
+    const { readFile } = await import('node:fs/promises');
+    await readFile('/__bolt_update_runtime_probe__.json', 'utf8');
+
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+    if (
+      message.includes('[unenv]') ||
+      message.includes('not implemented') ||
+      message.includes('fs.readfile is not implemented')
+    ) {
+      return false;
+    }
+
+    // ENOENT means fs is working in this runtime; probe path is intentionally missing.
+    return true;
+  }
+}
+
+async function canRunUpdateManager(): Promise<boolean> {
+  if (typeof process === 'undefined' || typeof process.cwd !== 'function' || isWorkerLikeRuntime()) {
+    return false;
+  }
+
+  return canRunNodeFileSystem();
+}
+
 async function ensureExecFile() {
   if (execFileAsync) {
     return execFileAsync;
@@ -82,7 +122,8 @@ export function toUserSafeUpdateError(error: unknown): string {
   if (
     normalized.includes('[unenv]') ||
     normalized.includes('fs.readfile is not implemented') ||
-    normalized.includes('not implemented yet')
+    normalized.includes('not implemented yet') ||
+    normalized.includes('update manager:')
   ) {
     return UPDATE_RUNTIME_UNSUPPORTED_MESSAGE;
   }
@@ -202,7 +243,7 @@ async function getCommitHash(rootDir: string): Promise<string> {
 }
 
 export const loader: LoaderFunction = async () => {
-  if (typeof process === 'undefined' || !process.cwd) {
+  if (!(await canRunUpdateManager())) {
     return json({ available: false, error: 'Update checks are unavailable in this runtime.' });
   }
 
@@ -231,7 +272,7 @@ export const action: ActionFunction = async ({ request }) => {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  if (typeof process === 'undefined' || !process.cwd) {
+  if (!(await canRunUpdateManager())) {
     return json({ updated: false, error: 'Update execution is unavailable in this runtime.' }, { status: 503 });
   }
 

@@ -37,7 +37,9 @@ function toFriendlyUpdateError(error: string | undefined): string | undefined {
   if (
     normalized.includes('[unenv]') ||
     normalized.includes('fs.readfile is not implemented') ||
-    normalized.includes('node:fs')
+    normalized.includes('node:fs') ||
+    normalized.includes('update execution is unavailable') ||
+    normalized.includes('update manager:')
   ) {
     return 'Update checks are unavailable in this runtime. Continue updates through your normal Git/Cloudflare deploy flow.';
   }

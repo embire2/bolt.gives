@@ -231,12 +231,11 @@ export async function loader({ request, context }: { request: Request; context: 
     console.error('Repository:', repo);
     console.error('Error details:', error instanceof Error ? error.message : String(error));
 
-    return json(
-      {
-        error: 'Failed to fetch template files',
-        details: error instanceof Error ? error.message : String(error),
+    return json([], {
+      status: 200,
+      headers: {
+        'x-bolt-template-fallback': '1',
       },
-      { status: 500 },
-    );
+    });
   }
 }

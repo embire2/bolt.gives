@@ -93,8 +93,9 @@ export class AgentRecoveryController {
       const backoffMs = this.#nextBackoffMs();
       return {
         reason: 'repeated-tool-loop',
-        message: 'Detected repeated tool loop. Applying recovery to avoid stalling.',
-        detail: `Repeated tool sequence: ${signature}. Backoff: ${backoffMs}ms.`,
+        message: 'I noticed a repeated loop, so I am switching to a safer recovery path.',
+        detail: `Key changes: The same action repeated several times, so I paused for ${backoffMs}ms.
+Next: I will continue with a safer fallback path.`,
         backoffMs,
         forceFinalize: true,
       };
@@ -104,8 +105,9 @@ export class AgentRecoveryController {
       const backoffMs = this.#nextBackoffMs();
       return {
         reason: 'no-progress',
-        message: 'No-progress state detected across steps. Triggering summarize-and-continue recovery.',
-        detail: `No-progress step streak: ${this.#noProgressCount}. Backoff: ${backoffMs}ms.`,
+        message: 'I detected no visible progress, so I am restarting from a stable point.',
+        detail: `Key changes: Progress paused for ${this.#noProgressCount} steps, so I added a ${backoffMs}ms recovery pause.
+Next: I will continue from the latest stable result.`,
         backoffMs,
         forceFinalize: true,
       };
@@ -121,8 +123,9 @@ export class AgentRecoveryController {
 
     return {
       reason: 'stream-timeout',
-      message: 'Streaming timeout detected. Retrying with backoff and recovery strategy.',
-      detail: `Timeout attempt ${this.#timeoutCount}. Backoff: ${backoffMs}ms.`,
+      message: 'The response timed out, so I am retrying automatically.',
+      detail: `Key changes: Timeout attempt ${this.#timeoutCount} triggered a ${backoffMs}ms backoff.
+Next: I will retry and continue automatically.`,
       backoffMs,
       forceFinalize: this.#timeoutCount >= this.#options.timeoutThreshold,
     };

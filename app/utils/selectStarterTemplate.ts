@@ -2,7 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
-import { getLocalStarterTemplateFiles } from './localStarterTemplates';
+import { getLocalStarterTemplateFallback, getLocalStarterTemplateFiles } from './localStarterTemplates';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -138,6 +138,7 @@ export async function getTemplates(templateName: string, title?: string) {
   const remoteFiles = await getGitHubRepoContent(githubRepo);
   const localFallbackFiles = getLocalStarterTemplateFiles(template);
   const usingLocalFallback = remoteFiles.length === 0 && localFallbackFiles.length > 0;
+  const localFallback = usingLocalFallback ? getLocalStarterTemplateFallback(template) : null;
   const files = usingLocalFallback ? localFallbackFiles : remoteFiles;
 
   if (files.length === 0) {
@@ -186,9 +187,19 @@ export async function getTemplates(templateName: string, title?: string) {
     filesToImport.ignoreFile = ignoredFiles;
   }
 
+  const fallbackBootstrapActions = localFallback
+    ? `
+<boltAction type="shell">
+${localFallback.scaffoldCommand}
+</boltAction>
+${localFallback.installCommand ? `<boltAction type="shell">\n${localFallback.installCommand}\n</boltAction>` : ''}
+`
+    : '';
+
   const assistantMessage = `
 Bolt is initializing your project with the required files using the ${template.name} template.
 <boltArtifact id="imported-files" title="${title || 'Create initial files'}" type="bundled">
+${fallbackBootstrapActions}
 ${filesToImport.files
   .map(
     (file) =>
@@ -214,7 +225,8 @@ ${templatePromptFile.content}
   if (usingLocalFallback) {
     userMessage += `Fallback starter note:
 Remote template download was unavailable, so a built-in ${template.label} starter fallback has been loaded.
-Proceed with the scaffold instructions and continue automatically.
+The initial scaffold and dependency install actions were queued automatically.
+Continue from the generated starter. Only re-run scaffolding if recovery is needed.
 ---
 `;
   }

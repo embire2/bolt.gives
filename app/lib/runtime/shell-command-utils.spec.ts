@@ -108,6 +108,16 @@ describe('makeInstallCommandsProjectAware', () => {
     expect(res.modifiedCommand).toBe('mkdir -p mini-react-e2e && cd mini-react-e2e && cat package.json');
   });
 
+  it('moves install commands after cd when the post-cd segment is malformed', () => {
+    const input = 'mkdir -p mini-react-e2e && npm install && cd mini-react-e2e && npm installStart Application';
+    const res = makeInstallCommandsProjectAware(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe(
+      'mkdir -p mini-react-e2e && cd mini-react-e2e && npm install && npm installStart Application',
+    );
+  });
+
   it('keeps root and nested installs when there is no scaffolding hint', () => {
     const input = 'npm install && cd packages/web && npm install';
     const res = makeInstallCommandsProjectAware(input);

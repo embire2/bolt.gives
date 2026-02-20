@@ -34,6 +34,10 @@ import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
+import {
+  ensureLatestUserMessageSelectionEnvelope,
+  resolvePreferredModelProvider,
+} from '~/lib/.server/llm/message-selection';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -136,10 +140,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   }>();
 
   const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
-  const providerSettings: Record<string, IProviderSetting> = JSON.parse(
-    parseCookies(cookieHeader || '').providers || '{}',
-  );
+  const parsedCookies = parseCookies(cookieHeader || '');
+  const apiKeys = JSON.parse(parsedCookies.apiKeys || '{}');
+  const providerSettings: Record<string, IProviderSetting> = JSON.parse(parsedCookies.providers || '{}');
+  const selectedModelCookie = parsedCookies.selectedModel;
+  const selectedProviderCookie = parsedCookies.selectedProvider;
 
   const stream = new SwitchableStream();
 
@@ -179,7 +184,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const dataStream = createDataStream({
       async execute(dataStream) {
         let firstCommentaryAt: number | null = null;
-        let lastCommentaryAt = Date.now();
         let lastCommentaryPhase: AgentCommentaryPhase = 'plan';
         let commentaryHeartbeat: ReturnType<typeof setInterval> | null = null;
         let recoveryTriggered = false;
@@ -206,7 +210,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             firstCommentaryAt = Date.now();
           }
 
-          lastCommentaryAt = Date.now();
           lastCommentaryPhase = phase;
 
           const contracted = enforceCommentaryContract({
@@ -235,15 +238,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             return;
           }
 
-          const heartbeatPollMs = Math.min(10_000, COMMENTARY_HEARTBEAT_INTERVAL_MS);
           commentaryHeartbeat = setInterval(() => {
-            if (Date.now() - lastCommentaryAt < COMMENTARY_HEARTBEAT_INTERVAL_MS) {
-              return;
-            }
-
             const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase);
             writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail);
-          }, heartbeatPollMs);
+          }, COMMENTARY_HEARTBEAT_INTERVAL_MS);
         };
 
         const recoveryController = new AgentRecoveryController();
@@ -362,11 +360,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let summary: string | undefined = undefined;
         let messageSliceId = 0;
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        const preferredSelection = resolvePreferredModelProvider(
+          processedMessages,
+          selectedModelCookie,
+          selectedProviderCookie,
+        );
+        ensureLatestUserMessageSelectionEnvelope(processedMessages, preferredSelection);
+
         const collectedToolOutputs: string[] = [];
         let forceFinalizeAttempted = false;
         let runContinuationAttempted = false;
 
-        writeCommentary('plan', 'Planning the implementation strategy and checking project context.');
+        writeCommentary('plan', 'I am reviewing your request and mapping out the first steps.');
         startCommentaryHeartbeat();
 
         if (processedMessages.length > 3) {
@@ -375,7 +380,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         if (filePaths.length > 0 && contextOptimization) {
           logger.debug('Generating Chat Summary');
-          writeCommentary('plan', 'Summarizing recent conversation context before coding.');
+          writeCommentary('plan', 'I am quickly summarizing recent context so I can stay on track.');
           dataStream.writeData({
             type: 'progress',
             label: 'summary',
@@ -417,7 +422,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           // Update context buffer
           logger.debug('Updating Context Buffer');
-          writeCommentary('plan', 'Selecting relevant files for the current request.');
+          writeCommentary('plan', 'I am selecting the files that matter for this task.');
           dataStream.writeData({
             type: 'progress',
             label: 'context',
@@ -477,7 +482,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let plannerAgentId: string | undefined = undefined;
 
         if (chatMode === 'build') {
-          writeCommentary('plan', 'Planner sub-agent is drafting an execution plan before coding.');
+          writeCommentary('plan', 'I am drafting a clear step-by-step plan before coding.');
 
           const latestPlannerSourceMessage = [...processedMessages]
             .reverse()
@@ -521,9 +526,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
             const onProgress = (state: SubAgentState, _output: string) => {
               if (state === 'planning') {
-                writeCommentary('plan', 'Planner sub-agent is analyzing the request...');
+                writeCommentary('plan', 'I am breaking your request into practical steps.');
               } else if (state === 'executing') {
-                writeCommentary('plan', 'Planner sub-agent is generating the execution plan...');
+                writeCommentary('plan', 'I am finalizing the plan and preparing to execute.');
               }
             };
 
@@ -554,7 +559,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
               writeCommentary(
                 'plan',
-                'Planner sub-agent produced a worker execution plan.',
+                'Planning is complete. I am moving into execution now.',
                 'complete',
                 subAgentPlan.slice(0, 260),
               );
@@ -562,7 +567,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           } catch {
             writeCommentary(
               'recovery',
-              'Planner sub-agent failed. Continuing with direct worker execution.',
+              'Planning helper had an issue, so I am continuing directly.',
               'warning',
               `Key changes: The planning helper could not complete this step, so I switched to direct execution.
 Next: I am continuing with the main coding flow and will keep you updated.`,
@@ -587,13 +592,13 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
               const toolNames = toolCalls.map((call) => call.toolName).join(', ');
               writeCommentary(
                 'verification',
-                'Completed an execution step. Verifying results before continuing.',
+                'I finished a step and I am checking the result before continuing.',
                 'in-progress',
                 toolNames
-                  ? `Key changes: Finished actions (${toolNames}) and collected ${(toolResults?.length ?? 0).toString()} result updates.
-Next: I am checking the output quality before moving to the next step.`
-                  : `Key changes: Finished an execution step and collected ${(toolResults?.length ?? 0).toString()} result updates.
-Next: I am validating the output before moving on.`,
+                  ? `Key changes: Finished actions (${toolNames}) and collected ${(toolResults?.length ?? 0).toString()} updates.
+Next: I am confirming everything still works before the next step.`
+                  : `Key changes: Finished one step and collected ${(toolResults?.length ?? 0).toString()} updates.
+Next: I am confirming everything still works before moving on.`,
               );
             }
 
@@ -623,10 +628,10 @@ Next: I am validating the output before moving on.`,
               recoveryTriggered = true;
               writeCommentary(
                 'recovery',
-                'A step failed while building your project. I am diagnosing and fixing it.',
+                'A step failed. I am checking it now and applying a fix automatically.',
                 'warning',
                 `Key changes: One of the recent actions did not succeed.
-Next: I will apply a fix and continue from the latest stable checkpoint.`,
+Next: I will recover and continue from the latest stable point.`,
               );
             }
 
@@ -677,7 +682,7 @@ Next: I will apply a fix and continue from the latest stable checkpoint.`,
               if (pendingRecoveryBackoffMs > 0) {
                 writeCommentary(
                   'recovery',
-                  'Taking a short recovery pause before the next step.',
+                  'I am taking a short recovery pause before the next step.',
                   'warning',
                   `Key changes: A quick safety pause is in progress.
 Next: I will continue automatically right after this pause.`,
@@ -742,7 +747,7 @@ Next: I am sending the final result now.`,
                   if (hasExecutionFailures && latestExecutionFailure) {
                     writeCommentary(
                       'next-step',
-                      'Execution completed, but at least one step still needs attention.',
+                      'Work finished, but one step still needs attention.',
                       'warning',
                       `Key changes: A previous step did not finish successfully.
 Next: I am returning clear recovery instructions to help you resolve it quickly.`,
@@ -789,7 +794,7 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
               runContinuationAttempted = true;
               writeCommentary(
                 'recovery',
-                'Detected scaffold-only output for a run request. Continuing automatically to start the app.',
+                'I detected that setup finished but the app did not start yet. I will continue automatically.',
                 'warning',
               );
 
@@ -862,7 +867,7 @@ Next: I am sending the final result now.`,
               if (hasExecutionFailures && latestExecutionFailure) {
                 writeCommentary(
                   'next-step',
-                  'Execution completed, but at least one step still needs attention.',
+                  'Work finished, but one step still needs attention.',
                   'warning',
                   `Key changes: A previous step did not finish successfully.
 Next: I am returning clear recovery instructions to help you resolve it quickly.`,
@@ -935,7 +940,7 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
           order: progressCounter++,
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
-        writeCommentary('action', 'Executing the plan now and streaming progress as actions run.');
+        writeCommentary('action', 'I am now executing the plan and streaming progress as I go.');
 
         const result = await streamText({
           messages: [...processedMessages],
