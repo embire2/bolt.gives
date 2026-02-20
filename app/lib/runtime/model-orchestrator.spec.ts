@@ -4,12 +4,20 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
 
 const providers: ProviderInfo[] = [
+  { name: 'LMStudio', staticModels: [] },
+  { name: 'AmazonBedrock', staticModels: [] },
   { name: 'Ollama', staticModels: [] },
   { name: 'Anthropic', staticModels: [] },
   { name: 'OpenAI', staticModels: [] },
 ];
 
 const models: ModelInfo[] = [
+  {
+    name: 'amazon.nova-lite-v1:0',
+    label: 'Amazon Nova Lite',
+    provider: 'AmazonBedrock',
+    maxTokenAllowed: 32768,
+  },
   {
     name: 'llama3.1:8b',
     label: 'Llama 3.1 8B',
@@ -30,12 +38,22 @@ const models: ModelInfo[] = [
   },
 ];
 
+function providerByName(name: string): ProviderInfo {
+  const provider = providers.find((entry) => entry.name === name);
+
+  if (!provider) {
+    throw new Error(`Missing provider fixture: ${name}`);
+  }
+
+  return provider;
+}
+
 describe('model-orchestrator', () => {
   it('routes short low-complexity prompts to preferred local provider', () => {
     const decision = selectModelForPrompt({
       prompt: 'Create a tiny hello world component.',
       currentModel: 'gpt-4.1-mini',
-      currentProvider: providers[2],
+      currentProvider: providerByName('OpenAI'),
       availableProviders: providers,
       availableModels: models,
       settings: {
@@ -58,7 +76,7 @@ describe('model-orchestrator', () => {
       prompt:
         'Design architecture for distributed migration with rollback, websocket integration, security review, and performance optimization.',
       currentModel: 'llama3.1:8b',
-      currentProvider: providers[0],
+      currentProvider: providerByName('Ollama'),
       availableProviders: providers,
       availableModels: models,
       settings: {
@@ -80,7 +98,7 @@ describe('model-orchestrator', () => {
     const decision = selectModelForPrompt({
       prompt: 'Please refactor this module and improve performance.',
       currentModel: 'gpt-4.1-mini',
-      currentProvider: providers[2],
+      currentProvider: providerByName('OpenAI'),
       availableProviders: providers,
       availableModels: models,
       settings: {
@@ -102,7 +120,7 @@ describe('model-orchestrator', () => {
     const decision = selectModelForPrompt({
       prompt: 'Any prompt',
       currentModel: 'gpt-4.1-mini',
-      currentProvider: providers[2],
+      currentProvider: providerByName('OpenAI'),
       availableProviders: providers,
       availableModels: models,
       settings: {
@@ -137,7 +155,7 @@ describe('model-orchestrator', () => {
     const decision = selectModelForPrompt({
       prompt: 'Create a simple todo list.',
       currentModel: 'gpt-4.1-mini',
-      currentProvider: providers[0], // Ollama does not have gpt-4.1-mini
+      currentProvider: providerByName('Ollama'), // Ollama does not have gpt-4.1-mini
       availableProviders: providers,
       availableModels: models,
       settings: {
@@ -153,5 +171,26 @@ describe('model-orchestrator', () => {
     expect(decision.model).toBe('llama3.1:8b');
     expect(decision.overridden).toBe(true);
     expect(decision.reason).toContain('Adjusted invalid model selection');
+  });
+
+  it('prefers provider with matching current model over strict-config fallback provider', () => {
+    const decision = selectModelForPrompt({
+      prompt: 'Build a small React dashboard.',
+      currentModel: 'gpt-4.1-mini',
+      currentProvider: providerByName('LMStudio'),
+      availableProviders: providers,
+      availableModels: models,
+      settings: {
+        enabled: true,
+        shortPromptTokenThreshold: 180,
+        lowComplexityKeywordThreshold: 2,
+        localPreferredProvider: 'Ollama',
+        cloudFallbackProvider: 'Anthropic',
+      },
+    });
+
+    expect(decision.provider.name).toBe('OpenAI');
+    expect(decision.model).toBe('gpt-4.1-mini');
+    expect(decision.reason).toContain('Adjusted invalid provider/model pair');
   });
 });

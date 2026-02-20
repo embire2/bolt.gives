@@ -47,6 +47,8 @@ const COMPLEXITY_KEYWORDS = [
   'crdt',
 ];
 
+const STRICT_CONFIG_FALLBACK_PROVIDERS = new Set(['AmazonBedrock']);
+
 function approximateTokenCount(prompt: string) {
   const words = prompt.trim().split(/\s+/).filter(Boolean).length;
   return Math.ceil(words * 1.3);
@@ -75,6 +77,48 @@ function pickFirstModel(models: ModelInfo[], providerName: string): string | und
 
 function hasModelForProvider(models: ModelInfo[], providerName: string, modelName: string): boolean {
   return models.some((model) => model.provider === providerName && model.name === modelName);
+}
+
+function pickFallbackProviderForInvalidSelection(options: {
+  availableProviders: ProviderInfo[];
+  availableModels: ModelInfo[];
+  currentModel: string;
+  settings: ModelOrchestratorSettings;
+}): ProviderInfo | undefined {
+  const providersWithModels = options.availableProviders.filter((provider) =>
+    pickFirstModel(options.availableModels, provider.name),
+  );
+
+  if (providersWithModels.length === 0) {
+    return undefined;
+  }
+
+  const providerWithCurrentModel = providersWithModels.find((provider) =>
+    hasModelForProvider(options.availableModels, provider.name, options.currentModel),
+  );
+
+  if (providerWithCurrentModel) {
+    return providerWithCurrentModel;
+  }
+
+  const preferredFallbackNames = [options.settings.cloudFallbackProvider, 'OpenAI', 'Anthropic', 'OpenRouter'];
+
+  for (const preferredName of preferredFallbackNames) {
+    if (!preferredName) {
+      continue;
+    }
+
+    const preferredProvider = providersWithModels.find((provider) => provider.name === preferredName);
+
+    if (preferredProvider) {
+      return preferredProvider;
+    }
+  }
+
+  return (
+    providersWithModels.find((provider) => !STRICT_CONFIG_FALLBACK_PROVIDERS.has(provider.name)) ||
+    providersWithModels[0]
+  );
 }
 
 export function buildModelSelectionEnvelope(options: {
@@ -150,9 +194,12 @@ export function selectModelForPrompt(options: {
       };
     }
 
-    const fallbackProvider = options.availableProviders.find((provider) =>
-      pickFirstModel(options.availableModels, provider.name),
-    );
+    const fallbackProvider = pickFallbackProviderForInvalidSelection({
+      availableProviders: options.availableProviders,
+      availableModels: options.availableModels,
+      currentModel: options.currentModel,
+      settings,
+    });
 
     if (fallbackProvider) {
       const fallbackModel = pickFirstModel(options.availableModels, fallbackProvider.name)!;
