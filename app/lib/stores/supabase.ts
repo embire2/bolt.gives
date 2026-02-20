@@ -86,10 +86,6 @@ export const isConnecting = atom(false);
 export const isFetchingStats = atom(false);
 export const isFetchingApiKeys = atom(false);
 
-if (initialState.token && !initialState.stats) {
-  fetchSupabaseStats(initialState.token).catch(console.error);
-}
-
 export function updateSupabaseConnection(connection: Partial<SupabaseConnectionState>) {
   const currentState = supabaseConnection.get();
 
@@ -149,7 +145,6 @@ export function initializeSupabaseConnection() {
 
   if (envToken && !supabaseConnection.get().token) {
     updateSupabaseConnection({ token: envToken });
-    fetchSupabaseStats(envToken).catch(console.error);
   }
 }
 

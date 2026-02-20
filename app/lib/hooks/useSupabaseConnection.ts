@@ -51,10 +51,6 @@ export function useSupabaseConnection() {
         if (!currentState.user) {
           updateSupabaseConnection(parsed);
         }
-
-        if (parsed.token && parsed.selectedProjectId && !parsed.credentials) {
-          fetchProjectApiKeys(parsed.selectedProjectId, parsed.token).catch(console.error);
-        }
       }
     };
 

@@ -66,20 +66,19 @@ MOST IMPORTANT: YOU DONT HAVE TIME TO THINK JUST START RESPONDING BASED ON HUNCH
 const templates: Template[] = STARTER_TEMPLATES.filter((t) => !t.name.includes('shadcn'));
 
 const parseSelectedTemplate = (llmOutput: string): { template: string; title: string } | null => {
-  try {
-    // Extract content between <templateName> tags
-    const templateNameMatch = llmOutput.match(/<templateName>(.*?)<\/templateName>/);
-    const titleMatch = llmOutput.match(/<title>(.*?)<\/title>/);
-
-    if (!templateNameMatch) {
-      return null;
-    }
-
-    return { template: templateNameMatch[1].trim(), title: titleMatch?.[1].trim() || 'Untitled Project' };
-  } catch (error) {
-    console.error('Error parsing template selection:', error);
+  if (typeof llmOutput !== 'string' || llmOutput.length === 0) {
     return null;
   }
+
+  // Extract content between <templateName> tags
+  const templateNameMatch = llmOutput.match(/<templateName>(.*?)<\/templateName>/);
+  const titleMatch = llmOutput.match(/<title>(.*?)<\/title>/);
+
+  if (!templateNameMatch) {
+    return null;
+  }
+
+  return { template: templateNameMatch[1].trim(), title: titleMatch?.[1].trim() || 'Untitled Project' };
 };
 
 export const selectStarterTemplate = async (options: { message: string; model: string; provider: ProviderInfo }) => {
@@ -95,7 +94,6 @@ export const selectStarterTemplate = async (options: { message: string; model: s
     body: JSON.stringify(requestBody),
   });
   const respJson: { text: string } = await response.json();
-  console.log(respJson);
 
   const { text } = respJson;
   const selectedTemplate = parseSelectedTemplate(text);
@@ -118,16 +116,15 @@ const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; p
     const response = await fetch(`/api/github-template?repo=${encodeURIComponent(repoName)}`);
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      return [];
     }
 
     // Our API will return the files in the format we need
     const files = (await response.json()) as any;
 
     return files;
-  } catch (error) {
-    console.error('Error fetching release contents:', error);
-    throw error;
+  } catch {
+    return [];
   }
 };
 

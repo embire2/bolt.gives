@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 
 type UpdateLogEntry = {
@@ -27,8 +27,6 @@ type UpdateApplyResponse = {
   latestVersion?: string;
 };
 
-const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
-
 export function UpdateBanner() {
   const [check, setCheck] = useState<UpdateCheckResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,16 +49,6 @@ export function UpdateBanner() {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    checkForUpdates();
-
-    const interval = window.setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [checkForUpdates]);
 
   const applyUpdate = useCallback(async () => {
     setApplying(true);
@@ -105,20 +93,19 @@ export function UpdateBanner() {
     }
   }, []);
 
-  if (!check?.available && logs.length === 0 && !check?.error) {
-    return null;
-  }
+  const statusText = check?.available
+    ? `v${check.latestVersion || 'latest'} available (current v${check.currentVersion || 'unknown'})`
+    : check?.error
+      ? check.error
+      : check
+        ? 'Up to date'
+        : 'Not checked yet';
 
   return (
     <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="font-medium text-bolt-elements-textPrimary">Update manager:</span>{' '}
-          {check?.available
-            ? `v${check.latestVersion || 'latest'} available (current v${check.currentVersion || 'unknown'})`
-            : check?.error
-              ? check.error
-              : 'Up to date'}
+          <span className="font-medium text-bolt-elements-textPrimary">Update manager:</span> {statusText}
         </div>
         <div className="flex items-center gap-2">
           <button

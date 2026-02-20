@@ -21,7 +21,6 @@ export function SupabaseConnection() {
     handleCreateProject,
     updateToken,
     isConnected,
-    fetchProjectApiKeys,
   } = useSupabaseConnection();
 
   const currentChatId = useStore(chatId);
@@ -63,18 +62,6 @@ export function SupabaseConnection() {
     }
   }, [currentChatId, supabaseConn.selectedProjectId]);
 
-  useEffect(() => {
-    if (isConnected && supabaseConn.token) {
-      fetchSupabaseStats(supabaseConn.token).catch(console.error);
-    }
-  }, [isConnected, supabaseConn.token]);
-
-  useEffect(() => {
-    if (isConnected && supabaseConn.selectedProjectId && supabaseConn.token && !supabaseConn.credentials) {
-      fetchProjectApiKeys(supabaseConn.selectedProjectId).catch(console.error);
-    }
-  }, [isConnected, supabaseConn.selectedProjectId, supabaseConn.token, supabaseConn.credentials]);
-
   return (
     <div className="relative">
       <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden mr-2 text-sm">
@@ -84,13 +71,7 @@ export function SupabaseConnection() {
           onClick={() => setIsDialogOpen(!isDialogOpen)}
           className="hover:bg-bolt-elements-item-backgroundActive !text-white flex items-center gap-2"
         >
-          <img
-            className="w-4 h-4"
-            height="20"
-            width="20"
-            crossOrigin="anonymous"
-            src="https://cdn.simpleicons.org/supabase"
-          />
+          <div className="i-ph:database w-4 h-4 text-[#3ECF8E]" />
           {isConnected && supabaseConn.project && (
             <span className="ml-1 text-xs max-w-[100px] truncate">{supabaseConn.project.name}</span>
           )}
@@ -103,13 +84,7 @@ export function SupabaseConnection() {
             {!isConnected ? (
               <div className="space-y-4">
                 <DialogTitle>
-                  <img
-                    className="w-5 h-5"
-                    height="24"
-                    width="24"
-                    crossOrigin="anonymous"
-                    src="https://cdn.simpleicons.org/supabase"
-                  />
+                  <div className="i-ph:database w-5 h-5 text-[#3ECF8E]" />
                   Connect to Supabase
                 </DialogTitle>
 
@@ -175,13 +150,7 @@ export function SupabaseConnection() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-2">
                   <DialogTitle>
-                    <img
-                      className="w-5 h-5"
-                      height="24"
-                      width="24"
-                      crossOrigin="anonymous"
-                      src="https://cdn.simpleicons.org/supabase"
-                    />
+                    <div className="i-ph:database w-5 h-5 text-[#3ECF8E]" />
                     Supabase Connection
                   </DialogTitle>
                 </div>

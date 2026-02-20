@@ -30,6 +30,33 @@ describe('UpdateBanner', () => {
     cleanup();
   });
 
+  it('does not check for updates until the user clicks Check', async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<UpdateBanner />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          available: false,
+          currentVersion: '1.0.2',
+          latestVersion: '1.0.2',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /check/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('shows one-click update when update is available', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
@@ -45,6 +72,8 @@ describe('UpdateBanner', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<UpdateBanner />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check/i }));
 
     await waitFor(() => {
       expect(screen.queryByText(/one-click update/i)).toBeTruthy();
@@ -80,6 +109,8 @@ describe('UpdateBanner', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<UpdateBanner />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check/i }));
 
     await waitFor(() => {
       expect(screen.queryByText(/one-click update/i)).toBeTruthy();

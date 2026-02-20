@@ -104,7 +104,7 @@ export function SupabaseChatAlert({ alert, clearAlert, postMessage }: Props) {
         {/* Header */}
         <div className="p-4 pb-2">
           <div className="flex items-center gap-2">
-            <img height="10" width="18" crossOrigin="anonymous" src="https://cdn.simpleicons.org/supabase" />
+            <div className="i-ph:database w-4 h-4 text-[#3DCB8F]" />
             <h3 className="text-sm font-medium text-[#3DCB8F]">{title}</h3>
           </div>
         </div>

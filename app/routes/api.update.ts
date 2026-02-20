@@ -176,7 +176,7 @@ async function getCommitHash(rootDir: string): Promise<string> {
 
 export const loader: LoaderFunction = async () => {
   if (typeof process === 'undefined' || !process.cwd) {
-    return json({ available: false, error: 'Update checks are unavailable in this runtime.' }, { status: 503 });
+    return json({ available: false, error: 'Update checks are unavailable in this runtime.' });
   }
 
   try {
@@ -192,13 +192,10 @@ export const loader: LoaderFunction = async () => {
       nodeMemoryBaselineMb: NODE_MEMORY_BASELINE_MB,
     });
   } catch (error) {
-    return json(
-      {
-        available: false,
-        error: error instanceof Error ? error.message : 'Failed to check for updates',
-      },
-      { status: 500 },
-    );
+    return json({
+      available: false,
+      error: error instanceof Error ? error.message : 'Failed to check for updates',
+    });
   }
 };
 

@@ -30,6 +30,15 @@
   - blocked/invalid/private URLs in `web_browse` now return a structured tool result instead of hard-failing the whole chat run
   - upstream browse failures now return actionable failure summaries without crashing the request
 
+### Fixed (2026-02-20 graceful integration noise patch)
+- Supabase integration now runs only on explicit user actions:
+  - removed mount-time Supabase stats/API-key fetch calls from chat connection initialization
+  - kept manual connect/select/refresh flows intact
+- Supabase UI icon rendering no longer depends on external `cdn.simpleicons.org` requests in chat components (no CORS icon noise).
+- Update checks are now user-triggered only (manual `Check` in Update Manager); no background polling on chat load.
+- `/api/update` loader now degrades gracefully with a non-error response when checks cannot run in the current runtime.
+- Starter template release-fetch failures now degrade quietly to fallback behavior instead of noisy client console errors.
+
 ### Verified
 - `pnpm run typecheck` passed.
 - `pnpm run lint` passed.
