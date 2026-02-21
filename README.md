@@ -15,190 +15,25 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
-  <a href="v1.0.3.md">v1.0.3 roadmap</a> ·
-  <a href="#quickstart-local-development">install</a>
+  <a href="v1.0.4.md">v1.0.4 roadmap</a> ·
+  <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
 </p>
 
-## Version
+## App Overview
 
 Current version: **v1.0.3**
 
-bolt.gives is a collaborative, open-source AI coding workspace.
+bolt.gives is an open-source, free, collaborative AI coding workspace.
 
-Release branch status (2026-02-20):
-- `main` → `v1.0.3`
-- `alpha` → `v1.0.3`
+Core principles:
+- Open source and free to self-host/use.
+- Zero-required-database setup for bolt.gives core.
+- Optional databases/integrations are for user projects only.
+- Transparent agent execution (users can see what is happening and why).
 
-Next roadmap:
-- `v1.0.4` → `ROADMAP.md`
-
-It combines:
-- A browser-based Node.js dev environment (StackBlitz WebContainer)
-- An AI-assisted editor + terminal
-- Real-time collaborative editing
-- Agent-style workflows (Plan/Act with checkpointed execution)
-
-## Steps towards v1.0.3 - completed
-
-Roadmap file: `v1.0.3.md`
-
-### P0 Release Scope
-
-1. Commentary Cards + Phase Model
-- [x] Normalize commentary event types and render dedicated commentary cards.
-- [x] Show clear phase transitions: `Plan -> Doing -> Verifying -> Next`.
-
-2. Enforced Commentary Format Contract
-- [x] Enforce concise live-update contract server-side (`micro-updates`, `Key changes:`, `Next:`).
-- [x] Add regression tests for formatting and phase correctness.
-
-3. Sticky Working Footer
-- [x] Keep model/provider, phase, step, elapsed time, action count, and recovery state always visible.
-
-4. First-Class Checkpoint Events
-- [x] Surface explicit checkpoint lifecycle events in timeline (checkpoint, install complete, preview ready, tests/deploy status).
-
-5. Honesty Guardrails (No False Success)
-- [x] Block optimistic success narration unless command/action exit status confirms success.
-- [x] Always show failure context: command, exit code, stderr snippet, next recovery action.
-
-6. Long-Run Performance De-bloat (Server-First)
-- [x] Reduce client-side bloat that slows long sessions.
-- [x] Move heavy operations to server-side execution paths where possible.
-- [x] Add telemetry for UI stall duration and client memory growth.
-
-7. Enforced Node Memory Baseline (Install + Upgrade)
-- [x] Enforce Node memory floor `>=4096MB` for fresh install and upgrades.
-- [x] Add preflight checks and auto-apply defaults for supported deployment paths.
-
-8. Git-Backed Auto-Update + One-Click Upgrade
-- [x] Detect new Git versions on startup/interval.
-- [x] Show in-app update notice with one-click update flow.
-- [x] Include safe failure handling (progress logs, retry/rollback path, version confirmation).
-
-9. Architect Self-Heal + Safety Guard
-- [x] Introduce Architect diagnosis + auto-heal path for known failures.
-- [x] Expand Architect knowledgebase for high-frequency runtime/build/package errors.
-- [x] Ensure Architect obeys autonomy/safety policy and reports recovery events in timeline.
-
-10. Cost Estimation Accuracy (All Providers)
-- [x] Normalize provider usage fields used by the cost estimator.
-- [x] Validate non-zero and accurate cost output for strict and standard providers.
-- [x] Add regression + E2E checks for usage-to-cost consistency.
-
-11. Provider/Model/API Key Session Persistence
-- [x] Persist latest working API key, provider, and model per instance.
-- [x] Auto-restore latest working selection on revisit.
-- [x] Keep previously working providers available for quick switching.
-
-## Steps towards v1.0.2 - completed
-
-### Delivery Paths (P0)
-
-1. Live Development Commentary Stream
-- [x] Stream concise step-by-step commentary while coding (`plan -> action -> verification -> next step`).
-- [x] Separate commentary from code/actions in protocol and UI.
-- [x] Keep commentary visible while work is in progress (not only at completion).
-
-2. Agent Anti-Stall + Auto-Recovery
-- [x] Detect stuck states (repeated tool calls, no-progress loops, long inactivity/timeouts).
-- [x] Add recovery strategies (retry/backoff, summarize-and-continue, explicit recovery prompt).
-- [x] Surface recovery actions in the commentary timeline.
-
-3. Execution Transparency Panel
-- [x] Show selected model, tool invocations, active step, elapsed time, and token/cost estimate.
-- [x] Show a short "why this action" reason for major agent steps.
-- [x] Persist per-run execution trace for review.
-
-4. Safer Autonomy Modes
-- [x] Add explicit modes: `read-only`, `review-required`, `auto-apply-safe`, `full-auto`.
-- [x] Add per-tool approval policy controls.
-- [x] Display active autonomy mode in chat/workflow UI at all times.
-
-5. Reliability Guardrails For Web/Tool Tasks
-- [x] Keep tool schemas compatible with strict providers (including Codex-style strict function validation).
-- [x] Add robust URL/tool input validation with clear fallback errors for users.
-- [x] Add regression tests for schema compatibility across major model families.
-
-### Next Paths (P1)
-
-6. Persistent Project Memory (Scoped)
-- [x] Store lightweight persistent project summaries/architecture notes between sessions.
-- [x] Use persisted memory to reduce repeated context rebuilding.
-
-7. Sub-Agent Framework (Minimal)
-- [x] Introduce a manager/worker pattern for long-running tasks.
-- [x] Ship behind a feature flag.
-
-### Acceptance Criteria
-
-1. Commentary appears within 2 seconds of run start and updates at each meaningful step.
-2. At least 90% of interrupted/stalled runs auto-recover or provide a clear recovery suggestion.
-3. Users can switch autonomy mode before and during a run; mode is reflected in every tool action.
-4. Tool/schema compatibility tests pass for strict OpenAI Codex-style models and standard chat-completions models.
-5. Timeline view logs model, tools, approvals, and outcome per run.
-
-### Success Metrics
-
-- Reduce "agent got stuck" reports by at least 40%.
-- Increase successful end-to-end task completion rate by at least 20%.
-- Reduce average manual "continue" interventions per session.
-- Increase user satisfaction on "I understand what the agent is doing."
-
-### Research Sources (Playwright Browsed)
-
-- https://forum.cursor.com/c/ideas
-- https://forum.cursor.com/c/ideas/7
-- https://codeium.canny.io/feature-requests
-- https://news.ycombinator.com/item?id=44031432
-- https://news.ycombinator.com/item?id=45534880
-- https://github.com/openai/codex/issues
-- https://github.com/features/copilot
-- https://github.com/orgs/community/discussions/categories/copilot
-- https://developers.openai.com/codex/
-
-## Platform Support (Important)
-
-- Using bolt.gives in a browser: supported on Windows, macOS, and Linux (any modern browser).
-- Installing / self-hosting bolt.gives: supported on **Ubuntu 18.04+ only**.
-  - Windows is **not supported** for installation/self-hosting.
-  - macOS is **not supported** for installation/self-hosting.
-  - If you are on Windows or macOS, use the hosted web app (or deploy to an Ubuntu server and access it from your machine).
-
-## v1.0.3 Highlights
-
-- Completed commentary-first release scope with phased commentary cards and strict `Key changes` / `Next` contract.
-- Execution timeline now includes first-class Architect diagnosis/attempt/outcome events and checkpoint lifecycle events.
-- Long-run timeline rendering is de-bloated with larger retained window controls plus virtualization for long feeds.
-- Provider history persistence now supports quick switching back to previously working providers.
-- Architect knowledgebase expanded for recurring scaffold/runtime failures (`npm ENOENT`, Vite specifier mismatches, unenv fs update runtime limits, Cloudflare auth 10000).
-- Full release gate passed:
-  - `pnpm run typecheck`
-  - `pnpm run lint`
-  - `pnpm test`
-  - E2E smoke on `https://alpha1.bolt.gives` for OpenAI `gpt-5-codex` (strict) and `gpt-4o` (standard)
-
-## v1.0.2 Highlights
-
-- Live development commentary stream (separate protocol event, visible during execution).
-- Plain-English commentary normalization with 60-second heartbeat updates during long-running work.
-- Anti-stall detection and auto-recovery with recovery events in timeline.
-- Execution transparency panel with model/tool/step/cost visibility and rationale.
-- Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`) with runtime enforcement.
-- Reliability guardrails for strict tool schemas with compatibility matrix endpoint and tests.
-- Persistent scoped project memory reused across runs.
-- Minimal planner/worker sub-agent framework behind feature flag (`BOLT_SUB_AGENTS_ENABLED`).
-- Local starter-template fallbacks for every framework option when remote template downloads fail.
-
-## v1.0.0 Release Notes
-
-This `v1.0.0` release focuses on shipping a complete, end-to-end collaborative AI coding workspace:
-- Real-time collaboration via Yjs (`y-websocket`) with persisted docs and a health endpoint
-- Plan/Act agent workflow with checkpointed execution and revert support
-- Multi-provider model support (cloud + local) with an in-app model orchestrator
-- Session save/resume/share (optional Supabase-backed storage)
-- Deployment wizard and provider integrations (GitHub/GitLab + Vercel/Netlify)
-- Production builds with Cloudflare Pages support (see `wrangler.toml`)
+Platform support:
+- Use in browser: Windows/macOS/Linux.
+- Install/self-host: **Ubuntu 18.04+ only**.
 
 ## Screenshots
 
@@ -214,98 +49,153 @@ Plan prompt example:
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
-## What The App Does
+## Roadmap (v1.0.4)
 
-bolt.gives is a single workspace where you can:
-- Chat with an LLM and apply changes as diffs/files inside the project
-- Run commands in an integrated terminal with incremental progress events
-- Collaborate with multiple people on the same file (live cursors/edits)
-- Save/resume/share sessions (optional Supabase-backed storage)
-- Deploy generated apps (wizard-driven configuration)
+Roadmap files:
+- Detailed plan: `v1.0.4.md`
+- Summary tracker: `ROADMAP.md`
 
-## Key Features
+v1.0.4 mission: make frozen windows mid-project a thing of the past by moving heavy lifting from the user's machine to server-side execution.
 
-- Multi-provider LLM support (cloud + local)
-- Real-time collaborative editing (Yjs + `y-websocket`)
-- Built-in web documentation browsing and synthesis tools (Playwright-backed)
-- Built-in fallback starter templates for all listed frameworks (so scaffold flows keep working even if remote template fetch fails)
-- Interactive step runner with structured events (`step-start`, `stdout`, `stderr`, `step-end`, `complete`)
-- Plan/Act workflow with checkpoints (continue/stop/revert)
-- Session save/resume/share (Supabase REST API)
-- Model orchestrator (auto-selects an efficient model and surfaces the decision in chat metadata)
-- Performance monitor (CPU/RAM sampling + token usage counter)
-- Deployment wizard (generates provider workflows/config)
-- Plugin manager + marketplace registry support
+P0 targets:
+- Zero-infra runtime guarantee (no mandatory DB/env).
+- Client-hosted isolated instance kit.
+- Optional Teams add-on (roles/permissions/invites).
+- Collaboration audit trail + export.
+- Architect v2 self-heal + safety guard.
+- Commentary v2 with clear plain-English progress updates.
+- First-party template packs with smoke coverage.
+- Long-run performance and stability hardening (server-first heavy tasks).
+- Cost estimation integrity across providers.
+- Safe multi-instance update channels with retry/rollback.
 
-## Quickstart (Local Development)
+## Current Features (v1.0.3)
 
-### Prereqs (Ubuntu 18.04+ Only)
+- Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
+- Anti-stall detection and auto-recovery events in timeline.
+- Execution transparency panel (model/provider/step/elapsed/actions/recovery state).
+- Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`).
+- Architect self-heal knowledgebase for common scaffold/build/runtime failures.
+- Multi-provider model support and model/provider/API-key persistence.
+- Web browsing tools (`web_search`, `web_browse`) with Playwright-backed extraction.
+- Real-time collaboration support (Yjs + websocket server).
+- First-party deployment support and update manager.
+- Cost estimation subsystem with cross-provider normalization.
+- Long-run timeline de-bloat and feed virtualization.
 
-- Ubuntu `18.04+` (recommended: Ubuntu `22.04+`)
-- Node.js `>= 18.18.0` (recommended: Node.js `22`)
-- `pnpm` (recommended: via `corepack`)
-- `git`
+## Installation (Ubuntu 18.04+ Only, Verbose, Tested)
 
-Notes:
-- You can **use** bolt.gives on Windows/macOS in a browser.
-- You cannot **install/self-host** bolt.gives on Windows/macOS today; use an Ubuntu 18+ server instead.
+This installation path is designed to run bolt.gives locally with no required database.
 
-### Install Node.js + pnpm (Ubuntu)
+### 0. What you need
 
-This project builds a large Vite/Remix bundle and may require a larger Node heap during build.
-From `v1.0.3`, install and upgrade scripts enforce a Node memory baseline of `--max-old-space-size=4096` (or higher).
+- Ubuntu `18.04+` (recommended `22.04+`)
+- `git`, `curl`, `build-essential`
+- Node.js `22.x`
+- `pnpm` `9.x`
 
-1. Install base packages:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y git curl ca-certificates build-essential
-   ```
-2. Install Node.js (recommended: `nvm`):
-   ```bash
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-   # restart your shell, then:
-   export NVM_DIR="$HOME/.nvm"
-   . "$NVM_DIR/nvm.sh"
-   nvm install 22
-   nvm use 22
-   node -v
-   ```
-3. Enable `pnpm` via corepack:
-   ```bash
-   corepack enable
-   corepack prepare pnpm@9.15.9 --activate
-   pnpm -v
-   ```
+Windows/macOS note:
+- You can use bolt.gives in the browser on Windows/macOS.
+- You should install/self-host bolt.gives on Ubuntu 18.04+.
 
-Setup:
+### 1. Install base packages
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates build-essential
+```
+
+### 2. Install Node.js 22 with nvm
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm install 22
+nvm use 22
+node -v
+```
+
+Expected: a `v22.x.x` version output.
+
+### 3. Enable pnpm via corepack
+
+```bash
+corepack enable
+corepack prepare pnpm@9.15.9 --activate
+pnpm -v
+```
+
+Expected: a `9.x.x` version output.
+
+### 4. Clone and enter the project
+
+```bash
+git clone https://github.com/embire2/bolt.gives.git
+cd bolt.gives
+```
+
+### 5. Install dependencies
+
 ```bash
 pnpm install
+```
+
+Playwright browsers are installed during dependency setup.
+
+### 6. Create local environment file
+
+```bash
 cp .env.example .env.local
 ```
 
-Then edit `.env.local` and set at least one provider key you intend to use (example: OpenAI, Anthropic, etc).
+Then edit `.env.local` and set at least one provider key (for example OpenAI).  
+No database setup is required for bolt.gives core runtime.
 
-Optional (guided env setup):
+### 7. Ensure default dev ports are free (prevents startup conflicts)
+
 ```bash
-pnpm run setup
+fuser -k 5173/tcp 2>/dev/null || true
+fuser -k 1234/tcp 2>/dev/null || true
+fuser -k 4179/tcp 2>/dev/null || true
 ```
 
-Run dev (starts the app, collaboration server, and web browsing service):
+If you still suspect conflicts, inspect ports:
+
+```bash
+ss -ltnp | grep -E ':(5173|1234|4179)\\b' || true
+```
+
+### 8. Run development mode
+
 ```bash
 pnpm run dev
 ```
 
-Defaults:
+Default endpoints:
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
 - Web browsing service: `http://127.0.0.1:4179`
 
-### Production Build (High Memory)
+### 9. Verify the install
 
-If the build fails with "JavaScript heap out of memory", use:
+Open `http://localhost:5173`, then verify:
+- UI loads without server crash.
+- You can open chat and send a prompt.
+- Terminal and preview panels render.
+- No database is required to start and use core features.
+
+### 10. Production build (recommended high-memory path)
+
 ```bash
 pnpm run build:highmem
 pnpm run start
+```
+
+If needed, enforce memory explicitly:
+
+```bash
+NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
 ```
 
 ## Deploying To Cloudflare Pages
