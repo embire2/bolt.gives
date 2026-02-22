@@ -46,6 +46,9 @@ Chat:
 Plan prompt example:
 ![bolt.gives plan prompt](docs/screenshots/chat-plan.png)
 
+System in action:
+![bolt.gives system in action](docs/screenshots/system-in-action.png)
+
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
@@ -256,6 +259,7 @@ Outputs:
 - `docs/screenshots/home.png`
 - `docs/screenshots/chat.png`
 - `docs/screenshots/chat-plan.png`
+- `docs/screenshots/system-in-action.png`
 - `docs/screenshots/changelog.png`
 
 To capture screenshots from the live alpha environment instead of a local dev server:
