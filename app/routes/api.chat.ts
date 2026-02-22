@@ -157,6 +157,24 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
   const requestStartedAt = Date.now();
   const runId = generateId();
+  const requestUrl = new URL(request.url);
+  const requestDebugContext = {
+    runId,
+    route: requestUrl.pathname,
+    messageCount: messages.length,
+    latestRole: messages[messages.length - 1]?.role,
+    selectedModelCookie,
+    selectedProviderCookie,
+    chatMode,
+    maxLLMSteps,
+  };
+  let resolvedSelectionForLogs: {
+    provider?: string;
+    model?: string;
+  } = {
+    provider: selectedProviderCookie,
+    model: selectedModelCookie,
+  };
   const manualInterventionDetected = detectManualIntervention(messages);
   const latestUserGoal = extractLatestUserGoal(messages);
   const projectKey = deriveProjectMemoryKey(files);
@@ -177,6 +195,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
 
   try {
+    logger.info('chat request started', requestDebugContext);
+
     const mcpService = MCPService.getInstance();
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
@@ -379,6 +399,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           apiKeys,
           selectedProviderCookie,
         });
+        resolvedSelectionForLogs = {
+          provider: sanitizedSelection.provider,
+          model: sanitizedSelection.model,
+        };
         ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
 
         const collectedToolOutputs: string[] = [];
@@ -1002,6 +1026,17 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
       onError: (error: any) => {
         stopHeartbeatIfRunning();
 
+        const elapsedMs = Date.now() - requestStartedAt;
+        logger.error('chat stream onError', {
+          ...requestDebugContext,
+          elapsedMs,
+          resolvedProvider: resolvedSelectionForLogs.provider,
+          resolvedModel: resolvedSelectionForLogs.model,
+          errorName: error?.name,
+          errorMessage: error?.message || String(error),
+          errorStack: error?.stack,
+        });
+
         // Provide more specific error messages for common issues
         const errorMessage = error.message || 'Unknown error';
 
@@ -1095,7 +1130,17 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
     });
   } catch (error: any) {
     stopHeartbeatIfRunning();
-    logger.error(error);
+
+    const elapsedMs = Date.now() - requestStartedAt;
+    logger.error('chat request failed before stream completion', {
+      ...requestDebugContext,
+      elapsedMs,
+      resolvedProvider: resolvedSelectionForLogs.provider,
+      resolvedModel: resolvedSelectionForLogs.model,
+      errorName: error?.name,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
 
     const errorResponse = {
       error: true,

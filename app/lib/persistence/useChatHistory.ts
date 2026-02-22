@@ -273,7 +273,7 @@ ${value.content}
         console.error(error);
       }
     },
-    storeMessageHistory: async (messages: Message[]) => {
+    storeMessageHistory: async (messages: Message[], isStreaming: boolean = false) => {
       if (!db || messages.length === 0) {
         return;
       }
@@ -286,7 +286,11 @@ ${value.content}
       if (!urlId && firstArtifact?.id) {
         const urlId = await getUrlId(db, firstArtifact.id);
         _urlId = urlId;
-        navigateChat(urlId);
+
+        if (!isStreaming) {
+          navigateChat(navigate, urlId);
+        }
+
         setUrlId(urlId);
       }
 
@@ -317,8 +321,8 @@ ${value.content}
 
         chatId.set(nextId);
 
-        if (!urlId) {
-          navigateChat(nextId);
+        if (!urlId && !isStreaming) {
+          navigateChat(navigate, nextId);
         }
       }
 
@@ -398,13 +402,12 @@ ${value.content}
   };
 }
 
-function navigateChat(nextId: string) {
+function navigateChat(navigate: ReturnType<typeof useNavigate>, nextId: string) {
   const targetPath = `/chat/${nextId}`;
 
   if (window.location.pathname === targetPath) {
     return;
   }
 
-  // Use full navigation to avoid stale in-memory chat state when switching conversations.
-  window.location.assign(targetPath);
+  navigate(targetPath);
 }

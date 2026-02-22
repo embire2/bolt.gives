@@ -195,13 +195,13 @@ const processSampledMessages = createSampler(
     initialMessages: Message[];
     isLoading: boolean;
     parseMessages: (messages: Message[], isLoading: boolean) => void;
-    storeMessageHistory: (messages: Message[]) => Promise<void>;
+    storeMessageHistory: (messages: Message[], isStreaming?: boolean) => Promise<void>;
   }) => {
     const { messages, initialMessages, isLoading, parseMessages, storeMessageHistory } = options;
     parseMessages(messages, isLoading);
 
     if (messages.length > initialMessages.length) {
-      storeMessageHistory(messages).catch((error) => toast.error(error.message));
+      storeMessageHistory(messages, isLoading).catch((error) => toast.error(error.message));
     }
   },
   50,
@@ -209,7 +209,7 @@ const processSampledMessages = createSampler(
 
 interface ChatProps {
   initialMessages: Message[];
-  storeMessageHistory: (messages: Message[]) => Promise<void>;
+  storeMessageHistory: (messages: Message[], isStreaming?: boolean) => Promise<void>;
   importChat: (description: string, messages: Message[]) => Promise<void>;
   exportChat: () => void;
   description?: string;
@@ -582,9 +582,41 @@ export const ChatImpl = memo(
       });
     };
 
+    const buildChatRequestDiagnostics = useCallback(
+      (context: 'chat' | 'template' | 'llmcall', error: unknown) => {
+        const lastMessage = messages[messages.length - 1];
+
+        return {
+          context,
+          provider: provider.name,
+          model,
+          route:
+            typeof window !== 'undefined'
+              ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+              : 'unknown',
+          online: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
+          visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
+          isLoading,
+          fakeLoading,
+          inputLength: input.length,
+          messageCount: messages.length,
+          lastMessageRole: lastMessage?.role,
+          lastMessageId: lastMessage?.id,
+          errorName: error instanceof Error ? error.name : undefined,
+          errorMessage:
+            error instanceof Error ? error.message : typeof error === 'string' ? error : JSON.stringify(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+        };
+      },
+      [fakeLoading, input.length, isLoading, messages, model, provider.name],
+    );
+
     const handleError = useCallback(
       (error: any, context: 'chat' | 'template' | 'llmcall' = 'chat') => {
-        logger.error(`${context} request failed`, error);
+        const diagnostics = buildChatRequestDiagnostics(context, error);
+
+        logger.error(`${context} request failed`, diagnostics);
+        console.error(`[chat:${context}:diagnostics]`, diagnostics);
 
         stop();
         setFakeLoading(false);
@@ -618,6 +650,13 @@ export const ChatImpl = memo(
         if (errorInfo.statusCode === 401 || errorInfo.message.toLowerCase().includes('api key')) {
           errorType = 'authentication';
           title = 'Authentication Error';
+        } else if (
+          errorInfo.message.toLowerCase().includes('failed to fetch') ||
+          errorInfo.message.toLowerCase().includes('aborted')
+        ) {
+          errorType = 'network';
+          title = 'Connection Error';
+          errorInfo.message = `${errorInfo.message}. Generation stream was interrupted before completion. Check network/proxy stability and server logs for the request diagnostics.`;
         } else if (errorInfo.statusCode === 429 || errorInfo.message.toLowerCase().includes('rate limit')) {
           errorType = 'rate_limit';
           title = 'Rate Limit Exceeded';
@@ -637,6 +676,27 @@ export const ChatImpl = memo(
           retryable: errorInfo.isRetryable,
           errorType,
           provider: provider.name,
+          diagnostics,
+        });
+
+        appendStepRunnerEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: `${context} generation failed`,
+          error: errorInfo.message,
+          output: JSON.stringify(
+            {
+              provider: diagnostics.provider,
+              model: diagnostics.model,
+              route: diagnostics.route,
+              messageCount: diagnostics.messageCount,
+              isLoading: diagnostics.isLoading,
+              errorName: diagnostics.errorName,
+              errorMessage: diagnostics.errorMessage,
+            },
+            null,
+            2,
+          ),
         });
 
         // Create API error alert
@@ -649,7 +709,7 @@ export const ChatImpl = memo(
         });
         setData([]);
       },
-      [provider.name, stop],
+      [buildChatRequestDiagnostics, provider.name, stop],
     );
 
     const clearApiErrorAlert = useCallback(() => {
