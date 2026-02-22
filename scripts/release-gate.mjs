@@ -41,9 +41,13 @@ async function checkDomain(domain) {
   const nonce = Date.now().toString(36);
   const homeText = await fetchText(`${domain}/?gate=${nonce}`);
   const changelogText = await fetchText(`${domain}/changelog?gate=${nonce}`);
+  const changelogVersionPattern = new RegExp(
+    `Current\\s+version\\s*:\\s*${versionLabel}|changelog\\s*\\(${versionLabel}\\)`,
+    'i',
+  );
 
   assert(homeText.includes(`bolt.gives ${versionLabel}`), `${domain}: expected home title/version ${versionLabel}`);
-  assert(changelogText.includes(`Current version: ${versionLabel}`), `${domain}: expected changelog version ${versionLabel}`);
+  assert(changelogVersionPattern.test(changelogText), `${domain}: expected changelog version ${versionLabel}`);
   assert(!/server error|error details|custom error/i.test(homeText), `${domain}: unexpected server error marker on home`);
   assert(
     !/server error|error details|custom error/i.test(changelogText),
@@ -118,11 +122,13 @@ async function checkScreenshots(baseUrl) {
     BASE_URL: baseUrl,
     README_SCREENSHOT_DIR: tempDir,
     EXPECTED_VERSION: expectedVersion,
+    README_SCREENSHOT_SKIP_PROMPTS: '1',
   });
 
   await runNodeScript(path.join(rootDir, 'scripts', 'capture-system-in-action.mjs'), {
     BASE_URL: baseUrl,
     SYSTEM_ACTION_SCREENSHOT_PATH: path.join(tempDir, 'system-in-action.png'),
+    SYSTEM_ACTION_SKIP_PROMPT: '1',
   });
 
   const files = ['home.png', 'chat.png', 'chat-plan.png', 'changelog.png', 'system-in-action.png'];

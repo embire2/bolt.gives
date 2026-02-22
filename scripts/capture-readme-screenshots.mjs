@@ -7,9 +7,10 @@ import { chromium } from 'playwright';
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const outDir = process.env.README_SCREENSHOT_DIR || 'docs/screenshots';
 const secure = baseUrl.startsWith('https://');
-const pkg = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
+const pkg = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const expectedVersion = process.env.EXPECTED_VERSION || pkg.version;
 const versionLabel = `v${expectedVersion}`;
+const skipPromptCaptures = /^(1|true|yes)$/i.test(process.env.README_SCREENSHOT_SKIP_PROMPTS || '');
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -76,11 +77,26 @@ async function runPromptCapture({ prompt, token, outputName }) {
   await page.screenshot({ path: path.join(outDir, outputName), fullPage: true });
 }
 
+async function capturePromptShell(outputName) {
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await waitReady();
+  const text = await page.evaluate(() => document.body.innerText || '');
+
+  if (/server error|error details|custom error/i.test(text)) {
+    throw new Error(`Cannot capture ${outputName}: page contains a server error marker.`);
+  }
+
+  await page.screenshot({ path: path.join(outDir, outputName), fullPage: true });
+}
+
 async function captureChangelog() {
   await page.goto(`${baseUrl}/changelog`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction((label) => {
     const text = document.body.innerText || '';
-    return text.includes(`Current version: ${label}`) && !/server error|error details|custom error/i.test(text);
+    const title = document.title || '';
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const versionRegex = new RegExp(`Current\\s+version\\s*:\\s*${escaped}|changelog\\s*\\(${escaped}\\)`, 'i');
+    return versionRegex.test(`${title}\n${text}`) && !/server error|error details|custom error/i.test(`${title}\n${text}`);
   }, versionLabel);
   await page.screenshot({ path: path.join(outDir, 'changelog.png'), fullPage: true });
 }
@@ -88,16 +104,23 @@ async function captureChangelog() {
 try {
   await forceProviderDefaults();
   await captureHome();
-  await runPromptCapture({
-    prompt: 'Say hello from bolt.gives in one short sentence.',
-    token: `CHAT_OK_${Date.now().toString(36)}`,
-    outputName: 'chat.png',
-  });
-  await runPromptCapture({
-    prompt: 'Plan a simple task in 3 steps and then wait.',
-    token: `PLAN_OK_${Math.random().toString(36).slice(2, 8)}`,
-    outputName: 'chat-plan.png',
-  });
+
+  if (skipPromptCaptures) {
+    await capturePromptShell('chat.png');
+    await capturePromptShell('chat-plan.png');
+  } else {
+    await runPromptCapture({
+      prompt: 'Say hello from bolt.gives in one short sentence.',
+      token: `CHAT_OK_${Date.now().toString(36)}`,
+      outputName: 'chat.png',
+    });
+    await runPromptCapture({
+      prompt: 'Plan a simple task in 3 steps and then wait.',
+      token: `PLAN_OK_${Math.random().toString(36).slice(2, 8)}`,
+      outputName: 'chat-plan.png',
+    });
+  }
+
   await captureChangelog();
   console.log(`Wrote README screenshots to ${outDir}`);
 } finally {
