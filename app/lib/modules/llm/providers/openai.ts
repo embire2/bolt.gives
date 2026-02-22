@@ -21,6 +21,24 @@ export default class OpenAIProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
+    // GPT-5.2 Codex: responses-API coding model fallback option
+    {
+      name: 'gpt-5.2-codex',
+      label: 'GPT-5.2 Codex',
+      provider: 'OpenAI',
+      maxTokenAllowed: 128000,
+      maxCompletionTokens: 32000,
+    },
+
+    // GPT-5 Codex: responses-API coding model fallback option
+    {
+      name: 'gpt-5-codex',
+      label: 'GPT-5 Codex',
+      provider: 'OpenAI',
+      maxTokenAllowed: 128000,
+      maxCompletionTokens: 32000,
+    },
+
     /*
      * Essential fallback models - only the most stable/reliable ones
      * GPT-4o: 128k context, 4k standard output (64k with long output mode)
