@@ -29,9 +29,18 @@ describe('getTemplates', () => {
 
     expect(result).not.toBeNull();
     expect(result?.assistantMessage).toContain('<boltAction type="shell">');
-    expect(result?.assistantMessage).toContain('create-vite@7.1.0');
+    expect(result?.assistantMessage).toContain('Using built-in Vite React starter files');
     expect(result?.assistantMessage).toContain('pnpm install');
+    expect(result?.assistantMessage).toContain('<boltAction type="start">');
+    expect(result?.assistantMessage).toContain('pnpm run dev');
     expect(result?.assistantMessage).toContain('filePath="README.md"');
+    expect(result?.assistantMessage).toContain('filePath="package.json"');
+
+    const packageIndex = result?.assistantMessage.indexOf('filePath="package.json"') ?? -1;
+    const installIndex = result?.assistantMessage.indexOf('pnpm install') ?? -1;
+    expect(packageIndex).toBeGreaterThanOrEqual(0);
+    expect(installIndex).toBeGreaterThanOrEqual(0);
+    expect(packageIndex).toBeLessThan(installIndex);
     expect(result?.userMessage).toContain('Fallback starter note');
     expect(result?.userMessage).toContain('queued automatically');
   });

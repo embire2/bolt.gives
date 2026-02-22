@@ -22,4 +22,16 @@ describe('local starter template coverage', () => {
       expect(filePaths, `Missing .bolt prompt fallback for "${template.name}"`).toContain('.bolt/prompt');
     }
   });
+
+  it('includes a deterministic built-in Vite React starter scaffold', () => {
+    const template = STARTER_TEMPLATES.find((item) => item.name === 'Vite React');
+    expect(template).toBeDefined();
+
+    const files = getLocalStarterTemplateFiles(template!);
+    const filePaths = files.map((file) => file.path);
+
+    expect(filePaths).toContain('package.json');
+    expect(filePaths).toContain('src/main.tsx');
+    expect(filePaths).toContain('vite.config.ts');
+  });
 });

@@ -332,21 +332,24 @@ export async function getTemplates(templateName: string, title?: string) {
 ${localFallback.scaffoldCommand}
 </boltAction>
 ${localFallback.installCommand ? `<boltAction type="shell">\n${localFallback.installCommand}\n</boltAction>` : ''}
+${localFallback.startCommand ? `<boltAction type="start">\n${localFallback.startCommand}\n</boltAction>` : ''}
 `
     : '';
+
+  const fileActions = filesToImport.files
+    .map(
+      (file) =>
+        `<boltAction type="file" filePath="${file.path}">
+${file.content}
+</boltAction>`,
+    )
+    .join('\n');
 
   const assistantMessage = `
 Bolt is initializing your project with the required files using the ${template.name} template.
 <boltArtifact id="imported-files" title="${title || 'Create initial files'}" type="bundled">
+${fileActions}
 ${fallbackBootstrapActions}
-${filesToImport.files
-  .map(
-    (file) =>
-      `<boltAction type="file" filePath="${file.path}">
-${file.content}
-</boltAction>`,
-  )
-  .join('\n')}
 </boltArtifact>
 `;
   let userMessage = ``;
@@ -364,7 +367,7 @@ ${templatePromptFile.content}
   if (usingLocalFallback) {
     userMessage += `Fallback starter note:
 Remote template download was unavailable, so a built-in ${template.label} starter fallback has been loaded.
-The initial scaffold and dependency install actions were queued automatically.
+The initial scaffold, dependency install, and dev server start actions were queued automatically.
 Continue from the generated starter. Only re-run scaffolding if recovery is needed.
 ---
 `;
