@@ -43,11 +43,8 @@ else
 fi
 
 echo "Capturing screenshots with Playwright (Chromium)..."
-pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 8000 --viewport-size 1600,900 "${BASE_URL}/" "${OUT_DIR}/home.png" >/dev/null 2>&1
-pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 15000 --viewport-size 1600,900 "${BASE_URL}/?prompt=Say%20hello%20from%20bolt.gives%20in%20one%20short%20sentence" "${OUT_DIR}/chat.png" >/dev/null 2>&1
-pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 20000 --viewport-size 1600,900 "${BASE_URL}/?prompt=Plan%20a%20simple%20task%20in%203%20steps%20and%20then%20wait" "${OUT_DIR}/chat-plan.png" >/dev/null 2>&1
+BASE_URL="${BASE_URL}" README_SCREENSHOT_DIR="${OUT_DIR}" node "${ROOT_DIR}/scripts/capture-readme-screenshots.mjs" >/dev/null 2>&1
 BASE_URL="${BASE_URL}" SYSTEM_ACTION_SCREENSHOT_PATH="${OUT_DIR}/system-in-action.png" node "${ROOT_DIR}/scripts/capture-system-in-action.mjs" >/dev/null 2>&1
-pnpm dlx playwright screenshot --browser=chromium --wait-for-timeout 8000 --viewport-size 1600,900 "${BASE_URL}/changelog" "${OUT_DIR}/changelog.png" >/dev/null 2>&1
 
 echo "Wrote:"
 ls -1 "${OUT_DIR}" | sed 's/^/  - /'
