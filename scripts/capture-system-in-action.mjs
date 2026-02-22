@@ -7,7 +7,9 @@ const outputPath = process.env.SYSTEM_ACTION_SCREENSHOT_PATH || 'docs/screenshot
 const responseToken = `SYSTEM_ACTION_OK_${Date.now().toString(36)}`;
 
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext();
+const context = await browser.newContext({
+  viewport: { width: 1600, height: 900 },
+});
 const page = await context.newPage();
 
 try {

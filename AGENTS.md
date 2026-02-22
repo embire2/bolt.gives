@@ -5,8 +5,8 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform, with a strong focus on reliability, transparent execution, and safe autonomous behavior.
 
 Current release line:
-- Stable: `v1.0.1`
-- In progress: `v1.0.2`
+- Stable: `v1.0.3`
+- In progress: `v1.0.4`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -22,6 +22,7 @@ If both `alpha` and `main` are active:
 - Land high-risk work on `alpha`
 - Verify on `https://alpha1.bolt.gives`
 - Fast-forward or merge cleanly into `main`
+- Keep `main` as the release source-of-truth; keep `alpha` fast-forwarded to `main` when no soak test is active.
 
 Never force-push shared branches unless explicitly approved.
 
@@ -38,20 +39,28 @@ When uncertain, choose the smallest safe change that unblocks users.
 
 ---
 
-## v1.0.2 Priority Stack
+## v1.0.4 Priority Stack
 
-### Completed
+### Completed (v1.0.3 baseline)
 - Live Development Commentary Stream
   - Commentary is streamed incrementally and separated from code/action events.
 - Agent Anti-Stall + Auto-Recovery
   - Loop/no-progress/timeout detection plus recovery backoff/finalize strategy.
+- Execution transparency panel + sticky footer
+- Safer autonomy modes
+- Architect self-heal v1 foundations
+- Provider/model/API-key persistence and cost estimation normalization
 
-### In Progress / Remaining
-- Execution Transparency Panel (model/tool/step/elapsed/usage visibility)
-- Safer Autonomy Modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`)
-- Reliability guardrails hardening across providers (schema and regression matrix)
-- Persistent project memory (scoped)
-- Minimal sub-agent framework (planner/executor split)
+### In Progress / Remaining (v1.0.4)
+- Zero-infra core runtime guarantee (no mandatory DB/services)
+- Client-hosted isolated instance kit + upgrade/rollback runbooks
+- Optional Teams add-on with role-based access controls
+- Collaboration audit trail and export
+- Architect v2 expansion (preflight checks, confidence-based recovery)
+- Commentary v2 polish (plain-English default + contract/cadence tests)
+- First-party template pack coverage + CI smoke tests
+- Long-run performance/server-offload hardening
+- Multi-instance safe update channels and health-verified rollbacks
 
 ---
 
@@ -125,7 +134,7 @@ If deployment fails:
 When behavior changes, update docs in the same PR/commit set:
 - `CHANGELOG.md` for user-facing behavior
 - `README.md` for setup/usage changes
-- `1.0.2.md` for roadmap status updates
+- `v1.0.4.md` and `ROADMAP.md` for roadmap status updates
 
 Roadmap items must be marked clearly:
 - `[x]` complete

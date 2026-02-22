@@ -7,6 +7,9 @@ import { chromium } from 'playwright';
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const outDir = process.env.README_SCREENSHOT_DIR || 'docs/screenshots';
 const secure = baseUrl.startsWith('https://');
+const pkg = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
+const expectedVersion = process.env.EXPECTED_VERSION || pkg.version;
+const versionLabel = `v${expectedVersion}`;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -42,6 +45,14 @@ async function waitReady() {
 async function captureHome() {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
+  await page.waitForFunction(
+    (label) => {
+      const text = document.body.innerText || '';
+      return text.includes(label) && !/server error|error details|custom error/i.test(text);
+    },
+    versionLabel,
+    { timeout: 45000 },
+  );
   await page.screenshot({ path: path.join(outDir, 'home.png'), fullPage: true });
 }
 
@@ -67,10 +78,10 @@ async function runPromptCapture({ prompt, token, outputName }) {
 
 async function captureChangelog() {
   await page.goto(`${baseUrl}/changelog`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForFunction(() => {
+  await page.waitForFunction((label) => {
     const text = document.body.innerText || '';
-    return text.includes('Current version: v1.0.3');
-  });
+    return text.includes(`Current version: ${label}`) && !/server error|error details|custom error/i.test(text);
+  }, versionLabel);
   await page.screenshot({ path: path.join(outDir, 'changelog.png'), fullPage: true });
 }
 

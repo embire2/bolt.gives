@@ -399,13 +399,12 @@ ${value.content}
 }
 
 function navigateChat(nextId: string) {
-  /**
-   * FIXME: Using the intended navigate function causes a rerender for <Chat /> that breaks the app.
-   *
-   * `navigate(`/chat/${nextId}`, { replace: true });`
-   */
-  const url = new URL(window.location.href);
-  url.pathname = `/chat/${nextId}`;
+  const targetPath = `/chat/${nextId}`;
 
-  window.history.replaceState({}, '', url);
+  if (window.location.pathname === targetPath) {
+    return;
+  }
+
+  // Use full navigation to avoid stale in-memory chat state when switching conversations.
+  window.location.assign(targetPath);
 }

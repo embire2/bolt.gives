@@ -30,6 +30,21 @@ import {
 } from '~/lib/runtime/autonomy';
 
 const { saveAs } = fileSaver;
+const DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS = 100;
+
+function resolveActionStreamSampleIntervalMs(): number {
+  const rawValue = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_ACTION_STREAM_SAMPLE_INTERVAL_MS;
+  const parsed = Number(rawValue);
+
+  if (Number.isFinite(parsed) && parsed >= 16 && parsed <= 2_000) {
+    return Math.floor(parsed);
+  }
+
+  return DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS;
+}
+
+const ACTION_STREAM_SAMPLE_INTERVAL_MS = resolveActionStreamSampleIntervalMs();
 
 export interface ArtifactState {
   id: string;
@@ -558,7 +573,32 @@ export class WorkbenchStore {
   }
 
   abortAllActions() {
-    // TODO: what do we wanna do and how do we wanna recover from this?
+    const artifacts = Object.values(this.artifacts.get());
+    let abortedActions = 0;
+
+    for (const artifact of artifacts) {
+      const actions = artifact.runner.actions.get();
+
+      for (const action of Object.values(actions)) {
+        if (action.status === 'running' || action.status === 'pending') {
+          action.abort();
+          abortedActions++;
+        }
+      }
+    }
+
+    if (abortedActions === 0) {
+      return;
+    }
+
+    const abortEvent: InteractiveStepRunnerEvent = {
+      type: 'error',
+      timestamp: new Date().toISOString(),
+      description: 'Execution aborted',
+      error: `Aborted ${abortedActions} action${abortedActions === 1 ? '' : 's'} by user request.`,
+    };
+
+    this.interactiveStepEvents.set([...this.interactiveStepEvents.get(), abortEvent].slice(-200));
   }
 
   setReloadedMessages(messages: string[]) {
@@ -765,7 +805,7 @@ export class WorkbenchStore {
 
   actionStreamSampler = createSampler(async (data: ActionCallbackData, isStreaming: boolean = false) => {
     return await this._runAction(data, isStreaming);
-  }, 100); // TODO: remove this magic number to have it configurable
+  }, ACTION_STREAM_SAMPLE_INTERVAL_MS);
 
   #getArtifact(id: string) {
     const artifacts = this.artifacts.get();

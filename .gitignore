@@ -51,3 +51,13 @@ docs/instructions/Roadmap.md
 .cursorrules
 .qodo
 .playwright-installed
+
+# local automation/test artifacts
+scripts/.tmp-*
+scripts/.tmp-replit-frames/
+.screenshots-dev.log
+
+# local operator files (not project source)
+bolt15february2026.tar.gz
+replit.mp4
+favicon.png

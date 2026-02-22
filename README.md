@@ -279,7 +279,13 @@ Before pushing changes:
 pnpm run typecheck
 pnpm run lint
 pnpm test
+pnpm run gate:release:live
 ```
+
+`gate:release:live` checks:
+- both live domains (`alpha1.bolt.gives` and `ahmad.bolt.gives`) return healthy pages
+- live version + changelog version match `package.json`
+- screenshot capture assertions pass (no server-error capture states, expected dimensions, non-empty output)
 
 ## Mailing List
 

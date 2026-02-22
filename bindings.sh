@@ -1,33 +1,25 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-bindings=""
+SOURCE_FILE="${1:-.env.local}"
+TARGET_FILE="${2:-.dev.vars}"
 
-# Function to extract variable names from the TypeScript interface
-extract_env_vars() {
-  grep -o '[A-Z_]\+:' worker-configuration.d.ts | sed 's/://'
-}
-
-# First try to read from .env.local if it exists
-if [ -f ".env.local" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    if [[ ! "$line" =~ ^# ]] && [[ -n "$line" ]]; then
-      name=$(echo "$line" | cut -d '=' -f 1)
-      value=$(echo "$line" | cut -d '=' -f 2-)
-      value=$(echo $value | sed 's/^"\(.*\)"$/\1/')
-      bindings+="--binding ${name}=${value} "
-    fi
-  done < .env.local
-else
-  # If .env.local doesn't exist, use environment variables defined in .d.ts
-  env_vars=($(extract_env_vars))
-  # Generate bindings for each environment variable if it exists
-  for var in "${env_vars[@]}"; do
-    if [ -n "${!var}" ]; then
-      bindings+="--binding ${var}=${!var} "
-    fi
-  done
+if [[ ! -f "${SOURCE_FILE}" ]]; then
+  exit 0
 fi
 
-bindings=$(echo $bindings | sed 's/[[:space:]]*$//')
+awk -F= '
+  /^\s*#/ || NF == 0 { next }
+  {
+    key=$1
+    sub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+    value=substr($0, index($0, "=") + 1)
+    if (key != "") {
+      print key "=" value
+    }
+  }
+' "${SOURCE_FILE}" > "${TARGET_FILE}"
 
-echo $bindings
+chmod 600 "${TARGET_FILE}" || true
+
+echo "bindings.sh: wrote ${TARGET_FILE}. Use wrangler pages dev without --binding flags." >&2
