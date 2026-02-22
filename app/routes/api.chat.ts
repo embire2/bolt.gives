@@ -34,6 +34,7 @@ import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
+import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
@@ -213,9 +214,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           lastCommentaryPhase = phase;
 
+          const order = progressCounter++;
+          const fallbackMessage = message || 'I am still working and will post another update shortly.';
+          const effectiveMessage =
+            status === 'in-progress'
+              ? getCommentaryPoolMessage(phase, requestStartedAt + order, fallbackMessage)
+              : fallbackMessage;
+
           const contracted = enforceCommentaryContract({
             phase,
-            message,
+            message: effectiveMessage,
             detail,
           });
 
@@ -223,7 +231,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             type: 'agent-commentary',
             phase,
             status,
-            order: progressCounter++,
+            order,
             message: contracted.message,
             timestamp: new Date().toISOString(),
             detail: contracted.detail,

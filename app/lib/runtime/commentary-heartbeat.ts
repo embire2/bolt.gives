@@ -1,4 +1,5 @@
 import type { AgentCommentaryPhase } from '~/types/context';
+import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
 
 export const COMMENTARY_HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -19,10 +20,16 @@ export function buildCommentaryHeartbeat(
 } {
   const phase = lastPhase === 'recovery' ? 'recovery' : 'action';
   const elapsed = formatElapsed(elapsedMs);
+  const heartbeatIndex = Math.max(1, Math.floor(elapsedMs / COMMENTARY_HEARTBEAT_INTERVAL_MS));
+  const message = getCommentaryPoolMessage(
+    phase,
+    heartbeatIndex,
+    'Still working on your request and checking each result.',
+  );
 
   return {
     phase,
-    message: 'Still working on your request and checking each result.',
+    message,
     detail: `Key changes: Work is still in progress (${elapsed} elapsed).
 Next: I will share the next visible update within 60 seconds.`,
   };

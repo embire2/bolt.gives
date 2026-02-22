@@ -31,6 +31,7 @@
     "dockerrun": "docker run -it -d --name bolt-ai-live -p 5173:5173 --env-file .env.local bolt-ai",
     "dockerbuild:prod": "docker build -t bolt-ai:production -t bolt-ai:latest --target bolt-ai-production .",
     "dockerbuild": "docker build -t bolt-ai:development -t bolt-ai:latest --target development .",
+    "commentary:generate": "node scripts/generate-commentary-pool.mjs",
     "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc --pretty false --incremental",
     "gate:release": "node scripts/release-gate.mjs",
     "gate:release:live": "RELEASE_GATE_DOMAINS=https://alpha1.bolt.gives,https://ahmad.bolt.gives node scripts/release-gate.mjs",
