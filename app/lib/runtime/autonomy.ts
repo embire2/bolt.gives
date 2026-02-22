@@ -8,7 +8,7 @@ export const AUTONOMY_MODE_STORAGE_KEY = 'bolt_autonomy_mode_v1';
 const TOOL_MUTATION_HINTS = /(write|delete|update|create|deploy|exec|run|command|mutation|insert|drop)/i;
 const TOOL_READ_HINTS = /(search|browse|read|get|list|fetch|inspect|query|status|find|lookup)/i;
 
-const SHELL_MUTATING_TOKENS = /[;&|><]/;
+const SHELL_MUTATING_TOKENS = /[;&|]/;
 const READ_ONLY_SHELL_PREFIXES = [
   /^ls(\s|$)/i,
   /^pwd(\s|$)/i,
@@ -22,6 +22,48 @@ const READ_ONLY_SHELL_PREFIXES = [
   /^pnpm\s+(test|run\s+test|run\s+lint)(\s|$)/i,
   /^npm\s+run\s+(test|lint)(\s|$)/i,
 ];
+const SAFE_AUTO_SHELL_PREFIXES = [
+  ...READ_ONLY_SHELL_PREFIXES,
+  /^(pnpm|npm)\s+(install|ci|add)(\s|$)/i,
+  /^pnpm\s+dlx\s+create-vite(?:@[^\s]+)?(\s|$)/i,
+  /^npm\s+create\s+vite(?:@[^\s]+)?(\s|$)/i,
+  /^npx\s+--yes\s+create-[a-z0-9@/_\-.]+(\s|$)/i,
+  /^npx\s+--yes\s+sv\s+create(\s|$)/i,
+  /^npx\s+--yes\s+@angular\/cli(?:@[^\s]+)?\s+new(\s|$)/i,
+  /^npm\s+pkg\s+set(\s|$)/i,
+  /^(pnpm|npm)\s+run\s+(dev|start|build|test|lint)(\s|$)/i,
+];
+
+function splitShellSegments(command: string): string[] {
+  return command
+    .split(/\s*&&\s*/g)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function stripShellRedirections(segment: string): string {
+  // Treat redirection as neutral for safety classification.
+  return segment
+    .replace(/\s+\d?>&\d+/g, '')
+    .replace(/\s+[<>]\s*[^&\s]+/g, '')
+    .trim();
+}
+
+function isCommandChainSafe(segments: string[], allowPrefixes: RegExp[]): boolean {
+  return segments.every((segment) => {
+    const normalized = stripShellRedirections(segment);
+
+    if (!normalized) {
+      return false;
+    }
+
+    if (SHELL_MUTATING_TOKENS.test(normalized)) {
+      return false;
+    }
+
+    return allowPrefixes.some((pattern) => pattern.test(normalized));
+  });
+}
 
 export function getAutonomyModeLabel(mode: AutonomyMode): string {
   switch (mode) {
@@ -59,11 +101,29 @@ export function isReadOnlyShellCommand(command: string): boolean {
     return false;
   }
 
-  if (SHELL_MUTATING_TOKENS.test(normalized)) {
+  if (/[;|]/.test(normalized)) {
     return false;
   }
 
-  return READ_ONLY_SHELL_PREFIXES.some((pattern) => pattern.test(normalized));
+  const segments = splitShellSegments(normalized);
+
+  return isCommandChainSafe(segments, READ_ONLY_SHELL_PREFIXES);
+}
+
+export function isSafeAutoShellCommand(command: string): boolean {
+  const normalized = command.trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (/[;|]/.test(normalized)) {
+    return false;
+  }
+
+  const segments = splitShellSegments(normalized);
+
+  return isCommandChainSafe(segments, SAFE_AUTO_SHELL_PREFIXES);
 }
 
 export function isActionAutoAllowed(action: BoltAction, mode: AutonomyMode): boolean {
@@ -76,7 +136,15 @@ export function isActionAutoAllowed(action: BoltAction, mode: AutonomyMode): boo
   }
 
   if (mode === 'auto-apply-safe') {
-    return action.type === 'file';
+    if (action.type === 'file') {
+      return true;
+    }
+
+    if (action.type === 'shell' || action.type === 'start') {
+      return isSafeAutoShellCommand(action.content);
+    }
+
+    return false;
   }
 
   // read-only
