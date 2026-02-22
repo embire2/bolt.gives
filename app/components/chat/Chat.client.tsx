@@ -69,6 +69,7 @@ import {
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent, UsageDataEvent } from '~/types/context';
+import { requestLikelyNeedsMutatingActions } from '~/lib/runtime/mutating-intent';
 
 const logger = createScopedLogger('Chat');
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
@@ -1146,6 +1147,33 @@ export const ChatImpl = memo(
         return;
       }
 
+      const currentAutonomyMode = workbenchStore.autonomyMode.get();
+
+      if (currentAutonomyMode === 'read-only' && requestLikelyNeedsMutatingActions(finalMessageContent)) {
+        logger.warn('Read-only autonomy mode cannot satisfy mutating request', {
+          messagePreview: finalMessageContent.slice(0, 180),
+        });
+
+        const shouldSwitchMode =
+          typeof window !== 'undefined'
+            ? window.confirm(
+                [
+                  'This request needs file writes and shell commands, but Autonomy is currently Read-Only.',
+                  '',
+                  'Switch to Safe Auto and continue now?',
+                ].join('\n'),
+              )
+            : false;
+
+        if (!shouldSwitchMode) {
+          toast.error('Request not started. Switch Autonomy to Safe Auto or Full Auto to build/run apps.');
+          return;
+        }
+
+        workbenchStore.setAutonomyMode('auto-apply-safe');
+        toast.info('Autonomy switched to Safe Auto for this request.');
+      }
+
       const selection = await resolveModelSelection(finalMessageContent, model, provider);
       const effectiveModel = selection.model;
       const effectiveProvider = selection.provider;
@@ -1221,10 +1249,23 @@ export const ChatImpl = memo(
         setFakeLoading(true);
 
         if (autoSelectTemplate) {
+          logger.info('Starter template selection started', {
+            model: effectiveModel,
+            provider: effectiveProvider.name,
+            messagePreview: finalMessageContent.slice(0, 180),
+          });
+
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
             model: effectiveModel,
             provider: effectiveProvider,
+          });
+
+          logger.info('Starter template selected', {
+            template,
+            title,
+            model: effectiveModel,
+            provider: effectiveProvider.name,
           });
 
           if (template !== 'blank') {
@@ -1240,6 +1281,13 @@ export const ChatImpl = memo(
 
             if (temResp) {
               const { assistantMessage, userMessage } = temResp;
+              const starterActionCount = (assistantMessage.match(/<boltAction\b/g) || []).length;
+              logger.info('Starter template import prepared', {
+                template,
+                starterActionCount,
+                usingLocalFallback: /fallback starter/i.test(userMessage),
+              });
+
               const userMessageText = buildUserMessageText(finalMessageContent);
               const attachments = await buildChatAttachments();
 
@@ -1266,6 +1314,10 @@ export const ChatImpl = memo(
 
               const reloadOptions = attachments ? { experimental_attachments: attachments } : undefined;
 
+              logger.info('Starter template chat reload triggered', {
+                template,
+                hasAttachments: Boolean(attachments?.length),
+              });
               reload(reloadOptions);
               setInput('');
               Cookies.remove(PROMPT_COOKIE_KEY);

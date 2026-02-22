@@ -103,6 +103,22 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'autonomy-read-only-block',
+    title: 'Autonomy mode blocked mutating action',
+    source: 'terminal',
+    patterns: [
+      /Read-Only mode blocked a mutating action/i,
+      /Read-Only mode prevented this project action/i,
+      /Blocked by read-only autonomy mode/i,
+    ],
+    maxAutoAttempts: 1,
+    guidance: [
+      'This workflow is blocked by Read-Only autonomy mode.',
+      'Switch autonomy to Safe Auto or Full Auto before running scaffold/install/start actions.',
+      'Retry the original request once autonomy mode allows mutating actions.',
+    ],
+  },
+  {
     id: 'json-command-envelope',
     title: 'JSON-wrapped shell command',
     source: 'terminal',

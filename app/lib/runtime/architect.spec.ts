@@ -93,6 +93,19 @@ describe('diagnoseArchitectIssue', () => {
     expect(diagnosis?.issueId).toBe('npm-spawn-enoent');
   });
 
+  it('detects autonomy read-only blocks for mutating actions', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'warning',
+      title: 'Action blocked by autonomy mode',
+      description:
+        'Read-Only mode prevented this project action. Switch to Safe Auto or Full Auto to scaffold/install/run apps.',
+      content: 'Blocked action type: shell.',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('autonomy-read-only-block');
+  });
+
   it('detects unenv fs runtime limitations for update actions', () => {
     const diagnosis = diagnoseArchitectIssue({
       type: 'error',

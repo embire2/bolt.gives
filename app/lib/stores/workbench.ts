@@ -28,8 +28,10 @@ import {
   isActionAutoAllowed,
   type AutonomyMode,
 } from '~/lib/runtime/autonomy';
+import { createScopedLogger } from '~/utils/logger';
 
 const { saveAs } = fileSaver;
+const logger = createScopedLogger('WorkbenchStore');
 const DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS = 100;
 
 function resolveActionStreamSampleIntervalMs(): number {
@@ -718,6 +720,12 @@ export class WorkbenchStore {
 
     if (!isActionAutoAllowed(data.action, autonomyMode)) {
       if (autonomyMode === 'read-only') {
+        logger.warn('Autonomy read-only blocked action', {
+          actionType: data.action.type,
+          actionId: data.actionId,
+          artifactId,
+          actionTarget: data.action.type === 'file' ? data.action.filePath : data.action.content,
+        });
         artifact.runner.actions.setKey(data.actionId, {
           ...action,
           status: 'failed',
@@ -728,8 +736,10 @@ export class WorkbenchStore {
         this.actionAlert.set({
           type: 'warning',
           title: 'Action blocked by autonomy mode',
-          description: 'Read-only mode blocked a mutating action.',
-          content: `${data.action.type} action was blocked.`,
+          description:
+            'Read-Only mode prevented this project action. Switch to Safe Auto or Full Auto to scaffold/install/run apps.',
+          content: `Blocked action type: ${data.action.type}.`,
+          source: 'terminal',
         });
 
         return;
