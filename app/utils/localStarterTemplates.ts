@@ -16,86 +16,86 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
   'Expo App': {
     scaffoldCommand: 'npx --yes create-expo-app@latest . --template blank-typescript',
     stackLabel: 'Expo + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Basic Astro': {
     scaffoldCommand: 'npm create astro@latest . -- --template basics --yes --install',
     stackLabel: 'Astro',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'NextJS Shadcn': {
     scaffoldCommand:
       'npx --yes create-next-app@latest . --ts --tailwind --eslint --app --use-npm --yes --no-src-dir --import-alias "@/*"',
     stackLabel: 'Next.js + Tailwind',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   NextJS: {
     scaffoldCommand:
       'npx --yes create-next-app@latest . --ts --eslint --app --use-npm --yes --no-tailwind --no-src-dir --import-alias "@/*"',
     stackLabel: 'Next.js + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Vite Shadcn': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template react-ts',
     stackLabel: 'Vite + React + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Qwik Typescript': {
     scaffoldCommand: 'npm create qwik@latest . -- --yes --typescript',
     stackLabel: 'Qwik + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Remix Typescript': {
     scaffoldCommand: 'npx --yes create-remix@latest . --template remix --no-git --install',
     stackLabel: 'Remix + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   Slidev: {
     scaffoldCommand: 'npx --yes create-slidev@latest .',
     stackLabel: 'Slidev',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   Sveltekit: {
     scaffoldCommand: 'npx --yes sv create . --template minimal --types ts --install npm --yes',
     stackLabel: 'SvelteKit + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Vanilla Vite': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vanilla',
     stackLabel: 'Vite + Vanilla JavaScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Vite React': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template react-ts',
     stackLabel: 'Vite + React + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Node Express API': {
     scaffoldCommand:
       "npm init -y && npm pkg set type=module scripts.start=\"node index.js\" && npm install express cors && printf \"import express from 'express';\\nimport cors from 'cors';\\nconst app = express();\\napp.use(cors());\\napp.get('/api/health', (_req, res) => res.json({ ok: true }));\\nconst port = Number(process.env.PORT || 5173);\\napp.listen(port, '0.0.0.0', () => console.log('Server running on ' + port));\\n\" > index.js",
     stackLabel: 'Node.js + Express',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   'Vite Typescript': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vanilla-ts',
     stackLabel: 'Vite + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   Vue: {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vue-ts',
     stackLabel: 'Vue + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   Angular: {
     scaffoldCommand:
       'npx --yes @angular/cli@17 new starter --defaults --skip-git --routing --style css && cp -r starter/. . && rm -rf starter',
     stackLabel: 'Angular',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
   SolidJS: {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template solid-ts',
     stackLabel: 'SolidJS + TypeScript',
-    installCommand: 'ls package.json >/dev/null 2>&1 && npm install',
+    installCommand: 'pnpm install',
   },
 };
 

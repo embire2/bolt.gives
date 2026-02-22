@@ -30,6 +30,7 @@ describe('getTemplates', () => {
     expect(result).not.toBeNull();
     expect(result?.assistantMessage).toContain('<boltAction type="shell">');
     expect(result?.assistantMessage).toContain('create-vite@7.1.0');
+    expect(result?.assistantMessage).toContain('pnpm install');
     expect(result?.assistantMessage).toContain('filePath="README.md"');
     expect(result?.userMessage).toContain('Fallback starter note');
     expect(result?.userMessage).toContain('queued automatically');

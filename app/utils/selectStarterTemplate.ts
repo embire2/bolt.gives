@@ -407,7 +407,7 @@ NO NOT EDIT/WRITE ANY FILES THAT ALREADY EXIST IN THE PROJECT AND DOES NOT NEED 
 ---
 Now that the Template is imported please continue with my original request
 
-IMPORTANT: Dont Forget to install the dependencies before running the app by using \`npm install && npm run dev\`
+IMPORTANT: Dont Forget to install the dependencies before running the app by using \`pnpm install && pnpm run dev\`
 `;
 
   return {
