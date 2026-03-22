@@ -110,6 +110,43 @@ describe('InteractiveStepRunner', () => {
     expect(stderrEvents[0]?.output).toBe('warn: details');
   });
 
+  it('suppresses noisy install progress chatter in streamed stdout events', async () => {
+    const runner = new InteractiveStepRunner({
+      async executeStep(_step, context) {
+        context.onStdout('\u001b[1AProgress: resolved 109, reused 0, downloaded 61, added 0\\r\\n');
+        context.onStdout('\u001b[1AProgress: resolved 112, reused 0, downloaded 65, added 0\\r\\n');
+        context.onStdout('Done in 11.5s\\r\\n');
+
+        return {
+          exitCode: 0,
+          stdout: 'Progress: resolved 112, reused 0, downloaded 65, added 0\\nDone in 11.5s',
+          stderr: '',
+        };
+      },
+    });
+    const stdoutEvents: Array<{ type: string; output?: string }> = [];
+    const stepEndEvents: Array<{ type: string; output?: string }> = [];
+
+    runner.addEventListener('event', (event) => {
+      const detail = (event as CustomEvent<{ type: string; output?: string }>).detail;
+
+      if (detail.type === 'stdout') {
+        stdoutEvents.push(detail);
+      }
+
+      if (detail.type === 'step-end') {
+        stepEndEvents.push(detail);
+      }
+    });
+
+    const result = await runner.run([{ description: 'install', command: ['pnpm', 'install'] }]);
+
+    expect(result.status).toBe('complete');
+    expect(stdoutEvents).toHaveLength(1);
+    expect(stdoutEvents[0]?.output).toContain('[progress] Progress: resolved 112');
+    expect(stepEndEvents[0]?.output).toContain('Done in 11.5s');
+  });
+
   it('stops immediately on non-zero exit code and emits error', async () => {
     let executions = 0;
     const { runner, events } = createRunner({

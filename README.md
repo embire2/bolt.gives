@@ -15,13 +15,13 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
-  <a href="v1.0.4.md">v1.0.4 roadmap</a> ·
+  <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
 </p>
 
 ## App Overview
 
-Current version: **v1.0.3**
+Current version: **v3.0.0**
 
 bolt.gives is an open-source, free, collaborative AI coding workspace.
 
@@ -34,6 +34,24 @@ Core principles:
 Platform support:
 - Use in browser: Windows/macOS/Linux.
 - Install/self-host: **Ubuntu 18.04+ only**.
+
+Release verdict for `v3.0.0`:
+- Local gates passed: `typecheck`, `lint`, `test`, `build`
+- Local dev smoke passed
+- Live OpenAI `gpt-5.4` E2E passed on `https://alpha1.bolt.gives`
+- Live smoke passed on `https://ahmad.bolt.gives`
+
+What `v3.0.0` specifically fixes:
+- Starter fallback runs now continue into the requested app instead of stopping at the Vite starter shell.
+- Provider/model/API-key normalization is stricter, so invalid pairings are caught earlier.
+- Runtime file writes are path-safe, which prevents generated files from being written into broken nested paths.
+- Helper services reuse occupied collaboration and web-browse ports instead of crashing on startup.
+- Build, test, and typecheck scripts now run with an 18 GB Node heap baseline to stop local OOM failures during large runs.
+
+What is still true after `v3.0.0`:
+- The validated OpenAI core path is now working.
+- The browser client is still heavier than it should be, especially during long projects.
+- `v1.0.4.md` remains focused on moving more heavy lifting off the user's machine and onto the server.
 
 ## Screenshots
 
@@ -52,13 +70,13 @@ System in action:
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
-## Roadmap (v1.0.4)
+## Roadmap (Post-3.0)
 
 Roadmap files:
 - Detailed plan: `v1.0.4.md`
 - Summary tracker: `ROADMAP.md`
 
-v1.0.4 mission: make frozen windows mid-project a thing of the past by moving heavy lifting from the user's machine to server-side execution.
+Current roadmap focus: make frozen windows mid-project a thing of the past by moving heavy lifting from the user's machine to server-side execution.
 
 P0 targets:
 - Zero-infra runtime guarantee (no mandatory DB/env).
@@ -72,7 +90,7 @@ P0 targets:
 - Cost estimation integrity across providers.
 - Safe multi-instance update channels with retry/rollback.
 
-## Current Features (v1.0.3)
+## Current Features (v3.0.0)
 
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Anti-stall detection and auto-recovery events in timeline.
@@ -85,6 +103,8 @@ P0 targets:
 - First-party deployment support and update manager.
 - Cost estimation subsystem with cross-provider normalization.
 - Long-run timeline de-bloat and feed virtualization.
+- Path-safe artifact writing and starter-continuation safeguards so fallback scaffolds continue into a real app instead of stopping at the starter.
+- Resilient dev-side helper services that reuse existing collaboration/web-browse ports instead of crashing on `EADDRINUSE`.
 
 ## Installation (Ubuntu 18.04+ Only, Verbose, Tested)
 
@@ -175,6 +195,12 @@ ss -ltnp | grep -E ':(5173|1234|4179)\\b' || true
 pnpm run dev
 ```
 
+The dev/build/test scripts now set a safe 18 GB Node heap automatically. If you run individual commands outside the package scripts, keep the same baseline:
+
+```bash
+export NODE_OPTIONS=--max-old-space-size=18432
+```
+
 Default endpoints:
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
@@ -191,14 +217,14 @@ Open `http://localhost:5173`, then verify:
 ### 10. Production build (recommended high-memory path)
 
 ```bash
-pnpm run build:highmem
+pnpm run build
 pnpm run start
 ```
 
-If needed, enforce memory explicitly:
+If you need to call the build tool directly outside the npm scripts, enforce the same memory explicitly:
 
 ```bash
-NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+NODE_OPTIONS=--max-old-space-size=18432 pnpm run build
 ```
 
 ## Deploying To Cloudflare Pages

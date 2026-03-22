@@ -1,8 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useState } from 'react';
+import { useStore } from '@nanostores/react';
 import type { ProgressAnnotation } from '~/types/context';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
+import { workbenchStore } from '~/lib/stores/workbench';
+import { deriveProgressMessage } from './execution-status';
 
 export default function ProgressCompilation({ data }: { data?: ProgressAnnotation[] }) {
   const [progressList, setProgressList] = React.useState<ProgressAnnotation[]>([]);
@@ -86,6 +89,10 @@ export default function ProgressCompilation({ data }: { data?: ProgressAnnotatio
 }
 
 const ProgressItem = ({ progress }: { progress: ProgressAnnotation }) => {
+  const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
+  const displayMessage =
+    progress.status === 'complete' ? deriveProgressMessage([progress], stepRunnerEvents) : progress.message;
+
   return (
     <motion.div
       className={classNames('flex text-sm gap-3')}
@@ -104,7 +111,7 @@ const ProgressItem = ({ progress }: { progress: ProgressAnnotation }) => {
         </div>
         {/* {x.label} */}
       </div>
-      {progress.message}
+      {displayMessage}
     </motion.div>
   );
 };

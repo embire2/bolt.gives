@@ -4,18 +4,22 @@ import type { ITerminal } from '~/types/terminal';
 import { newBoltShellProcess, newShellProcess } from '~/utils/shell';
 import { coloredText } from '~/utils/terminal';
 
+const hotData = import.meta.hot?.data ?? {};
+
 export class TerminalStore {
   #webcontainer: Promise<WebContainer>;
   #terminals: Array<{ terminal: ITerminal; process: WebContainerProcess }> = [];
   #boltTerminal = newBoltShellProcess();
 
-  showTerminal: WritableAtom<boolean> = import.meta.hot?.data.showTerminal ?? atom(true);
+  showTerminal: WritableAtom<boolean> = hotData?.showTerminal ?? atom(true);
 
   constructor(webcontainerPromise: Promise<WebContainer>) {
     this.#webcontainer = webcontainerPromise;
 
     if (import.meta.hot) {
-      import.meta.hot.data.showTerminal = this.showTerminal;
+      const hot = import.meta.hot as any;
+      hot.data ??= {};
+      hot.data.showTerminal = this.showTerminal;
     }
   }
   get boltTerminal() {

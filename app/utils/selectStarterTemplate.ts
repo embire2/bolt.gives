@@ -60,8 +60,7 @@ Instructions:
 4. Consider both technical requirements and tags
 5. If no perfect match exists, recommend the closest option
 
-Important: Provide only the selection tags in your response, no additional text.
-MOST IMPORTANT: YOU DONT HAVE TIME TO THINK JUST START RESPONDING BASED ON HUNCH 
+Important: Provide only the selection tags in your response, with no extra commentary.
 `;
 
 const templates: Template[] = STARTER_TEMPLATES.filter((t) => !t.name.includes('shadcn'));
@@ -266,17 +265,27 @@ const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; p
   }
 };
 
-export async function getTemplates(templateName: string, title?: string) {
+export async function getTemplates(templateName: string, title?: string, originalRequest?: string) {
   const template = STARTER_TEMPLATES.find((t) => t.name == templateName);
 
   if (!template) {
     return null;
   }
 
-  const githubRepo = template.githubRepo;
-  const remoteFiles = await getGitHubRepoContent(githubRepo);
   const localFallbackFiles = getLocalStarterTemplateFiles(template);
-  const usingLocalFallback = remoteFiles.length === 0 && localFallbackFiles.length > 0;
+  let remoteFiles: { name: string; path: string; content: string }[] = [];
+
+  /*
+   * Prefer deterministic local starter bundles first.
+   * This avoids startup regressions when external template hosts are rate-limited/unavailable.
+   * Remote template fetch is only attempted when no local starter exists for the selected template.
+   */
+  if (localFallbackFiles.length === 0) {
+    const githubRepo = template.githubRepo;
+    remoteFiles = await getGitHubRepoContent(githubRepo);
+  }
+
+  const usingLocalFallback = localFallbackFiles.length > 0 || remoteFiles.length === 0;
   const localFallback = usingLocalFallback ? getLocalStarterTemplateFallback(template) : null;
   const files = usingLocalFallback ? localFallbackFiles : remoteFiles;
 
@@ -364,11 +373,14 @@ ${templatePromptFile.content}
 `;
   }
 
+  const normalizedOriginalRequest = (originalRequest || '').trim();
+
   if (usingLocalFallback) {
     userMessage += `Fallback starter note:
 Remote template download was unavailable, so a built-in ${template.label} starter fallback has been loaded.
 The initial scaffold, dependency install, and dev server start actions were queued automatically.
 Continue from the generated starter. Only re-run scaffolding if recovery is needed.
+Do not stop after scaffold/install/start: continue implementing the original user request, replace any fallback placeholder UI, verify preview, and only then provide a final response.
 ---
 `;
   }
@@ -405,16 +417,21 @@ If you need to make changes to functionality, create new files instead of modify
   userMessage += `
 ---
 template import is done, and you can now use the imported files,
-edit only the files that need to be changed, and you can create new files as needed.
-NO NOT EDIT/WRITE ANY FILES THAT ALREADY EXIST IN THE PROJECT AND DOES NOT NEED TO BE MODIFIED
+edit only the files that need to be changed, and create new files when needed.
+replace starter placeholder content instead of leaving the default fallback screen in place.
 ---
-Now that the Template is imported please continue with my original request
+Now that the Template is imported please continue with my original request.
+${normalizedOriginalRequest ? `Original request:\n${normalizedOriginalRequest}\n---` : ''}
 
-IMPORTANT: Dont Forget to install the dependencies before running the app by using \`pnpm install && pnpm run dev\`
+IMPORTANT: If dependencies are already installed, do not repeat installation unnecessarily.
+IMPORTANT: Keep the dev server running or restart it if required after code changes.
+IMPORTANT: After runtime is healthy, continue feature implementation for the user request and finish with a clear completion summary.
+IMPORTANT: Never leave the built-in fallback screen visible in the final app.
 `;
 
   return {
     assistantMessage,
     userMessage,
+    usingLocalFallback,
   };
 }

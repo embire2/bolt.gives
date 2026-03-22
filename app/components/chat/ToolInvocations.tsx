@@ -22,11 +22,15 @@ const highlighterOptions = {
   themes: ['light-plus', 'dark-plus'],
 };
 
+const hotData = import.meta.hot?.data ?? {};
+
 const jsonHighlighter: HighlighterGeneric<BundledLanguage, BundledTheme> =
-  import.meta.hot?.data.jsonHighlighter ?? (await createHighlighter(highlighterOptions));
+  hotData?.jsonHighlighter ?? (await createHighlighter(highlighterOptions));
 
 if (import.meta.hot) {
-  import.meta.hot.data.jsonHighlighter = jsonHighlighter;
+  const hot = import.meta.hot as any;
+  hot.data ??= {};
+  hot.data.jsonHighlighter = jsonHighlighter;
 }
 
 interface JsonCodeBlockProps {

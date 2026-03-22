@@ -11,6 +11,7 @@ const logger = createScopedLogger('EnhancedMessageParser');
 export class EnhancedStreamingMessageParser extends StreamingMessageParser {
   private _processedCodeBlocks = new Map<string, Set<string>>();
   private _artifactCounter = 0;
+  private _messageModes = new Map<string, 'raw' | 'enhanced'>();
 
   // Optimized command pattern lookup
   private _commandPatternMap = new Map<string, RegExp>([
@@ -33,21 +34,38 @@ export class EnhancedStreamingMessageParser extends StreamingMessageParser {
   }
 
   parse(messageId: string, input: string): string {
-    // First try the normal parsing
-    let output = super.parse(messageId, input);
-
-    // If no artifacts were detected, check for code blocks that should be files
-    if (!this._hasDetectedArtifacts(input)) {
-      const enhancedInput = this._detectAndWrapCodeBlocks(messageId, input);
-
-      if (enhancedInput !== input) {
-        // Reset and reparse with enhanced input
-        this.reset();
-        output = super.parse(messageId, enhancedInput);
-      }
+    // Native artifact stream: parse directly and keep raw mode.
+    if (this._hasDetectedArtifacts(input)) {
+      this._messageModes.set(messageId, 'raw');
+      return super.parse(messageId, input);
     }
 
-    return output;
+    const enhancedInput = this._detectAndWrapCodeBlocks(messageId, input);
+    const shouldUseEnhanced = enhancedInput !== input;
+    const currentMode = this._messageModes.get(messageId);
+
+    if (!shouldUseEnhanced) {
+      this._messageModes.set(messageId, 'raw');
+      return super.parse(messageId, input);
+    }
+
+    /*
+     * Switch this specific message to enhanced mode only once.
+     * Resetting the whole parser here causes duplicate action emission and repeated file writes.
+     */
+    if (currentMode !== 'enhanced') {
+      this.resetMessage(messageId);
+      this._messageModes.set(messageId, 'enhanced');
+    }
+
+    return super.parse(messageId, enhancedInput);
+  }
+
+  reset() {
+    super.reset();
+    this._processedCodeBlocks.clear();
+    this._messageModes.clear();
+    this._artifactCounter = 0;
   }
 
   private _hasDetectedArtifacts(input: string): boolean {
@@ -517,11 +535,5 @@ ${content.trim()}
       // If it looks like a script, let the file detection patterns handle it
       return match;
     });
-  }
-
-  reset() {
-    super.reset();
-    this._processedCodeBlocks.clear();
-    this._artifactCounter = 0;
   }
 }

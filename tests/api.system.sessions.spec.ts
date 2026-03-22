@@ -1,3 +1,4 @@
+import { lookup } from 'node:dns/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { action, loader } from '../app/routes/api.sessions';
 import { normalizeSessionPayload, restoreConversationFromPayload } from '../app/lib/services/session-payload';
@@ -32,7 +33,25 @@ function isValidUrl(value: unknown) {
   }
 }
 
-const hasSupabase = isValidUrl(supabaseUrl) && !isPlaceholderValue(supabaseKey);
+async function canResolveSupabaseUrl(value: unknown) {
+  if (!isValidUrl(value)) {
+    return false;
+  }
+
+  try {
+    const { hostname } = new URL(String(value));
+    await lookup(hostname);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const hasSupabase =
+  isValidUrl(supabaseUrl) &&
+  !isPlaceholderValue(supabaseKey) &&
+  (await canResolveSupabaseUrl(supabaseUrl));
 
 function getHeaders(key: string) {
   return {

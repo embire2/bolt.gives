@@ -1,4 +1,5 @@
 import type { JSONValue } from 'ai';
+import { useStore } from '@nanostores/react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ProviderInfo } from '~/types/model';
 import type {
@@ -7,6 +8,8 @@ import type {
   ProgressAnnotation,
   ToolCallDataEvent,
 } from '~/types/context';
+import { workbenchStore } from '~/lib/stores/workbench';
+import { deriveActionCount, deriveProgressMessage, hasPreviewVerification } from './execution-status';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -79,6 +82,7 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
   const { data = [], model, provider, isStreaming } = props;
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
 
   useEffect(() => {
     if (isStreaming) {
@@ -107,12 +111,12 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
   const progressEvents = useMemo(() => data.filter(isProgress), [data]);
   const commentaryEvents = useMemo(() => data.filter(isCommentary), [data]);
   const checkpointEvents = useMemo(() => data.filter(isCheckpoint), [data]);
-  const actionCount = useMemo(() => data.filter(isToolCall).length, [data]);
+  const actionCount = useMemo(
+    () => deriveActionCount(data.filter(isToolCall).length, stepRunnerEvents),
+    [data, stepRunnerEvents],
+  );
   const lastCommentary = commentaryEvents.slice(-1)[0];
-  const currentStep =
-    progressEvents.filter((event) => event.status === 'in-progress').slice(-1)[0]?.message ||
-    progressEvents.slice(-1)[0]?.message ||
-    'idle';
+  const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);
   const phase = mapPhase(lastCommentary?.phase);
   const failedCheckpoint = checkpointEvents
     .slice()
@@ -123,6 +127,8 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
     : lastCommentary?.phase === 'recovery'
       ? lastCommentary.status
       : 'stable';
+  const resolvedRecoveryState =
+    hasPreviewVerification(stepRunnerEvents) && recoveryState === 'stable' ? 'verified' : recoveryState;
 
   if (!isStreaming && progressEvents.length === 0 && commentaryEvents.length === 0 && checkpointEvents.length === 0) {
     return null;
@@ -150,7 +156,7 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
           Actions: <span className="text-bolt-elements-textPrimary">{actionCount}</span>
         </span>
         <span className="rounded border border-bolt-elements-borderColor px-2 py-0.5">
-          Recovery: <span className="text-bolt-elements-textPrimary">{recoveryState}</span>
+          Recovery: <span className="text-bolt-elements-textPrimary">{resolvedRecoveryState}</span>
         </span>
       </div>
     </div>

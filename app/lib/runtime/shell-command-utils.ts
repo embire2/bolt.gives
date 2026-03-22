@@ -11,6 +11,15 @@ const TEST_FILE_CHECK_RE = /^test\s+-f\s+(.+)$/i;
 const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
+const PNPM_REPORTER_FLAG_RE = /--reporter(?:=|\s+)(append-only|silent)\b/i;
+const NPM_PROGRESS_FLAG_RE = /--no-progress\b/i;
+const NPM_SILENT_FLAG_RE = /--silent\b|--loglevel(?:=|\s+)silent\b/i;
+const YARN_SILENT_FLAG_RE = /--silent\b/i;
+const PROJECT_SCAFFOLD_SEGMENT_RE =
+  /\b(create-vite|create-react-app|npm\s+create\s+vite|pnpm\s+dlx\s+create-vite|npx\s+create-react-app)\b/i;
+const COMMAND_PREFIX_RE = /^\s*(?:run\s+shell\s+command\s*:|shell\s+command\s*:|command\s*:)\s*/i;
+const BULLET_PREFIX_RE = /^\s*(?:[-*]\s+|\d+\.\s+)/;
+const SHELL_FENCE_RE = /^```(?:bash|sh|shell|zsh)?\s*([\s\S]*?)\s*```$/i;
 
 export function unwrapCommandJsonEnvelope(command: string): ShellCommandRewrite {
   const trimmed = command.trim();
@@ -47,6 +56,48 @@ export function decodeHtmlCommandDelimiters(command: string): ShellCommandRewrit
     shouldModify: true,
     modifiedCommand: normalized,
     warning: 'Normalized HTML-escaped command separators for shell compatibility.',
+  };
+}
+
+export function normalizeShellCommandSurface(command: string): ShellCommandRewrite {
+  const trimmed = command.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  let normalized = trimmed;
+  let modified = false;
+
+  const unwrapFence = normalized.match(SHELL_FENCE_RE);
+
+  if (unwrapFence?.[1]) {
+    normalized = unwrapFence[1].trim();
+    modified = true;
+  }
+
+  const withoutPrefix = normalized.replace(COMMAND_PREFIX_RE, '');
+
+  if (withoutPrefix !== normalized) {
+    normalized = withoutPrefix.trim();
+    modified = true;
+  }
+
+  const withoutBullet = normalized.replace(BULLET_PREFIX_RE, '');
+
+  if (withoutBullet !== normalized) {
+    normalized = withoutBullet.trim();
+    modified = true;
+  }
+
+  if (!normalized || normalized === trimmed) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: modified,
+    modifiedCommand: normalized,
+    warning: 'Normalized shell command prefix/format before execution.',
   };
 }
 
@@ -319,5 +370,125 @@ export function makeInstallCommandsProjectAware(command: string): ShellCommandRe
     shouldModify: true,
     modifiedCommand: rewrittenCommand,
     warning: `Removed project-manifest commands before "cd ${cdTarget}" so project commands run in the scaffolded directory.`,
+  };
+}
+
+function rewriteInstallSegmentForLowNoise(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+
+  if (!INSTALL_SEGMENT_RE.test(trimmed)) {
+    return { segment, modified: false };
+  }
+
+  if (/^pnpm\s+/i.test(trimmed)) {
+    if (PNPM_REPORTER_FLAG_RE.test(trimmed)) {
+      return { segment: trimmed, modified: false };
+    }
+
+    return {
+      segment: `${trimmed} --reporter=append-only`,
+      modified: true,
+    };
+  }
+
+  if (/^npm\s+/i.test(trimmed)) {
+    let next = trimmed;
+    let modified = false;
+
+    if (!NPM_PROGRESS_FLAG_RE.test(next)) {
+      next = `${next} --no-progress`;
+      modified = true;
+    }
+
+    if (!NPM_SILENT_FLAG_RE.test(next)) {
+      next = `${next} --silent`;
+      modified = true;
+    }
+
+    return { segment: next, modified };
+  }
+
+  if (/^yarn\s+/i.test(trimmed)) {
+    if (YARN_SILENT_FLAG_RE.test(trimmed)) {
+      return { segment: trimmed, modified: false };
+    }
+
+    return {
+      segment: `${trimmed} --silent`,
+      modified: true,
+    };
+  }
+
+  return { segment: trimmed, modified: false };
+}
+
+export function makeInstallCommandsLowNoise(command: string): ShellCommandRewrite {
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = false;
+
+  const rewrittenParts = parts.map((part) => {
+    const rewritten = rewriteInstallSegmentForLowNoise(part);
+
+    if (rewritten.modified) {
+      modifiedAny = true;
+    }
+
+    return rewritten.segment;
+  });
+
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: 'Reduced install-command output verbosity to prevent UI stalls during dependency setup.',
+  };
+}
+
+export function makeScaffoldCommandsProjectAware(
+  command: string,
+  options: { projectInitialized: boolean },
+): ShellCommandRewrite {
+  if (!options.projectInitialized) {
+    return { shouldModify: false };
+  }
+
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
+
+  if (!trimmed || !PROJECT_SCAFFOLD_SEGMENT_RE.test(trimmed)) {
+    return { shouldModify: false };
+  }
+
+  const parts = trimmed.split(/\s*&&\s*/).map((part) => part.trim());
+  const filteredParts = parts.filter((part) => !PROJECT_SCAFFOLD_SEGMENT_RE.test(part));
+
+  if (filteredParts.length === parts.length) {
+    return { shouldModify: false };
+  }
+
+  const rewritten = filteredParts.length
+    ? filteredParts.join(' && ')
+    : 'echo "Skipping scaffold command because project files already exist"';
+
+  if (rewritten === trimmed) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewritten,
+    warning: 'Skipped duplicate scaffolding command because the project is already initialized.',
   };
 }

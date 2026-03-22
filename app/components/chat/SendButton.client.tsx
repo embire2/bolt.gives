@@ -11,6 +11,8 @@ interface SendButtonProps {
 const customEasingFn = cubicBezier(0.4, 0, 0.2, 1);
 
 export const SendButton = ({ show, isStreaming, disabled, onClick }: SendButtonProps) => {
+  const accessibleLabel = !isStreaming ? 'Send prompt' : 'Stop generation';
+
   return (
     <AnimatePresence>
       {show ? (
@@ -21,6 +23,8 @@ export const SendButton = ({ show, isStreaming, disabled, onClick }: SendButtonP
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 10 }}
           disabled={disabled}
+          aria-label={accessibleLabel}
+          title={accessibleLabel}
           onClick={(event) => {
             event.preventDefault();
 

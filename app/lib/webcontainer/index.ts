@@ -6,12 +6,16 @@ interface WebContainerContext {
   loaded: boolean;
 }
 
-export const webcontainerContext: WebContainerContext = import.meta.hot?.data.webcontainerContext ?? {
+const hotData = import.meta.hot?.data ?? {};
+
+export const webcontainerContext: WebContainerContext = hotData?.webcontainerContext ?? {
   loaded: false,
 };
 
 if (import.meta.hot) {
-  import.meta.hot.data.webcontainerContext = webcontainerContext;
+  const hot = import.meta.hot as any;
+  hot.data ??= {};
+  hot.data.webcontainerContext = webcontainerContext;
 }
 
 export let webcontainer: Promise<WebContainer> = new Promise(() => {
@@ -20,7 +24,7 @@ export let webcontainer: Promise<WebContainer> = new Promise(() => {
 
 if (!import.meta.env.SSR) {
   webcontainer =
-    import.meta.hot?.data.webcontainer ??
+    hotData?.webcontainer ??
     Promise.resolve()
       .then(() => {
         return WebContainer.boot({
@@ -60,6 +64,8 @@ if (!import.meta.env.SSR) {
       });
 
   if (import.meta.hot) {
-    import.meta.hot.data.webcontainer = webcontainer;
+    const hot = import.meta.hot as any;
+    hot.data ??= {};
+    hot.data.webcontainer = webcontainer;
   }
 }

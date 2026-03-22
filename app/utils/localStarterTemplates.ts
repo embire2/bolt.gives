@@ -18,59 +18,59 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
   'Expo App': {
     scaffoldCommand: 'npx --yes create-expo-app@latest . --template blank-typescript',
     stackLabel: 'Expo + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Basic Astro': {
     scaffoldCommand: 'npm create astro@latest . -- --template basics --yes --install',
     stackLabel: 'Astro',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'NextJS Shadcn': {
     scaffoldCommand:
       'npx --yes create-next-app@latest . --ts --tailwind --eslint --app --use-npm --yes --no-src-dir --import-alias "@/*"',
     stackLabel: 'Next.js + Tailwind',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   NextJS: {
     scaffoldCommand:
       'npx --yes create-next-app@latest . --ts --eslint --app --use-npm --yes --no-tailwind --no-src-dir --import-alias "@/*"',
     stackLabel: 'Next.js + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Vite Shadcn': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template react-ts',
     stackLabel: 'Vite + React + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Qwik Typescript': {
     scaffoldCommand: 'npm create qwik@latest . -- --yes --typescript',
     stackLabel: 'Qwik + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Remix Typescript': {
     scaffoldCommand: 'npx --yes create-remix@latest . --template remix --no-git --install',
     stackLabel: 'Remix + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   Slidev: {
     scaffoldCommand: 'npx --yes create-slidev@latest .',
     stackLabel: 'Slidev',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   Sveltekit: {
     scaffoldCommand: 'npx --yes sv create . --template minimal --types ts --install npm --yes',
     stackLabel: 'SvelteKit + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Vanilla Vite': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vanilla',
     stackLabel: 'Vite + Vanilla JavaScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Vite React': {
     scaffoldCommand: 'echo "Using built-in Vite React starter files"',
     stackLabel: 'Vite + React + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
     startCommand: 'pnpm run dev',
     starterFilesPreloaded: true,
   },
@@ -78,28 +78,28 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
     scaffoldCommand:
       "npm init -y && npm pkg set type=module scripts.start=\"node index.js\" && npm install express cors && printf \"import express from 'express';\\nimport cors from 'cors';\\nconst app = express();\\napp.use(cors());\\napp.get('/api/health', (_req, res) => res.json({ ok: true }));\\nconst port = Number(process.env.PORT || 5173);\\napp.listen(port, '0.0.0.0', () => console.log('Server running on ' + port));\\n\" > index.js",
     stackLabel: 'Node.js + Express',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   'Vite Typescript': {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vanilla-ts',
     stackLabel: 'Vite + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   Vue: {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vue-ts',
     stackLabel: 'Vue + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   Angular: {
     scaffoldCommand:
       'npx --yes @angular/cli@17 new starter --defaults --skip-git --routing --style css && cp -r starter/. . && rm -rf starter',
     stackLabel: 'Angular',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
   SolidJS: {
     scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template solid-ts',
     stackLabel: 'SolidJS + TypeScript',
-    installCommand: 'pnpm install',
+    installCommand: 'pnpm install --reporter=append-only',
   },
 };
 
@@ -295,7 +295,7 @@ Scaffold command: \`${fallback.scaffoldCommand}\`
 function toPrompt(template: Template, fallback: LocalTemplateFallback): string {
   const scaffoldInstruction = fallback.starterFilesPreloaded
     ? `1) Starter files are already preloaded locally. Do NOT run a scaffold command.
-2) Implement the user's requested features immediately by editing application files.`
+2) Implement the user's requested features immediately by editing the application files that matter.`
     : `1) Scaffold the project with:
 \`${fallback.scaffoldCommand}\`
 2) Implement the user's requested features immediately after scaffolding.`;
@@ -314,7 +314,7 @@ ${scaffoldInstruction}
 Success criteria:
 - The user's requested app is implemented beyond the starter baseline.
 - The preview starts successfully with the implemented features visible.
-- The fallback placeholder UI text is replaced when feature implementation begins.
+- The fallback placeholder UI text is removed from the main app entry before you finish.
 - The user receives concise status updates while work is in progress.
 `;
 }

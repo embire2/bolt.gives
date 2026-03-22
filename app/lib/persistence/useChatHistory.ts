@@ -19,9 +19,13 @@ import {
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
-import { webcontainer } from '~/lib/webcontainer';
-import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
+import { detectProjectCommands } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
+import {
+  hasRestorableSnapshotFiles,
+  shouldNavigateAfterPersistedMessage,
+  shouldPersistSnapshot,
+} from './chat-history-utils';
 
 export interface ChatHistoryItem {
   id: string;
@@ -100,7 +104,7 @@ export function useChatHistory() {
 
             setArchivedMessages(archivedMessages);
 
-            if (startingIdx > 0) {
+            if (startingIdx > 0 && hasRestorableSnapshotFiles(validSnapshot)) {
               const files = Object.entries(validSnapshot?.files || {})
                 .map(([key, value]) => {
                   if (value?.type !== 'file') {
@@ -115,8 +119,7 @@ export function useChatHistory() {
                 .filter((x): x is { content: string; path: string } => !!x); // Type assertion
               const projectCommands = await detectProjectCommands(files);
 
-              // Call the modified function to get only the command actions string
-              const commandActionsString = createCommandActionsString(projectCommands);
+              const restoreMessageId = generateId();
 
               filteredMessages = [
                 {
@@ -126,34 +129,16 @@ export function useChatHistory() {
                   annotations: ['no-store', 'hidden'],
                 },
                 {
-                  id: storedMessages.messages[snapshotIndex].id,
+                  id: restoreMessageId,
                   role: 'assistant',
 
-                  // Combine followup message and the artifact with files and command actions
-                  content: `Bolt Restored your chat from a snapshot. You can revert this message to load the full chat history.
-                  <boltArtifact id="restored-project-setup" title="Restored Project & Setup" type="bundled">
-                  ${Object.entries(snapshot?.files || {})
-                    .map(([key, value]) => {
-                      if (value?.type === 'file') {
-                        return `
-                      <boltAction type="file" filePath="${key}">
-${value.content}
-                      </boltAction>
-                      `;
-                      } else {
-                        return ``;
-                      }
-                    })
-                    .join('\n')}
-                  ${commandActionsString} 
-                  </boltArtifact>
-                  `, // Added commandActionsString, followupMessage, updated id and title
+                  content: `Bolt restored your chat from a snapshot. The workspace has been rehydrated and runtime setup will continue in the technical feed.${projectCommands.followupMessage ? `\n\n${projectCommands.followupMessage}` : ''}`,
                   annotations: [
                     'no-store',
                     ...(summary
                       ? [
                           {
-                            chatId: storedMessages.messages[snapshotIndex].id,
+                            chatId: restoreMessageId,
                             type: 'chatSummary',
                             summary,
                           } satisfies ContextAnnotation,
@@ -170,7 +155,7 @@ ${value.content}
                  */
                 ...filteredMessages,
               ];
-              restoreSnapshot(mixedId);
+              await restoreSnapshot(mixedId, validSnapshot, projectCommands);
             }
 
             setInitialMessages(filteredMessages);
@@ -205,6 +190,10 @@ ${value.content}
         return;
       }
 
+      if (!shouldPersistSnapshot(files, chatSummary)) {
+        return;
+      }
+
       const snapshot: Snapshot = {
         chatIndex: chatIdx,
         files,
@@ -222,38 +211,65 @@ ${value.content}
     [db],
   );
 
-  const restoreSnapshot = useCallback(async (id: string, snapshot?: Snapshot) => {
-    // const snapshotStr = localStorage.getItem(`snapshot:${id}`); // Remove localStorage usage
-    const container = await webcontainer;
+  const restoreSnapshot = useCallback(
+    async (_id: string, snapshot?: Snapshot, projectCommands?: Awaited<ReturnType<typeof detectProjectCommands>>) => {
+      const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
-    const validSnapshot = snapshot || { chatIndex: '', files: {} };
-
-    if (!validSnapshot?.files) {
-      return;
-    }
-
-    Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
-      if (key.startsWith(container.workdir)) {
-        key = key.replace(container.workdir, '');
+      if (!hasRestorableSnapshotFiles(validSnapshot)) {
+        return;
       }
 
-      if (value?.type === 'folder') {
-        await container.fs.mkdir(key, { recursive: true });
-      }
-    });
-    Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
-      if (value?.type === 'file') {
-        if (key.startsWith(container.workdir)) {
-          key = key.replace(container.workdir, '');
+      await workbenchStore.restoreSnapshot(validSnapshot.files);
+
+      const runtimeArtifactId = 'restored-project-setup';
+      const runtimeMessageId = `snapshot-runtime-${validSnapshot.chatIndex || Date.now()}`;
+
+      workbenchStore.addArtifact({
+        id: runtimeArtifactId,
+        messageId: runtimeMessageId,
+        title: 'Restored Project Runtime',
+        type: 'bundled',
+      });
+
+      const runtimeActions = [
+        projectCommands?.setupCommand
+          ? {
+              artifactId: runtimeArtifactId,
+              messageId: runtimeMessageId,
+              actionId: `${runtimeArtifactId}-setup`,
+              action: {
+                type: 'shell' as const,
+                content: projectCommands.setupCommand,
+              },
+            }
+          : null,
+        projectCommands?.startCommand
+          ? {
+              artifactId: runtimeArtifactId,
+              messageId: runtimeMessageId,
+              actionId: `${runtimeArtifactId}-start`,
+              action: {
+                type: 'start' as const,
+                content: projectCommands.startCommand,
+              },
+            }
+          : null,
+      ].filter((action): action is NonNullable<typeof action> => action !== null);
+
+      for (const action of runtimeActions) {
+        const existingArtifact = workbenchStore.artifacts.get()[runtimeArtifactId];
+        const existingAction = existingArtifact?.runner.actions.get()[action.actionId];
+
+        if (existingAction) {
+          continue;
         }
 
-        await container.fs.writeFile(key, value.content, { encoding: value.isBinary ? undefined : 'utf8' });
-      } else {
+        workbenchStore.addAction(action);
+        workbenchStore.runAction(action);
       }
-    });
-
-    // workbenchStore.files.setKey(snapshot?.files)
-  }, []);
+    },
+    [],
+  );
 
   return {
     ready: !mixedId || ready,
@@ -318,10 +334,11 @@ ${value.content}
       // Ensure chatId.get() is used here as well
       if (initialMessages.length === 0 && !chatId.get()) {
         const nextId = await getNextId(db);
+        const shouldNavigate = shouldNavigateAfterPersistedMessage(messages, isStreaming, Boolean(firstArtifact?.id));
 
         chatId.set(nextId);
 
-        if (!urlId && !isStreaming) {
+        if (!urlId && shouldNavigate) {
           navigateChat(navigate, nextId);
         }
       }
@@ -340,7 +357,7 @@ ${value.content}
         db,
         finalChatId, // Use the potentially updated chatId
         [...archivedMessages, ...messages],
-        urlId,
+        _urlId,
         description.get(),
         undefined,
         chatMetadata.get(),

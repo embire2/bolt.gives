@@ -8,17 +8,22 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { WORK_DIR } from '~/utils/constants';
+import { toWorkbenchAbsoluteFilePath, toWorkbenchRelativeFilePath } from '~/lib/runtime/file-paths';
 
 const highlighterOptions = {
   langs: ['shell'],
   themes: ['light-plus', 'dark-plus'],
 };
 
+const hotData = import.meta.hot?.data ?? {};
+
 const shellHighlighter: HighlighterGeneric<BundledLanguage, BundledTheme> =
-  import.meta.hot?.data.shellHighlighter ?? (await createHighlighter(highlighterOptions));
+  hotData?.shellHighlighter ?? (await createHighlighter(highlighterOptions));
 
 if (import.meta.hot) {
-  import.meta.hot.data.shellHighlighter = shellHighlighter;
+  const hot = import.meta.hot as any;
+  hot.data ??= {};
+  hot.data.shellHighlighter = shellHighlighter;
 }
 
 interface ArtifactProps {
@@ -190,7 +195,7 @@ export function openArtifactInWorkbench(filePath: any) {
     workbenchStore.currentView.set('code');
   }
 
-  workbenchStore.setSelectedFile(`${WORK_DIR}/${filePath}`);
+  workbenchStore.setSelectedFile(toWorkbenchAbsoluteFilePath(String(filePath), WORK_DIR));
 }
 
 const ActionList = memo(({ actions }: ActionListProps) => {
@@ -237,7 +242,7 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                       className="bg-bolt-elements-artifacts-inlineCode-background text-bolt-elements-artifacts-inlineCode-text px-1.5 py-1 rounded-md text-bolt-elements-item-contentAccent hover:underline cursor-pointer"
                       onClick={() => openArtifactInWorkbench(action.filePath)}
                     >
-                      {action.filePath}
+                      {toWorkbenchRelativeFilePath(action.filePath, WORK_DIR)}
                     </code>
                   </div>
                 ) : type === 'shell' ? (

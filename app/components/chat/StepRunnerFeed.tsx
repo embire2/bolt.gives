@@ -1,30 +1,8 @@
 import { useStore } from '@nanostores/react';
-import { useEffect, useRef } from 'react';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import type { JSONValue } from 'ai';
 import type { AgentCommentaryAnnotation, CheckpointDataEvent } from '~/types/context';
-
-function sanitizeTimelineText(value: string | undefined): string {
-  if (!value) {
-    return '';
-  }
-
-  return value
-    .replace(/\\u001b\][^\\]*(?:\\u0007|\\u001b\\\\)/g, '')
-    .replace(/\\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-    .replace(/\u009b\[[0-9;?]*[ -/]*[@-~]/g, '')
-    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
-    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-    .replace(/\[(?:\d{1,3};)*\d{1,3}m/g, ' ')
-    .replace(/\[\?[0-9;]{1,16}[A-Za-z]/g, ' ')
-    .replace(/\][0-9]{1,6};[A-Za-z0-9=:+._-]*/g, ' ')
-    .replace(/\\r/g, '')
-    .replace(/\\n/g, '\n')
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-}
 
 function getSuggestedFix(event: InteractiveStepRunnerEvent): string | undefined {
   if (event.type !== 'error') {
@@ -138,11 +116,11 @@ function renderArchitectCard(event: InteractiveStepRunnerEvent, index: number) {
         <span className={`rounded border px-1.5 py-0.5 text-[10px] ${getStatusClasses(status)}`}>{status}</span>
       </div>
       <div className="whitespace-pre-wrap break-words text-bolt-elements-textPrimary">
-        {sanitizeTimelineText(event.description) || 'Architect update'}
+        {event.description || 'Architect update'}
       </div>
       {event.output || event.error ? (
         <div className="mt-1 whitespace-pre-wrap break-words text-xs text-bolt-elements-textSecondary">
-          {sanitizeTimelineText(event.error || event.output)}
+          {event.error || event.output}
         </div>
       ) : null}
       {event.command && event.command.length > 0 ? (
@@ -175,13 +153,12 @@ function renderCommentaryCard(event: AgentCommentaryAnnotation, index: number) {
         <div className="mt-1 space-y-1 text-xs text-bolt-elements-textSecondary">
           {details.keyChanges ? (
             <div className="whitespace-pre-wrap break-words">
-              <span className="text-bolt-elements-textPrimary">Key changes:</span>{' '}
-              {sanitizeTimelineText(details.keyChanges)}
+              <span className="text-bolt-elements-textPrimary">Key changes:</span> {details.keyChanges}
             </div>
           ) : null}
           {details.next ? (
             <div className="whitespace-pre-wrap break-words">
-              <span className="text-bolt-elements-textPrimary">Next:</span> {sanitizeTimelineText(details.next)}
+              <span className="text-bolt-elements-textPrimary">Next:</span> {details.next}
             </div>
           ) : null}
         </div>
@@ -196,41 +173,9 @@ interface StepRunnerFeedProps {
 
 export function StepRunnerFeed(props: StepRunnerFeedProps) {
   const events = useStore(workbenchStore.stepRunnerEvents);
-  const commentaryEvents = (props.data || []).filter(isAgentCommentaryAnnotation).slice(-20);
-  const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-20);
-  const architectEvents = events.filter(isArchitectTimelineEvent).slice(-20);
-  const timelineRef = useRef<HTMLDivElement | null>(null);
-  const shouldAutoFollowRef = useRef(true);
-  const recent = events.filter((event) => !isArchitectTimelineEvent(event)).slice(-64);
-
-  useEffect(() => {
-    const node = timelineRef.current;
-
-    if (!node || !shouldAutoFollowRef.current) {
-      return;
-    }
-
-    if (typeof node.scrollTo === 'function') {
-      node.scrollTo({
-        top: node.scrollHeight,
-        behavior: 'auto',
-      });
-      return;
-    }
-
-    node.scrollTop = node.scrollHeight;
-  }, [architectEvents.length, checkpointEvents.length, commentaryEvents.length, recent.length]);
-
-  const handleTimelineScroll = () => {
-    const node = timelineRef.current;
-
-    if (!node) {
-      return;
-    }
-
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    shouldAutoFollowRef.current = distanceFromBottom < 24;
-  };
+  const commentaryEvents = (props.data || []).filter(isAgentCommentaryAnnotation).slice(-12);
+  const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-12);
+  const architectEvents = events.filter(isArchitectTimelineEvent).slice(-16);
 
   if (
     events.length === 0 &&
@@ -240,6 +185,8 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
   ) {
     return null;
   }
+
+  const recent = events.filter((event) => !isArchitectTimelineEvent(event)).slice(-96);
 
   const getPrimaryText = (event: InteractiveStepRunnerEvent): string => {
     switch (event.type) {
@@ -278,11 +225,7 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
           Clear
         </button>
       </div>
-      <div
-        ref={timelineRef}
-        onScroll={handleTimelineScroll}
-        className="modern-scrollbar max-h-[44vh] sm:max-h-[24rem] space-y-2 overflow-x-hidden overflow-y-auto pr-1"
-      >
+      <div className="modern-scrollbar max-h-[44vh] sm:max-h-[30rem] space-y-2 overflow-x-hidden overflow-y-auto pr-1">
         {commentaryEvents.map(renderCommentaryCard)}
         {architectEvents.map(renderArchitectCard)}
         {checkpointEvents.map((event, index) => (
@@ -298,18 +241,16 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
                 {event.status}
               </span>
             </div>
-            <div className="whitespace-pre-wrap break-words text-bolt-elements-textPrimary">
-              {sanitizeTimelineText(event.message)}
-            </div>
+            <div className="whitespace-pre-wrap break-words text-bolt-elements-textPrimary">{event.message}</div>
             {event.command || typeof event.exitCode === 'number' || event.stderr ? (
               <details className="mt-1">
                 <summary className="cursor-pointer text-[11px] text-bolt-elements-textTertiary">
                   Technical details
                 </summary>
                 <div className="modern-scrollbar mt-1 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] text-bolt-elements-textTertiary">
-                  {event.command ? <div>{sanitizeTimelineText(event.command)}</div> : null}
+                  {event.command ? <div>{event.command}</div> : null}
                   {typeof event.exitCode === 'number' ? <div>exit {event.exitCode}</div> : null}
-                  {event.stderr ? <div>{sanitizeTimelineText(event.stderr)}</div> : null}
+                  {event.stderr ? <div>{event.stderr}</div> : null}
                 </div>
               </details>
             ) : null}
@@ -333,7 +274,7 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
                 ) : null}
               </div>
               <div className="whitespace-pre-wrap break-words font-mono text-[12px] text-bolt-elements-textPrimary">
-                {sanitizeTimelineText(primaryText)}
+                {primaryText}
               </div>
               {event.type === 'step-start' && event.command && event.command.length > 0 ? (
                 <div className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px] text-bolt-elements-textTertiary">

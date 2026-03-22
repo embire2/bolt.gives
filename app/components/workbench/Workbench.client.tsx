@@ -305,11 +305,17 @@ export const Workbench = memo(
     const { showChat } = useStore(chatStore);
     const canHideChat = showWorkbench || !showChat;
 
-    const isSmallViewport = useViewport(1024);
+    const isSmallViewport = useViewport(1280);
     const streaming = useStore(streamingState);
     const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
+    const hasWorkspaceContent =
+      hasPreview ||
+      Boolean(selectedFile) ||
+      Boolean(currentDocument) ||
+      Object.keys(files).length > 0 ||
+      Boolean(isStreaming);
 
     const setSelectedView = (view: WorkbenchViewType) => {
       workbenchStore.currentView.set(view);
@@ -500,30 +506,43 @@ export const Workbench = memo(
                   />
                 </div>
                 <div className="relative flex-1 overflow-hidden">
-                  <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
-                    <EditorPanel
-                      editorDocument={currentDocument}
-                      isStreaming={isStreaming}
-                      selectedFile={selectedFile}
-                      files={files}
-                      unsavedFiles={unsavedFiles}
-                      fileHistory={fileHistory}
-                      onFileSelect={onFileSelect}
-                      onEditorScroll={onEditorScroll}
-                      onEditorChange={onEditorChange}
-                      onFileSave={onFileSave}
-                      onFileReset={onFileReset}
-                    />
-                  </View>
-                  <View
-                    initial={{ x: '100%' }}
-                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
-                  >
-                    <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
-                  </View>
-                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
-                    <Preview setSelectedElement={setSelectedElement} />
-                  </View>
+                  {hasWorkspaceContent ? (
+                    <>
+                      <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
+                        <EditorPanel
+                          editorDocument={currentDocument}
+                          isStreaming={isStreaming}
+                          selectedFile={selectedFile}
+                          files={files}
+                          unsavedFiles={unsavedFiles}
+                          fileHistory={fileHistory}
+                          onFileSelect={onFileSelect}
+                          onEditorScroll={onEditorScroll}
+                          onEditorChange={onEditorChange}
+                          onFileSave={onFileSave}
+                          onFileReset={onFileReset}
+                        />
+                      </View>
+                      <View
+                        initial={{ x: '100%' }}
+                        animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
+                      >
+                        <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
+                      </View>
+                      <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                        <Preview setSelectedElement={setSelectedElement} />
+                      </View>
+                    </>
+                  ) : (
+                    <div className="h-full flex items-center justify-center px-6 text-center">
+                      <div className="max-w-md">
+                        <h3 className="text-lg font-semibold text-bolt-elements-textPrimary">Workspace standing by</h3>
+                        <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                          The editor and preview will appear here as soon as Bolt writes files or starts the app.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

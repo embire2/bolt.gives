@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.0.0 (2026-03-22)
+
+### Fixed
+- Starter/bootstrap runs no longer stop at scaffold-only output; continuation logic now detects scaffold-only, bootstrap-only, and run-intent-without-start responses and forces the implementation to continue.
+- Provider/model/API-key normalization now merges cookie, request-body, and runtime-environment keys before a run starts so invalid provider/key combinations fail less often.
+- Absolute artifact file paths are normalized before writing into the workspace, preventing broken writes like `/home/project/home/project/...` on live instances.
+- Local development startup now tolerates occupied helper ports by reusing healthy collaboration/web-browse sidecars instead of failing the entire dev boot.
+- Stream recovery and commentary heartbeat behavior were tightened so healthy runs do not false-timeout after valid output is already streaming.
+- Prompt library lookup now falls back safely instead of throwing on missing prompt identifiers.
+
+### Changed
+- Development, build, typecheck, and test scripts now run with an 18 GB Node heap baseline (`NODE_OPTIONS=--max-old-space-size=18432`) to stop local OOM failures during large builds.
+- Release verification now includes a live OpenAI `gpt-5.4` browser E2E for actual app creation rather than only unit/integration gates.
+
+### Verified
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build` passed.
+- Local dev smoke passed (`http://localhost:5174` loaded prompt box + model selector after helper-port reuse).
+- Live E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4` by building a React appointment scheduler whose preview rendered the required heading `OpenWeb Clinic Scheduler`.
+- Live smoke passed on `https://ahmad.bolt.gives` with OpenAI `gpt-5.4`.
+
 ## v1.0.3.1 (2026-02-25)
 
 ### Fixed

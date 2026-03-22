@@ -27,6 +27,7 @@ import { supabaseConnection } from '~/lib/stores/supabase';
 import { defaultDesignScheme, type DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
+import type { FileMap } from '~/lib/stores/files';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { buildModelSelectionEnvelope, selectModelForPrompt } from '~/lib/runtime/model-orchestrator';
@@ -48,7 +49,6 @@ import {
   resolvePreferredModelName,
 } from '~/lib/runtime/model-selection';
 import { normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
-import { normalizeCredential } from '~/lib/runtime/credentials';
 import {
   ARCHITECT_NAME,
   buildArchitectAutoHealPrompt,
@@ -63,6 +63,8 @@ import {
 } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
+import { resolveStallPolicy } from '~/lib/runtime/stall-policy';
+import { shouldUseClientStarterBootstrap } from '~/lib/runtime/starter-bootstrap';
 import {
   computeTextFileDelta,
   computeTextSnapshotRevertOps,
@@ -84,26 +86,13 @@ const TELEMETRY_EMIT_INTERVAL_MS = 60000;
 const STEP_EVENT_FLUSH_MS = 250;
 const TELEMETRY_OUTPUT_MAX_CHARS = 1600;
 const TELEMETRY_MERGE_WINDOW_MS = 20000;
-const DEFAULT_STALL_WARNING_THRESHOLD_MS = 45000;
-const DEFAULT_STALL_RECOVERY_THRESHOLD_MS = 60000;
-const AUTO_CONTINUATION_LIMIT = 3;
 const LOCAL_PROVIDER_SET = new Set<string>(LOCAL_PROVIDERS);
-const LONG_THINK_MODEL_RE =
-  /\b(gpt-5|gpt-5\.2|gpt-5-codex|codex|o1|o3|claude-3\.7|claude-3\.5-sonnet-latest|claude-3-5-sonnet-latest)\b/i;
-
-function resolveStallPolicy(modelName?: string): { warningMs: number; recoveryMs: number } {
-  if (modelName && LONG_THINK_MODEL_RE.test(modelName)) {
-    return {
-      warningMs: 90000,
-      recoveryMs: 150000,
-    };
-  }
-
-  return {
-    warningMs: DEFAULT_STALL_WARNING_THRESHOLD_MS,
-    recoveryMs: DEFAULT_STALL_RECOVERY_THRESHOLD_MS,
-  };
-}
+const ANSI_ESCAPE_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+const CARRIAGE_RETURN_RE = /\r+/g;
+const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
+const STARTER_ENTRY_FILE_RE =
+  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
+const STARTER_IGNORE_FILE_RE = /(^|\/)(readme(\.[a-z0-9]+)?|changelog(\.[a-z0-9]+)?|\.bolt\/prompt)$/i;
 
 type StoredProjectMemory = ProjectMemoryDataEvent | null;
 type ApiKeysUpdatePayload = {
@@ -112,6 +101,38 @@ type ApiKeysUpdatePayload = {
   apiKey: string;
   providerModels: ModelInfo[];
 };
+
+function hasFallbackStarterPlaceholder(fileMap: FileMap | undefined): boolean {
+  if (!fileMap) {
+    return false;
+  }
+
+  return Object.entries(fileMap).some(([filePath, dirent]) => {
+    if (dirent?.type !== 'file' || dirent.isBinary || STARTER_IGNORE_FILE_RE.test(filePath)) {
+      return false;
+    }
+
+    if (!STARTER_ENTRY_FILE_RE.test(filePath)) {
+      return false;
+    }
+
+    return typeof dirent.content === 'string' && dirent.content.includes(STARTER_PLACEHOLDER_TEXT);
+  });
+}
+
+function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean {
+  if (!fileMap) {
+    return false;
+  }
+
+  return Object.entries(fileMap).some(([filePath, dirent]) => {
+    if (dirent?.type !== 'file' || dirent.isBinary) {
+      return false;
+    }
+
+    return /(^|\/)(package\.json|src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?))$/i.test(filePath);
+  });
+}
 
 function loadStoredProjectMemory(): StoredProjectMemory {
   if (typeof window === 'undefined') {
@@ -167,57 +188,17 @@ async function fetchProviderModels(providerName: string): Promise<ModelInfo[]> {
     const payload = (await response.json()) as { modelList?: ModelInfo[] };
 
     if (!response.ok) {
-      return [];
+      return resolveProviderInfo(providerName).staticModels || [];
     }
 
-    return payload.modelList || [];
+    return payload.modelList || resolveProviderInfo(providerName).staticModels || [];
   } catch {
-    return [];
+    return resolveProviderInfo(providerName).staticModels || [];
   }
 }
 
 let bufferedStepRunnerEvents: InteractiveStepRunnerEvent[] = [];
 let stepRunnerFlushHandle: ReturnType<typeof setTimeout> | null = null;
-
-function sanitizeStepRunnerOutput(output: string | undefined): string | undefined {
-  if (!output) {
-    return output;
-  }
-
-  return (
-    output
-      // Remove escaped OSC/CSI fragments that can appear in JSON-escaped output
-      .replace(/\\u001b\][^\\]*(?:\\u0007|\\u001b\\\\)/g, '')
-      .replace(/\\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-      // Remove raw CSI/OSC sequences
-      .replace(/\u009b\[[0-9;?]*[ -/]*[@-~]/g, '')
-      .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
-      .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-      // Remove residual ANSI fragments left after ESC stripping (e.g. [39m, [?25h, ]654;pid=...)
-      .replace(/\[[0-9;?]{1,16}[A-Za-z]/g, ' ')
-      .replace(/\][0-9]{1,6};[A-Za-z0-9=:+._-]*/g, ' ')
-      .replace(/\[\?[0-9;]{1,16}[A-Za-z]/g, ' ')
-      .replace(/\[(?:\d{1,3};)*\d{1,3}m/g, ' ')
-      .replace(/\\r/g, '')
-      .replace(/\\n/g, '\n')
-      .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim()
-  );
-}
-
-function sanitizeStepRunnerEvent(event: InteractiveStepRunnerEvent): InteractiveStepRunnerEvent {
-  const cleanedOutput = sanitizeStepRunnerOutput(event.output);
-
-  if (cleanedOutput === event.output) {
-    return event;
-  }
-
-  return {
-    ...event,
-    output: cleanedOutput,
-  };
-}
 
 function findMergeableStreamIndex(events: InteractiveStepRunnerEvent[], incoming: InteractiveStepRunnerEvent): number {
   if (incoming.type !== 'stdout' && incoming.type !== 'stderr') {
@@ -247,23 +228,21 @@ function mergeOrAppendStepRunnerEvent(
   events: InteractiveStepRunnerEvent[],
   event: InteractiveStepRunnerEvent,
 ): InteractiveStepRunnerEvent[] {
-  const normalizedEvent = sanitizeStepRunnerEvent(event);
-
   if (events.length === 0) {
-    return [normalizedEvent];
+    return [event];
   }
 
   const last = events[events.length - 1];
-  const streamMergeIndex = findMergeableStreamIndex(events, normalizedEvent);
+  const streamMergeIndex = findMergeableStreamIndex(events, event);
 
   if (streamMergeIndex >= 0) {
     const target = events[streamMergeIndex];
-    const mergedOutput = `${target.output || ''}${target.output ? '\n' : ''}${normalizedEvent.output || ''}`.slice(
+    const mergedOutput = `${target.output || ''}${target.output ? '\n' : ''}${event.output || ''}`.slice(
       -TELEMETRY_OUTPUT_MAX_CHARS,
     );
     const mergedEvent: InteractiveStepRunnerEvent = {
       ...target,
-      timestamp: normalizedEvent.timestamp,
+      timestamp: event.timestamp,
       output: mergedOutput,
     };
     const next = [...events];
@@ -273,27 +252,27 @@ function mergeOrAppendStepRunnerEvent(
   }
 
   const isDuplicateTelemetry =
-    normalizedEvent.type === 'telemetry' &&
+    event.type === 'telemetry' &&
     last.type === 'telemetry' &&
-    (last.output || '') === (normalizedEvent.output || '') &&
-    (last.description || '') === (normalizedEvent.description || '');
+    (last.output || '') === (event.output || '') &&
+    (last.description || '') === (event.description || '');
 
   if (isDuplicateTelemetry) {
-    return [...events.slice(0, -1), { ...last, timestamp: normalizedEvent.timestamp }];
+    return [...events.slice(0, -1), { ...last, timestamp: event.timestamp }];
   }
 
-  if (normalizedEvent.type === 'telemetry' && last.type === 'telemetry') {
+  if (event.type === 'telemetry' && last.type === 'telemetry') {
     const lastTimestamp = Date.parse(last.timestamp || '');
-    const nextTimestamp = Date.parse(normalizedEvent.timestamp || '');
+    const nextTimestamp = Date.parse(event.timestamp || '');
     const distance =
       Number.isFinite(lastTimestamp) && Number.isFinite(nextTimestamp) ? nextTimestamp - lastTimestamp : 0;
 
     if (distance < TELEMETRY_MERGE_WINDOW_MS) {
-      return [...events.slice(0, -1), { ...last, ...normalizedEvent }];
+      return [...events.slice(0, -1), { ...last, ...event }];
     }
   }
 
-  return [...events, normalizedEvent];
+  return [...events, event];
 }
 
 function flushBufferedStepRunnerEvents() {
@@ -328,9 +307,21 @@ function scheduleBufferedStepRunnerFlush() {
 }
 
 function appendStepRunnerEvent(event: InteractiveStepRunnerEvent) {
-  bufferedStepRunnerEvents.push(event);
+  const normalizedEvent: InteractiveStepRunnerEvent = {
+    ...event,
+    output:
+      typeof event.output === 'string'
+        ? event.output
+            .replace(ANSI_ESCAPE_RE, '')
+            .replace(CARRIAGE_RETURN_RE, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .slice(-TELEMETRY_OUTPUT_MAX_CHARS)
+        : event.output,
+  };
 
-  if (event.type === 'stdout' || event.type === 'stderr' || event.type === 'telemetry') {
+  bufferedStepRunnerEvents.push(normalizedEvent);
+
+  if (normalizedEvent.type === 'stdout' || normalizedEvent.type === 'stderr' || normalizedEvent.type === 'telemetry') {
     scheduleBufferedStepRunnerFlush();
     return;
   }
@@ -532,6 +523,8 @@ export const ChatImpl = memo(
     const stallReportedRef = useRef(false);
     const stallRecoveryTriggeredRef = useRef(false);
     const lastTelemetryEmitAtRef = useRef(0);
+    const lastMessageProgressAtRef = useRef(Date.now());
+    const lastAssistantProgressSignatureRef = useRef('');
     const latestUserRequestRef = useRef('');
     const requestLifecycleStartedAtRef = useRef(Date.now());
     const pendingStarterContinuationRef = useRef<string | null>(null);
@@ -547,6 +540,20 @@ export const ChatImpl = memo(
     useEffect(() => {
       fakeLoadingRef.current = fakeLoading;
     }, [fakeLoading]);
+
+    useEffect(() => {
+      const lastAssistantMessage = [...messages]
+        .reverse()
+        .find((message) => message.role === 'assistant' && typeof message.content === 'string');
+      const nextSignature = lastAssistantMessage
+        ? `${lastAssistantMessage.id}:${lastAssistantMessage.content.length}`
+        : '';
+
+      if (nextSignature && nextSignature !== lastAssistantProgressSignatureRef.current) {
+        lastAssistantProgressSignatureRef.current = nextSignature;
+        lastMessageProgressAtRef.current = Date.now();
+      }
+    }, [messages]);
 
     const appendHiddenContinuation = useCallback(
       (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
@@ -594,29 +601,25 @@ export const ChatImpl = memo(
     );
 
     const dispatchAutoContinuation = useCallback(
-      (
-        reason: 'starter-followup' | 'stall-recovery' | 'timeout-recovery',
-        args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string },
-      ) => {
-        if (autoContinuationCountRef.current >= AUTO_CONTINUATION_LIMIT) {
+      (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
+        const stallPolicy = resolveStallPolicy(runContextRef.current.model);
+
+        if (autoContinuationCountRef.current >= stallPolicy.maxAutoContinuations) {
           appendStepRunnerEvent({
             type: 'error',
             timestamp: new Date().toISOString(),
-            description: `Auto continuation cap reached (${AUTO_CONTINUATION_LIMIT})`,
-            error: `Stopped auto continuation loop for ${reason}`,
-            output: 'Please continue manually if you want to proceed from the current workspace state.',
+            description: 'Auto-recovery continuation limit reached',
+            error: `Reached ${stallPolicy.maxAutoContinuations} continuation attempts for this request.`,
+            output: 'Review the latest timeline events and retry after adjusting provider/model or prompt scope.',
           });
+          toast.error('Auto-recovery reached its retry limit for this request. Please retry with a narrower prompt.');
+          setFakeLoading(false);
 
           return false;
         }
 
         autoContinuationCountRef.current += 1;
-        appendStepRunnerEvent({
-          type: 'telemetry',
-          timestamp: new Date().toISOString(),
-          description: 'Auto continuation dispatched',
-          output: `reason=${reason} attempt=${autoContinuationCountRef.current}/${AUTO_CONTINUATION_LIMIT}`,
-        });
+        requestLifecycleStartedAtRef.current = Date.now();
         appendHiddenContinuation(args);
 
         return true;
@@ -628,19 +631,24 @@ export const ChatImpl = memo(
       (reason: 'stream-finished' | 'stream-stalled') => {
         const pendingOriginalRequest = pendingStarterContinuationRef.current;
         const activeRunContext = runContextRef.current;
+        const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(workbenchStore.files.get());
 
         if (!pendingOriginalRequest || starterContinuationTriggeredRef.current) {
           return false;
         }
 
-        pendingStarterContinuationRef.current = null;
-        starterContinuationTriggeredRef.current = true;
-
         const normalizedRequest = pendingOriginalRequest.trim() || latestUserRequestRef.current.trim();
 
-        if (!normalizedRequest) {
+        if (!normalizedRequest || !starterPlaceholderStillPresent) {
+          pendingStarterContinuationRef.current = null;
+          starterContinuationTriggeredRef.current = false;
+
           return false;
         }
+
+        starterContinuationTriggeredRef.current = true;
+
+        const nextAttempt = autoContinuationCountRef.current + 1;
 
         const continuationPrompt = buildModelSelectionEnvelope({
           model: activeRunContext.model,
@@ -649,16 +657,21 @@ export const ChatImpl = memo(
             reason === 'stream-stalled'
               ? 'Starter bootstrap stalled. Continuing with the user request.'
               : 'Starter bootstrap completed. Continuing with the user request.',
-          content: `Starter bootstrap is complete. Continue implementing the original request now (do not stop at scaffold/start).
+          content: `Starter bootstrap is complete, but the fallback placeholder is still present.
+Continue implementing the original request now and do not stop at scaffold/install/start.
+
 Original request:
 ${normalizedRequest}
 
 Requirements:
-1) Continue from the existing files and runtime state.
-2) Implement the requested features fully.
-3) Keep preview running and verify the output.
-4) Your first output must be actionable <boltAction> steps (do not respond with plan-only prose).
-5) Finish with a concise completion summary plus any remaining gaps.`,
+1) Continue from the existing files and runtime state. Do not re-run create-vite/create-react-app if package.json already exists.
+2) Replace any fallback placeholder UI in src/App.tsx, src/App.jsx, app/page.tsx, or the equivalent entry screen.
+3) Implement the requested features fully, beyond the starter baseline.
+4) Keep preview running and verify the output.
+5) Your first output must be actionable <boltAction> steps (do not respond with plan-only prose).
+6) If a command fails, self-heal by correcting the command and retrying.
+7) Do not finish while the preview still shows "${STARTER_PLACEHOLDER_TEXT}".
+8) Finish with a concise completion summary plus any remaining gaps.`,
         });
 
         appendStepRunnerEvent({
@@ -668,12 +681,10 @@ Requirements:
             reason === 'stream-stalled'
               ? 'Dispatching hidden continuation after starter stall'
               : 'Dispatching hidden continuation after starter bootstrap',
-          output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
+          output: `provider=${activeRunContext.providerName} model=${activeRunContext.model} attempt=${nextAttempt}`,
         });
 
-        requestLifecycleStartedAtRef.current = Date.now();
-
-        const dispatched = dispatchAutoContinuation('starter-followup', {
+        const dispatched = dispatchAutoContinuation({
           idSuffix: 'starter-followup',
           content: continuationPrompt,
           failureDescription: 'Failed to dispatch starter continuation',
@@ -681,13 +692,11 @@ Requirements:
         });
 
         if (!dispatched) {
-          pendingStarterContinuationRef.current = normalizedRequest;
+          pendingStarterContinuationRef.current = null;
           starterContinuationTriggeredRef.current = false;
-
-          return false;
         }
 
-        return true;
+        return dispatched;
       },
       [dispatchAutoContinuation],
     );
@@ -770,6 +779,7 @@ Requirements:
         lastTelemetryEmitAtRef.current = 0;
       } else {
         interval = window.setInterval(() => {
+          const stallPolicy = resolveStallPolicy(runContextRef.current.model);
           const performanceRecord = performance as Performance & {
             memory?: {
               usedJSHeapSize?: number;
@@ -792,10 +802,10 @@ Requirements:
           const lastMeaningfulTimestamp = getLastMeaningfulProgressTimestamp(
             recentStepEvents,
             requestLifecycleStartedAtRef.current,
+            [lastDataEventAtRef.current, lastMessageProgressAtRef.current],
           );
           const meaningfulStallMs = Date.now() - lastMeaningfulTimestamp;
           const meaningfulStallSeconds = Math.round(meaningfulStallMs / 1000);
-          const stallPolicy = resolveStallPolicy(runContextRef.current.model);
           const telemetryMessage = `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
 
           const now = Date.now();
@@ -811,7 +821,7 @@ Requirements:
           }
 
           if (
-            meaningfulStallMs > 25000 &&
+            meaningfulStallMs > stallPolicy.starterContinuationThresholdMs &&
             pendingStarterContinuationRef.current &&
             !starterContinuationTriggeredRef.current
           ) {
@@ -829,7 +839,7 @@ Requirements:
             return;
           }
 
-          if (meaningfulStallMs > stallPolicy.warningMs && !stallReportedRef.current) {
+          if (meaningfulStallMs > stallPolicy.warningThresholdMs && !stallReportedRef.current) {
             stallReportedRef.current = true;
 
             const recentEventSummary = recentStepEvents
@@ -846,7 +856,7 @@ Requirements:
             });
           }
 
-          if (meaningfulStallMs > stallPolicy.recoveryMs && !stallRecoveryTriggeredRef.current) {
+          if (meaningfulStallMs > stallPolicy.recoveryThresholdMs && !stallRecoveryTriggeredRef.current) {
             stallRecoveryTriggeredRef.current = true;
 
             const activeRunContext = runContextRef.current;
@@ -897,8 +907,7 @@ Requirements:
                 output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
               });
 
-              requestLifecycleStartedAtRef.current = Date.now();
-              dispatchAutoContinuation('stall-recovery', {
+              dispatchAutoContinuation({
                 idSuffix: 'stall-recovery',
                 content: recoveryPrompt,
                 failureDescription: 'Failed to dispatch stalled-stream continuation',
@@ -930,47 +939,111 @@ Requirements:
         return;
       }
 
-      dispatchStarterContinuation('stream-finished');
-    }, [dispatchStarterContinuation, fakeLoading, isLoading]);
-
-    useEffect(() => {
-      if (selectionBootstrapRef.current || activeProviders.length === 0) {
+      if (!pendingStarterContinuationRef.current) {
         return;
       }
 
-      const nextApiKeys = getApiKeysFromCookiesSafe();
-      setApiKeys(nextApiKeys);
+      const starterWorkspaceReady = hasMaterializedStarterWorkspace(files);
+      const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(files);
 
-      const instanceSelection =
-        typeof window !== 'undefined' ? readInstanceSelection(window.location.hostname) : undefined;
-
-      const preferredProviderName = pickPreferredProviderName({
-        activeProviderNames: activeProviders.map((activeProvider) => activeProvider.name),
-        apiKeys: nextApiKeys,
-        localProviderNames: LOCAL_PROVIDERS,
-        savedProviderName: instanceSelection?.providerName || Cookies.get('selectedProvider'),
-        lastConfiguredProviderName: Cookies.get(LAST_CONFIGURED_PROVIDER_COOKIE_KEY),
-        fallbackProviderName: DEFAULT_PROVIDER.name,
-      });
-      const preferredProvider =
-        activeProviders.find((activeProvider) => activeProvider.name === preferredProviderName) ||
-        resolveProviderInfo(preferredProviderName);
-
-      setProvider(preferredProvider as ProviderInfo);
-      Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
-
-      if (typeof window !== 'undefined') {
-        rememberInstanceSelection({
-          hostname: window.location.hostname,
-          providerName: preferredProvider.name,
-        });
-        recordProviderHistory(preferredProvider.name);
+      if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
+        return;
       }
 
-      selectionBootstrapRef.current = true;
+      if (!starterPlaceholderStillPresent) {
+        pendingStarterContinuationRef.current = null;
+        starterContinuationTriggeredRef.current = false;
 
-      (async () => {
+        return;
+      }
+
+      starterContinuationTriggeredRef.current = false;
+      dispatchStarterContinuation('stream-finished');
+    }, [dispatchStarterContinuation, fakeLoading, files, isLoading]);
+
+    useEffect(() => {
+      if (selectionBootstrapRef.current || activeProviders.length === 0) {
+        return undefined;
+      }
+
+      let cancelled = false;
+
+      const bootstrapSelection = async () => {
+        const nextApiKeys = getApiKeysFromCookiesSafe();
+        setApiKeys(nextApiKeys);
+
+        const instanceSelection =
+          typeof window !== 'undefined' ? readInstanceSelection(window.location.hostname) : undefined;
+        const activeProviderNames = activeProviders.map((activeProvider) => activeProvider.name);
+
+        const credentialChecks = await Promise.all(
+          activeProviderNames.map(async (providerName) => {
+            if (LOCAL_PROVIDER_SET.has(providerName)) {
+              return providerName;
+            }
+
+            const fromUi = nextApiKeys[providerName];
+
+            if (typeof fromUi === 'string' && fromUi.trim().length > 0) {
+              return providerName;
+            }
+
+            if (providerEnvKeyStatusRef.current[providerName] !== undefined) {
+              return providerEnvKeyStatusRef.current[providerName] ? providerName : null;
+            }
+
+            try {
+              const response = await fetch(`/api/check-env-key?provider=${encodeURIComponent(providerName)}`);
+              const payload = (await response.json()) as { isSet?: boolean };
+              const isSet = Boolean(payload?.isSet);
+              providerEnvKeyStatusRef.current[providerName] = isSet;
+
+              return isSet ? providerName : null;
+            } catch {
+              providerEnvKeyStatusRef.current[providerName] = false;
+              return null;
+            }
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const preferredProviderName = pickPreferredProviderName({
+          activeProviderNames,
+          apiKeys: nextApiKeys,
+          configuredProviderNames: credentialChecks.filter((providerName): providerName is string =>
+            Boolean(providerName),
+          ),
+          localProviderNames: LOCAL_PROVIDERS,
+          savedProviderName: instanceSelection?.providerName || Cookies.get('selectedProvider'),
+          lastConfiguredProviderName: Cookies.get(LAST_CONFIGURED_PROVIDER_COOKIE_KEY),
+          fallbackProviderName: DEFAULT_PROVIDER.name,
+        });
+        const preferredProvider =
+          activeProviders.find((activeProvider) => activeProvider.name === preferredProviderName) ||
+          resolveProviderInfo(preferredProviderName);
+
+        setProvider(preferredProvider as ProviderInfo);
+        Cookies.set('selectedProvider', preferredProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+
+        if (typeof window !== 'undefined') {
+          rememberInstanceSelection({
+            hostname: window.location.hostname,
+            providerName: preferredProvider.name,
+          });
+          recordProviderHistory(preferredProvider.name);
+        }
+
+        selectionBootstrapRef.current = true;
+
         const providerModels = await fetchProviderModels(preferredProvider.name);
+
+        if (cancelled) {
+          return;
+        }
+
         const preferredModel = resolvePreferredModelName({
           providerName: preferredProvider.name,
           models: providerModels,
@@ -993,7 +1066,13 @@ Requirements:
             modelName: preferredModel,
           });
         }
-      })();
+      };
+
+      void bootstrapSelection();
+
+      return () => {
+        cancelled = true;
+      };
     }, [activeProviders]);
 
     useEffect(() => {
@@ -1215,8 +1294,7 @@ Requirements:
             output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
           });
 
-          requestLifecycleStartedAtRef.current = Date.now();
-          queuedAutoRecovery = dispatchAutoContinuation('timeout-recovery', {
+          dispatchAutoContinuation({
             idSuffix: 'timeout-recovery',
             content: recoveryPrompt,
             failureDescription: 'Failed to dispatch timeout recovery continuation',
@@ -1396,9 +1474,9 @@ Requirements:
           return true;
         }
 
-        const fromUi = normalizeCredential(apiKeys[providerName]);
+        const fromUi = apiKeys[providerName];
 
-        if (fromUi) {
+        if (typeof fromUi === 'string' && fromUi.trim().length > 0) {
           return true;
         }
 
@@ -1488,17 +1566,6 @@ Requirements:
                 continue;
               }
 
-              const hasUiCandidateCredential = Boolean(normalizeCredential(apiKeys[candidateProviderName]));
-              const allowCrossProviderAutoSwitch =
-                candidateProviderName === currentProvider.name ||
-                candidateProviderName === resolvedProvider.name ||
-                LOCAL_PROVIDER_SET.has(candidateProviderName) ||
-                hasUiCandidateCredential;
-
-              if (!allowCrossProviderAutoSwitch) {
-                continue;
-              }
-
               const candidateConfigured = await hasProviderCredential(candidateProviderName);
 
               if (!candidateConfigured) {
@@ -1526,6 +1593,11 @@ Requirements:
             rememberProviderModelSelection(resolvedProvider.name, resolvedModel);
 
             if (typeof window !== 'undefined') {
+              rememberInstanceSelection({
+                hostname: window.location.hostname,
+                providerName: resolvedProvider.name,
+                modelName: resolvedModel,
+              });
               recordProviderHistory(resolvedProvider.name);
             }
 
@@ -1794,11 +1866,13 @@ Requirements:
         sketchElements,
       });
       requestLifecycleStartedAtRef.current = Date.now();
+      lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
+      lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
       stallRecoveryTriggeredRef.current = false;
       starterContinuationTriggeredRef.current = false;
-      pendingStarterContinuationRef.current = null;
       autoContinuationCountRef.current = 0;
+      pendingStarterContinuationRef.current = null;
 
       if (agentMode === 'act') {
         const executed = await runAgentActWorkflow();
@@ -1937,7 +2011,11 @@ Requirements:
       if (!chatStarted) {
         setFakeLoading(true);
 
-        if (autoSelectTemplate) {
+        const shouldBootstrapStarter = autoSelectTemplate
+          ? shouldUseClientStarterBootstrap(effectiveProvider.name, effectiveModel)
+          : false;
+
+        if (shouldBootstrapStarter) {
           logger.info('Starter template selection started', {
             model: effectiveModel,
             provider: effectiveProvider.name,
@@ -2028,6 +2106,13 @@ Requirements:
               return;
             }
           }
+        }
+
+        if (autoSelectTemplate && !shouldBootstrapStarter) {
+          logger.info('Skipping client-side starter bootstrap for capable model', {
+            model: effectiveModel,
+            provider: effectiveProvider.name,
+          });
         }
 
         // If autoSelectTemplate is disabled or template selection failed, proceed with normal message
@@ -2302,7 +2387,7 @@ Requirements:
       }
     };
 
-    const handleProviderChange = (newProvider: ProviderInfo) => {
+    const handleProviderSelection = (newProvider: ProviderInfo, preferredModel?: string) => {
       setProvider(newProvider);
       Cookies.set('selectedProvider', newProvider.name, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
 
@@ -2310,10 +2395,29 @@ Requirements:
         rememberInstanceSelection({
           hostname: window.location.hostname,
           providerName: newProvider.name,
-          modelName: model,
         });
         recordProviderHistory(newProvider.name);
       }
+
+      if (!preferredModel) {
+        return;
+      }
+
+      setModel(preferredModel);
+      Cookies.set('selectedModel', preferredModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+      rememberProviderModelSelection(newProvider.name, preferredModel);
+
+      if (typeof window !== 'undefined') {
+        rememberInstanceSelection({
+          hostname: window.location.hostname,
+          providerName: newProvider.name,
+          modelName: preferredModel,
+        });
+      }
+    };
+
+    const handleProviderChange = (newProvider: ProviderInfo) => {
+      handleProviderSelection(newProvider);
     };
 
     const handleWebSearchResult = useCallback(
@@ -2348,6 +2452,7 @@ Requirements:
         setModel={handleModelChange}
         provider={provider}
         setProvider={handleProviderChange}
+        onProviderSelection={handleProviderSelection}
         providerList={activeProviders}
         handleInputChange={(e) => {
           onTextareaChange(e);

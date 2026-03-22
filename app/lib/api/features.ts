@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.0',
+    name: 'v3.0.0 runtime reliability reset',
+    description:
+      'Starter continuation, provider/key normalization, dev-port resilience, path-safe file actions, and verified OpenAI gpt-5.4 live app generation.',
+    releaseDate: '2026-03-22',
+  },
+  {
     id: 'release-v1.0.3',
     name: 'v1.0.3 reliability hardening',
     description:

@@ -10,6 +10,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
+import type { ModelInfo } from '~/lib/modules/llm/types';
 import { resolvePromptIdForModel } from './prompt-selection';
 import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
@@ -29,9 +30,86 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 }
 
 const logger = createScopedLogger('stream-text');
-const LONG_THINK_MODEL_RE =
-  /\b(gpt-5|gpt-5\.2|gpt-5-codex|codex|o1|o3|claude-3\.7|claude-3\.5-sonnet-latest|claude-3-5-sonnet-latest)\b/i;
+const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const LONG_THINK_BUILD_MAX_COMPLETION_TOKENS = 6000;
+
+function isNonGeneralPurposeModel(name: string): boolean {
+  const normalized = name.toLowerCase();
+  const patterns = ['image', 'dall', 'whisper', 'tts', 'audio', 'transcribe', 'embedding', 'moderation', 'realtime'];
+
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+function scoreModelForFallback(model: {
+  name: string;
+  maxTokenAllowed?: number;
+  maxCompletionTokens?: number;
+}): number {
+  const normalized = model.name.toLowerCase();
+
+  if (isNonGeneralPurposeModel(normalized)) {
+    return -1000;
+  }
+
+  let score = 0;
+
+  if (normalized.includes('gpt-5.4')) {
+    score += 900;
+  }
+
+  if (normalized.includes('gpt-5.2-codex')) {
+    score += 850;
+  }
+
+  if (normalized.includes('gpt-5-codex')) {
+    score += 825;
+  }
+
+  if (normalized.includes('codex')) {
+    score += 800;
+  }
+
+  if (normalized.includes('gpt-5')) {
+    score += 760;
+  }
+
+  if (normalized.includes('claude-3-7')) {
+    score += 720;
+  }
+
+  if (normalized.includes('claude-3-5-sonnet')) {
+    score += 700;
+  }
+
+  if (normalized.includes('claude')) {
+    score += 660;
+  }
+
+  if (normalized.includes('gpt-4.1')) {
+    score += 640;
+  }
+
+  if (normalized.includes('gpt-4o')) {
+    score += 620;
+  }
+
+  if (normalized.includes('o4') || normalized.includes('o3') || normalized.includes('o1')) {
+    score += 600;
+  }
+
+  if (normalized.includes('mini')) {
+    score -= 30;
+  }
+
+  score += Math.min(Math.floor((model.maxTokenAllowed || 0) / 1000), 80);
+  score += Math.min(Math.floor((model.maxCompletionTokens || 0) / 1000), 40);
+
+  return score;
+}
+
+function pickPreferredFallbackModel(models: ModelInfo[]): ModelInfo | undefined {
+  return [...models].sort((a, b) => scoreModelForFallback(b) - scoreModelForFallback(a))[0];
+}
 
 function getCompletionTokenLimit(modelDetails: any): number {
   // 1. If model specifies completion tokens, use that
@@ -153,14 +231,27 @@ export async function streamText(props: {
       }
 
       // Fallback to first model with warning
+      const fallbackModel = pickPreferredFallbackModel(modelsList);
+
+      if (!fallbackModel) {
+        throw new Error(`No fallback model available for provider ${provider.name}`);
+      }
+
       logger.warn(
-        `MODEL [${currentModel}] not found in provider [${provider.name}]. Falling back to first model. ${modelsList[0].name}`,
+        `MODEL [${currentModel}] not found in provider [${provider.name}]. Falling back to preferred model ${fallbackModel.name}`,
       );
-      modelDetails = modelsList[0];
+      modelDetails = fallbackModel;
     }
   }
 
-  const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
+  const dynamicMaxTokens = getCompletionTokenLimit(modelDetails);
+
+  // Use model-specific limits directly - no artificial cap needed
+  const safeMaxTokens = dynamicMaxTokens;
+
+  logger.info(
+    `Token limits for model ${modelDetails.name}: maxTokens=${safeMaxTokens}, maxTokenAllowed=${modelDetails.maxTokenAllowed}, maxCompletionTokens=${modelDetails.maxCompletionTokens}`,
+  );
 
   const effectiveChatMode = chatMode || 'build';
   const effectivePromptId = resolvePromptIdForModel({
@@ -170,7 +261,7 @@ export async function streamText(props: {
   });
 
   let systemPrompt =
-    PromptLibrary.getPropmtFromLibrary(effectivePromptId, {
+    PromptLibrary.getPromptFromLibrary(effectivePromptId, {
       cwd: WORK_DIR,
       allowedHtmlElements: allowedHTMLElements,
       modificationTagName: MODIFICATIONS_TAG_NAME,
@@ -183,17 +274,6 @@ export async function streamText(props: {
     }) ?? getSystemPrompt();
 
   systemPrompt = withDevelopmentCommentaryWorkstyle(systemPrompt);
-
-  if (effectiveChatMode === 'build') {
-    systemPrompt = `${systemPrompt}
-
-    OUTPUT CONTRACT (required):
-    1) Start your response with executable <boltAction> steps inside a single <boltArtifact>.
-    2) Do not open with plan-only prose.
-    3) Continue from the existing workspace/project state; do not re-scaffold when files already exist.
-    4) Include a <boltAction type="start"> command when the task expects preview/runtime output.
-    `;
-  }
 
   if (effectiveChatMode === 'build' && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
@@ -255,6 +335,17 @@ export async function streamText(props: {
     `;
   }
 
+  if (effectiveChatMode === 'build') {
+    systemPrompt = `${systemPrompt}
+
+    EXECUTION OUTPUT CONTRACT (MANDATORY):
+    - Start your response with executable <boltAction> block(s). Do not start with plan-only prose.
+    - If the project already exists, continue from current files and do not re-scaffold.
+    - After install/build steps, include <boltAction type="start"> to launch preview.
+    - Keep each action focused and verifiable; then provide concise plain-English progress updates.
+    `;
+  }
+
   const effectiveLockedFilePaths = new Set<string>();
 
   if (files) {
@@ -279,22 +370,17 @@ export async function streamText(props: {
     console.log('No locked files found from any source for prompt.');
   }
 
-  const isLongThinkBuild =
-    effectiveChatMode === 'build' && LONG_THINK_MODEL_RE.test(modelDetails?.name || currentModel || '');
-  const safeMaxTokens = isLongThinkBuild
-    ? Math.min(dynamicMaxTokens, LONG_THINK_BUILD_MAX_COMPLETION_TOKENS)
-    : dynamicMaxTokens;
-
-  logger.info(
-    `Token limits for model ${modelDetails.name}: maxTokens=${safeMaxTokens}, maxTokenAllowed=${modelDetails.maxTokenAllowed}, maxCompletionTokens=${modelDetails.maxCompletionTokens}`,
-  );
-
   logger.info(`Sending llm call to ${provider.name} with model ${modelDetails.name}`);
+
+  const adjustedMaxTokens =
+    effectiveChatMode === 'build' && LONG_THINK_MODEL_RE.test(modelDetails.name)
+      ? Math.min(safeMaxTokens, LONG_THINK_BUILD_MAX_COMPLETION_TOKENS)
+      : safeMaxTokens;
 
   // Log reasoning model detection and token parameters
   const isReasoning = isReasoningModel(modelDetails.name);
   logger.info(
-    `Model "${modelDetails.name}" is reasoning model: ${isReasoning}, using ${isReasoning ? 'maxCompletionTokens' : 'maxTokens'}: ${safeMaxTokens}`,
+    `Model "${modelDetails.name}" is reasoning model: ${isReasoning}, using ${isReasoning ? 'maxCompletionTokens' : 'maxTokens'}: ${adjustedMaxTokens}`,
   );
 
   // Validate token limits before API call
@@ -305,7 +391,7 @@ export async function streamText(props: {
   }
 
   // Use maxCompletionTokens for reasoning models (o1, GPT-5), maxTokens for traditional models
-  const tokenParams = isReasoning ? { maxCompletionTokens: safeMaxTokens } : { maxTokens: safeMaxTokens };
+  const tokenParams = isReasoning ? { maxCompletionTokens: adjustedMaxTokens } : { maxTokens: adjustedMaxTokens };
 
   // Filter out unsupported parameters for reasoning models
   const filteredOptions =

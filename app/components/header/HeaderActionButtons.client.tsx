@@ -21,7 +21,7 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
 
       {/* Debug Tools */}
       {shouldShowButtons && (
-        <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden text-sm">
+        <div className="hidden xl:flex border border-bolt-elements-borderColor rounded-md overflow-hidden text-sm">
           <button
             onClick={() =>
               window.open('https://github.com/embire2/bolt.gives/issues/new?template=bug_report.yml', '_blank')

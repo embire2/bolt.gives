@@ -1,70 +1,124 @@
 import { describe, expect, it } from 'vitest';
-import { shouldForceRunContinuation } from './run-continuation';
+import { analyzeRunContinuation, shouldForceRunContinuation } from './run-continuation';
 
 describe('shouldForceRunContinuation', () => {
-  it('returns true when user requests running app but assistant only scaffolded', () => {
-    const shouldForce = shouldForceRunContinuation({
+  it('continues when a build request ends with scaffold-only output', () => {
+    const shouldContinue = shouldForceRunContinuation({
       chatMode: 'build',
-      lastUserContent: 'Create and run a mini React app, then show preview.',
-      assistantContent:
-        '<boltArtifact id="a1" title="Scaffold"><boltAction type="shell">pnpm dlx create-vite@latest mini-react-app --template react --no-interactive</boltAction></boltArtifact>',
       alreadyAttempted: false,
+      lastUserContent: 'Create an appointment scheduling website for a doctor office.',
+      assistantContent: '<boltAction type="shell">pnpm dlx create-vite@latest . --template react</boltAction>',
     });
 
-    expect(shouldForce).toBe(true);
+    expect(shouldContinue).toBe(true);
   });
 
-  it('returns false when a start action already exists', () => {
-    const shouldForce = shouldForceRunContinuation({
+  it('continues when starter bootstrap text is present but no start action exists', () => {
+    const shouldContinue = shouldForceRunContinuation({
       chatMode: 'build',
-      lastUserContent: 'Create and run a mini React app.',
-      assistantContent:
-        '<boltArtifact id="a1" title="Run"><boltAction type="shell">pnpm dlx create-vite@latest mini-react-app --template react --no-interactive</boltAction><boltAction type="start">cd mini-react-app && pnpm run dev -- --host 0.0.0.0 --port 5173</boltAction></boltArtifact>',
       alreadyAttempted: false,
+      lastUserContent: 'Build a dashboard with forms and validation.',
+      assistantContent: 'Bolt is initializing your project with the required files using the Vite React template.',
     });
 
-    expect(shouldForce).toBe(false);
+    expect(shouldContinue).toBe(true);
   });
 
-  it('returns true when run intent exists but assistant only performed inspection commands', () => {
-    const shouldForce = shouldForceRunContinuation({
+  it('does not continue when the assistant already emitted a start action', () => {
+    const shouldContinue = shouldForceRunContinuation({
       chatMode: 'build',
-      lastUserContent: 'Create and run a mini React app, then show preview.',
-      assistantContent: '<boltArtifact id="a1" title="Inspect"><boltAction type="shell">ls</boltAction></boltArtifact>',
       alreadyAttempted: false,
+      lastUserContent: 'Run the app and keep preview open.',
+      assistantContent: '<boltAction type="start">pnpm run dev</boltAction>',
     });
 
-    expect(shouldForce).toBe(true);
+    expect(shouldContinue).toBe(false);
   });
 
-  it('returns true when run intent exists but assistant returned no bolt actions', () => {
-    const shouldForce = shouldForceRunContinuation({
+  it('continues when output is bootstrap-only even if start action exists', () => {
+    const decision = analyzeRunContinuation({
       chatMode: 'build',
-      lastUserContent: 'Create and run a mini React app, then show preview.',
-      assistantContent: 'I created the project and installed dependencies.',
       alreadyAttempted: false,
+      lastUserContent: "Create an appointment scheduling website for a doctor's office in React.",
+      assistantContent: `
+<boltAction type="shell">echo "Using built-in Vite React starter files"</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
     });
 
-    expect(shouldForce).toBe(true);
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('bootstrap-only-shell-actions');
   });
 
-  it('returns false outside build mode or after one continuation attempt', () => {
-    expect(
-      shouldForceRunContinuation({
-        chatMode: 'discuss',
-        lastUserContent: 'Run this app.',
-        assistantContent: 'pnpm dlx create-vite@latest mini-react-app --template react --no-interactive',
-        alreadyAttempted: false,
-      }),
-    ).toBe(false);
+  it('continues when only non-implementation files were written', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: "Create an appointment scheduling website for a doctor's office in React.",
+      assistantContent: `
+<boltAction type="file" filePath="README.md"># React + Vite + typescript fallback template</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+    });
 
-    expect(
-      shouldForceRunContinuation({
-        chatMode: 'build',
-        lastUserContent: 'Run this app.',
-        assistantContent: 'pnpm dlx create-vite@latest mini-react-app --template react --no-interactive',
-        alreadyAttempted: true,
-      }),
-    ).toBe(false);
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('bootstrap-only-shell-actions');
+  });
+
+  it('does not continue when implementation files are already present', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: "Create an appointment scheduling website for a doctor's office in React.",
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>appointments</div>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+    });
+
+    expect(decision.shouldContinue).toBe(false);
+    expect(decision.reason).toBe('continuation-not-required');
+  });
+
+  it('does not classify scaffold output as incomplete when implementation files are already present', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a React scheduler and run it.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>ready</div>;}</boltAction>
+<boltAction type="shell">pnpm dlx create-vite@latest . --template react</boltAction>
+`,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('run-intent-without-start');
+  });
+
+  it('continues when only inspection shell commands were emitted', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a patient intake app and run it.',
+      assistantContent: '<boltAction type="shell">ls -la && pwd && cat README.md</boltAction>',
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('inspection-only-shell-actions');
+  });
+
+  it('returns reason when continuation is skipped due prior attempt', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: true,
+      lastUserContent: 'Build a React scheduler app.',
+      assistantContent: '<boltAction type="shell">pnpm install</boltAction>',
+    });
+
+    expect(decision.shouldContinue).toBe(false);
+    expect(decision.reason).toBe('already-attempted');
   });
 });

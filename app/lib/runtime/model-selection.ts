@@ -18,6 +18,7 @@ interface PickPreferredProviderNameOptions {
   activeProviderNames: string[];
   apiKeys: Record<string, string>;
   localProviderNames?: string[];
+  configuredProviderNames?: string[];
   savedProviderName?: string;
   lastConfiguredProviderName?: string;
   fallbackProviderName?: string;
@@ -52,6 +53,80 @@ function isValidBedrockConfig(rawKey: string): boolean {
 const PROVIDER_API_KEY_VALIDATORS: Record<string, ProviderApiKeyValidator> = {
   AmazonBedrock: isValidBedrockConfig,
 };
+
+function isNonGeneralPurposeModel(name: string): boolean {
+  const normalized = name.toLowerCase();
+  const patterns = ['image', 'dall', 'whisper', 'tts', 'audio', 'transcribe', 'embedding', 'moderation', 'realtime'];
+
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+function scorePreferredModel(model: ModelInfo): number {
+  const normalized = model.name.toLowerCase();
+
+  if (isNonGeneralPurposeModel(normalized)) {
+    return -1000;
+  }
+
+  let score = 0;
+
+  if (normalized.includes('gpt-5.4')) {
+    score += 900;
+  }
+
+  if (normalized.includes('gpt-5.2-codex')) {
+    score += 850;
+  }
+
+  if (normalized.includes('gpt-5-codex')) {
+    score += 825;
+  }
+
+  if (normalized.includes('codex')) {
+    score += 800;
+  }
+
+  if (normalized.includes('gpt-5')) {
+    score += 760;
+  }
+
+  if (normalized.includes('claude-3-7')) {
+    score += 720;
+  }
+
+  if (normalized.includes('claude-3-5-sonnet')) {
+    score += 700;
+  }
+
+  if (normalized.includes('claude')) {
+    score += 660;
+  }
+
+  if (normalized.includes('gpt-4.1')) {
+    score += 640;
+  }
+
+  if (normalized.includes('gpt-4o')) {
+    score += 620;
+  }
+
+  if (normalized.includes('o4') || normalized.includes('o3') || normalized.includes('o1')) {
+    score += 600;
+  }
+
+  if (normalized.includes('mini')) {
+    score -= 30;
+  }
+
+  if (normalized.includes('preview')) {
+    score -= 10;
+  }
+
+  score += Math.min(Math.floor((model.maxTokenAllowed || 0) / 1000), 80);
+  score += Math.min(Math.floor((model.maxCompletionTokens || 0) / 1000), 40);
+
+  return score;
+}
 
 function parseRecord(raw: string | null | undefined): Record<string, unknown> {
   if (!raw) {
@@ -166,6 +241,7 @@ export function pickPreferredProviderName(options: PickPreferredProviderNameOpti
     activeProviderNames,
     apiKeys,
     localProviderNames = [],
+    configuredProviderNames = [],
     savedProviderName,
     lastConfiguredProviderName,
     fallbackProviderName,
@@ -177,8 +253,9 @@ export function pickPreferredProviderName(options: PickPreferredProviderNameOpti
 
   const activeSet = new Set(activeProviderNames);
   const localSet = new Set(localProviderNames);
+  const configuredSet = new Set(configuredProviderNames);
   const hasUsableProvider = (providerName: string): boolean =>
-    localSet.has(providerName) || hasUsableApiKey(apiKeys, providerName);
+    localSet.has(providerName) || configuredSet.has(providerName) || hasUsableApiKey(apiKeys, providerName);
   const hasAnyUsableProvider = activeProviderNames.some((providerName) => hasUsableProvider(providerName));
 
   const candidates = [lastConfiguredProviderName, savedProviderName, fallbackProviderName].filter(
@@ -317,5 +394,7 @@ export function resolvePreferredModelName(options: ResolvePreferredModelNameOpti
     }
   }
 
-  return providerModels[0].name;
+  const rankedModels = [...providerModels].sort((a, b) => scorePreferredModel(b) - scorePreferredModel(a));
+
+  return rankedModels[0]?.name;
 }

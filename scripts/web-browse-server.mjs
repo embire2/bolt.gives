@@ -53,6 +53,41 @@ function sendJson(res, statusCode, data) {
   res.end(payload);
 }
 
+function probeExistingServer() {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        host: HOST,
+        port: PORT,
+        path: '/health',
+        timeout: 1500,
+      },
+      (res) => {
+        let raw = '';
+
+        res.on('data', (chunk) => {
+          raw += chunk.toString();
+        });
+
+        res.on('end', () => {
+          try {
+            const payload = JSON.parse(raw);
+            resolve(Boolean(payload?.ok));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
 async function readJsonBody(req) {
   let raw = '';
 
@@ -331,10 +366,35 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[web-browse] listening on http://${HOST}:${PORT}`);
-});
+async function startServer() {
+  try {
+    await new Promise((resolve, reject) => {
+      const handleError = (error) => {
+        server.off('listening', handleListening);
+        reject(error);
+      };
+      const handleListening = () => {
+        server.off('error', handleError);
+        resolve(undefined);
+      };
+
+      server.once('error', handleError);
+      server.once('listening', handleListening);
+      server.listen(PORT, HOST);
+    });
+
+    // eslint-disable-next-line no-console
+    console.log(`[web-browse] listening on http://${HOST}:${PORT}`);
+  } catch (error) {
+    if (error?.code === 'EADDRINUSE' && (await probeExistingServer())) {
+      // eslint-disable-next-line no-console
+      console.log(`[web-browse] reusing existing server on http://${HOST}:${PORT}`);
+      return;
+    }
+
+    throw error;
+  }
+}
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
@@ -350,3 +410,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     process.exit(0);
   });
 }
+
+startServer().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error('[web-browse] failed to start server:', error);
+  process.exit(1);
+});

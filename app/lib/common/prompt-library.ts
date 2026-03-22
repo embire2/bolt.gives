@@ -59,13 +59,38 @@ export class PromptLibrary {
       };
     });
   }
-  static getPropmtFromLibrary(promptId: string, options: PromptOptions) {
-    const prompt = this.library[promptId];
+  static getPromptFromLibrary(promptId: string | undefined, options: PromptOptions) {
+    const normalizedPromptId = typeof promptId === 'string' ? promptId.trim() : '';
+    const requestedPrompt = this.library[normalizedPromptId];
+    const fallbackOrder = [requestedPrompt, this.library.default, this.library.original].filter(
+      (
+        entry,
+        index,
+        entries,
+      ): entry is { label: string; description: string; get: (options: PromptOptions) => string } =>
+        Boolean(entry) && entries.indexOf(entry) === index,
+    );
 
-    if (!prompt) {
-      throw 'Prompt Now Found';
+    for (const prompt of fallbackOrder) {
+      try {
+        const resolvedPrompt = prompt.get(options);
+
+        if (typeof resolvedPrompt === 'string' && resolvedPrompt.trim().length > 0) {
+          return resolvedPrompt;
+        }
+      } catch (error) {
+        console.warn('[PromptLibrary] prompt resolution failed, trying fallback', {
+          promptId: normalizedPromptId || 'default',
+          label: prompt.label,
+          error,
+        });
+      }
     }
 
-    return this.library[promptId]?.get(options);
+    return getSystemPrompt(options.cwd, options.supabase, options.designScheme);
+  }
+
+  static getPropmtFromLibrary(promptId: string | undefined, options: PromptOptions) {
+    return this.getPromptFromLibrary(promptId, options);
   }
 }

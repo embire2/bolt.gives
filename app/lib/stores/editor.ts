@@ -8,12 +8,13 @@ export type EditorDocuments = Record<string, EditorDocument>;
 type SelectedFile = WritableAtom<string | undefined>;
 
 const logger = createScopedLogger('EditorStore');
+const hotData = import.meta.hot?.data ?? {};
 
 export class EditorStore {
   #filesStore: FilesStore;
 
-  selectedFile: SelectedFile = import.meta.hot?.data.selectedFile ?? atom<string | undefined>();
-  documents: MapStore<EditorDocuments> = import.meta.hot?.data.documents ?? map({});
+  selectedFile: SelectedFile = hotData?.selectedFile ?? atom<string | undefined>();
+  documents: MapStore<EditorDocuments> = hotData?.documents ?? map({});
 
   currentDocument = computed([this.documents, this.selectedFile], (documents, selectedFile) => {
     if (!selectedFile) {
@@ -27,8 +28,10 @@ export class EditorStore {
     this.#filesStore = filesStore;
 
     if (import.meta.hot) {
-      import.meta.hot.data.documents = this.documents;
-      import.meta.hot.data.selectedFile = this.selectedFile;
+      const hot = import.meta.hot as any;
+      hot.data ??= {};
+      hot.data.documents = this.documents;
+      hot.data.selectedFile = this.selectedFile;
     }
   }
 

@@ -38,7 +38,6 @@ import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/li
 import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
-import { normalizeCredential } from '~/lib/runtime/credentials';
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
@@ -51,12 +50,11 @@ export async function action(args: ActionFunctionArgs) {
 
 const logger = createScopedLogger('api.chat');
 const MAX_RUN_CONTINUATION_ATTEMPTS = 5;
-const LONG_THINK_MODEL_RE =
-  /\b(gpt-5|gpt-5\.2|gpt-5-codex|codex|o1|o3|claude-3\.7|claude-3\.5-sonnet-latest|claude-3-5-sonnet-latest)\b/i;
+const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 
-function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
-  if (value == null) {
-    return fallback;
+function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
+  if (typeof value !== 'string') {
+    return defaultValue;
   }
 
   const normalized = value.trim().toLowerCase();
@@ -69,31 +67,7 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean 
     return false;
   }
 
-  return fallback;
-}
-
-function buildForcedRunRecoveryPrompt(params: { provider: string; model: string; originalRequest: string }): string {
-  const { provider, model, originalRequest } = params;
-
-  return `[Model: ${model}]
-
-[Provider: ${provider}]
-
-Forced recovery mode: previous attempts did not produce a runnable implementation.
-Continue from the current project state and execute the original request now.
-
-Original request:
-${originalRequest}
-
-Hard requirements (must follow exactly):
-1) Emit exactly one <boltArtifact> with executable <boltAction> steps.
-2) Do NOT run inspection-only commands (ls, pwd, cat, find, tree, env, echo).
-3) Do NOT re-scaffold if package.json already exists.
-4) First meaningful actions must be <boltAction type="file"> updates that implement the requested features.
-5) If dependencies are missing, run a single install command.
-6) Include a <boltAction type="start"> command to run the dev server.
-7) If preview still shows fallback starter text, replace src/App.tsx (or equivalent root UI entry) immediately.
-8) Keep prose short; focus on executable steps and completion.`;
+  return defaultValue;
 }
 
 function extractLatestUserGoal(messages: Messages): string {
@@ -265,15 +239,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     hasBodyApiKeys: Object.keys(bodyApiKeys).length > 0,
     hasMergedApiKeys: Object.keys(mergedApiKeys).length > 0,
     hasResolvedApiKeys: Object.keys(apiKeys).length > 0,
-    mergedApiKeyProviders: Object.keys(mergedApiKeys),
-    resolvedApiKeyProviders: Object.keys(apiKeys),
-    selectedProviderHasMergedKey: Boolean(
-      selectedProvider ? normalizeCredential(mergedApiKeys[selectedProvider]) : undefined,
-    ),
-    selectedProviderHasResolvedKey: Boolean(
-      selectedProvider ? normalizeCredential(apiKeys[selectedProvider]) : undefined,
-    ),
-    hasOpenAIEnvKey: Boolean(normalizeCredential(runtimeEnv.OPENAI_API_KEY)),
+    hasOpenAIEnvKey: Boolean(runtimeEnv.OPENAI_API_KEY),
     chatMode,
     maxLLMSteps,
   };
@@ -323,6 +289,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let completionEmitted = false;
         let hasExecutionFailures = false;
         let latestExecutionFailure: ReturnType<typeof extractExecutionFailure> = null;
+        let previewCheckpointObserved = false;
+        const effectiveChatMode = chatMode || 'build';
 
         const stopCommentaryHeartbeat = () => {
           if (commentaryHeartbeat) {
@@ -334,6 +302,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         const markRunActivity = () => {
           streamRecovery?.updateActivity();
+        };
+
+        const beginRunMonitors = () => {
+          streamRecovery?.startMonitoring();
+          markRunActivity();
         };
 
         const writeCommentary = (
@@ -459,19 +432,54 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           });
           dataStream.writeData({ ...runMetricsEvent });
           dataStream.writeData({ ...projectMemoryEvent });
+
+          const responseMessage =
+            effectiveChatMode === 'build' && !previewCheckpointObserved && !hasExecutionFailures
+              ? 'Response Generated (preview not yet verified)'
+              : hasExecutionFailures
+                ? 'Response Generated (with execution failures)'
+                : 'Response Generated';
           dataStream.writeData({
             type: 'progress',
             label: 'response',
             status: 'complete',
             order: progressCounter++,
-            message: hasExecutionFailures ? 'Response Generated (with execution failures)' : 'Response Generated',
+            message: responseMessage,
           } satisfies ProgressAnnotation);
         };
 
-        const longThinkSelectedModel = selectedModel || '';
-        const dynamicStreamTimeoutFallbackMs = LONG_THINK_MODEL_RE.test(longThinkSelectedModel) ? 300000 : 180000;
+        const emitFinalNextStepCommentary = () => {
+          if (hasExecutionFailures && latestExecutionFailure) {
+            writeCommentary(
+              'next-step',
+              'Work finished, but one step still needs attention.',
+              'warning',
+              `Key changes: A previous step did not finish successfully.
+Next: I am returning clear recovery instructions to help you resolve it quickly.`,
+            );
+
+            return;
+          }
+
+          if (effectiveChatMode === 'build' && !previewCheckpointObserved) {
+            writeCommentary(
+              'next-step',
+              'Execution finished, but preview verification is still pending.',
+              'warning',
+              `Key changes: Code generation completed, but no preview-ready checkpoint was observed yet.
+Next: Check the preview/start output before treating this run as complete.`,
+            );
+
+            return;
+          }
+
+          writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
+        };
+
+        const longThinkSelection = resolvedSelectionForLogs.model || selectedModel || '';
+        const defaultStreamTimeoutMs = LONG_THINK_MODEL_RE.test(longThinkSelection) ? 300000 : 180000;
         const configuredStreamTimeoutMs = Number(
-          envVars?.BOLT_STREAM_TIMEOUT_MS || process?.env?.BOLT_STREAM_TIMEOUT_MS || dynamicStreamTimeoutFallbackMs,
+          envVars?.BOLT_STREAM_TIMEOUT_MS || process?.env?.BOLT_STREAM_TIMEOUT_MS || defaultStreamTimeoutMs,
         );
         const configuredStreamMaxRetries = Number(
           envVars?.BOLT_STREAM_RECOVERY_MAX_RETRIES || process?.env?.BOLT_STREAM_RECOVERY_MAX_RETRIES || 2,
@@ -479,7 +487,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const streamTimeoutMs =
           Number.isFinite(configuredStreamTimeoutMs) && configuredStreamTimeoutMs >= 30000
             ? configuredStreamTimeoutMs
-            : dynamicStreamTimeoutFallbackMs;
+            : 180000;
         const streamMaxRetries =
           Number.isFinite(configuredStreamMaxRetries) && configuredStreamMaxRetries >= 0
             ? configuredStreamMaxRetries
@@ -514,7 +522,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             }
           },
         });
-        streamRecovery.startMonitoring();
 
         const filePaths = getFilePaths(files || {});
         let filteredFiles: FileMap | undefined = undefined;
@@ -522,15 +529,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
         const preferredSelection = resolvePreferredModelProvider(processedMessages, selectedModel, selectedProvider);
-
-        /*
-         * Use explicit user-provided keys (cookie/body) for selection fallback decisions.
-         * Runtime-env hydration still applies at execution time, but we avoid silently
-         * switching to unrelated env-backed providers during model/provider sanitization.
-         */
         const sanitizedSelection = sanitizeSelectionWithApiKeys({
           selection: preferredSelection,
-          apiKeys: mergedApiKeys,
+          apiKeys,
           selectedProviderCookie: selectedProvider,
         });
         resolvedSelectionForLogs = {
@@ -542,7 +543,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         const collectedToolOutputs: string[] = [];
         let forceFinalizeAttempted = false;
         let runContinuationAttempts = 0;
-        let forcedRunRecoveryAttempted = false;
 
         writeCommentary('plan', 'I am reviewing your request and mapping out the first steps.');
         startCommentaryHeartbeat();
@@ -654,7 +654,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let subAgentPlan: string | undefined = undefined;
         let plannerAgentId: string | undefined = undefined;
 
-        if (chatMode === 'build') {
+        if (effectiveChatMode === 'build') {
           writeCommentary('plan', 'I am drafting a clear step-by-step plan before coding.');
 
           const latestPlannerSourceMessage = [...processedMessages]
@@ -666,46 +666,52 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             : undefined;
           const plannerModel = plannerSelection?.model;
           const plannerProvider = plannerSelection?.provider;
-          const plannerEnabled = parseBooleanEnv(envVars?.BOLT_PLANNER_SUBAGENT_ENABLED, true);
-          const plannerLongThinkEnabled = parseBooleanEnv(envVars?.BOLT_PLANNER_LONG_THINK_ENABLED, false);
-          const plannerModelForPolicy = plannerModel || selectedModel || '';
-          const plannerIsLongThink = LONG_THINK_MODEL_RE.test(plannerModelForPolicy);
-          const shouldRunPlanner = plannerEnabled && (!plannerIsLongThink || plannerLongThinkEnabled);
+          const plannerFeatureEnabled = parseBooleanEnv(
+            envVars?.BOLT_PLANNER_SUBAGENT_ENABLED || process?.env?.BOLT_PLANNER_SUBAGENT_ENABLED,
+            true,
+          );
+          const plannerAllowedForLongThink = parseBooleanEnv(
+            envVars?.BOLT_PLANNER_LONG_THINK_ENABLED || process?.env?.BOLT_PLANNER_LONG_THINK_ENABLED,
+            false,
+          );
+          const effectivePlannerModel = plannerModel || selectedModel || '';
+          const isLongThinkModel = LONG_THINK_MODEL_RE.test(effectivePlannerModel);
+          const shouldRunPlanner = plannerFeatureEnabled && (plannerAllowedForLongThink || !isLongThinkModel);
 
           if (!shouldRunPlanner) {
-            const skipReason = !plannerEnabled
-              ? 'Planner helper is disabled by runtime config.'
-              : `Planner helper is skipped for long-think model ${plannerModelForPolicy || 'unknown model'} to keep execution responsive.`;
+            const reason = !plannerFeatureEnabled
+              ? 'disabled by configuration'
+              : `skipped for ${effectivePlannerModel || 'current model'} to reduce stall risk`;
             writeCommentary(
               'plan',
-              'I am moving straight into implementation for this run.',
+              'I am skipping the planning helper and moving directly into executable steps.',
               'in-progress',
-              `Key changes: ${skipReason}
-Next: I am executing code actions directly and will stream progress checkpoints.`,
+              `Key changes: Planner sub-agent ${reason}.
+Next: I will execute actions directly for faster progress.`,
             );
           }
 
-          if (shouldRunPlanner) {
-            const getPlannerParams = async (_messages: Messages, _config: SubAgentConfig) => ({
-              env: runtimeEnv as any,
-              options: {
-                maxSteps: 1,
-                tools: {},
-                toolChoice: undefined,
-              } as StreamingOptions,
-              apiKeys,
-              files,
-              providerSettings,
-              promptId,
-              contextOptimization,
-              contextFiles: filteredFiles,
-              summary,
-              messageSliceId,
-              chatMode: 'discuss',
-              designScheme,
-              projectMemory: effectiveProjectMemory || undefined,
-            });
+          const getPlannerParams = async (_messages: Messages, _config: SubAgentConfig) => ({
+            env: runtimeEnv as any,
+            options: {
+              maxSteps: 1,
+              tools: {},
+              toolChoice: undefined,
+            } as StreamingOptions,
+            apiKeys,
+            files,
+            providerSettings,
+            promptId,
+            contextOptimization,
+            contextFiles: filteredFiles,
+            summary,
+            messageSliceId,
+            chatMode: 'discuss',
+            designScheme,
+            projectMemory: effectiveProjectMemory || undefined,
+          });
 
+          if (shouldRunPlanner) {
             const plannerExecutor = createPlannerExecutor(getPlannerParams);
             subAgentManager.registerExecutor('planner', plannerExecutor);
 
@@ -813,6 +819,9 @@ Next: I am confirming everything still works before moving on.`,
             });
 
             checkpointEvents.forEach((event) => dataStream.writeData({ ...(event as CheckpointDataEvent) }));
+            previewCheckpointObserved =
+              previewCheckpointObserved ||
+              checkpointEvents.some((event) => event.checkpointType === 'preview-ready' && event.status === 'complete');
 
             const executionFailure = extractExecutionFailure({
               toolCalls: toolCalls as Array<{ toolName?: string; toolCallId?: string; args?: unknown }>,
@@ -945,22 +954,14 @@ Next: I am sending the final result now.`,
                     forceFinalizeRequested = false;
                   }
 
-                  if (hasExecutionFailures && latestExecutionFailure) {
-                    writeCommentary(
-                      'next-step',
-                      'Work finished, but one step still needs attention.',
-                      'warning',
-                      `Key changes: A previous step did not finish successfully.
-Next: I am returning clear recovery instructions to help you resolve it quickly.`,
-                    );
-                  } else {
-                    writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
-                  }
+                  emitFinalNextStepCommentary();
 
                   stopRunMonitors();
                   emitRunCompletionEvents(finalContent, model, provider);
                 },
               };
+
+              beginRunMonitors();
 
               const result = await streamText({
                 messages: [...processedMessages],
@@ -993,11 +994,9 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
               chatMode: chatMode || 'build',
               lastUserContent,
               assistantContent: content,
-              alreadyAttempted: false,
-              attemptCount: runContinuationAttempts,
+              alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
             });
-            const continuationLimitReached = runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS;
-            const shouldContinueForRunIntent = runContinuationDecision.shouldContinue && !continuationLimitReached;
+            const shouldContinueForRunIntent = runContinuationDecision.shouldContinue;
 
             if (shouldContinueForRunIntent) {
               runContinuationAttempts += 1;
@@ -1042,76 +1041,10 @@ Continue now and do ALL of the following:
 6) your response must start with executable <boltAction> steps (no plan-only prose).
 7) if preview still shows the starter, replace src/App.tsx (or equivalent entry UI file) with the requested implementation.
 8) keep the final response concise and execution-focused.
-9) do NOT run inspection-only commands (ls, pwd, cat, find, tree, env) as standalone steps.
-10) your first meaningful action must implement feature code files for the original request.
-${runContinuationAttempts >= 2 ? '11) this is the final continuation attempt: skip diagnostics and apply implementation changes immediately.' : ''}
 `,
               });
 
-              const result = await streamText({
-                messages: [...processedMessages],
-                env: runtimeEnv as any,
-                options: {
-                  ...options,
-                  abortSignal: createStreamAbortSignal(),
-                },
-                apiKeys,
-                files,
-                providerSettings,
-                promptId,
-                contextOptimization,
-                contextFiles: filteredFiles,
-                chatMode,
-                designScheme,
-                summary,
-                messageSliceId,
-                projectMemory: effectiveProjectMemory || undefined,
-                subAgentPlan,
-              });
-
-              markRunActivity();
-              result.mergeIntoDataStream(dataStream);
-
-              return;
-            }
-
-            if (
-              runContinuationDecision.shouldContinue &&
-              continuationLimitReached &&
-              !forcedRunRecoveryAttempted &&
-              (chatMode || 'build') === 'build'
-            ) {
-              forcedRunRecoveryAttempted = true;
-              writeCommentary(
-                'recovery',
-                'Automatic recovery is escalating because previous attempts did not produce implementation steps.',
-                'warning',
-                `Key changes: Escalated continuation recovery after ${runContinuationAttempts} attempts (${runContinuationDecision.reason}).
-Next: I will force a file-first implementation response and relaunch preview from the existing project state.`,
-              );
-              logger.warn(
-                `run continuation escalated to forced recovery ${JSON.stringify({
-                  runId,
-                  reason: runContinuationDecision.reason,
-                  provider,
-                  model,
-                  attempts: runContinuationAttempts,
-                  maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
-                  assistantChars: content.length,
-                  assistantPreview: content.replace(/\s+/g, ' ').slice(0, 220),
-                })}`,
-              );
-
-              processedMessages.push({ id: generateId(), role: 'assistant', content });
-              processedMessages.push({
-                id: generateId(),
-                role: 'user',
-                content: buildForcedRunRecoveryPrompt({
-                  provider,
-                  model,
-                  originalRequest: lastUserContent,
-                }),
-              });
+              beginRunMonitors();
 
               const result = await streamText({
                 messages: [...processedMessages],
@@ -1165,17 +1098,7 @@ Next: I am sending the final result now.`,
                 forceFinalizeRequested = false;
               }
 
-              if (hasExecutionFailures && latestExecutionFailure) {
-                writeCommentary(
-                  'next-step',
-                  'Work finished, but one step still needs attention.',
-                  'warning',
-                  `Key changes: A previous step did not finish successfully.
-Next: I am returning clear recovery instructions to help you resolve it quickly.`,
-                );
-              } else {
-                writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
-              }
+              emitFinalNextStepCommentary();
 
               stopRunMonitors();
               emitRunCompletionEvents(content, model, provider);
@@ -1198,6 +1121,8 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
               role: 'user',
               content: `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${CONTINUE_PROMPT}`,
             });
+
+            beginRunMonitors();
 
             const result = await streamText({
               messages: [...processedMessages],
@@ -1235,6 +1160,8 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
         writeCommentary('action', 'I am now executing the plan and streaming progress as I go.');
+
+        beginRunMonitors();
 
         const result = await streamText({
           messages: [...processedMessages],

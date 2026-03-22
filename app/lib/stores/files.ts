@@ -23,6 +23,7 @@ import {
 import { getCurrentChatId } from '~/utils/fileLocks';
 
 const logger = createScopedLogger('FilesStore');
+const hotData = import.meta.hot?.data ?? {};
 
 const utf8TextDecoder = new TextDecoder('utf8', { fatal: true });
 
@@ -57,17 +58,17 @@ export class FilesStore {
    * Needs to be reset when the user sends another message and all changes have to be submitted
    * for the model to be aware of the changes.
    */
-  #modifiedFiles: Map<string, string> = import.meta.hot?.data.modifiedFiles ?? new Map();
+  #modifiedFiles: Map<string, string> = hotData?.modifiedFiles ?? new Map();
 
   /**
    * Keeps track of deleted files and folders to prevent them from reappearing on reload
    */
-  #deletedPaths: Set<string> = import.meta.hot?.data.deletedPaths ?? new Set();
+  #deletedPaths: Set<string> = hotData?.deletedPaths ?? new Set();
 
   /**
    * Map of files that matches the state of WebContainer.
    */
-  files: MapStore<FileMap> = import.meta.hot?.data.files ?? map({});
+  files: MapStore<FileMap> = hotData?.files ?? map({});
 
   get filesCount() {
     return this.#size;
@@ -97,10 +98,13 @@ export class FilesStore {
     this.#loadLockedFiles();
 
     if (import.meta.hot) {
+      const hot = import.meta.hot as any;
+      hot.data ??= {};
+
       // Persist our state across hot reloads
-      import.meta.hot.data.files = this.files;
-      import.meta.hot.data.modifiedFiles = this.#modifiedFiles;
-      import.meta.hot.data.deletedPaths = this.#deletedPaths;
+      hot.data.files = this.files;
+      hot.data.modifiedFiles = this.#modifiedFiles;
+      hot.data.deletedPaths = this.#deletedPaths;
     }
 
     // Listen for URL changes to detect chat ID changes
@@ -949,6 +953,85 @@ export class FilesStore {
     }
   }
 
+  async restoreSnapshot(snapshotFiles: FileMap) {
+    const webcontainer = await this.#webcontainer;
+    const nextFiles = Object.fromEntries(
+      Object.entries(snapshotFiles)
+        .filter(([, dirent]) => dirent !== undefined)
+        .map(([filePath, dirent]) => [filePath, dirent ? { ...dirent } : dirent]),
+    ) as FileMap;
+    const currentFiles = this.files.get();
+
+    const existingPaths = Object.entries(currentFiles)
+      .filter(([, dirent]) => dirent !== undefined)
+      .sort(([leftPath], [rightPath]) => rightPath.length - leftPath.length);
+
+    for (const [absolutePath, dirent] of existingPaths) {
+      if (nextFiles[absolutePath] !== undefined) {
+        continue;
+      }
+
+      const relativePath = path.relative(webcontainer.workdir, absolutePath);
+
+      if (!relativePath || relativePath.startsWith('..')) {
+        continue;
+      }
+
+      try {
+        if (dirent?.type === 'folder') {
+          await webcontainer.fs.rm(relativePath, { recursive: true });
+        } else {
+          await webcontainer.fs.rm(relativePath);
+        }
+      } catch {
+        // Best effort only. The store is still updated to the snapshot below.
+      }
+    }
+
+    const folderEntries = Object.entries(nextFiles)
+      .filter(([, dirent]) => dirent?.type === 'folder')
+      .sort(([leftPath], [rightPath]) => leftPath.length - rightPath.length);
+    const fileEntries = Object.entries(nextFiles)
+      .filter(([, dirent]) => dirent?.type === 'file')
+      .sort(([leftPath], [rightPath]) => leftPath.length - rightPath.length);
+
+    for (const [absolutePath] of folderEntries) {
+      const relativePath = path.relative(webcontainer.workdir, absolutePath);
+
+      if (!relativePath || relativePath.startsWith('..')) {
+        continue;
+      }
+
+      await webcontainer.fs.mkdir(relativePath, { recursive: true });
+    }
+
+    for (const [absolutePath, dirent] of fileEntries) {
+      const relativePath = path.relative(webcontainer.workdir, absolutePath);
+
+      if (!relativePath || relativePath.startsWith('..') || dirent?.type !== 'file') {
+        continue;
+      }
+
+      const parentPath = path.dirname(relativePath);
+
+      if (parentPath && parentPath !== '.') {
+        await webcontainer.fs.mkdir(parentPath, { recursive: true });
+      }
+
+      if (dirent.isBinary) {
+        await webcontainer.fs.writeFile(relativePath, decodeBase64ToUint8Array(dirent.content));
+      } else {
+        await webcontainer.fs.writeFile(relativePath, dirent.content ?? '');
+      }
+    }
+
+    this.#deletedPaths.clear();
+    this.#modifiedFiles.clear();
+    this.#size = fileEntries.length;
+    this.files.set(nextFiles);
+    this.#persistDeletedPaths();
+  }
+
   // method to persist deleted paths to localStorage
   #persistDeletedPaths() {
     try {
@@ -977,4 +1060,20 @@ function isBinaryFile(buffer: Uint8Array | undefined) {
  */
 function convertToBuffer(view: Uint8Array): Buffer {
   return Buffer.from(view.buffer, view.byteOffset, view.byteLength);
+}
+
+function decodeBase64ToUint8Array(input: string): Uint8Array {
+  if (!input) {
+    return new Uint8Array();
+  }
+
+  const normalized = input.includes(',') ? input.slice(input.indexOf(',') + 1) : input;
+  const binary = atob(normalized);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }

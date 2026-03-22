@@ -15,10 +15,14 @@ import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 import {
   decodeHtmlCommandDelimiters,
   makeCreateViteNonInteractive,
+  makeInstallCommandsLowNoise,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
+  makeScaffoldCommandsProjectAware,
+  normalizeShellCommandSurface,
   unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
+import { normalizeArtifactFilePath } from './file-paths';
 
 const logger = createScopedLogger('ActionRunner');
 const NOISY_PACKAGE_PROGRESS_RE =
@@ -215,7 +219,7 @@ export class ActionRunner {
         case 'start': {
           // making the start app non blocking
 
-          this.#runStartAction(action)
+          this.#runStartAction(actionId, action)
             .then(() => this.#updateAction(actionId, { status: 'complete' }))
             .catch((err: Error) => {
               if (action.abortSignal.aborted) {
@@ -379,7 +383,7 @@ export class ActionRunner {
     }
   }
 
-  async #runStartAction(action: ActionState) {
+  async #runStartAction(actionId: string, action: ActionState) {
     if (action.type !== 'start') {
       unreachable('Expected shell action');
     }
@@ -395,17 +399,76 @@ export class ActionRunner {
       unreachable('Shell terminal not found');
     }
 
-    const resp = await shell.executeCommand(this.runnerId.get(), action.content, () => {
-      logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
-      action.abort();
-    });
-    logger.debug(`${action.type} Shell Response: [exit code:${resp?.exitCode}]`);
+    const validationResult = await this.#validateShellCommand(action.content);
 
-    if (resp?.exitCode != 0) {
-      throw new ActionCommandError('Failed To Start Application', resp?.output || 'No Output Available');
+    if (validationResult.shouldModify && validationResult.modifiedCommand) {
+      logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
+      action.content = validationResult.modifiedCommand;
+      this.#updateAction(actionId, { ...action } as any);
     }
 
-    return resp;
+    let finalOutput = '';
+    let finalExitCode = 0;
+    let stepError: string | undefined;
+    const stepSocket = this.#getStepEventSocket();
+    const stepRunner = new InteractiveStepRunner(
+      {
+        executeStep: async (_step: InteractiveStep, context) => {
+          const resp = await shell.executeCommand(
+            this.runnerId.get(),
+            action.content,
+            () => {
+              logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
+              action.abort();
+            },
+            (chunk) => {
+              const normalized = normalizeShellChunkForTimeline(chunk);
+
+              if (!normalized.trim()) {
+                return;
+              }
+
+              context.onStdout(normalized);
+            },
+          );
+          const output = resp?.output || '';
+          const exitCode = resp?.exitCode ?? 1;
+
+          finalOutput = output;
+          finalExitCode = exitCode;
+
+          return {
+            exitCode,
+            stdout: output,
+            stderr: exitCode === 0 ? '' : output,
+          };
+        },
+      },
+      stepSocket,
+    );
+
+    stepRunner.addEventListener('event', (event) => {
+      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+      this.onStepRunnerEvent?.(detail);
+
+      if (detail.type === 'error') {
+        stepError = detail.error || 'Step execution failed';
+      }
+    });
+
+    await stepRunner.run([
+      {
+        description: `Start application: ${action.content}`,
+        command: [action.content],
+      },
+    ]);
+
+    logger.debug(`${action.type} Shell Response: [exit code:${finalExitCode}]`);
+
+    if (stepError || finalExitCode !== 0) {
+      const enhancedError = this.#createEnhancedShellError(action.content, finalExitCode, finalOutput);
+      throw new ActionCommandError(enhancedError.title, stepError || enhancedError.details);
+    }
   }
 
   #getStepEventSocket() {
@@ -438,7 +501,8 @@ export class ActionRunner {
     }
 
     const webcontainer = await this.#webcontainer;
-    const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
+    const normalizedFilePath = normalizeArtifactFilePath(action.filePath, webcontainer.workdir);
+    const relativePath = nodePath.relative(webcontainer.workdir, normalizedFilePath);
 
     let folder = nodePath.dirname(relativePath);
 
@@ -721,9 +785,16 @@ export class ActionRunner {
     };
 
     applyRewrite(unwrapCommandJsonEnvelope(trimmedCommand));
+    applyRewrite(normalizeShellCommandSurface(trimmedCommand));
     applyRewrite(decodeHtmlCommandDelimiters(trimmedCommand));
     applyRewrite(makeCreateViteNonInteractive(trimmedCommand));
     applyRewrite(makeInstallCommandsProjectAware(trimmedCommand));
+    applyRewrite(
+      makeScaffoldCommandsProjectAware(trimmedCommand, {
+        projectInitialized: await this.#isProjectInitialized(),
+      }),
+    );
+    applyRewrite(makeInstallCommandsLowNoise(trimmedCommand));
     applyRewrite(makeFileChecksPortable(trimmedCommand));
 
     if (hasCommandRewrite) {
@@ -822,6 +893,17 @@ export class ActionRunner {
     return { shouldModify: false };
   }
 
+  async #isProjectInitialized(): Promise<boolean> {
+    try {
+      const webcontainer = await this.#webcontainer;
+      await webcontainer.fs.readFile('package.json', 'utf-8');
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   #createEnhancedShellError(
     command: string,
     exitCode: number | undefined,
@@ -878,13 +960,19 @@ export class ActionRunner {
         },
       },
       {
+        pattern: /ERR_PNPM_NO_SCRIPT|Command\s+["'][^"']+["']\s+not found/i,
+        title: 'Missing npm script',
+        getMessage: () =>
+          `The requested npm/pnpm script is not defined in package.json.\n\nSuggestion: Check package.json scripts and run the correct command (for Vite usually "pnpm run dev").`,
+      },
+      {
         pattern: /Permission denied/,
         title: 'Permission Denied',
         getMessage: () =>
           `Permission denied for '${firstWord}'.\n\nSuggestion: The file may not be executable. Try 'chmod +x filename' first.`,
       },
       {
-        pattern: /command not found/,
+        pattern: /(?:^|\n)(?:jsh|bash|sh|zsh):[^\n]*command not found\b/i,
         title: 'Command Not Found',
         getMessage: () =>
           `The command '${firstWord}' is not available in WebContainer.\n\nSuggestion: Check available commands or use a package manager to install it.`,

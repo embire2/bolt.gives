@@ -70,6 +70,8 @@ export function SupabaseConnection() {
           disabled={connecting}
           onClick={() => setIsDialogOpen(!isDialogOpen)}
           className="hover:bg-bolt-elements-item-backgroundActive !text-white flex items-center gap-2"
+          title="Open Supabase connection"
+          ariaLabel="Open Supabase connection"
         >
           <div className="i-ph:database w-4 h-4 text-[#3ECF8E]" />
           {isConnected && supabaseConn.project && (
@@ -284,9 +286,11 @@ interface ButtonProps {
   children?: any;
   onClick?: VoidFunction;
   className?: string;
+  title?: string;
+  ariaLabel?: string;
 }
 
-function Button({ active = false, disabled = false, children, onClick, className }: ButtonProps) {
+function Button({ active = false, disabled = false, children, onClick, className, title, ariaLabel }: ButtonProps) {
   return (
     <button
       className={classNames(
@@ -301,6 +305,8 @@ function Button({ active = false, disabled = false, children, onClick, className
         className,
       )}
       onClick={onClick}
+      title={title}
+      aria-label={ariaLabel}
     >
       {children}
     </button>

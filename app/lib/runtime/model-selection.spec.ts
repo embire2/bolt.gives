@@ -84,6 +84,19 @@ describe('model-selection utilities', () => {
     expect(preferred).toBe('Ollama');
   });
 
+  it('prefers an env-configured provider over local fallback during bootstrap', () => {
+    const preferred = pickPreferredProviderName({
+      activeProviderNames: ['OpenAI', 'LMStudio'],
+      apiKeys: {},
+      configuredProviderNames: ['OpenAI'],
+      localProviderNames: ['LMStudio'],
+      savedProviderName: 'OpenAI',
+      fallbackProviderName: 'LMStudio',
+    });
+
+    expect(preferred).toBe('OpenAI');
+  });
+
   it('treats invalid Bedrock JSON config as unusable and picks a valid provider key', () => {
     const preferred = pickPreferredProviderName({
       activeProviderNames: ['AmazonBedrock', 'OpenAI', 'Ollama'],
@@ -100,7 +113,7 @@ describe('model-selection utilities', () => {
     expect(preferred).toBe('OpenAI');
   });
 
-  it('resolves model preference as remembered -> saved -> first model', () => {
+  it('resolves model preference as remembered -> saved -> preferred fallback', () => {
     const models: ModelInfo[] = [
       { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },
       { name: 'gpt-5-codex', label: 'GPT-5 Codex', provider: 'OpenAI', maxTokenAllowed: 128000 },
@@ -124,7 +137,24 @@ describe('model-selection utilities', () => {
 
     expect(rememberedFirst).toBe('gpt-5-codex');
     expect(savedSecond).toBe('gpt-4o');
-    expect(fallbackThird).toBe('gpt-4o');
+    expect(fallbackThird).toBe('gpt-5-codex');
+  });
+
+  it('prefers a stronger default model instead of alphabetical fallback when saved models are invalid', () => {
+    const models: ModelInfo[] = [
+      { name: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI', maxTokenAllowed: 16000 },
+      { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },
+      { name: 'gpt-5.4', label: 'GPT-5.4', provider: 'OpenAI', maxTokenAllowed: 128000, maxCompletionTokens: 12000 },
+    ];
+
+    const resolved = resolvePreferredModelName({
+      providerName: 'OpenAI',
+      models,
+      rememberedModelName: 'missing-model',
+      savedModelName: 'also-missing',
+    });
+
+    expect(resolved).toBe('gpt-5.4');
   });
 
   it('stores and retrieves provider model selections', () => {

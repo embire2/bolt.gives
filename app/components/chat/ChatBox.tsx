@@ -50,6 +50,7 @@ interface ChatBoxProps {
   setQrModalOpen: (open: boolean) => void;
   handleFileUpload: () => void;
   setProvider?: ((provider: ProviderInfo) => void) | undefined;
+  onProviderSelection?: ((provider: ProviderInfo, preferredModel?: string) => void) | undefined;
   model?: string | undefined;
   setModel?: ((model: string) => void) | undefined;
   setUploadedFiles?: ((files: File[]) => void) | undefined;
@@ -125,6 +126,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 modelList={props.modelList}
                 provider={props.provider}
                 setProvider={props.setProvider}
+                onProviderSelection={props.onProviderSelection}
                 providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
                 apiKeys={props.apiKeys}
                 modelLoading={props.isModelLoading}
@@ -270,8 +272,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             />
           )}
         </ClientOnly>
-        <div className="flex justify-between items-center text-sm p-4 pt-2">
-          <div className="flex gap-1 items-center">
+        <div className="flex flex-col gap-2 text-sm p-4 pt-2">
+          <div className="flex flex-wrap gap-1 items-center">
             <ColorSchemeDialog designScheme={props.designScheme} setDesignScheme={props.setDesignScheme} />
             <McpTools />
             <IconButton title="Upload file" className="transition-all" onClick={() => props.handleFileUpload()}>
@@ -315,7 +317,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
                 }}
               >
                 <div className={`i-ph:chats text-xl`} />
-                {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
+                {props.chatMode === 'discuss' ? <span className="hidden md:inline">Discuss</span> : <span />}
               </IconButton>
             )}
             <IconButton
@@ -330,7 +332,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               disabled={props.isStreaming}
             >
               <div className="i-ph:list-checks text-xl" />
-              {props.agentMode === 'plan' ? <span>Plan</span> : <span />}
+              {props.agentMode === 'plan' ? <span className="hidden md:inline">Plan</span> : <span />}
             </IconButton>
             <IconButton
               title="Act Mode"
@@ -344,7 +346,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               disabled={props.isStreaming}
             >
               <div className="i-ph:play-circle text-xl" />
-              {props.agentMode === 'act' ? <span>Act</span> : <span />}
+              {props.agentMode === 'act' ? <span className="hidden md:inline">Act</span> : <span />}
             </IconButton>
             <IconButton
               title={`Autonomy Mode: ${getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe')}`}
@@ -361,7 +363,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               disabled={props.isStreaming}
             >
               <div className="i-ph:shield-check text-xl" />
-              <span>{getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe')}</span>
+              <span className="hidden sm:inline">{getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe')}</span>
             </IconButton>
             <IconButton
               title="Save Session"
@@ -399,11 +401,15 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               disabled={!props.providerList || props.providerList.length === 0}
             >
               <div className={`i-ph:caret-${props.isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-              {props.isModelSettingsCollapsed ? <span className="text-xs">{props.model}</span> : <span />}
+              {props.isModelSettingsCollapsed ? (
+                <span className="hidden sm:inline text-xs">{props.model}</span>
+              ) : (
+                <span />
+              )}
             </IconButton>
           </div>
           {props.input.length > 3 ? (
-            <div className="text-xs text-bolt-elements-textTertiary">
+            <div className="hidden md:block text-xs text-bolt-elements-textTertiary">
               Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd> +{' '}
               <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd> a new line
             </div>

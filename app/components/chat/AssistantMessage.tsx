@@ -17,6 +17,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { ToolInvocations } from './ToolInvocations';
 import type { ToolCallAnnotation } from '~/types/context';
+import { toWorkbenchAbsoluteFilePath, toWorkbenchRelativeFilePath } from '~/lib/runtime/file-paths';
 
 interface AssistantMessageProps {
   content: string;
@@ -36,27 +37,11 @@ interface AssistantMessageProps {
 }
 
 function openArtifactInWorkbench(filePath: string) {
-  filePath = normalizedFilePath(filePath);
-
   if (workbenchStore.currentView.get() !== 'code') {
     workbenchStore.currentView.set('code');
   }
 
-  workbenchStore.setSelectedFile(`${WORK_DIR}/${filePath}`);
-}
-
-function normalizedFilePath(path: string) {
-  let normalizedPath = path;
-
-  if (normalizedPath.startsWith(WORK_DIR)) {
-    normalizedPath = path.replace(WORK_DIR, '');
-  }
-
-  if (normalizedPath.startsWith('/')) {
-    normalizedPath = normalizedPath.slice(1);
-  }
-
-  return normalizedPath;
+  workbenchStore.setSelectedFile(toWorkbenchAbsoluteFilePath(filePath, WORK_DIR));
 }
 
 export const AssistantMessage = memo(
@@ -121,7 +106,7 @@ export const AssistantMessage = memo(
                         <h2>Context</h2>
                         <div className="flex gap-4 mt-4 bolt" style={{ zoom: 0.6 }}>
                           {codeContext.map((x) => {
-                            const normalized = normalizedFilePath(x);
+                            const normalized = toWorkbenchRelativeFilePath(x, WORK_DIR);
                             return (
                               <Fragment key={normalized}>
                                 <code

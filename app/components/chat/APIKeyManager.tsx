@@ -88,9 +88,9 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
   };
 
   return (
-    <div className="flex items-center justify-between py-3 px-1">
-      <div className="flex items-center gap-2 flex-1">
-        <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-start justify-between gap-2 py-3 px-1">
+      <div className="flex min-w-0 items-center gap-2 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-bolt-elements-textSecondary">{provider?.name} API Key:</span>
           {!isEditing && (
             <div className="flex items-center gap-2">
@@ -115,15 +115,15 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
         {isEditing ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <input
               type="password"
               value={tempKey}
               placeholder="Enter API Key"
               onChange={(e) => setTempKey(e.target.value)}
-              className="w-[300px] px-3 py-1.5 text-sm rounded border border-bolt-elements-borderColor 
+              className="w-[min(300px,70vw)] sm:w-[300px] px-3 py-1.5 text-sm rounded border border-bolt-elements-borderColor 
                         bg-bolt-elements-prompt-background text-bolt-elements-textPrimary 
                         focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus"
             />

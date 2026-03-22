@@ -1,4 +1,5 @@
 import type { JSONValue } from 'ai';
+import { useStore } from '@nanostores/react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ProviderInfo } from '~/types/model';
 import type {
@@ -12,6 +13,13 @@ import type {
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { getAutonomyModeLabel } from '~/lib/runtime/autonomy';
 import { estimateCostUSD, formatCostUSD, normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
+import { workbenchStore } from '~/lib/stores/workbench';
+import {
+  deriveActionCount,
+  deriveProgressMessage,
+  deriveWhyThisAction,
+  hasPreviewVerification,
+} from './execution-status';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -83,6 +91,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const { data = [], model, provider, isStreaming, autonomyMode, latestUsage } = props;
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
 
   useEffect(() => {
     if (isStreaming) {
@@ -118,26 +127,19 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const inlineRunMetrics = useMemo(() => data.filter(isRunMetrics).slice(-1)[0], [data]);
   const runMetrics = props.latestRunMetrics || inlineRunMetrics;
   const subAgentEvents = useMemo(() => data.filter(isSubAgentEvent), [data]);
+  const actionCount = useMemo(
+    () => deriveActionCount(toolCalls.length, stepRunnerEvents),
+    [toolCalls.length, stepRunnerEvents],
+  );
   const costEstimate = estimateCostUSD({
     providerName: provider?.name,
     modelName: model,
     usage: usageEvent,
   });
 
-  const currentStep = (() => {
-    const inProgress = progressEvents.filter((event) => event.status === 'in-progress').slice(-1)[0];
-
-    if (inProgress) {
-      return inProgress.message;
-    }
-
-    return progressEvents.slice(-1)[0]?.message || 'Idle';
-  })();
-
-  const whyThisAction =
-    commentaryEvents
-      .filter((event) => event.phase === 'plan' || event.phase === 'action' || event.phase === 'next-step')
-      .slice(-1)[0]?.message || 'Waiting for the next planning/action update.';
+  const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);
+  const whyThisAction = deriveWhyThisAction(commentaryEvents, progressEvents, stepRunnerEvents);
+  const previewStatus = hasPreviewVerification(stepRunnerEvents) ? 'verified' : 'pending';
 
   if (!isStreaming && !usageEvent && toolCalls.length === 0 && progressEvents.length === 0) {
     return null;
@@ -177,6 +179,12 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
           Cost estimate: <span className="text-bolt-elements-textPrimary">{formatCostUSD(costEstimate)}</span>
         </div>
         <div>
+          Actions: <span className="text-bolt-elements-textPrimary">{actionCount}</span>
+        </div>
+        <div>
+          Preview: <span className="text-bolt-elements-textPrimary">{previewStatus}</span>
+        </div>
+        <div>
           Commentary first event:{' '}
           <span className="text-bolt-elements-textPrimary">
             {runMetrics?.commentaryFirstEventLatencyMs ?? 0}
@@ -199,7 +207,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
       {toolCalls.length > 0 && (
         <div className="mt-2">
           <div className="mb-1 text-bolt-elements-textPrimary">Recent tool calls</div>
-          <div className="space-y-1 font-mono">
+          <div className="modern-scrollbar max-h-32 space-y-1 overflow-y-auto pr-1 font-mono">
             {toolCalls.map((toolCall) => (
               <div key={`${toolCall.toolCallId}-${toolCall.timestamp}`}>
                 <span className="text-bolt-elements-textPrimary">{toolCall.toolName}</span>{' '}
@@ -212,7 +220,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
       {subAgentEvents.length > 0 && (
         <div className="mt-2">
           <div className="mb-1 text-bolt-elements-textPrimary">Sub-agent Timeline</div>
-          <div className="space-y-1">
+          <div className="modern-scrollbar max-h-64 space-y-1 overflow-y-auto pr-1">
             {subAgentEvents.map((event) => (
               <div
                 key={`${event.agentId}-${event.state}-${event.createdAt}`}
@@ -251,7 +259,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
                 {event.plan && (
                   <div className="mt-2 text-xs text-bolt-elements-textPrimary">
                     <div className="mb-1 font-medium">Plan:</div>
-                    <div className="max-h-40 overflow-y-auto rounded border border-bolt-elements-borderColor/70 bg-bolt-elements-background-depth-2 p-2">
+                    <div className="modern-scrollbar max-h-40 overflow-y-auto rounded border border-bolt-elements-borderColor/70 bg-bolt-elements-background-depth-2 p-2 pr-1">
                       <div className="whitespace-pre-wrap break-words opacity-90">{event.plan}</div>
                     </div>
                   </div>

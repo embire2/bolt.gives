@@ -1,5 +1,5 @@
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState } from 'react';
+import React, { type RefCallback, useEffect, useRef, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
@@ -37,7 +37,7 @@ import { ExecutionStickyFooter } from './ExecutionStickyFooter';
 import { UpdateBanner } from './UpdateBanner';
 import { workbenchStore } from '~/lib/stores/workbench';
 
-const TEXTAREA_MIN_HEIGHT = 140;
+const TEXTAREA_MIN_HEIGHT = 72;
 
 interface BaseChatProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement> | undefined;
@@ -56,6 +56,7 @@ interface BaseChatProps {
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
   setProvider?: (provider: ProviderInfo) => void;
+  onProviderSelection?: (provider: ProviderInfo, preferredModel?: string) => void;
   providerList?: ProviderInfo[];
   handleStop?: () => void;
   sendMessage?: (event: React.UIEvent, messageInput?: string) => void;
@@ -115,6 +116,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setModel,
       provider,
       setProvider,
+      onProviderSelection,
       providerList,
       input = '',
       enhancingPrompt,
@@ -165,7 +167,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     },
     ref,
   ) => {
-    const TEXTAREA_MAX_HEIGHT = chatStarted ? 640 : 320;
+    const TEXTAREA_MAX_HEIGHT = chatStarted ? 180 : 136;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
     const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
     const [modelList, setModelList] = useState<ModelInfo[]>([]);
@@ -175,6 +177,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
+    const technicalFeedRef = useRef<HTMLDivElement | null>(null);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
 
@@ -192,6 +195,27 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         setProgressAnnotations(progressList);
       }
     }, [data]);
+
+    useEffect(() => {
+      if (!chatStarted) {
+        return;
+      }
+
+      const feedElement = technicalFeedRef.current;
+
+      if (!feedElement) {
+        return;
+      }
+
+      if (!isStreaming && !(data && data.length > 0)) {
+        return;
+      }
+
+      feedElement.scrollTo({
+        top: feedElement.scrollHeight,
+        behavior: 'auto',
+      });
+    }, [chatStarted, data, isStreaming, progressAnnotations.length]);
     useEffect(() => {
       console.log(transcript);
     }, [transcript]);
@@ -205,8 +229,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return;
       }
 
-      // Keep a Replit-style split workspace visible on desktop sessions.
-      if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      // Keep a Replit-style split workspace visible on wide desktop sessions only.
+      if (typeof window !== 'undefined' && window.innerWidth >= 1280) {
         workbenchStore.showWorkbench.set(true);
       }
     }, [chatStarted]);
@@ -398,31 +422,34 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         data-chat-visible={showChat}
       >
         <ClientOnly>{() => <Menu />}</ClientOnly>
-        <div className="flex h-full w-full flex-col overflow-hidden lg:flex-row">
+        <div className="flex h-full w-full flex-col overflow-hidden xl:flex-row">
           <div
             className={classNames(
               styles.Chat,
-              'relative flex h-full min-w-0 flex-col overflow-hidden lg:min-w-[var(--chat-min-width)] lg:max-w-[560px] lg:border-r lg:border-bolt-elements-borderColor',
+              'relative flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden modern-scrollbar xl:min-w-[var(--chat-min-width)] xl:max-w-[560px] xl:border-r xl:border-bolt-elements-borderColor',
             )}
           >
             {!chatStarted && (
-              <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
-                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
+              <div
+                id="intro"
+                className="mt-[10vh] sm:mt-[12vh] lg:mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0"
+              >
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-3 sm:mb-4 animate-fade-in">
                   What are we creating today?
                 </h1>
-                <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
+                <p className="text-base sm:text-lg lg:text-xl mb-6 sm:mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                   Create / Approve / Rinse / Repeat. There are no limits to your creativity with Bolt.gives
                 </p>
               </div>
             )}
             <StickToBottom
               className={classNames('pt-6 px-2 sm:px-6 relative', {
-                'h-full flex flex-col modern-scrollbar': chatStarted,
+                'h-full min-h-0 flex flex-col overflow-y-auto overscroll-contain modern-scrollbar': chatStarted,
               })}
               resize="smooth"
               initial="smooth"
             >
-              <StickToBottom.Content className="flex flex-col gap-4 relative ">
+              <StickToBottom.Content className="relative flex min-h-0 flex-col gap-4">
                 <ClientOnly>
                   {() => {
                     return chatStarted ? (
@@ -482,7 +509,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {chatStarted ? (
-                  <div className="max-h-[38vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2">
+                  <div
+                    ref={technicalFeedRef}
+                    className="modern-scrollbar min-h-[150px] max-h-[30vh] sm:min-h-[180px] sm:max-h-[36vh] md:min-h-[200px] md:max-h-[42vh] xl:min-h-[220px] xl:max-h-[60vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2"
+                  >
                     <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                       Technical Feed
                     </div>
@@ -509,6 +539,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
                     provider={provider}
                     setProvider={setProvider}
+                    onProviderSelection={onProviderSelection}
                     providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
                     model={model}
                     setModel={setModel}

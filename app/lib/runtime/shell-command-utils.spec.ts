@@ -3,7 +3,10 @@ import {
   decodeHtmlCommandDelimiters,
   makeCreateViteNonInteractive,
   makeFileChecksPortable,
+  makeInstallCommandsLowNoise,
   makeInstallCommandsProjectAware,
+  makeScaffoldCommandsProjectAware,
+  normalizeShellCommandSurface,
   unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
 
@@ -31,6 +34,24 @@ describe('decodeHtmlCommandDelimiters', () => {
 
     expect(res.shouldModify).toBe(true);
     expect(res.modifiedCommand).toBe('cd /home/project && pnpm install && pnpm run build');
+  });
+});
+
+describe('normalizeShellCommandSurface', () => {
+  it('strips model-added shell command prefixes', () => {
+    const input = 'Run shell command: pnpm install';
+    const res = normalizeShellCommandSurface(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install');
+  });
+
+  it('strips list bullets and fenced wrappers', () => {
+    const input = '```bash\n- pnpm run dev\n```';
+    const res = normalizeShellCommandSurface(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev');
   });
 });
 
@@ -123,5 +144,55 @@ describe('makeInstallCommandsProjectAware', () => {
     const res = makeInstallCommandsProjectAware(input);
 
     expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makeInstallCommandsLowNoise', () => {
+  it('adds append-only reporter for pnpm install commands', () => {
+    const input = 'pnpm install && pnpm run dev';
+    const res = makeInstallCommandsLowNoise(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install --reporter=append-only && pnpm run dev');
+  });
+
+  it('adds quiet flags for npm install commands', () => {
+    const input = 'npm install && npm run dev';
+    const res = makeInstallCommandsLowNoise(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('npm install --no-progress --silent && npm run dev');
+  });
+
+  it('does not modify install commands that are already low-noise', () => {
+    const input = 'pnpm install --reporter=append-only && pnpm run dev';
+    const res = makeInstallCommandsLowNoise(input);
+
+    expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makeScaffoldCommandsProjectAware', () => {
+  it('drops scaffold commands when project is already initialized', () => {
+    const input = 'pnpm dlx create-vite@latest . --template react --no-interactive && pnpm install';
+    const res = makeScaffoldCommandsProjectAware(input, { projectInitialized: true });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install');
+  });
+
+  it('keeps scaffold commands for uninitialized projects', () => {
+    const input = 'pnpm dlx create-vite@latest . --template react --no-interactive && pnpm install';
+    const res = makeScaffoldCommandsProjectAware(input, { projectInitialized: false });
+
+    expect(res.shouldModify).toBe(false);
+  });
+
+  it('emits a no-op echo when scaffold is the only segment', () => {
+    const input = 'npm create vite@latest . -- --template react';
+    const res = makeScaffoldCommandsProjectAware(input, { projectInitialized: true });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toContain('Skipping scaffold command');
   });
 });

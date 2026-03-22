@@ -21,13 +21,22 @@ export default class OpenAIProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
+    // GPT-5.4: primary general-purpose frontier model
+    {
+      name: 'gpt-5.4',
+      label: 'GPT-5.4',
+      provider: 'OpenAI',
+      maxTokenAllowed: 128000,
+      maxCompletionTokens: 12000,
+    },
+
     // GPT-5.2 Codex: responses-API coding model fallback option
     {
       name: 'gpt-5.2-codex',
       label: 'GPT-5.2 Codex',
       provider: 'OpenAI',
       maxTokenAllowed: 128000,
-      maxCompletionTokens: 32000,
+      maxCompletionTokens: 12000,
     },
 
     // GPT-5 Codex: responses-API coding model fallback option
@@ -36,7 +45,7 @@ export default class OpenAIProvider extends BaseProvider {
       label: 'GPT-5 Codex',
       provider: 'OpenAI',
       maxTokenAllowed: 128000,
-      maxCompletionTokens: 32000,
+      maxCompletionTokens: 12000,
     },
 
     /*

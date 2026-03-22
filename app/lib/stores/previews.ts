@@ -16,24 +16,23 @@ export interface PreviewInfo {
 
 // Create a broadcast channel for preview updates
 const PREVIEW_CHANNEL = 'preview-updates';
-const ENABLE_PREVIEW_CROSS_TAB_SYNC = false;
-const ENABLE_PREVIEW_STORAGE_SYNC = false;
 
 export class PreviewsStore {
   #availablePreviews = new Map<number, PreviewInfo>();
   #webcontainer: Promise<WebContainer>;
   #broadcastChannel?: BroadcastChannel;
   #lastUpdate = new Map<string, number>();
+  #watchedFiles = new Set<string>();
   #refreshTimeouts = new Map<string, NodeJS.Timeout>();
-  #REFRESH_DELAY = 800;
+  #REFRESH_DELAY = 300;
   #storageChannel?: BroadcastChannel;
 
   previews = atom<PreviewInfo[]>([]);
 
   constructor(webcontainerPromise: Promise<WebContainer>) {
     this.#webcontainer = webcontainerPromise;
-    this.#broadcastChannel = ENABLE_PREVIEW_CROSS_TAB_SYNC ? this.#maybeCreateChannel(PREVIEW_CHANNEL) : undefined;
-    this.#storageChannel = ENABLE_PREVIEW_STORAGE_SYNC ? this.#maybeCreateChannel('storage-sync-channel') : undefined;
+    this.#broadcastChannel = this.#maybeCreateChannel(PREVIEW_CHANNEL);
+    this.#storageChannel = this.#maybeCreateChannel('storage-sync-channel');
 
     if (this.#broadcastChannel) {
       // Listen for preview updates from other tabs
@@ -64,13 +63,20 @@ export class PreviewsStore {
     }
 
     // Override localStorage setItem to catch all changes
-    if (ENABLE_PREVIEW_STORAGE_SYNC && typeof window !== 'undefined') {
-      const originalSetItem = localStorage.setItem;
+    const storage = this._getLocalStorage();
 
-      localStorage.setItem = (...args) => {
-        originalSetItem.apply(localStorage, args);
-        this._broadcastStorageSync();
-      };
+    if (storage) {
+      const originalSetItem = storage.setItem.bind(storage);
+
+      try {
+        (storage as Storage & { setItem: Storage['setItem'] }).setItem = (...args) => {
+          originalSetItem(...args);
+          this._broadcastStorageSync();
+        };
+      } catch (error) {
+        // Some test environments expose non-writable storage proxies.
+        console.warn('[Preview] localStorage.setItem is not writable:', error);
+      }
     }
 
     this.#init();
@@ -112,29 +118,71 @@ export class PreviewsStore {
     return '';
   }
 
+  private _getLocalStorage(): Storage | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const candidate = (globalThis as { localStorage?: Storage }).localStorage as Partial<Storage> | undefined;
+
+    if (
+      !candidate ||
+      typeof candidate.getItem !== 'function' ||
+      typeof candidate.setItem !== 'function' ||
+      typeof candidate.key !== 'function'
+    ) {
+      return null;
+    }
+
+    return candidate as Storage;
+  }
+
   // Sync storage data between tabs
   private _syncStorage(storage: Record<string, string>) {
-    if (typeof window !== 'undefined') {
+    const localStorage = this._getLocalStorage();
+
+    if (localStorage && typeof window !== 'undefined') {
       Object.entries(storage).forEach(([key, value]) => {
         try {
-          const originalSetItem = Object.getPrototypeOf(localStorage).setItem;
-          originalSetItem.call(localStorage, key, value);
+          const prototypeSetItem = Object.getPrototypeOf(localStorage)?.setItem;
+
+          if (typeof prototypeSetItem === 'function') {
+            prototypeSetItem.call(localStorage, key, value);
+            return;
+          }
+
+          localStorage.setItem(key, value);
         } catch (error) {
           console.error('[Preview] Error syncing storage:', error);
         }
       });
 
-      // Do not force iframe reloads here. Browser-level reload loops can freeze the UI.
+      // Force a refresh after syncing storage
+      const previews = this.previews.get();
+      previews.forEach((preview) => {
+        const previewId = this.getPreviewId(preview.baseUrl);
+
+        if (previewId) {
+          this.refreshPreview(previewId);
+        }
+      });
+
+      // Reload the page content
+      if (typeof window !== 'undefined' && window.location) {
+        const iframe = document.querySelector('iframe');
+
+        if (iframe) {
+          iframe.src = iframe.src;
+        }
+      }
     }
   }
 
   // Broadcast storage state to other tabs
   private _broadcastStorageSync() {
-    if (!ENABLE_PREVIEW_STORAGE_SYNC || typeof window === 'undefined') {
-      return;
-    }
+    const localStorage = this._getLocalStorage();
 
-    if (typeof window !== 'undefined') {
+    if (localStorage && typeof window !== 'undefined') {
       const storage: Record<string, string> = {};
 
       for (let i = 0; i < localStorage.length; i++) {
@@ -163,9 +211,7 @@ export class PreviewsStore {
       this.broadcastUpdate(url);
 
       // Initial storage sync when preview is ready
-      if (ENABLE_PREVIEW_STORAGE_SYNC) {
-        this._broadcastStorageSync();
-      }
+      this._broadcastStorageSync();
     });
 
     // Listen for port events
@@ -275,10 +321,6 @@ export class PreviewsStore {
   }
 
   refreshAllPreviews() {
-    if (!ENABLE_PREVIEW_CROSS_TAB_SYNC) {
-      return;
-    }
-
     const previews = this.previews.get();
 
     for (const preview of previews) {

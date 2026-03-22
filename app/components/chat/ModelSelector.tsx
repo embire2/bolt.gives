@@ -90,6 +90,7 @@ interface ModelSelectorProps {
   setModel?: (model: string) => void;
   provider?: ProviderInfo;
   setProvider?: (provider: ProviderInfo) => void;
+  onProviderSelection?: (provider: ProviderInfo, preferredModel?: string) => void;
   modelList: ModelInfo[];
   providerList: ProviderInfo[];
   apiKeys: Record<string, string>;
@@ -116,6 +117,7 @@ export const ModelSelector = ({
   setModel,
   provider,
   setProvider,
+  onProviderSelection,
   modelList,
   providerList,
   modelLoading,
@@ -153,17 +155,22 @@ export const ModelSelector = ({
 
   const applyProviderSelection = useCallback(
     (selectedProvider: ProviderInfo) => {
+      const preferredModel = getPreferredModelForProvider(selectedProvider.name);
+
+      if (onProviderSelection) {
+        onProviderSelection(selectedProvider, preferredModel);
+        return;
+      }
+
       if (setProvider) {
         setProvider(selectedProvider);
       }
-
-      const preferredModel = getPreferredModelForProvider(selectedProvider.name);
 
       if (preferredModel && setModel) {
         setModel(preferredModel);
       }
     },
-    [setProvider, getPreferredModelForProvider, setModel],
+    [getPreferredModelForProvider, onProviderSelection, setModel, setProvider],
   );
 
   // Check connectivity of local providers when provider list changes

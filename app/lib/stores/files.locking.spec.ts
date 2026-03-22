@@ -96,4 +96,37 @@ describe('FilesStore locking', () => {
     await expect(store.createFile('/workspace/locked-dir/new.txt', 'content')).rejects.toThrow(/locked folder/i);
     expect(webcontainer.fs.writeFile).not.toHaveBeenCalled();
   });
+
+  it('restoreSnapshot hydrates the file map and syncs text/binary files into the container', async () => {
+    const webcontainer = makeWebcontainer('/workspace');
+    const store = new FilesStore(Promise.resolve(webcontainer));
+
+    store.files.set({
+      '/workspace/obsolete.txt': { type: 'file', content: 'old', isBinary: false, isLocked: false },
+    });
+
+    await store.restoreSnapshot({
+      '/workspace/src': { type: 'folder' },
+      '/workspace/src/app.txt': { type: 'file', content: 'hello', isBinary: false, isLocked: false },
+      '/workspace/assets/logo.bin': { type: 'file', content: 'QUI=', isBinary: true, isLocked: false },
+    });
+
+    expect(webcontainer.fs.rm).toHaveBeenCalledWith('obsolete.txt');
+    expect(webcontainer.fs.mkdir).toHaveBeenCalledWith('src', { recursive: true });
+    expect(webcontainer.fs.mkdir).toHaveBeenCalledWith('assets', { recursive: true });
+    expect(webcontainer.fs.writeFile).toHaveBeenCalledWith('src/app.txt', 'hello');
+
+    const binaryCall = (webcontainer.fs.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call) => call[0] === 'assets/logo.bin',
+    );
+    expect(binaryCall).toBeTruthy();
+    expect(binaryCall?.[1]).toBeInstanceOf(Uint8Array);
+    expect(Array.from(binaryCall?.[1] as Uint8Array)).toEqual([65, 66]);
+
+    const files = store.files.get();
+    expect(files['/workspace/src']?.type).toBe('folder');
+    expect(files['/workspace/src/app.txt']).toMatchObject({ type: 'file', content: 'hello', isBinary: false });
+    expect(files['/workspace/assets/logo.bin']).toMatchObject({ type: 'file', content: 'QUI=', isBinary: true });
+    expect(files['/workspace/obsolete.txt']).toBeUndefined();
+  });
 });

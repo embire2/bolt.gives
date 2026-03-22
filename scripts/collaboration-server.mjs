@@ -132,6 +132,41 @@ function sweepInactiveDocs() {
   });
 }
 
+function probeExistingServer() {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        host: HOST,
+        port: PORT,
+        path: '/health',
+        timeout: 1500,
+      },
+      (res) => {
+        let raw = '';
+
+        res.on('data', (chunk) => {
+          raw += chunk.toString();
+        });
+
+        res.on('end', () => {
+          try {
+            const payload = JSON.parse(raw);
+            resolve(Boolean(payload?.ok));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
+
 const server = http.createServer((req, res) => {
   if ((req.url || '/').startsWith('/health')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -199,11 +234,35 @@ server.on('upgrade', (request, socket, head) => {
   });
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`[collab] listening on ws://${HOST}:${PORT}`);
-  console.log(`[collab] persistence dir: ${persistenceDir}`);
-  console.log(`[collab] inactivity timeout: ${INACTIVITY_TIMEOUT_MS}ms`);
-});
+async function startServer() {
+  try {
+    await new Promise((resolve, reject) => {
+      const handleError = (error) => {
+        server.off('listening', handleListening);
+        reject(error);
+      };
+      const handleListening = () => {
+        server.off('error', handleError);
+        resolve(undefined);
+      };
+
+      server.once('error', handleError);
+      server.once('listening', handleListening);
+      server.listen(PORT, HOST);
+    });
+
+    console.log(`[collab] listening on ws://${HOST}:${PORT}`);
+    console.log(`[collab] persistence dir: ${persistenceDir}`);
+    console.log(`[collab] inactivity timeout: ${INACTIVITY_TIMEOUT_MS}ms`);
+  } catch (error) {
+    if (error?.code === 'EADDRINUSE' && (await probeExistingServer())) {
+      console.log(`[collab] reusing existing server on ws://${HOST}:${PORT}`);
+      return;
+    }
+
+    throw error;
+  }
+}
 
 const cleanupInterval = setInterval(sweepInactiveDocs, CLEANUP_SWEEP_MS);
 
@@ -234,3 +293,8 @@ function shutdown(signal) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+startServer().catch((error) => {
+  console.error('[collab] failed to start server:', error);
+  process.exit(1);
+});

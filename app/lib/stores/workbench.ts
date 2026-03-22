@@ -12,7 +12,6 @@ import { TerminalStore } from './terminal';
 import JSZip from 'jszip';
 import fileSaver from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
-import { path } from '~/utils/path';
 import { extractRelativePath } from '~/utils/diff';
 import { description } from '~/lib/persistence';
 import Cookies from 'js-cookie';
@@ -28,10 +27,13 @@ import {
   isActionAutoAllowed,
   type AutonomyMode,
 } from '~/lib/runtime/autonomy';
+import { createResilientExecutionQueue } from '~/lib/runtime/serial-execution-queue';
 import { createScopedLogger } from '~/utils/logger';
+import { toWorkbenchAbsoluteFilePath } from '~/lib/runtime/file-paths';
 
 const { saveAs } = fileSaver;
 const logger = createScopedLogger('WorkbenchStore');
+const hotData = import.meta.hot?.data ?? {};
 const DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS = 100;
 const MAX_INTERACTIVE_STEP_EVENTS = 140;
 const INTERACTIVE_EVENTS_FLUSH_MS = 220;
@@ -73,28 +75,28 @@ export class WorkbenchStore {
 
   #reloadedMessages = new Set<string>();
 
-  artifacts: Artifacts = import.meta.hot?.data.artifacts ?? map({});
+  artifacts: Artifacts = hotData?.artifacts ?? map({});
 
-  showWorkbench: WritableAtom<boolean> = import.meta.hot?.data.showWorkbench ?? atom(false);
-  currentView: WritableAtom<WorkbenchViewType> = import.meta.hot?.data.currentView ?? atom('code');
-  unsavedFiles: WritableAtom<Set<string>> = import.meta.hot?.data.unsavedFiles ?? atom(new Set<string>());
-  actionAlert: WritableAtom<ActionAlert | undefined> =
-    import.meta.hot?.data.actionAlert ?? atom<ActionAlert | undefined>(undefined);
+  showWorkbench: WritableAtom<boolean> = hotData?.showWorkbench ?? atom(false);
+  currentView: WritableAtom<WorkbenchViewType> = hotData?.currentView ?? atom('code');
+  unsavedFiles: WritableAtom<Set<string>> = hotData?.unsavedFiles ?? atom(new Set<string>());
+  actionAlert: WritableAtom<ActionAlert | undefined> = hotData?.actionAlert ?? atom<ActionAlert | undefined>(undefined);
   supabaseAlert: WritableAtom<SupabaseAlert | undefined> =
-    import.meta.hot?.data.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
-  deployAlert: WritableAtom<DeployAlert | undefined> =
-    import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
-  autonomyMode: WritableAtom<AutonomyMode> =
-    import.meta.hot?.data.autonomyMode ?? atom<AutonomyMode>(DEFAULT_AUTONOMY_MODE);
+    hotData?.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
+  deployAlert: WritableAtom<DeployAlert | undefined> = hotData?.deployAlert ?? atom<DeployAlert | undefined>(undefined);
+  autonomyMode: WritableAtom<AutonomyMode> = hotData?.autonomyMode ?? atom<AutonomyMode>(DEFAULT_AUTONOMY_MODE);
   interactiveStepEvents: WritableAtom<InteractiveStepRunnerEvent[]> =
-    import.meta.hot?.data.interactiveStepEvents ?? atom<InteractiveStepRunnerEvent[]>([]);
-  isTestAndScanRunning: WritableAtom<boolean> = import.meta.hot?.data.isTestAndScanRunning ?? atom<boolean>(false);
+    hotData?.interactiveStepEvents ?? atom<InteractiveStepRunnerEvent[]>([]);
+  isTestAndScanRunning: WritableAtom<boolean> = hotData?.isTestAndScanRunning ?? atom<boolean>(false);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
-  #globalExecutionQueue = Promise.resolve();
+  #enqueueExecution = createResilientExecutionQueue((error) => {
+    logger.error('Workbench execution queue task failed', error);
+  });
   #actionDecisions = new Map<string, 'approved' | 'rejected'>();
   #pendingInteractiveEvents: InteractiveStepRunnerEvent[] = [];
   #interactiveEventsFlushHandle: ReturnType<typeof setTimeout> | null = null;
+  #readyPreviewSignatures = new Set<string>();
   constructor() {
     if (typeof window !== 'undefined') {
       try {
@@ -109,16 +111,18 @@ export class WorkbenchStore {
     }
 
     if (import.meta.hot) {
-      import.meta.hot.data.artifacts = this.artifacts;
-      import.meta.hot.data.unsavedFiles = this.unsavedFiles;
-      import.meta.hot.data.showWorkbench = this.showWorkbench;
-      import.meta.hot.data.currentView = this.currentView;
-      import.meta.hot.data.actionAlert = this.actionAlert;
-      import.meta.hot.data.supabaseAlert = this.supabaseAlert;
-      import.meta.hot.data.deployAlert = this.deployAlert;
-      import.meta.hot.data.autonomyMode = this.autonomyMode;
-      import.meta.hot.data.interactiveStepEvents = this.interactiveStepEvents;
-      import.meta.hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
+      const hot = import.meta.hot as any;
+      hot.data ??= {};
+      hot.data.artifacts = this.artifacts;
+      hot.data.unsavedFiles = this.unsavedFiles;
+      hot.data.showWorkbench = this.showWorkbench;
+      hot.data.currentView = this.currentView;
+      hot.data.actionAlert = this.actionAlert;
+      hot.data.supabaseAlert = this.supabaseAlert;
+      hot.data.deployAlert = this.deployAlert;
+      hot.data.autonomyMode = this.autonomyMode;
+      hot.data.interactiveStepEvents = this.interactiveStepEvents;
+      hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -130,10 +134,36 @@ export class WorkbenchStore {
         }
       }
     }
+
+    this.#previewsStore.previews.subscribe((previews) => {
+      const nextReadySignatures = new Set<string>();
+
+      for (const preview of previews) {
+        if (!preview.ready || !preview.baseUrl) {
+          continue;
+        }
+
+        const signature = `${preview.port}:${preview.baseUrl}`;
+        nextReadySignatures.add(signature);
+
+        if (this.#readyPreviewSignatures.has(signature)) {
+          continue;
+        }
+
+        this.#appendInteractiveStepEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Preview ready',
+          output: `${preview.baseUrl} (port ${preview.port})`,
+        });
+      }
+
+      this.#readyPreviewSignatures = nextReadySignatures;
+    });
   }
 
   addToExecutionQueue(callback: () => Promise<void>) {
-    this.#globalExecutionQueue = this.#globalExecutionQueue.then(() => callback());
+    return this.#enqueueExecution(callback);
   }
 
   #sanitizeInteractiveEvent(event: InteractiveStepRunnerEvent): InteractiveStepRunnerEvent {
@@ -680,6 +710,22 @@ export class WorkbenchStore {
     }
   }
 
+  async restoreSnapshot(snapshotFiles: FileMap) {
+    await this.#filesStore.restoreSnapshot(snapshotFiles);
+    this.#editorStore.setDocuments(snapshotFiles);
+    this.showWorkbench.set(true);
+    this.currentView.set('code');
+
+    const selectedFile = this.currentDocument.get()?.filePath;
+
+    if (selectedFile && snapshotFiles[selectedFile]?.type === 'file') {
+      return;
+    }
+
+    const firstSnapshotFile = Object.entries(snapshotFiles).find(([, dirent]) => dirent?.type === 'file')?.[0];
+    this.setSelectedFile(firstSnapshotFile);
+  }
+
   abortAllActions() {
     const artifacts = Object.values(this.artifacts.get());
     let abortedActions = 0;
@@ -882,7 +928,7 @@ export class WorkbenchStore {
 
     if (data.action.type === 'file') {
       const wc = await webcontainer;
-      const fullPath = path.join(wc.workdir, data.action.filePath);
+      const fullPath = toWorkbenchAbsoluteFilePath(data.action.filePath, wc.workdir);
 
       /*
        * For scoped locks, we would need to implement diff checking here

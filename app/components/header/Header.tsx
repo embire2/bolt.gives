@@ -11,35 +11,35 @@ export function Header() {
 
   return (
     <header
-      className={classNames('flex items-center px-4 border-b h-[var(--header-height)]', {
+      className={classNames('flex items-center px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]', {
         'border-transparent': !chat.started,
         'border-bolt-elements-borderColor': chat.started,
       })}
     >
-      <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
-        <div className="i-ph:sidebar-simple-duotone text-xl" />
+      <div className="flex items-center gap-1.5 sm:gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
+        <div className="i-ph:sidebar-simple-duotone text-lg sm:text-xl" />
         <a href="/" className="text-2xl font-semibold text-accent flex items-center">
           {/* <span className="i-bolt:logo-text?mask w-[46px] inline-block" /> */}
           <img
             src={`/boltlogo2.png?v=${APP_VERSION}`}
             alt="bolt.gives"
-            className="h-[calc(var(--header-height)-16px)] w-auto max-w-[220px] object-contain"
+            className="h-[calc(var(--header-height)-14px)] w-auto max-w-[120px] sm:max-w-[180px] md:max-w-[220px] object-contain"
             loading="eager"
           />
-          <span className="ml-2 px-2 py-1 rounded-full border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-xs font-mono text-bolt-elements-textSecondary">
+          <span className="hidden sm:inline-flex ml-2 px-2 py-1 rounded-full border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-xs font-mono text-bolt-elements-textSecondary">
             v{APP_VERSION}
           </span>
         </a>
       </div>
 
-      <span className="flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">
+      <span className="hidden md:block flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">
         {chat.started ? <ClientOnly>{() => <ChatDescription />}</ClientOnly> : null}
       </span>
 
-      <div className="flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <a
           href="/changelog"
-          className="text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+          className="text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >
           Changelog
         </a>
@@ -47,7 +47,7 @@ export function Header() {
         {chat.started ? (
           <ClientOnly>
             {() => (
-              <div className="">
+              <div className="hidden sm:block">
                 <HeaderActionButtons chatStarted={chat.started} />
               </div>
             )}
