@@ -6,16 +6,26 @@ interface Props {
   alert: ActionAlert;
   clearAlert: () => void;
   postMessage: (message: string) => void;
+  autoFixState?: 'queued' | 'running';
 }
 
-export default function ChatAlert({ alert, clearAlert, postMessage }: Props) {
+export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState }: Props) {
   const { description, content, source } = alert;
 
   const isPreview = source === 'preview';
   const title = isPreview ? 'Preview Error' : 'Terminal Error';
-  const message = isPreview
-    ? 'We encountered an error while running the preview. Would you like Bolt to analyze and help resolve this issue?'
-    : 'We encountered an error while running terminal commands. Would you like Bolt to analyze and help resolve this issue?';
+  const message =
+    autoFixState === 'running'
+      ? isPreview
+        ? 'Architect is fixing the preview error now so a working preview can come back without manual intervention.'
+        : 'Architect is fixing the terminal error now so the run can continue safely.'
+      : autoFixState === 'queued'
+        ? isPreview
+          ? 'Architect has queued an automatic preview repair and will run it as soon as the current step finishes.'
+          : 'Architect has queued an automatic terminal repair and will run it as soon as the current step finishes.'
+        : isPreview
+          ? 'We encountered an error while running the preview. Would you like Bolt to analyze and help resolve this issue?'
+          : 'We encountered an error while running terminal commands. Would you like Bolt to analyze and help resolve this issue?';
 
   return (
     <AnimatePresence>
@@ -74,6 +84,7 @@ export default function ChatAlert({ alert, clearAlert, postMessage }: Props) {
                       `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${content}\n\`\`\`\n`,
                     )
                   }
+                  disabled={autoFixState === 'queued' || autoFixState === 'running'}
                   className={classNames(
                     `px-2 py-1.5 rounded-md text-sm font-medium`,
                     'bg-bolt-elements-button-primary-background',
@@ -81,10 +92,11 @@ export default function ChatAlert({ alert, clearAlert, postMessage }: Props) {
                     'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bolt-elements-button-danger-background',
                     'text-bolt-elements-button-primary-text',
                     'flex items-center gap-1.5',
+                    (autoFixState === 'queued' || autoFixState === 'running') && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <div className="i-ph:chat-circle-duotone"></div>
-                  Ask Bolt
+                  {autoFixState === 'running' ? 'Auto-fixing' : autoFixState === 'queued' ? 'Queued' : 'Ask Bolt'}
                 </button>
                 <button
                   onClick={clearAlert}

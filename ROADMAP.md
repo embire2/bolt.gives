@@ -42,12 +42,12 @@ Non-negotiable guardrails:
 - [ ] Timeline visibility and export support.
 
 5. Architect v2 Self-Heal + Safety Guard
-- [ ] Expand failure signatures and preflight detection coverage.
+- [~] Expand failure signatures and preflight detection coverage.
 - [ ] Mode-aware safe auto-fix boundaries and recovery confidence.
 - [ ] Clear recovery reporting in plain English.
 
 6. Commentary v2
-- [ ] Keep meaningful progress updates visible during long runs.
+- [~] Keep meaningful progress updates visible during long runs.
 - [ ] Plain-English default with optional technical detail expansion.
 - [ ] Contract tests for commentary format and cadence.
 

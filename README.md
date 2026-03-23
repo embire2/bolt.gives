@@ -93,10 +93,12 @@ P0 targets:
 ## Current Features (v3.0.0)
 
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
+- Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.
 - Anti-stall detection and auto-recovery events in timeline.
 - Execution transparency panel (model/provider/step/elapsed/actions/recovery state).
 - Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`).
 - Architect self-heal knowledgebase for common scaffold/build/runtime failures.
+- Preview runtime errors can now be queued directly into Architect auto-repair instead of relying only on a manual `Ask Bolt` action.
 - Multi-provider model support and model/provider/API-key persistence.
 - Web browsing tools (`web_search`, `web_browse`) with Playwright-backed extraction.
 - Real-time collaboration support (Yjs + websocket server).

@@ -117,6 +117,19 @@ describe('diagnoseArchitectIssue', () => {
 
     expect(diagnosis?.issueId).toBe('update-runtime-unenv-fs');
   });
+
+  it('detects generic preview runtime exceptions', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'preview',
+      title: 'Preview Error',
+      description: 'PREVIEW_UNCAUGHT_EXCEPTION: Uncaught TypeError: Cannot read properties of undefined',
+      content: 'at App (/home/project/src/App.tsx:17:9)',
+      source: 'preview',
+    });
+
+    expect(diagnosis?.issueId).toBe('preview-runtime-exception');
+    expect(diagnosis?.maxAutoAttempts).toBe(2);
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

@@ -155,6 +155,24 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'preview-runtime-exception',
+    title: 'Preview runtime exception',
+    source: 'preview',
+    patterns: [
+      /PREVIEW_UNCAUGHT_EXCEPTION/i,
+      /PREVIEW_UNHANDLED_REJECTION/i,
+      /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
+      /Unhandled\s+Promise\s+Rejection/i,
+    ],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Inspect the preview/runtime error and identify the exact file, import, or state transition that caused it.',
+      'Apply the smallest code fix that removes the runtime exception without rewriting unrelated parts of the app.',
+      'Restart or refresh the preview if needed and verify that the app renders instead of showing the runtime error again.',
+      'If a dependency or environment variable is missing, add the minimum safe fallback and report what changed.',
+    ],
+  },
+  {
     id: 'update-runtime-unenv-fs',
     title: 'Runtime lacks Node fs support for update actions',
     source: 'terminal',

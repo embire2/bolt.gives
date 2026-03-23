@@ -29,7 +29,7 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import type { FileMap } from '~/lib/stores/files';
 import { useMCPStore } from '~/lib/stores/mcp';
-import type { LlmErrorAlertType } from '~/types/actions';
+import type { ActionAlert, LlmErrorAlertType } from '~/types/actions';
 import { buildModelSelectionEnvelope, selectModelForPrompt } from '~/lib/runtime/model-orchestrator';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { recordTokenUsage } from '~/lib/stores/performance';
@@ -51,6 +51,7 @@ import {
 import { normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
 import {
   ARCHITECT_NAME,
+  type ArchitectDiagnosis,
   buildArchitectAutoHealPrompt,
   decideArchitectAutoHeal,
   diagnoseArchitectIssue,
@@ -100,6 +101,11 @@ type ApiKeysUpdatePayload = {
   providerName: string;
   apiKey: string;
   providerModels: ModelInfo[];
+};
+type PendingArchitectAutoHeal = {
+  alert: ActionAlert;
+  diagnosis: ArchitectDiagnosis;
+  alertKey: string;
 };
 
 function hasFallbackStarterPlaceholder(fileMap: FileMap | undefined): boolean {
@@ -176,6 +182,10 @@ function getProviderSettingsFromCookiesSafe(): Record<string, IProviderSetting> 
   } catch {
     return {};
   }
+}
+
+function buildActionAlertKey(alert: ActionAlert): string {
+  return [alert.source || 'unknown', alert.title || '', alert.description || '', alert.content || ''].join('::');
 }
 
 function resolveProviderInfo(providerName: string | undefined): ProviderInfo {
@@ -432,6 +442,8 @@ export const ChatImpl = memo(
     const [projectMemory, setProjectMemory] = useState<StoredProjectMemory>(() => loadStoredProjectMemory());
     const [latestRunMetrics, setLatestRunMetrics] = useState<AgentRunMetricsDataEvent | null>(null);
     const [latestUsage, setLatestUsage] = useState<UsageDataEvent | null>(null);
+    const [pendingArchitectAutoHeal, setPendingArchitectAutoHeal] = useState<PendingArchitectAutoHeal | null>(null);
+    const [architectAutoHealStatus, setArchitectAutoHealStatus] = useState<'queued' | 'running' | null>(null);
     const selectionBootstrapRef = useRef(false);
     const architectAttemptCountsRef = useRef<Record<string, number>>({});
     const architectInFlightRef = useRef(false);
@@ -2207,13 +2219,110 @@ Requirements:
     };
 
     useEffect(() => {
-      if (!actionAlert || isLoading || architectInFlightRef.current) {
+      if (actionAlert) {
+        return;
+      }
+
+      setPendingArchitectAutoHeal(null);
+      setArchitectAutoHealStatus(null);
+    }, [actionAlert]);
+
+    const dispatchArchitectAutoHeal = useCallback(
+      async (alert: ActionAlert, diagnosis: ArchitectDiagnosis) => {
+        const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
+        const decision = decideArchitectAutoHeal({
+          autonomyMode,
+          diagnosis,
+          attemptsForFingerprint,
+        });
+
+        if (!decision.shouldAutoHeal) {
+          appendArchitectTimelineEvent({
+            type: 'error',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            error:
+              decision.reason === 'autonomy-blocked'
+                ? 'Autonomy mode blocks auto-heal for this issue.'
+                : 'Auto-heal attempt limit reached for this issue fingerprint.',
+            output: `${diagnosis.title} (${diagnosis.issueId})`,
+          });
+          setPendingArchitectAutoHeal(null);
+          setArchitectAutoHealStatus(null);
+
+          return;
+        }
+
+        const attemptNumber = attemptsForFingerprint + 1;
+        architectAttemptCountsRef.current[diagnosis.fingerprint] = attemptNumber;
+        architectInFlightRef.current = true;
+        setArchitectAutoHealStatus('running');
+        setPendingArchitectAutoHeal(null);
+
+        appendArchitectTimelineEvent({
+          type: 'step-start',
+          stepIndex: attemptNumber,
+          description: `${ARCHITECT_NAME} auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`,
+          command: ['architect', 'auto-heal', diagnosis.issueId],
+        });
+
+        workbenchStore.clearAlert();
+        toast.info(`${ARCHITECT_NAME}: auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`);
+
+        const architectPrompt = buildArchitectAutoHealPrompt({
+          alert,
+          diagnosis,
+          attemptNumber,
+        });
+        const payload = buildModelSelectionEnvelope({
+          model,
+          providerName: provider.name,
+          selectionReason: `${ARCHITECT_NAME} auto-heal detected: ${diagnosis.title}.`,
+          content: architectPrompt,
+        });
+
+        try {
+          await append({
+            id: `${Date.now()}-architect-auto-heal`,
+            role: 'user',
+            content: payload,
+          });
+
+          appendArchitectTimelineEvent({
+            type: 'step-end',
+            stepIndex: attemptNumber,
+            description: `${ARCHITECT_NAME} auto-heal dispatched`,
+            exitCode: 0,
+          });
+        } catch (error) {
+          appendArchitectTimelineEvent({
+            type: 'error',
+            stepIndex: attemptNumber,
+            description: `${ARCHITECT_NAME} auto-heal failed`,
+            error: error instanceof Error ? error.message : 'Unknown auto-heal dispatch error',
+          });
+          toast.error(error instanceof Error ? error.message : `${ARCHITECT_NAME} auto-heal failed to start`);
+        } finally {
+          architectInFlightRef.current = false;
+          setArchitectAutoHealStatus(null);
+        }
+      },
+      [append, autonomyMode, model, provider.name],
+    );
+
+    useEffect(() => {
+      if (!actionAlert || architectInFlightRef.current) {
         return;
       }
 
       const diagnosis = diagnoseArchitectIssue(actionAlert);
 
       if (!diagnosis) {
+        return;
+      }
+
+      const alertKey = buildActionAlertKey(actionAlert);
+
+      if (pendingArchitectAutoHeal?.alertKey === alertKey) {
         return;
       }
 
@@ -2244,58 +2353,32 @@ Requirements:
         return;
       }
 
-      const attemptNumber = attemptsForFingerprint + 1;
-      architectAttemptCountsRef.current[diagnosis.fingerprint] = attemptNumber;
-      architectInFlightRef.current = true;
-
-      appendArchitectTimelineEvent({
-        type: 'step-start',
-        stepIndex: attemptNumber,
-        description: `${ARCHITECT_NAME} auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`,
-        command: ['architect', 'auto-heal', diagnosis.issueId],
-      });
-
-      workbenchStore.clearAlert();
-      toast.info(`${ARCHITECT_NAME}: auto-heal attempt ${attemptNumber}/${decision.maxAutoAttempts}`);
-
-      const architectPrompt = buildArchitectAutoHealPrompt({
-        alert: actionAlert,
-        diagnosis,
-        attemptNumber,
-      });
-      const payload = buildModelSelectionEnvelope({
-        model,
-        providerName: provider.name,
-        selectionReason: `${ARCHITECT_NAME} auto-heal detected: ${diagnosis.title}.`,
-        content: architectPrompt,
-      });
-
-      append({
-        id: `${Date.now()}-architect-auto-heal`,
-        role: 'user',
-        content: payload,
-      })
-        .then(() => {
-          appendArchitectTimelineEvent({
-            type: 'step-end',
-            stepIndex: attemptNumber,
-            description: `${ARCHITECT_NAME} auto-heal dispatched`,
-            exitCode: 0,
-          });
-        })
-        .catch((error) => {
-          appendArchitectTimelineEvent({
-            type: 'error',
-            stepIndex: attemptNumber,
-            description: `${ARCHITECT_NAME} auto-heal failed`,
-            error: error instanceof Error ? error.message : 'Unknown auto-heal dispatch error',
-          });
-          toast.error(error instanceof Error ? error.message : `${ARCHITECT_NAME} auto-heal failed to start`);
-        })
-        .finally(() => {
-          architectInFlightRef.current = false;
+      if (isLoading) {
+        setPendingArchitectAutoHeal({
+          alert: actionAlert,
+          diagnosis,
+          alertKey,
         });
-    }, [actionAlert, append, autonomyMode, isLoading, model, provider.name]);
+        setArchitectAutoHealStatus('queued');
+        appendArchitectTimelineEvent({
+          type: 'telemetry',
+          description: `${ARCHITECT_NAME} auto-heal queued`,
+          output: `${diagnosis.title} (${diagnosis.issueId})`,
+        });
+
+        return;
+      }
+
+      void dispatchArchitectAutoHeal(actionAlert, diagnosis);
+    }, [actionAlert, append, autonomyMode, dispatchArchitectAutoHeal, isLoading, pendingArchitectAutoHeal]);
+
+    useEffect(() => {
+      if (!pendingArchitectAutoHeal || isLoading || architectInFlightRef.current) {
+        return;
+      }
+
+      void dispatchArchitectAutoHeal(pendingArchitectAutoHeal.alert, pendingArchitectAutoHeal.diagnosis);
+    }, [dispatchArchitectAutoHeal, isLoading, pendingArchitectAutoHeal]);
 
     /**
      * Handles the change event for the textarea and updates the input state.
@@ -2433,6 +2516,10 @@ Requirements:
       },
       [input, handleInputChange],
     );
+    const actionAlertAutoFixState =
+      actionAlert && pendingArchitectAutoHeal?.alertKey === buildActionAlertKey(actionAlert)
+        ? architectAutoHealStatus || 'queued'
+        : undefined;
 
     return (
       <BaseChat
@@ -2489,6 +2576,7 @@ Requirements:
         imageDataList={imageDataList}
         setImageDataList={setImageDataList}
         actionAlert={actionAlert}
+        actionAlertAutoFixState={actionAlertAutoFixState}
         clearAlert={() => workbenchStore.clearAlert()}
         supabaseAlert={supabaseAlert}
         clearSupabaseAlert={() => workbenchStore.clearSupabaseAlert()}

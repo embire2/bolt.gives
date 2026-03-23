@@ -169,11 +169,14 @@ function renderCommentaryCard(event: AgentCommentaryAnnotation, index: number) {
 
 interface StepRunnerFeedProps {
   data?: JSONValue[] | undefined;
+  includeCommentary?: boolean;
+  title?: string;
 }
 
 export function StepRunnerFeed(props: StepRunnerFeedProps) {
   const events = useStore(workbenchStore.stepRunnerEvents);
-  const commentaryEvents = (props.data || []).filter(isAgentCommentaryAnnotation).slice(-12);
+  const commentaryEvents =
+    props.includeCommentary === false ? [] : (props.data || []).filter(isAgentCommentaryAnnotation).slice(-12);
   const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-12);
   const architectEvents = events.filter(isArchitectTimelineEvent).slice(-16);
 
@@ -217,7 +220,7 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
   return (
     <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium text-bolt-elements-textPrimary">Execution Timeline</span>
+        <span className="font-medium text-bolt-elements-textPrimary">{props.title || 'Execution Timeline'}</span>
         <button
           className="bg-transparent text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
           onClick={() => workbenchStore.clearStepRunnerEvents()}

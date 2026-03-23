@@ -35,6 +35,7 @@ import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { ExecutionTransparencyPanel } from './ExecutionTransparencyPanel';
 import { ExecutionStickyFooter } from './ExecutionStickyFooter';
 import { UpdateBanner } from './UpdateBanner';
+import { CommentaryFeed } from './CommentaryFeed';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
@@ -69,6 +70,7 @@ interface BaseChatProps {
   imageDataList?: string[];
   setImageDataList?: (dataList: string[]) => void;
   actionAlert?: ActionAlert;
+  actionAlertAutoFixState?: 'queued' | 'running';
   clearAlert?: () => void;
   supabaseAlert?: SupabaseAlert;
   clearSupabaseAlert?: () => void;
@@ -134,6 +136,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setImageDataList,
       messages,
       actionAlert,
+      actionAlertAutoFixState,
       clearAlert,
       deployAlert,
       clearDeployAlert,
@@ -177,6 +180,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
+    const commentaryFeedRef = useRef<HTMLDivElement | null>(null);
     const technicalFeedRef = useRef<HTMLDivElement | null>(null);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -201,9 +205,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return;
       }
 
+      const commentaryElement = commentaryFeedRef.current;
       const feedElement = technicalFeedRef.current;
 
-      if (!feedElement) {
+      if (!commentaryElement && !feedElement) {
         return;
       }
 
@@ -211,7 +216,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return;
       }
 
-      feedElement.scrollTo({
+      commentaryElement?.scrollTo({
+        top: commentaryElement.scrollHeight,
+        behavior: 'auto',
+      });
+
+      feedElement?.scrollTo({
         top: feedElement.scrollHeight,
         behavior: 'auto',
       });
@@ -499,6 +509,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {actionAlert && (
                     <ChatAlert
                       alert={actionAlert}
+                      autoFixState={actionAlertAutoFixState}
                       clearAlert={() => clearAlert?.()}
                       postMessage={(message) => {
                         sendMessage?.({} as any, message);
@@ -509,27 +520,35 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {chatStarted ? (
-                  <div
-                    ref={technicalFeedRef}
-                    className="modern-scrollbar min-h-[150px] max-h-[30vh] sm:min-h-[180px] sm:max-h-[36vh] md:min-h-[200px] md:max-h-[42vh] xl:min-h-[220px] xl:max-h-[60vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2"
-                  >
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
-                      Technical Feed
-                    </div>
-                    <div className="space-y-2">
-                      {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
-                      <ExecutionTransparencyPanel
-                        data={data}
-                        model={model}
-                        provider={provider}
-                        isStreaming={isStreaming}
-                        autonomyMode={autonomyMode}
-                        latestRunMetrics={latestRunMetrics}
-                        latestUsage={latestUsage}
-                      />
-                      <StepRunnerFeed data={data} />
-                      <ExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
-                      <UpdateBanner />
+                  <div className="space-y-2">
+                    <CommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+                    <div
+                      ref={technicalFeedRef}
+                      className="modern-scrollbar min-h-[150px] max-h-[30vh] sm:min-h-[180px] sm:max-h-[36vh] md:min-h-[200px] md:max-h-[42vh] xl:min-h-[220px] xl:max-h-[60vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2"
+                    >
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+                        Technical Feed
+                      </div>
+                      <div className="space-y-2">
+                        {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                        <ExecutionTransparencyPanel
+                          data={data}
+                          model={model}
+                          provider={provider}
+                          isStreaming={isStreaming}
+                          autonomyMode={autonomyMode}
+                          latestRunMetrics={latestRunMetrics}
+                          latestUsage={latestUsage}
+                        />
+                        <StepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
+                        <ExecutionStickyFooter
+                          data={data}
+                          model={model}
+                          provider={provider}
+                          isStreaming={isStreaming}
+                        />
+                        <UpdateBanner />
+                      </div>
                     </div>
                   </div>
                 ) : null}

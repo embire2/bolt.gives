@@ -2,6 +2,10 @@
 
 ## v3.0.0 (2026-03-22)
 
+### Added
+- Preview runtime failures now route into Architect auto-repair detection so preview exceptions can be queued or repaired automatically instead of only surfacing a manual `Ask Bolt` path.
+- Commentary now has a dedicated `Live Commentary` feed, separated from the technical timeline so progress updates stay visible while coding runs are active.
+
 ### Fixed
 - Starter/bootstrap runs no longer stop at scaffold-only output; continuation logic now detects scaffold-only, bootstrap-only, and run-intent-without-start responses and forces the implementation to continue.
 - Provider/model/API-key normalization now merges cookie, request-body, and runtime-environment keys before a run starts so invalid provider/key combinations fail less often.
@@ -19,6 +23,9 @@
 - `pnpm run lint` passed.
 - `pnpm test` passed.
 - `pnpm run build` passed.
+- New UI regressions passed:
+  - `app/components/chat/CommentaryFeed.spec.tsx`
+  - `app/components/chat/ChatAlert.spec.tsx`
 - Local dev smoke passed (`http://localhost:5174` loaded prompt box + model selector after helper-port reuse).
 - Live E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4` by building a React appointment scheduler whose preview rendered the required heading `OpenWeb Clinic Scheduler`.
 - Live smoke passed on `https://ahmad.bolt.gives` with OpenAI `gpt-5.4`.
