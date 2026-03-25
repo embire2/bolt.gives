@@ -16,6 +16,7 @@ export interface ModelInfo {
 export interface ProviderInfo {
   name: string;
   staticModels: ModelInfo[];
+  allowsUserApiKey?: boolean;
   getDynamicModels?: (
     apiKeys?: Record<string, string>,
     settings?: IProviderSetting,

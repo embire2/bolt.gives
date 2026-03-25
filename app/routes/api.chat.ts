@@ -201,6 +201,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
   const runtimeEnv = resolveRuntimeEnv(context.cloudflare?.env as unknown as Record<string, unknown> | undefined);
   const llmManager = LLMManager.getInstance(runtimeEnv as any);
+  const serverManagedProviderNames = llmManager
+    .getAllProviders()
+    .filter((provider) => provider.allowsUserApiKey === false)
+    .map((provider) => provider.name);
   const providerTokenKeyByName = Object.fromEntries(
     llmManager.getAllProviders().map((provider) => [provider.name, provider.config.apiTokenKey]),
   );
@@ -212,6 +216,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     apiKeys: mergedApiKeys,
     runtimeEnv,
     providerTokenKeyByName,
+    serverManagedProviderNames,
   });
   const providerSettings: Record<string, IProviderSetting> = {
     ...cookieProviderSettings,
@@ -1226,6 +1231,14 @@ Next: I am sending the final result now.`,
 
         if (errorMessage.includes('Missing API key for')) {
           return 'Custom error: The selected provider is not configured for this instance yet. Select a provider with a valid key and retry.';
+        }
+
+        if (errorMessage.includes('FREE_PROVIDER_RATE_LIMITED')) {
+          return 'Custom error: The hosted FREE coder is temporarily rate-limited upstream. Please retry shortly, or switch to OpenRouter with your own key for uninterrupted access.';
+        }
+
+        if (errorMessage.includes('FREE_PROVIDER_UNAVAILABLE')) {
+          return 'Custom error: The hosted FREE coder is temporarily unavailable upstream. Please retry shortly, or switch to OpenRouter with your own key.';
         }
 
         if (

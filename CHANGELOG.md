@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.1.0 (in progress)
+
+### Added
+- Hosted instances can now expose a server-managed `FREE` provider that routes through a locked OpenRouter model without revealing the hosted API token to users.
+
+### Changed
+- The hosted `FREE` provider is now the default provider selection and is pinned to `Qwen3 Coder 480B A35B (free)`.
+- The standard `OpenRouter` provider remains user-managed and continues to require the user's own OpenRouter API key for unrestricted model access.
+- Hosted free-provider requests now fail fast with a clear retry/switch-provider message when OpenRouter rate-limits the upstream `qwen/qwen3-coder:free` route.
+
+### Security
+- Server-managed provider credentials are no longer eligible for `/api/export-api-keys`, preventing hosted fallback/provider secrets from being serialized back to the browser.
+
 ## v3.0.0 (2026-03-22)
 
 ### Added

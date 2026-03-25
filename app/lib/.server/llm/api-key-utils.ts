@@ -37,27 +37,38 @@ export function hydrateApiKeysFromRuntimeEnv(options: {
   apiKeys: ApiKeyMap;
   runtimeEnv: Record<string, string>;
   providerTokenKeyByName: Record<string, string | undefined>;
+  serverManagedProviderNames?: string[];
 }): ApiKeyMap {
   const hydrated: ApiKeyMap = { ...options.apiKeys };
+  const serverManagedProviders = new Set(options.serverManagedProviderNames || []);
 
   for (const [providerName, tokenEnvKey] of Object.entries(options.providerTokenKeyByName)) {
     if (!tokenEnvKey) {
       continue;
     }
 
-    if (typeof hydrated[providerName] === 'string' && hydrated[providerName].trim().length > 0) {
+    const envValue = options.runtimeEnv[tokenEnvKey];
+    const isServerManaged = serverManagedProviders.has(providerName);
+
+    if (!isServerManaged && typeof hydrated[providerName] === 'string' && hydrated[providerName].trim().length > 0) {
       continue;
     }
 
-    const envValue = options.runtimeEnv[tokenEnvKey];
-
     if (typeof envValue !== 'string') {
+      if (isServerManaged) {
+        delete hydrated[providerName];
+      }
+
       continue;
     }
 
     const trimmedEnvValue = envValue.trim();
 
     if (trimmedEnvValue.length === 0) {
+      if (isServerManaged) {
+        delete hydrated[providerName];
+      }
+
       continue;
     }
 

@@ -15,6 +15,8 @@ import { resolvePromptIdForModel } from './prompt-selection';
 import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
 import { shouldEnableBuiltInWebTools } from './tool-intent';
+import { ensureFreeProviderAvailability } from './free-provider-preflight';
+import { normalizeCredential } from '~/lib/runtime/credentials';
 
 export type Messages = Message[];
 
@@ -438,6 +440,20 @@ export async function streamText(props: {
       2,
     ),
   );
+
+  if (provider.name === 'FREE') {
+    const envRecord = serverEnv as Record<string, string | undefined> | undefined;
+    const preflightApiKey =
+      normalizeCredential(apiKeys?.[provider.name]) ||
+      normalizeCredential(envRecord?.FREE_OPENROUTER_API_KEY) ||
+      normalizeCredential(process?.env?.FREE_OPENROUTER_API_KEY);
+
+    await ensureFreeProviderAvailability({
+      providerName: provider.name,
+      modelName: modelDetails.name,
+      apiKey: preflightApiKey,
+    });
+  }
 
   const streamParams = {
     model: provider.getModelInstance({

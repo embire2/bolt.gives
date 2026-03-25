@@ -201,6 +201,12 @@ export class LLMManager {
   }
 
   getDefaultProvider(): BaseProvider {
+    const freeProvider = this._providers.get('FREE');
+
+    if (freeProvider) {
+      return freeProvider;
+    }
+
     const firstProvider = this._providers.values().next().value;
 
     if (!firstProvider) {

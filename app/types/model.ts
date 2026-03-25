@@ -3,6 +3,7 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 export type ProviderInfo = {
   staticModels: ModelInfo[];
   name: string;
+  allowsUserApiKey?: boolean;
   getDynamicModels?: (
     providerName: string,
     apiKeys?: Record<string, string>,

@@ -23,6 +23,12 @@
 
 Current version: **v3.0.0**
 
+Current `v3.1.0` work in progress:
+- Hosted instances now default to a built-in `FREE` provider backed by `Qwen3 Coder 480B A35B (free)`.
+- The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
+- The normal `OpenRouter` provider is still available for users who want to supply their own OpenRouter key and choose any OpenRouter-hosted model.
+- When OpenRouter rate-limits the hosted free route upstream, bolt.gives now fails fast with a clear retry/switch-provider message instead of hanging silently.
+
 bolt.gives is an open-source, free, collaborative AI coding workspace.
 
 Core principles:
@@ -92,6 +98,8 @@ P0 targets:
 
 ## Current Features (v3.0.0)
 
+- Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `Qwen3 Coder 480B A35B (free)`.
+- Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.
 - Anti-stall detection and auto-recovery events in timeline.
@@ -176,6 +184,11 @@ cp .env.example .env.local
 
 Then edit `.env.local` and set at least one provider key (for example OpenAI).  
 No database setup is required for bolt.gives core runtime.
+
+Hosted-instance note:
+- If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked free coder without exposing the token to users.
+- Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
+- The hosted `FREE` coder still depends on OpenRouter availability for `qwen/qwen3-coder:free`; when that route is rate-limited, the UI surfaces a clear retry/switch-provider error instead of stalling.
 
 ### 7. Ensure default dev ports are free (prevents startup conflicts)
 

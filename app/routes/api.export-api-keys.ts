@@ -14,20 +14,24 @@ export const loader: LoaderFunction = async ({ context, request }) => {
   const providers = llmManager.getAllProviders();
 
   // Create a comprehensive API keys object
-  const apiKeys: Record<string, string> = { ...apiKeysFromCookie };
+  const apiKeys: Record<string, string> = {};
 
   // For each provider, check all possible sources for API keys
   for (const provider of providers) {
+    if (provider.allowsUserApiKey === false) {
+      continue;
+    }
+
+    if (apiKeysFromCookie[provider.name]) {
+      apiKeys[provider.name] = apiKeysFromCookie[provider.name];
+      continue;
+    }
+
     if (!provider.config.apiTokenKey) {
       continue;
     }
 
     const envVarName = provider.config.apiTokenKey;
-
-    // Skip if we already have this provider's key from cookies
-    if (apiKeys[provider.name]) {
-      continue;
-    }
 
     // Check environment variables in order of precedence
     const envValue =

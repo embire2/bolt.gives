@@ -84,6 +84,18 @@ describe('model-selection utilities', () => {
     expect(preferred).toBe('Ollama');
   });
 
+  it('prefers the hosted FREE provider when it is env-configured and no selection is saved', () => {
+    const preferred = pickPreferredProviderName({
+      activeProviderNames: ['FREE', 'OpenAI', 'LMStudio'],
+      apiKeys: {},
+      configuredProviderNames: ['FREE'],
+      localProviderNames: ['LMStudio'],
+      fallbackProviderName: 'FREE',
+    });
+
+    expect(preferred).toBe('FREE');
+  });
+
   it('prefers an env-configured provider over local fallback during bootstrap', () => {
     const preferred = pickPreferredProviderName({
       activeProviderNames: ['OpenAI', 'LMStudio'],

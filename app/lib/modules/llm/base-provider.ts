@@ -11,6 +11,7 @@ export abstract class BaseProvider implements ProviderInfo {
   abstract name: string;
   abstract staticModels: ModelInfo[];
   abstract config: ProviderConfig;
+  allowsUserApiKey = true;
   cachedDynamicModels?: {
     cacheId: string;
     models: ModelInfo[];

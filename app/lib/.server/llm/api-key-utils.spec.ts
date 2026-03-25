@@ -73,4 +73,36 @@ describe('api-key-utils', () => {
 
     expect(hydrated.OpenAI).toBe('ui-openai-key');
   });
+
+  it('forces server-managed providers to use the runtime env key instead of user input', () => {
+    const hydrated = hydrateApiKeysFromRuntimeEnv({
+      apiKeys: {
+        FREE: 'user-supplied-free-key',
+      },
+      runtimeEnv: {
+        FREE_OPENROUTER_API_KEY: 'env-free-key',
+      },
+      providerTokenKeyByName: {
+        FREE: 'FREE_OPENROUTER_API_KEY',
+      },
+      serverManagedProviderNames: ['FREE'],
+    });
+
+    expect(hydrated.FREE).toBe('env-free-key');
+  });
+
+  it('drops user-supplied values for server-managed providers when no env key exists', () => {
+    const hydrated = hydrateApiKeysFromRuntimeEnv({
+      apiKeys: {
+        FREE: 'user-supplied-free-key',
+      },
+      runtimeEnv: {},
+      providerTokenKeyByName: {
+        FREE: 'FREE_OPENROUTER_API_KEY',
+      },
+      serverManagedProviderNames: ['FREE'],
+    });
+
+    expect(hydrated.FREE).toBeUndefined();
+  });
 });

@@ -8,6 +8,8 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
+import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
+import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -91,8 +93,25 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   }
 
   const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
+  const rawApiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
+  const runtimeEnv = resolveRuntimeEnv(context.cloudflare?.env as unknown as Record<string, unknown> | undefined);
+  const llmManager = LLMManager.getInstance(runtimeEnv);
+  const serverManagedProviderNames = llmManager
+    .getAllProviders()
+    .filter((registeredProvider) => registeredProvider.allowsUserApiKey === false)
+    .map((registeredProvider) => registeredProvider.name);
+  const providerTokenKeyByName = Object.fromEntries(
+    llmManager
+      .getAllProviders()
+      .map((registeredProvider) => [registeredProvider.name, registeredProvider.config.apiTokenKey]),
+  );
+  const apiKeys = hydrateApiKeysFromRuntimeEnv({
+    apiKeys: rawApiKeys,
+    runtimeEnv,
+    providerTokenKeyByName,
+    serverManagedProviderNames,
+  });
 
   if (streamOutput) {
     try {
@@ -106,7 +125,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             content: `${message}`,
           },
         ],
-        env: context.cloudflare?.env as any,
+        env: runtimeEnv as any,
         apiKeys,
         providerSettings,
       });
@@ -151,7 +170,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   } else {
     try {
-      const models = await getModelList({ apiKeys, providerSettings, serverEnv: context.cloudflare?.env as any });
+      const models = await getModelList({ apiKeys, providerSettings, serverEnv: runtimeEnv });
       const modelDetails = models.find((m: ModelInfo) => m.name === model);
 
       if (!modelDetails) {
@@ -196,7 +215,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         ],
         model: providerInfo.getModelInstance({
           model: modelDetails.name,
-          serverEnv: context.cloudflare?.env as any,
+          serverEnv: runtimeEnv as any,
           apiKeys,
           providerSettings,
         }),
