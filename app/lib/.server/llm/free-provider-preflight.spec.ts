@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureFreeProviderAvailability, resetFreeProviderPreflightCache } from './free-provider-preflight';
-import { FREE_PROVIDER_NAME, FREE_QWEN_MODEL } from '~/lib/modules/llm/providers/free';
+import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
 
 describe('ensureFreeProviderAvailability', () => {
   afterEach(() => {
@@ -23,7 +23,7 @@ describe('ensureFreeProviderAvailability', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('throws a rate-limit error when OpenRouter rejects the hosted free model', async () => {
+  it('throws a rate-limit error when OpenRouter rejects the hosted model', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -31,7 +31,7 @@ describe('ensureFreeProviderAvailability', () => {
         status: 429,
         json: async () => ({
           error: {
-            message: 'qwen/qwen3-coder:free is temporarily rate-limited upstream.',
+            message: 'deepseek/deepseek-v3.2 is temporarily rate-limited upstream.',
           },
         }),
       }),
@@ -40,7 +40,7 @@ describe('ensureFreeProviderAvailability', () => {
     await expect(
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
-        modelName: FREE_QWEN_MODEL,
+        modelName: FREE_HOSTED_MODEL,
         apiKey: 'sk-or-v1-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_RATE_LIMITED');
@@ -56,12 +56,12 @@ describe('ensureFreeProviderAvailability', () => {
 
     await ensureFreeProviderAvailability({
       providerName: FREE_PROVIDER_NAME,
-      modelName: FREE_QWEN_MODEL,
+      modelName: FREE_HOSTED_MODEL,
       apiKey: 'sk-or-v1-real-secret',
     });
     await ensureFreeProviderAvailability({
       providerName: FREE_PROVIDER_NAME,
-      modelName: FREE_QWEN_MODEL,
+      modelName: FREE_HOSTED_MODEL,
       apiKey: 'sk-or-v1-real-secret',
     });
 

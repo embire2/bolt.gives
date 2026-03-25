@@ -5,13 +5,14 @@ import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { IProviderSetting } from '~/types/model';
 
 export const FREE_PROVIDER_NAME = 'FREE';
-export const FREE_QWEN_MODEL = 'qwen/qwen3-coder:free';
+export const FREE_HOSTED_MODEL = 'deepseek/deepseek-v3.2';
 
-const FREE_QWEN_MODEL_INFO: ModelInfo = {
-  name: FREE_QWEN_MODEL,
-  label: 'Qwen3 Coder 480B A35B (free)',
+const FREE_HOSTED_MODEL_INFO: ModelInfo = {
+  name: FREE_HOSTED_MODEL,
+  label: 'DeepSeek V3.2',
   provider: FREE_PROVIDER_NAME,
-  maxTokenAllowed: 262000,
+  maxTokenAllowed: 64000,
+  maxCompletionTokens: 8192,
 };
 
 export default class FreeProvider extends BaseProvider {
@@ -22,7 +23,7 @@ export default class FreeProvider extends BaseProvider {
     apiTokenKey: 'FREE_OPENROUTER_API_KEY',
   };
 
-  staticModels: ModelInfo[] = [FREE_QWEN_MODEL_INFO];
+  staticModels: ModelInfo[] = [FREE_HOSTED_MODEL_INFO];
 
   getModelInstance(options: {
     model: string;
@@ -47,6 +48,6 @@ export default class FreeProvider extends BaseProvider {
       apiKey,
     });
 
-    return openRouter.chat(FREE_QWEN_MODEL) as LanguageModelV1;
+    return openRouter.chat(FREE_HOSTED_MODEL) as LanguageModelV1;
   }
 }

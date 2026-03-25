@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import FreeProvider, { FREE_QWEN_MODEL } from './free';
+import FreeProvider, { FREE_HOSTED_MODEL } from './free';
 
 const { chatSpy, createOpenRouterSpy } = vi.hoisted(() => {
   const chatSpy = vi.fn();
@@ -23,7 +23,7 @@ describe('FreeProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it('uses the dedicated server-side OpenRouter key and hard-locks the free Qwen model', () => {
+  it('uses the dedicated server-side OpenRouter key and hard-locks the hosted DeepSeek model', () => {
     const provider = new FreeProvider();
     const modelInstance = { id: 'free-model-instance' };
     chatSpy.mockReturnValue(modelInstance);
@@ -38,7 +38,7 @@ describe('FreeProvider', () => {
     expect(createOpenRouterSpy).toHaveBeenCalledWith({
       apiKey: 'sk-or-free',
     });
-    expect(chatSpy).toHaveBeenCalledWith(FREE_QWEN_MODEL);
+    expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
   });
 
@@ -48,7 +48,7 @@ describe('FreeProvider', () => {
 
     expect(() =>
       provider.getModelInstance({
-        model: FREE_QWEN_MODEL,
+        model: FREE_HOSTED_MODEL,
         serverEnv: {} as Env,
       }),
     ).toThrow('Missing API key for FREE provider');
@@ -60,7 +60,7 @@ describe('FreeProvider', () => {
     chatSpy.mockReturnValue(modelInstance);
 
     const result = provider.getModelInstance({
-      model: FREE_QWEN_MODEL,
+      model: FREE_HOSTED_MODEL,
       serverEnv: {} as Env,
       apiKeys: {
         FREE: 'sk-or-free',
@@ -70,7 +70,7 @@ describe('FreeProvider', () => {
     expect(createOpenRouterSpy).toHaveBeenCalledWith({
       apiKey: 'sk-or-free',
     });
-    expect(chatSpy).toHaveBeenCalledWith(FREE_QWEN_MODEL);
+    expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
   });
 });

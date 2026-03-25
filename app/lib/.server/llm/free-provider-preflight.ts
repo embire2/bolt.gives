@@ -1,4 +1,4 @@
-import { FREE_PROVIDER_NAME, FREE_QWEN_MODEL } from '~/lib/modules/llm/providers/free';
+import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 
 type FreeProviderPreflightResult = {
@@ -41,7 +41,7 @@ export async function ensureFreeProviderAvailability(options: {
   modelName: string;
   apiKey?: string;
 }) {
-  if (options.providerName !== FREE_PROVIDER_NAME || options.modelName !== FREE_QWEN_MODEL) {
+  if (options.providerName !== FREE_PROVIDER_NAME || options.modelName !== FREE_HOSTED_MODEL) {
     return;
   }
 
@@ -69,7 +69,7 @@ export async function ensureFreeProviderAvailability(options: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: FREE_QWEN_MODEL,
+      model: FREE_HOSTED_MODEL,
       stream: false,
       max_tokens: 1,
       messages: [
