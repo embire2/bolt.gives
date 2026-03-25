@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import FreeProvider, { FREE_HOSTED_MODEL } from './free';
+import FreeProvider, {
+  FREE_FALLBACK_MODEL,
+  FREE_HOSTED_MODEL,
+  clearHostedFreeModelResolution,
+  rememberHostedFreeModelResolution,
+} from './free';
 
 const { chatSpy, createOpenRouterSpy } = vi.hoisted(() => {
   const chatSpy = vi.fn();
@@ -21,6 +26,7 @@ describe('FreeProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    clearHostedFreeModelResolution();
   });
 
   it('uses the dedicated server-side OpenRouter key and hard-locks the hosted DeepSeek model', () => {
@@ -71,6 +77,31 @@ describe('FreeProvider', () => {
       apiKey: 'sk-or-free',
     });
     expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
+    expect(result).toBe(modelInstance);
+  });
+
+  it('quietly routes to qwen/qwen3-coder when FREE preflight picked the fallback', () => {
+    const provider = new FreeProvider();
+    const modelInstance = { id: 'free-fallback-model-instance' };
+    chatSpy.mockReturnValue(modelInstance);
+
+    rememberHostedFreeModelResolution({
+      apiKey: 'sk-or-free',
+      resolvedModelName: FREE_FALLBACK_MODEL,
+      ttlMs: 60_000,
+    });
+
+    const result = provider.getModelInstance({
+      model: FREE_HOSTED_MODEL,
+      serverEnv: {
+        FREE_OPENROUTER_API_KEY: 'sk-or-free',
+      } as unknown as Env,
+    });
+
+    expect(createOpenRouterSpy).toHaveBeenCalledWith({
+      apiKey: 'sk-or-free',
+    });
+    expect(chatSpy).toHaveBeenCalledWith(FREE_FALLBACK_MODEL);
     expect(result).toBe(modelInstance);
   });
 });

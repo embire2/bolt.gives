@@ -225,7 +225,7 @@
 
   /* Replit-style split: technical rail on the left, workbench on the right. */
   --chat-max-width: 72rem;
-  --chat-min-width: clamp(420px, 34vw, 560px);
+  --chat-min-width: clamp(480px, 36vw, 620px);
   --workbench-width: min(calc(100% - var(--chat-min-width)), 2536px);
   --workbench-inner-width: var(--workbench-width);
   --workbench-left: calc(100% - var(--workbench-width));

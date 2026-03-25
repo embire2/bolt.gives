@@ -10,6 +10,7 @@ import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/c
 import { createScopedLogger } from '~/utils/logger';
 import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
+import { ensureFreeProviderAvailability } from '~/lib/.server/llm/free-provider-preflight';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -197,6 +198,14 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
       logger.info(`Generating response Provider: ${provider.name}, Model: ${modelDetails.name}`);
 
+      if (provider.name === 'FREE') {
+        await ensureFreeProviderAvailability({
+          providerName: provider.name,
+          modelName: modelDetails.name,
+          apiKey: apiKeys[provider.name],
+        });
+      }
+
       // DEBUG: Log reasoning model detection
       const isReasoning = isReasoningModel(modelDetails.name);
       logger.info(`DEBUG: Model "${modelDetails.name}" detected as reasoning model: ${isReasoning}`);
@@ -280,6 +289,40 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
             statusText: 'Unauthorized',
+          },
+        );
+      }
+
+      if (error instanceof Error && error.message?.includes('FREE_PROVIDER_RATE_LIMITED')) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message:
+              'The hosted FREE coder is temporarily rate-limited upstream. Please retry shortly, or switch to OpenRouter with your own key for uninterrupted access.',
+            statusCode: 503,
+            isRetryable: true,
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Hosted FREE Provider Rate Limited',
+          },
+        );
+      }
+
+      if (error instanceof Error && error.message?.includes('FREE_PROVIDER_UNAVAILABLE')) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message:
+              'The hosted FREE coder is temporarily unavailable upstream. Please retry shortly, or switch to OpenRouter with your own key.',
+            statusCode: 503,
+            isRetryable: true,
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Hosted FREE Provider Unavailable',
           },
         );
       }

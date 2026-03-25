@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.0.1 (2026-03-25)
+
+### Added
+- Hosted `FREE` now includes an internal OpenRouter fallback chain. If `deepseek/deepseek-v3.2` is unavailable upstream, bolt.gives silently retries with `qwen/qwen3-coder` without changing the visible client model selection.
+
+### Changed
+- The desktop chat rail is wider so the left-side prompt and progress column has more usable room during long runs.
+- The visible default hosted provider/model remains `FREE` + `DeepSeek V3.2`.
+- The hidden fallback model is not exposed in the provider/model picker and is only used by the managed server path.
+
+### Verified
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build` passed.
+- Targeted FREE-provider fallback regressions passed.
+
 ## v3.1.0 (in progress)
 
 ### Added

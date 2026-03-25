@@ -21,13 +21,13 @@
 
 ## App Overview
 
-Current version: **v3.0.0**
+Current version: **v3.0.1**
 
 Current `v3.1.0` work in progress:
 - Hosted instances now default to a built-in `FREE` provider backed by `DeepSeek V3.2`.
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
 - The normal `OpenRouter` provider is still available for users who want to supply their own OpenRouter key and choose any OpenRouter-hosted model.
-- When OpenRouter rate-limits the hosted free route upstream, bolt.gives now fails fast with a clear retry/switch-provider message instead of hanging silently.
+- Hosted FREE now silently falls back to `qwen/qwen3-coder` if `DeepSeek V3.2` is unavailable, without exposing the fallback model in the client UI.
 
 bolt.gives is an open-source, free, collaborative AI coding workspace.
 
@@ -41,20 +41,22 @@ Platform support:
 - Use in browser: Windows/macOS/Linux.
 - Install/self-host: **Ubuntu 18.04+ only**.
 
-Release verdict for `v3.0.0`:
+Release verdict for `v3.0.1`:
 - Local gates passed: `typecheck`, `lint`, `test`, `build`
 - Local dev smoke passed
-- Live OpenAI `gpt-5.4` E2E passed on `https://alpha1.bolt.gives`
+- Live smoke passed on `https://alpha1.bolt.gives`
 - Live smoke passed on `https://ahmad.bolt.gives`
 
-What `v3.0.0` specifically fixes:
+What `v3.0.1` specifically fixes:
 - Starter fallback runs now continue into the requested app instead of stopping at the Vite starter shell.
 - Provider/model/API-key normalization is stricter, so invalid pairings are caught earlier.
 - Runtime file writes are path-safe, which prevents generated files from being written into broken nested paths.
 - Helper services reuse occupied collaboration and web-browse ports instead of crashing on startup.
 - Build, test, and typecheck scripts now run with an 18 GB Node heap baseline to stop local OOM failures during large runs.
+- Hosted FREE now keeps `DeepSeek V3.2` as the visible default while silently failing over to `qwen/qwen3-coder` if the primary OpenRouter route is unavailable.
+- The left prompt rail is wider, which gives the prompt/comms column more usable room on desktop.
 
-What is still true after `v3.0.0`:
+What is still true after `v3.0.1`:
 - The validated OpenAI core path is now working.
 - The browser client is still heavier than it should be, especially during long projects.
 - `v1.0.4.md` remains focused on moving more heavy lifting off the user's machine and onto the server.
@@ -96,9 +98,10 @@ P0 targets:
 - Cost estimation integrity across providers.
 - Safe multi-instance update channels with retry/rollback.
 
-## Current Features (v3.0.0)
+## Current Features (v3.0.1)
 
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
+- Silent internal hosted-model fallback from `DeepSeek V3.2` to `qwen/qwen3-coder` when the primary upstream route is unavailable.
 - Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.
@@ -188,7 +191,7 @@ No database setup is required for bolt.gives core runtime.
 Hosted-instance note:
 - If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked free coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
-- The hosted `FREE` coder still depends on OpenRouter availability for `deepseek/deepseek-v3.2`; when that route is rate-limited or temporarily unavailable, the UI surfaces a clear retry/switch-provider error instead of stalling.
+- The hosted `FREE` coder keeps `deepseek/deepseek-v3.2` as the visible primary route and silently falls back to `qwen/qwen3-coder` if the primary route is unavailable. If both hosted routes fail, the UI surfaces a clear retry/switch-provider error instead of stalling.
 
 ### 7. Ensure default dev ports are free (prevents startup conflicts)
 

@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.1',
+    name: 'v3.0.1 hosted free-model fallback',
+    description:
+      'Hosted FREE now keeps DeepSeek V3.2 as the visible default while silently failing over to qwen/qwen3-coder, alongside a wider prompt rail and refreshed release docs.',
+    releaseDate: '2026-03-25',
+  },
+  {
     id: 'release-v3.0.0',
     name: 'v3.0.0 runtime reliability reset',
     description:

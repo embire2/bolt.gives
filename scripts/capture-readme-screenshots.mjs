@@ -49,7 +49,11 @@ async function captureHome() {
   await page.waitForFunction(
     (label) => {
       const text = document.body.innerText || '';
-      return text.includes(label) && !/server error|error details|custom error/i.test(text);
+      return (
+        text.includes(label) &&
+        !text.includes('Select model') &&
+        !/server error|error details|custom error/i.test(text)
+      );
     },
     versionLabel,
     { timeout: 45000 },
@@ -102,8 +106,8 @@ async function captureChangelog() {
 }
 
 try {
-  await forceProviderDefaults();
   await captureHome();
+  await forceProviderDefaults();
 
   if (skipPromptCaptures) {
     await capturePromptShell('chat.png');

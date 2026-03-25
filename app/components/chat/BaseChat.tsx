@@ -436,7 +436,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           <div
             className={classNames(
               styles.Chat,
-              'relative flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden modern-scrollbar xl:min-w-[var(--chat-min-width)] xl:max-w-[560px] xl:border-r xl:border-bolt-elements-borderColor',
+              'relative flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden modern-scrollbar xl:min-w-[var(--chat-min-width)] xl:max-w-[620px] xl:border-r xl:border-bolt-elements-borderColor',
             )}
           >
             {!chatStarted && (

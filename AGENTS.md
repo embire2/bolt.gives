@@ -5,7 +5,7 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform, with a strong focus on reliability, transparent execution, and safe autonomous behavior.
 
 Current release line:
-- Stable: `v3.0.0`
+- Stable: `v3.0.1`
 - In progress: `v3.1.0`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.

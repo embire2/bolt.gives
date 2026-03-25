@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-02-21
+Last updated: 2026-03-25
 
 Status legend:
 - `[x]` complete
@@ -10,6 +10,9 @@ Status legend:
 Canonical release plan docs:
 - `v1.0.3.md` (completed)
 - `v1.0.4.md` (current target)
+
+Latest shipped baseline:
+- [x] `v3.0.1` hosted FREE fallback chain (`DeepSeek V3.2` -> hidden `qwen/qwen3-coder`) plus wider desktop prompt rail.
 
 ## Steps towards v1.0.4
 
@@ -56,7 +59,7 @@ Non-negotiable guardrails:
 - [ ] Template smoke tests in CI and live E2E.
 
 8. Long-Run Performance and Stability
-- [ ] Continue server-first offloading for heavy operations.
+- [~] Continue server-first offloading for heavy operations.
 - [ ] Keep timeline/feed responsive in long sessions.
 - [ ] Add operational telemetry for stalls and memory growth.
 

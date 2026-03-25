@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureFreeProviderAvailability, resetFreeProviderPreflightCache } from './free-provider-preflight';
-import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
+import { FREE_FALLBACK_MODEL, FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
 
 describe('ensureFreeProviderAvailability', () => {
   afterEach(() => {
@@ -18,7 +18,10 @@ describe('ensureFreeProviderAvailability', () => {
         modelName: 'gpt-5.4',
         apiKey: 'sk-test',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      resolvedModelName: 'gpt-5.4',
+      usedFallback: false,
+    });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -26,15 +29,26 @@ describe('ensureFreeProviderAvailability', () => {
   it('throws a rate-limit error when OpenRouter rejects the hosted model', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
-        json: async () => ({
-          error: {
-            message: 'deepseek/deepseek-v3.2 is temporarily rate-limited upstream.',
-          },
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          json: async () => ({
+            error: {
+              message: 'deepseek/deepseek-v3.2 is temporarily rate-limited upstream.',
+            },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          json: async () => ({
+            error: {
+              message: 'qwen/qwen3-coder is temporarily rate-limited upstream.',
+            },
+          }),
         }),
-      }),
     );
 
     await expect(
@@ -44,6 +58,41 @@ describe('ensureFreeProviderAvailability', () => {
         apiKey: 'sk-or-v1-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_RATE_LIMITED');
+  });
+
+  it('falls back to qwen/qwen3-coder when deepseek/deepseek-v3.2 is unavailable', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          error: {
+            message: 'deepseek/deepseek-v3.2 is temporarily unavailable upstream.',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'sk-or-v1-real-secret',
+      }),
+    ).resolves.toMatchObject({
+      resolvedModelName: FREE_FALLBACK_MODEL,
+      usedFallback: true,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain(FREE_HOSTED_MODEL);
+    expect(String(fetchSpy.mock.calls[1]?.[1]?.body)).toContain(FREE_FALLBACK_MODEL);
   });
 
   it('caches a successful result for the same token fingerprint', async () => {
@@ -59,10 +108,25 @@ describe('ensureFreeProviderAvailability', () => {
       modelName: FREE_HOSTED_MODEL,
       apiKey: 'sk-or-v1-real-secret',
     });
-    await ensureFreeProviderAvailability({
-      providerName: FREE_PROVIDER_NAME,
-      modelName: FREE_HOSTED_MODEL,
-      apiKey: 'sk-or-v1-real-secret',
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'sk-or-v1-real-secret',
+      }),
+    ).resolves.toMatchObject({
+      resolvedModelName: FREE_HOSTED_MODEL,
+      usedFallback: false,
+    });
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'sk-or-v1-real-secret',
+      }),
+    ).resolves.toMatchObject({
+      resolvedModelName: FREE_HOSTED_MODEL,
+      usedFallback: false,
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
