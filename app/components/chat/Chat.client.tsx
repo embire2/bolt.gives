@@ -416,14 +416,22 @@ export const ChatImpl = memo(
     );
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
-    const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
-    const [model, setModel] = useState(() => {
-      const savedModel = Cookies.get('selectedModel');
-      return savedModel || DEFAULT_MODEL;
-    });
     const [provider, setProvider] = useState(() => {
       const savedProvider = Cookies.get('selectedProvider');
       return resolveProviderInfo(savedProvider);
+    });
+    const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
+    const [model, setModel] = useState(() => {
+      const savedProvider = Cookies.get('selectedProvider');
+      const savedModel = Cookies.get('selectedModel');
+      const visibleProvider = resolveProviderInfo(savedProvider);
+      const sanitizedVisibleModel = resolvePreferredModelName({
+        providerName: visibleProvider.name,
+        models: visibleProvider.staticModels || [],
+        savedModelName: savedModel,
+      });
+
+      return sanitizedVisibleModel || savedModel || DEFAULT_MODEL;
     });
     const runContextRef = useRef<{ model: string; providerName: string }>({
       model,
@@ -458,6 +466,30 @@ export const ChatImpl = memo(
         providerName: provider.name,
       };
     }, [model, provider.name]);
+
+    useEffect(() => {
+      if (provider.name !== 'FREE') {
+        return;
+      }
+
+      const visibleDefaultModel = provider.staticModels?.[0]?.name || DEFAULT_MODEL;
+
+      if (!visibleDefaultModel || model === visibleDefaultModel) {
+        return;
+      }
+
+      setModel(visibleDefaultModel);
+      Cookies.set('selectedModel', visibleDefaultModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+      rememberProviderModelSelection(provider.name, visibleDefaultModel);
+
+      if (typeof window !== 'undefined') {
+        rememberInstanceSelection({
+          hostname: window.location.hostname,
+          providerName: provider.name,
+          modelName: visibleDefaultModel,
+        });
+      }
+    }, [model, provider]);
 
     useEffect(() => {
       if (!mcpInitialized) {

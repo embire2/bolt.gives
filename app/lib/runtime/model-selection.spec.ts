@@ -169,6 +169,27 @@ describe('model-selection utilities', () => {
     expect(resolved).toBe('gpt-5.4');
   });
 
+  it('replaces a stale hidden FREE fallback selection with the visible DeepSeek model', () => {
+    const models: ModelInfo[] = [
+      {
+        name: 'deepseek/deepseek-v3.2',
+        label: 'DeepSeek V3.2',
+        provider: 'FREE',
+        maxTokenAllowed: 64000,
+        maxCompletionTokens: 8192,
+      },
+    ];
+
+    const resolved = resolvePreferredModelName({
+      providerName: 'FREE',
+      models,
+      rememberedModelName: 'qwen/qwen3-coder',
+      savedModelName: 'qwen/qwen3-coder',
+    });
+
+    expect(resolved).toBe('deepseek/deepseek-v3.2');
+  });
+
   it('stores and retrieves provider model selections', () => {
     const storage = createMemoryStorage();
     rememberProviderModelSelection('OpenAI', 'gpt-5-codex', storage);
