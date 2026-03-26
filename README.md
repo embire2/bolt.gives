@@ -23,7 +23,11 @@
 
 Current version: **v3.0.1**
 
-Current `v3.1.0` work in progress:
+Next release targets:
+- `v3.0.2`: self-host installer + zero-infra runtime reliability hardening.
+- `v3.0.3`: server-first heavy execution + collaboration/isolation work.
+
+Current `v3.0.1` release line:
 - Hosted instances now default to a built-in `FREE` provider backed by `DeepSeek V3.2`.
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
 - The normal `OpenRouter` provider is still available for users who want to supply their own OpenRouter key and choose any OpenRouter-hosted model.
@@ -59,7 +63,7 @@ What `v3.0.1` specifically fixes:
 What is still true after `v3.0.1`:
 - The validated OpenAI core path is now working.
 - The browser client is still heavier than it should be, especially during long projects.
-- `v1.0.4.md` remains focused on moving more heavy lifting off the user's machine and onto the server.
+- `ROADMAP.md` now tracks the next two release buckets directly: `v3.0.2` and `v3.0.3`.
 
 ## Screenshots
 
@@ -78,25 +82,14 @@ System in action:
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
-## Roadmap (Post-3.0)
+## Roadmap (Post-3.0.1)
 
 Roadmap files:
-- Detailed plan: `v1.0.4.md`
 - Summary tracker: `ROADMAP.md`
 
-Current roadmap focus: make frozen windows mid-project a thing of the past by moving heavy lifting from the user's machine to server-side execution.
-
-P0 targets:
-- Zero-infra runtime guarantee (no mandatory DB/env).
-- Client-hosted isolated instance kit.
-- Optional Teams add-on (roles/permissions/invites).
-- Collaboration audit trail + export.
-- Architect v2 self-heal + safety guard.
-- Commentary v2 with clear plain-English progress updates.
-- First-party template packs with smoke coverage.
-- Long-run performance and stability hardening (server-first heavy tasks).
-- Cost estimation integrity across providers.
-- Safe multi-instance update channels with retry/rollback.
+Current roadmap split:
+- `v3.0.2`: installer-first self-hosting, zero-infra startup hardening, release-gate automation, and commentary/layout reliability.
+- `v3.0.3`: server-first heavy execution, first-party template coverage, isolated instance kit, optional teams mode, and update/audit hardening.
 
 ## Current Features (v3.0.1)
 
@@ -126,124 +119,116 @@ This installation path is designed to run bolt.gives locally with no required da
 ### 0. What you need
 
 - Ubuntu `18.04+` (recommended `22.04+`)
-- `git`, `curl`, `build-essential`
-- Node.js `22.x`
-- `pnpm` `9.x`
+- A user account with `sudo` access
+- Internet access for package installation and GitHub clone
 
 Windows/macOS note:
 - You can use bolt.gives in the browser on Windows/macOS.
 - You should install/self-host bolt.gives on Ubuntu 18.04+.
 
-### 1. Install base packages
+### 1. Recommended: run the installer
+
+Download the installer from GitHub, inspect it, then run it:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y git curl ca-certificates build-essential
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh -o install-bolt-gives.sh
+chmod +x install-bolt-gives.sh
+./install-bolt-gives.sh
 ```
 
-### 2. Install Node.js 22 with nvm
+The installer will:
+- install `git`, `curl`, `ca-certificates`, and `build-essential`
+- install Node.js `22.x`
+- install a compatible `pnpm 9.x` release (repo-pinned to `9.14.4`)
+- clone or update `https://github.com/embire2/bolt.gives`
+- create `.env.local` from `.env.example` if it does not exist
+- build the app with a **4 GB** Node heap (`NODE_OPTIONS=--max-old-space-size=4096`)
+- install and start these systemd services:
+  - `bolt-gives-app`
+  - `bolt-gives-collab`
+  - `bolt-gives-webbrowse`
+
+Optional overrides:
 
 ```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install 22
-nvm use 22
-node -v
+INSTALL_DIR="$HOME/apps/bolt.gives" ./install-bolt-gives.sh
 ```
 
-Expected: a `v22.x.x` version output.
+After the installer finishes:
+- app: `http://127.0.0.1:5173`
+- collaboration server: `ws://127.0.0.1:1234`
+- web browsing service: `http://127.0.0.1:4179`
 
-### 3. Enable pnpm via corepack
+### 2. Add your provider keys
+
+The installer creates `.env.local` for you. Edit it after install:
 
 ```bash
-corepack enable
-corepack prepare pnpm@9.15.9 --activate
-pnpm -v
+cd ~/bolt.gives
+nano .env.local
 ```
 
-Expected: a `9.x.x` version output.
-
-### 4. Clone and enter the project
+Then restart the services:
 
 ```bash
-git clone https://github.com/embire2/bolt.gives.git
-cd bolt.gives
+sudo systemctl restart bolt-gives-app bolt-gives-collab bolt-gives-webbrowse
 ```
 
-### 5. Install dependencies
-
-```bash
-pnpm install
-```
-
-Playwright browsers are installed during dependency setup.
-
-### 6. Create local environment file
-
-```bash
-cp .env.example .env.local
-```
-
-Then edit `.env.local` and set at least one provider key (for example OpenAI).  
-No database setup is required for bolt.gives core runtime.
+No database setup is required for the bolt.gives core runtime.
 
 Hosted-instance note:
 - If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked free coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
 - The hosted `FREE` coder keeps `deepseek/deepseek-v3.2` as the visible primary route and silently falls back to `qwen/qwen3-coder` if the primary route is unavailable. If both hosted routes fail, the UI surfaces a clear retry/switch-provider error instead of stalling.
 
-### 7. Ensure default dev ports are free (prevents startup conflicts)
+### 3. Verify the install
 
 ```bash
-fuser -k 5173/tcp 2>/dev/null || true
-fuser -k 1234/tcp 2>/dev/null || true
-fuser -k 4179/tcp 2>/dev/null || true
+sudo systemctl status bolt-gives-app --no-pager
+sudo systemctl status bolt-gives-collab --no-pager
+sudo systemctl status bolt-gives-webbrowse --no-pager
 ```
 
-If you still suspect conflicts, inspect ports:
+Open `http://127.0.0.1:5173`, then verify:
+- UI loads without a server crash
+- chat opens
+- terminal and preview panels render
+- collaboration and web browsing helper services are reachable
+
+### 4. Manual install alternative
+
+If you do not want to use the installer, this is the validated manual path.
 
 ```bash
-ss -ltnp | grep -E ':(5173|1234|4179)\\b' || true
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates build-essential
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+sudo npm install -g pnpm@9.14.4
+git clone https://github.com/embire2/bolt.gives.git
+cd bolt.gives
+cp .env.example .env.local
+pnpm install --frozen-lockfile || pnpm install
+NODE_OPTIONS=--max-old-space-size=4096 pnpm exec remix vite:build
 ```
 
-### 8. Run development mode
+Run it locally:
 
 ```bash
-pnpm run dev
+# terminal 1
+NODE_OPTIONS=--max-old-space-size=4096 pnpm run collab:server
+
+# terminal 2
+NODE_OPTIONS=--max-old-space-size=4096 pnpm run webbrowse:server
+
+# terminal 3
+NODE_OPTIONS=--max-old-space-size=4096 pnpm run start
 ```
 
-The dev/build/test scripts now set a safe 18 GB Node heap automatically. If you run individual commands outside the package scripts, keep the same baseline:
+### 5. Contributor note about memory
 
-```bash
-export NODE_OPTIONS=--max-old-space-size=18432
-```
-
-Default endpoints:
-- App: `http://localhost:5173`
-- Collaboration server: `ws://localhost:1234`
-- Web browsing service: `http://127.0.0.1:4179`
-
-### 9. Verify the install
-
-Open `http://localhost:5173`, then verify:
-- UI loads without server crash.
-- You can open chat and send a prompt.
-- Terminal and preview panels render.
-- No database is required to start and use core features.
-
-### 10. Production build (recommended high-memory path)
-
-```bash
-pnpm run build
-pnpm run start
-```
-
-If you need to call the build tool directly outside the npm scripts, enforce the same memory explicitly:
-
-```bash
-NODE_OPTIONS=--max-old-space-size=18432 pnpm run build
-```
+The repo still contains heavier maintainer scripts used for large local test/build workflows.  
+The installer and manual self-host path above are the validated open-source install path and run with a **4 GB** Node heap.
 
 ## Deploying To Cloudflare Pages
 
@@ -258,11 +243,6 @@ If your Pages build runs out of memory, increase Node's heap:
 
 Fresh install checklist:
 - `docs/fresh-install-checklist.md`
-
-Install script (Ubuntu 18.04+ only):
-```bash
-./scripts/install-bolt-gives.sh
-```
 
 ## Built-In Web Browsing
 

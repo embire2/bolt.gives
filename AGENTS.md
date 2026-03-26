@@ -6,7 +6,7 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 - Stable: `v3.0.1`
-- In progress: `v3.1.0`
+- In progress: `v3.0.2`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -39,7 +39,7 @@ When uncertain, choose the smallest safe change that unblocks users.
 
 ---
 
-## v1.0.4 Priority Stack
+## v3.0.2 / v3.0.3 Priority Stack
 
 ### Completed (v1.0.3 baseline)
 - Live Development Commentary Stream
@@ -51,16 +51,20 @@ When uncertain, choose the smallest safe change that unblocks users.
 - Architect self-heal v1 foundations
 - Provider/model/API-key persistence and cost estimation normalization
 
-### In Progress / Remaining (v1.0.4)
-- Zero-infra core runtime guarantee (no mandatory DB/services)
-- Client-hosted isolated instance kit + upgrade/rollback runbooks
-- Optional Teams add-on with role-based access controls
-- Collaboration audit trail and export
-- Architect v2 expansion (preflight checks, confidence-based recovery)
-- Commentary v2 polish (plain-English default + contract/cadence tests)
-- First-party template pack coverage + CI smoke tests
-- Long-run performance/server-offload hardening
-- Multi-instance safe update channels and health-verified rollbacks
+### In Progress / Remaining
+- `v3.0.2`
+  - Zero-infra core runtime guarantee (no mandatory DB/services)
+  - Installer-first self-host reliability
+  - Commentary/layout polish and release-gate automation
+- `v3.0.3`
+  - Client-hosted isolated instance kit + upgrade/rollback runbooks
+  - Optional Teams add-on with role-based access controls
+  - Collaboration audit trail and export
+  - Architect v2 expansion (preflight checks, confidence-based recovery)
+  - Commentary v2 polish (plain-English default + contract/cadence tests)
+  - First-party template pack coverage + CI smoke tests
+  - Long-run performance/server-offload hardening
+  - Multi-instance safe update channels and health-verified rollbacks
 
 ---
 
@@ -134,7 +138,7 @@ If deployment fails:
 When behavior changes, update docs in the same PR/commit set:
 - `CHANGELOG.md` for user-facing behavior
 - `README.md` for setup/usage changes
-- `v1.0.4.md` and `ROADMAP.md` for roadmap status updates
+- `ROADMAP.md` for roadmap status updates
 
 Roadmap items must be marked clearly:
 - `[x]` complete
