@@ -30,7 +30,7 @@ import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~
 import { analyzeRunContinuation } from '~/lib/.server/llm/run-continuation';
 import { SubAgentManager, type SubAgentConfig, type SubAgentState } from '~/lib/.server/llm/sub-agent';
 import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-executor';
-import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
+import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
@@ -199,7 +199,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const selectedProviderCookie = parsedCookies.selectedProvider;
   const selectedModel = selectedModelBody || selectedModelCookie;
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
-  const runtimeEnv = resolveRuntimeEnv(context.cloudflare?.env as unknown as Record<string, unknown> | undefined);
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const llmManager = LLMManager.getInstance(runtimeEnv as any);
   const serverManagedProviderNames = llmManager
     .getAllProviders()

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveRuntimeEnv } from './runtime-env';
+import { resolveRuntimeEnv, resolveRuntimeEnvFromContext } from './runtime-env';
 
 describe('resolveRuntimeEnv', () => {
   afterEach(() => {
@@ -34,5 +34,31 @@ describe('resolveRuntimeEnv', () => {
     });
 
     expect(env.OPENAI_API_KEY).toBe('sk-real-openai-key');
+  });
+
+  it('hydrates env values from the Cloudflare Pages context.env shape', () => {
+    const env = resolveRuntimeEnvFromContext({
+      env: {
+        FREE_OPENROUTER_API_KEY: 'sk-or-pages-secret',
+      },
+    });
+
+    expect(env.FREE_OPENROUTER_API_KEY).toBe('sk-or-pages-secret');
+  });
+
+  it('merges cloudflare.env and context.env sources', () => {
+    const env = resolveRuntimeEnvFromContext({
+      cloudflare: {
+        env: {
+          OPENAI_API_KEY: 'sk-openai-cloudflare',
+        },
+      },
+      env: {
+        FREE_OPENROUTER_API_KEY: 'sk-or-pages-secret',
+      },
+    });
+
+    expect(env.OPENAI_API_KEY).toBe('sk-openai-cloudflare');
+    expect(env.FREE_OPENROUTER_API_KEY).toBe('sk-or-pages-secret');
   });
 });

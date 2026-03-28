@@ -3,6 +3,7 @@ import { json } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials';
+import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 
 interface ConfiguredProvider {
   name: string;
@@ -20,7 +21,8 @@ interface ConfiguredProvidersResponse {
  */
 export const loader: LoaderFunction = async ({ context }) => {
   try {
-    const llmManager = LLMManager.getInstance(context?.cloudflare?.env as any);
+    const runtimeEnv = resolveRuntimeEnvFromContext(context);
+    const llmManager = LLMManager.getInstance(runtimeEnv);
     const configuredProviders: ConfiguredProvider[] = [];
 
     // Check each local provider for environment configuration
@@ -38,7 +40,7 @@ export const loader: LoaderFunction = async ({ context }) => {
          */
         if (config.baseUrlKey) {
           const baseUrlEnvVar = config.baseUrlKey;
-          const cloudflareEnv = (context?.cloudflare?.env as Record<string, any>)?.[baseUrlEnvVar];
+          const cloudflareEnv = runtimeEnv[baseUrlEnvVar];
           const processEnv = process.env[baseUrlEnvVar];
           const managerEnv = llmManager.env[baseUrlEnvVar];
 
@@ -55,9 +57,7 @@ export const loader: LoaderFunction = async ({ context }) => {
         if (config.apiTokenKey && !isConfigured) {
           const apiTokenEnvVar = config.apiTokenKey;
           const envApiToken =
-            (context?.cloudflare?.env as Record<string, any>)?.[apiTokenEnvVar] ||
-            process.env[apiTokenEnvVar] ||
-            llmManager.env[apiTokenEnvVar];
+            runtimeEnv[apiTokenEnvVar] || process.env[apiTokenEnvVar] || llmManager.env[apiTokenEnvVar];
 
           if (normalizeCredential(envApiToken)) {
             isConfigured = true;

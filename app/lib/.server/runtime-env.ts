@@ -3,6 +3,12 @@ import { isPlaceholderCredential } from '~/lib/runtime/credentials';
 export type RuntimeEnv = Record<string, string>;
 
 type EnvSource = Record<string, unknown> | undefined | null;
+type RuntimeContext = {
+  cloudflare?: {
+    env?: unknown;
+  };
+  env?: unknown;
+};
 
 const SENSITIVE_ENV_KEY_PATTERN = /(API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY|ACCESS_KEY|ACCESS_TOKEN)$/i;
 
@@ -61,4 +67,8 @@ export function resolveRuntimeEnv(...sources: EnvSource[]): RuntimeEnv {
   }
 
   return env;
+}
+
+export function resolveRuntimeEnvFromContext(context?: RuntimeContext | null): RuntimeEnv {
+  return resolveRuntimeEnv(context?.cloudflare?.env as EnvSource, context?.env as EnvSource);
 }

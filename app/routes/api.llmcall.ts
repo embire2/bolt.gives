@@ -8,7 +8,7 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
-import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
+import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
 import { ensureFreeProviderAvailability } from '~/lib/.server/llm/free-provider-preflight';
 
@@ -96,7 +96,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   const cookieHeader = request.headers.get('Cookie');
   const rawApiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
-  const runtimeEnv = resolveRuntimeEnv(context.cloudflare?.env as unknown as Record<string, unknown> | undefined);
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const llmManager = LLMManager.getInstance(runtimeEnv);
   const serverManagedProviderNames = llmManager
     .getAllProviders()

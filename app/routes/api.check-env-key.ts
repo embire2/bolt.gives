@@ -1,7 +1,7 @@
 import type { LoaderFunction } from '@remix-run/cloudflare';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { getApiKeysFromCookie } from '~/lib/api/cookies';
-import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
+import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 
 export const loader: LoaderFunction = async ({ context, request }) => {
   const url = new URL(request.url);
@@ -11,7 +11,7 @@ export const loader: LoaderFunction = async ({ context, request }) => {
     return Response.json({ isSet: false });
   }
 
-  const runtimeEnv = resolveRuntimeEnv(context?.cloudflare?.env as unknown as Record<string, unknown> | undefined);
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const llmManager = LLMManager.getInstance(runtimeEnv);
   const providerInstance = llmManager.getProvider(provider);
 

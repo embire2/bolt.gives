@@ -3,7 +3,7 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
-import { resolveRuntimeEnv } from '~/lib/.server/runtime-env';
+import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 
 interface ModelsResponse {
   modelList: ModelInfo[];
@@ -54,7 +54,7 @@ export async function loader({
     };
   };
 }): Promise<Response> {
-  const runtimeEnv = resolveRuntimeEnv(context.cloudflare?.env as unknown as Record<string, unknown> | undefined);
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const llmManager = LLMManager.getInstance(runtimeEnv);
 
   // Get client side maintained API keys and provider settings from cookies
