@@ -39,6 +39,84 @@ import { CommentaryFeed } from './CommentaryFeed';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
+const SURFACE_LAYOUT_STORAGE_KEY = 'bolt_surface_layout';
+
+type SurfaceTabId = 'chat' | 'workspace';
+
+interface SurfaceTabDefinition {
+  id: SurfaceTabId;
+  label: string;
+  description: string;
+  closable: boolean;
+}
+
+const SURFACE_TABS: SurfaceTabDefinition[] = [
+  {
+    id: 'chat',
+    label: 'Chat',
+    description: 'Prompt, live commentary, and technical feed',
+    closable: false,
+  },
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    description: 'Files, code, diff, preview, and terminal',
+    closable: true,
+  },
+];
+
+function readStoredSurfaceLayout(): { openTabs: SurfaceTabId[]; activeTab: SurfaceTabId } | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SURFACE_LAYOUT_STORAGE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      openTabs?: unknown;
+      activeTab?: unknown;
+    };
+
+    const openTabs = Array.isArray(parsed.openTabs)
+      ? parsed.openTabs.filter((tab): tab is SurfaceTabId => tab === 'chat' || tab === 'workspace')
+      : [];
+    const activeTab = parsed.activeTab === 'workspace' ? 'workspace' : 'chat';
+
+    if (!openTabs.includes('chat')) {
+      openTabs.unshift('chat');
+    }
+
+    return {
+      openTabs,
+      activeTab: openTabs.includes(activeTab) ? activeTab : 'chat',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistSurfaceLayout(openTabs: SurfaceTabId[], activeTab: SurfaceTabId) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      SURFACE_LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        openTabs,
+        activeTab,
+      }),
+    );
+  } catch {
+    // Persistence failures should never block the shell.
+  }
+}
 
 interface BaseChatProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement> | undefined;
@@ -110,7 +188,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
     {
       textareaRef,
-      showChat = true,
       chatStarted = false,
       isStreaming = false,
       onStreamingChange,
@@ -180,10 +257,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
+    const showWorkbench = useStore(workbenchStore.showWorkbench);
     const commentaryFeedRef = useRef<HTMLDivElement | null>(null);
     const technicalFeedRef = useRef<HTMLDivElement | null>(null);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [openSurfaces, setOpenSurfaces] = useState<SurfaceTabId[]>(['chat', 'workspace']);
+    const [activeSurface, setActiveSurface] = useState<SurfaceTabId>('chat');
+    const [surfaceLayoutHydrated, setSurfaceLayoutHydrated] = useState(false);
 
     useEffect(() => {
       if (expoUrl) {
@@ -231,19 +312,46 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, [transcript]);
 
     useEffect(() => {
-      onStreamingChange?.(isStreaming);
-    }, [isStreaming, onStreamingChange]);
+      const storedLayout = readStoredSurfaceLayout();
+
+      if (storedLayout) {
+        setOpenSurfaces(storedLayout.openTabs);
+        setActiveSurface(storedLayout.activeTab);
+      }
+
+      setSurfaceLayoutHydrated(true);
+    }, []);
 
     useEffect(() => {
-      if (!chatStarted) {
+      if (!surfaceLayoutHydrated) {
         return;
       }
 
-      // Keep a Replit-style split workspace visible on wide desktop sessions only.
-      if (typeof window !== 'undefined' && window.innerWidth >= 1280) {
-        workbenchStore.showWorkbench.set(true);
+      persistSurfaceLayout(openSurfaces, activeSurface);
+    }, [activeSurface, openSurfaces, surfaceLayoutHydrated]);
+
+    useEffect(() => {
+      if (openSurfaces.includes(activeSurface)) {
+        return;
       }
-    }, [chatStarted]);
+
+      setActiveSurface('chat');
+    }, [activeSurface, openSurfaces]);
+
+    useEffect(() => {
+      if (!showWorkbench) {
+        return;
+      }
+
+      setOpenSurfaces((currentTabs) =>
+        currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
+      );
+      setActiveSurface('workspace');
+    }, [showWorkbench]);
+
+    useEffect(() => {
+      onStreamingChange?.(isStreaming);
+    }, [isStreaming, onStreamingChange]);
 
     useEffect(() => {
       if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -425,244 +533,355 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
-    const baseChat = (
+    const openSurface = (surfaceId: SurfaceTabId) => {
+      setOpenSurfaces((currentTabs) => (currentTabs.includes(surfaceId) ? currentTabs : [...currentTabs, surfaceId]));
+      setActiveSurface(surfaceId);
+
+      if (surfaceId === 'workspace') {
+        workbenchStore.showWorkbench.set(true);
+      }
+    };
+
+    const closeSurface = (surfaceId: SurfaceTabId) => {
+      if (surfaceId === 'chat') {
+        return;
+      }
+
+      setOpenSurfaces((currentTabs) => currentTabs.filter((tab) => tab !== surfaceId));
+      setActiveSurface((currentSurface) => (currentSurface === surfaceId ? 'chat' : currentSurface));
+
+      if (surfaceId === 'workspace') {
+        workbenchStore.showWorkbench.set(false);
+      }
+    };
+
+    const visibleSurfaceTabs = SURFACE_TABS.filter((tab) => openSurfaces.includes(tab.id));
+    const hiddenSurfaceTabs = SURFACE_TABS.filter((tab) => tab.closable && !openSurfaces.includes(tab.id));
+
+    const chatSurface = (
       <div
-        ref={ref}
-        className={classNames(styles.BaseChat, 'relative flex h-full w-full overflow-hidden')}
-        data-chat-visible={showChat}
+        className={classNames(
+          styles.Chat,
+          'relative flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden modern-scrollbar',
+        )}
       >
-        <ClientOnly>{() => <Menu />}</ClientOnly>
-        <div className="flex h-full w-full flex-col overflow-hidden xl:flex-row">
-          <div
-            className={classNames(
-              styles.Chat,
-              'relative flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden modern-scrollbar xl:min-w-[var(--chat-min-width)] xl:max-w-[620px] xl:border-r xl:border-bolt-elements-borderColor',
-            )}
-          >
-            {!chatStarted && (
-              <div
-                id="intro"
-                className="mt-[10vh] sm:mt-[12vh] lg:mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0"
-              >
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-3 sm:mb-4 animate-fade-in">
-                  What are we creating today?
-                </h1>
-                <p className="text-base sm:text-lg lg:text-xl mb-6 sm:mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
-                  Create / Approve / Rinse / Repeat. There are no limits to your creativity with Bolt.gives
-                </p>
-              </div>
-            )}
-            <StickToBottom
-              className={classNames('pt-6 px-2 sm:px-6 relative', {
-                'h-full min-h-0 flex flex-col overflow-y-auto overscroll-contain modern-scrollbar': chatStarted,
-              })}
-              resize="smooth"
-              initial="smooth"
-            >
-              <StickToBottom.Content className="relative flex min-h-0 flex-col gap-4">
-                <ClientOnly>
-                  {() => {
-                    return chatStarted ? (
-                      <Messages
-                        className="flex flex-col w-full flex-1 pb-4 mx-auto z-1"
-                        messages={messages}
-                        isStreaming={isStreaming}
-                        append={append}
-                        chatMode={chatMode}
-                        setChatMode={setChatMode}
-                        provider={provider}
-                        model={model}
-                        addToolResult={addToolResult}
-                      />
-                    ) : null;
-                  }}
-                </ClientOnly>
-                <ScrollToBottom />
-              </StickToBottom.Content>
-              <div
-                className={classNames('z-prompt mx-auto flex w-full flex-col gap-3', {
-                  'my-auto mb-6': !chatStarted,
-                  'mt-2': chatStarted,
-                })}
-              >
-                <div className="flex flex-col gap-2">
-                  {deployAlert && (
-                    <DeployChatAlert
-                      alert={deployAlert}
-                      clearAlert={() => clearDeployAlert?.()}
-                      postMessage={(message: string | undefined) => {
-                        sendMessage?.({} as any, message);
-                        clearSupabaseAlert?.();
-                      }}
-                    />
-                  )}
-                  {supabaseAlert && (
-                    <SupabaseChatAlert
-                      alert={supabaseAlert}
-                      clearAlert={() => clearSupabaseAlert?.()}
-                      postMessage={(message) => {
-                        sendMessage?.({} as any, message);
-                        clearSupabaseAlert?.();
-                      }}
-                    />
-                  )}
-                  {actionAlert && (
-                    <ChatAlert
-                      alert={actionAlert}
-                      autoFixState={actionAlertAutoFixState}
-                      clearAlert={() => clearAlert?.()}
-                      postMessage={(message) => {
-                        sendMessage?.({} as any, message);
-                        clearAlert?.();
-                      }}
-                    />
-                  )}
-                  {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
-                </div>
-                {chatStarted ? (
-                  <div className="space-y-2">
-                    <CommentaryFeed data={data} scrollRef={commentaryFeedRef} />
-                    <div
-                      ref={technicalFeedRef}
-                      className="modern-scrollbar min-h-[150px] max-h-[30vh] sm:min-h-[180px] sm:max-h-[36vh] md:min-h-[200px] md:max-h-[42vh] xl:min-h-[220px] xl:max-h-[60vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2"
-                    >
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
-                        Technical Feed
-                      </div>
-                      <div className="space-y-2">
-                        {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
-                        <ExecutionTransparencyPanel
-                          data={data}
-                          model={model}
-                          provider={provider}
-                          isStreaming={isStreaming}
-                          autonomyMode={autonomyMode}
-                          latestRunMetrics={latestRunMetrics}
-                          latestUsage={latestUsage}
-                        />
-                        <StepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
-                        <ExecutionStickyFooter
-                          data={data}
-                          model={model}
-                          provider={provider}
-                          isStreaming={isStreaming}
-                        />
-                        <UpdateBanner />
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                <div className={classNames('flex flex-col gap-2', { 'sticky bottom-2 z-10': chatStarted })}>
-                  <ChatBox
-                    isModelSettingsCollapsed={isModelSettingsCollapsed}
-                    setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
-                    provider={provider}
-                    setProvider={setProvider}
-                    onProviderSelection={onProviderSelection}
-                    providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
-                    model={model}
-                    setModel={setModel}
-                    modelList={modelList}
-                    apiKeys={apiKeys}
-                    isModelLoading={isModelLoading}
-                    onApiKeysChange={onApiKeysChange}
-                    uploadedFiles={uploadedFiles}
-                    setUploadedFiles={setUploadedFiles}
-                    imageDataList={imageDataList}
-                    setImageDataList={setImageDataList}
-                    textareaRef={textareaRef}
-                    input={input}
-                    handleInputChange={handleInputChange}
-                    handlePaste={handlePaste}
-                    TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
-                    TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
+        {!chatStarted && (
+          <div id="intro" className="mt-[10vh] sm:mt-[12vh] lg:mt-[16vh] mx-auto max-w-3xl px-4 text-center lg:px-0">
+            <h1 className="mb-3 text-4xl font-bold text-bolt-elements-textPrimary animate-fade-in sm:text-5xl lg:text-6xl">
+              What are we creating today?
+            </h1>
+            <p className="mb-6 text-base text-bolt-elements-textSecondary animate-fade-in animation-delay-200 sm:mb-8 sm:text-lg lg:text-xl">
+              Create / Approve / Rinse / Repeat. There are no limits to your creativity with Bolt.gives
+            </p>
+          </div>
+        )}
+        <StickToBottom
+          className={classNames('relative mx-auto w-full max-w-[980px] px-3 pt-6 sm:px-6 lg:px-8', {
+            'flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain modern-scrollbar': chatStarted,
+          })}
+          resize="smooth"
+          initial="smooth"
+        >
+          <StickToBottom.Content className="relative flex min-h-0 flex-col gap-4">
+            <ClientOnly>
+              {() => {
+                return chatStarted ? (
+                  <Messages
+                    className="z-1 mx-auto flex w-full flex-1 flex-col pb-4"
+                    messages={messages}
                     isStreaming={isStreaming}
-                    handleStop={handleStop}
-                    handleSendMessage={handleSendMessage}
-                    enhancingPrompt={enhancingPrompt}
-                    enhancePrompt={enhancePrompt}
-                    isListening={isListening}
-                    startListening={startListening}
-                    stopListening={stopListening}
-                    chatStarted={chatStarted}
-                    exportChat={exportChat}
-                    qrModalOpen={qrModalOpen}
-                    setQrModalOpen={setQrModalOpen}
-                    handleFileUpload={handleFileUpload}
+                    append={append}
                     chatMode={chatMode}
                     setChatMode={setChatMode}
-                    designScheme={designScheme}
-                    setDesignScheme={setDesignScheme}
-                    selectedElement={selectedElement}
-                    setSelectedElement={setSelectedElement}
-                    onWebSearchResult={onWebSearchResult}
-                    onSaveSession={onSaveSession}
-                    onResumeSession={onResumeSession}
-                    onShareSession={onShareSession}
-                    agentMode={agentMode}
-                    setAgentMode={setAgentMode}
-                    onSketchChange={onSketchChange}
-                    autonomyMode={autonomyMode}
-                    setAutonomyMode={setAutonomyMode}
+                    provider={provider}
+                    model={model}
+                    addToolResult={addToolResult}
                   />
-                  <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
-                    <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span>{' '}
-                    Bolt.gives can browse the web with Playwright, study API documentation from a URL, and generate a{' '}
-                    <code>.md</code> file with its understanding of the full API environment. No setup is required.
+                ) : null;
+              }}
+            </ClientOnly>
+            <ScrollToBottom />
+          </StickToBottom.Content>
+          <div
+            className={classNames('z-prompt mx-auto flex w-full flex-col gap-3', {
+              'my-auto mb-6': !chatStarted,
+              'mt-2': chatStarted,
+            })}
+          >
+            <div className="flex flex-col gap-2">
+              {deployAlert && (
+                <DeployChatAlert
+                  alert={deployAlert}
+                  clearAlert={() => clearDeployAlert?.()}
+                  postMessage={(message: string | undefined) => {
+                    sendMessage?.({} as any, message);
+                    clearSupabaseAlert?.();
+                  }}
+                />
+              )}
+              {supabaseAlert && (
+                <SupabaseChatAlert
+                  alert={supabaseAlert}
+                  clearAlert={() => clearSupabaseAlert?.()}
+                  postMessage={(message) => {
+                    sendMessage?.({} as any, message);
+                    clearSupabaseAlert?.();
+                  }}
+                />
+              )}
+              {actionAlert && (
+                <ChatAlert
+                  alert={actionAlert}
+                  autoFixState={actionAlertAutoFixState}
+                  clearAlert={() => clearAlert?.()}
+                  postMessage={(message) => {
+                    sendMessage?.({} as any, message);
+                    clearAlert?.();
+                  }}
+                />
+              )}
+              {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
+            </div>
+            {chatStarted ? (
+              <div className="space-y-2">
+                <CommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+                <div
+                  ref={technicalFeedRef}
+                  className="modern-scrollbar min-h-[160px] max-h-[32vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2 sm:min-h-[190px] sm:max-h-[38vh] md:min-h-[220px] md:max-h-[44vh]"
+                >
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+                    Technical Feed
+                  </div>
+                  <div className="space-y-2">
+                    {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                    <ExecutionTransparencyPanel
+                      data={data}
+                      model={model}
+                      provider={provider}
+                      isStreaming={isStreaming}
+                      autonomyMode={autonomyMode}
+                      latestRunMetrics={latestRunMetrics}
+                      latestUsage={latestUsage}
+                    />
+                    <StepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
+                    <ExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
+                    <UpdateBanner />
                   </div>
                 </div>
               </div>
-            </StickToBottom>
-            <div className="flex flex-col justify-center">
-              {!chatStarted && (
-                <div className="flex justify-center gap-2">
-                  {ImportButtons(importChat)}
-                  <GitCloneButton importChat={importChat} />
-                </div>
-              )}
-              <div className="flex flex-col gap-5">
-                {!chatStarted && !hasAnyApiKey && (
-                  <div className="mx-auto w-full max-w-[980px] rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 text-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="i-ph:rocket-launch-duotone text-2xl text-bolt-elements-textPrimary mt-0.5" />
-                      <div className="flex-1">
-                        <div className="text-bolt-elements-textPrimary font-medium">
-                          Getting started (no bolt.gives signup required)
-                        </div>
-                        <div className="text-bolt-elements-textSecondary mt-1 space-y-1">
-                          <div>1. Pick a provider (OpenAI, Anthropic, OpenRouter, Ollama, etc.) in the chat box.</div>
-                          <div>
-                            2. If you choose a cloud provider, you will need to sign up with that provider to get an API
-                            key.
-                          </div>
-                          <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
-                          <div className="text-xs mt-2">
-                            Note: keys are stored in your browser and sent with your requests to talk to your selected
-                            provider.
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {!chatStarted &&
-                  ExamplePrompts((event, messageInput) => {
-                    if (isStreaming) {
-                      handleStop?.();
-                      return;
-                    }
-
-                    handleSendMessage?.(event, messageInput);
-                  })}
-                {!chatStarted && <StarterTemplates />}
+            ) : null}
+            <div className={classNames('flex flex-col gap-2', { 'sticky bottom-2 z-10': chatStarted })}>
+              <ChatBox
+                isModelSettingsCollapsed={isModelSettingsCollapsed}
+                setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
+                provider={provider}
+                setProvider={setProvider}
+                onProviderSelection={onProviderSelection}
+                providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
+                model={model}
+                setModel={setModel}
+                modelList={modelList}
+                apiKeys={apiKeys}
+                isModelLoading={isModelLoading}
+                onApiKeysChange={onApiKeysChange}
+                uploadedFiles={uploadedFiles}
+                setUploadedFiles={setUploadedFiles}
+                imageDataList={imageDataList}
+                setImageDataList={setImageDataList}
+                textareaRef={textareaRef}
+                input={input}
+                handleInputChange={handleInputChange}
+                handlePaste={handlePaste}
+                TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
+                TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
+                isStreaming={isStreaming}
+                handleStop={handleStop}
+                handleSendMessage={handleSendMessage}
+                enhancingPrompt={enhancingPrompt}
+                enhancePrompt={enhancePrompt}
+                isListening={isListening}
+                startListening={startListening}
+                stopListening={stopListening}
+                chatStarted={chatStarted}
+                exportChat={exportChat}
+                qrModalOpen={qrModalOpen}
+                setQrModalOpen={setQrModalOpen}
+                handleFileUpload={handleFileUpload}
+                chatMode={chatMode}
+                setChatMode={setChatMode}
+                designScheme={designScheme}
+                setDesignScheme={setDesignScheme}
+                selectedElement={selectedElement}
+                setSelectedElement={setSelectedElement}
+                onWebSearchResult={onWebSearchResult}
+                onSaveSession={onSaveSession}
+                onResumeSession={onResumeSession}
+                onShareSession={onShareSession}
+                agentMode={agentMode}
+                setAgentMode={setAgentMode}
+                onSketchChange={onSketchChange}
+                autonomyMode={autonomyMode}
+                setAutonomyMode={setAutonomyMode}
+              />
+              <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives
+                can browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code>{' '}
+                file with its understanding of the full API environment. No setup is required.
               </div>
             </div>
           </div>
-          <ClientOnly>
-            {() => (
-              <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />
+        </StickToBottom>
+        <div className="flex flex-col justify-center px-3 pb-4 sm:px-6 lg:px-8">
+          {!chatStarted && (
+            <div className="flex justify-center gap-2">
+              {ImportButtons(importChat)}
+              <GitCloneButton importChat={importChat} />
+            </div>
+          )}
+          <div className="flex flex-col gap-5">
+            {!chatStarted && !hasAnyApiKey && (
+              <div className="mx-auto w-full max-w-[980px] rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <div className="i-ph:rocket-launch-duotone mt-0.5 text-2xl text-bolt-elements-textPrimary" />
+                  <div className="flex-1">
+                    <div className="font-medium text-bolt-elements-textPrimary">
+                      Getting started (no bolt.gives signup required)
+                    </div>
+                    <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
+                      <div>1. Pick a provider (OpenAI, Anthropic, OpenRouter, Ollama, etc.) in the chat box.</div>
+                      <div>
+                        2. If you choose a cloud provider, you will need to sign up with that provider to get an API
+                        key.
+                      </div>
+                      <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
+                      <div className="mt-2 text-xs">
+                        Note: keys are stored in your browser and sent with your requests to talk to your selected
+                        provider.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
-          </ClientOnly>
+            {!chatStarted &&
+              ExamplePrompts((event, messageInput) => {
+                if (isStreaming) {
+                  handleStop?.();
+                  return;
+                }
+
+                handleSendMessage?.(event, messageInput);
+              })}
+            {!chatStarted && <StarterTemplates />}
+          </div>
+        </div>
+      </div>
+    );
+
+    const baseChat = (
+      <div ref={ref} className={classNames(styles.BaseChat, 'relative flex h-full min-h-0 w-full overflow-hidden')}>
+        <ClientOnly>{() => <Menu />}</ClientOnly>
+        <div className="flex h-full w-full min-h-0 flex-col overflow-hidden">
+          <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/95 px-2 py-2 backdrop-blur">
+            <div
+              role="tablist"
+              aria-label="Workspace surfaces"
+              className="flex flex-wrap items-center gap-2 pl-12 sm:pl-14"
+            >
+              {visibleSurfaceTabs.map((tab) => {
+                const isActive = activeSurface === tab.id;
+                const panelId = `${tab.id}-surface-panel`;
+                const tabId = `${tab.id}-surface-tab`;
+
+                return (
+                  <div
+                    key={tab.id}
+                    className={classNames(
+                      'group flex items-center gap-1 rounded-full border px-2 py-1 text-sm transition-colors',
+                      isActive
+                        ? 'border-accent-500/40 bg-accent-500/10 text-bolt-elements-textPrimary'
+                        : 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      id={tabId}
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={panelId}
+                      className="flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5"
+                      onClick={() => openSurface(tab.id)}
+                      title={tab.description}
+                    >
+                      <span className={tab.id === 'chat' ? 'i-ph:chat-circle-dots' : 'i-ph:stack'} />
+                      <span className="font-medium">{tab.label}</span>
+                    </button>
+                    {tab.closable ? (
+                      <button
+                        type="button"
+                        className="rounded-full bg-transparent p-1 text-bolt-elements-textTertiary transition-colors hover:text-bolt-elements-textPrimary"
+                        onClick={() => closeSurface(tab.id)}
+                        aria-label={`Close ${tab.label} tab`}
+                        title={`Close ${tab.label}`}
+                      >
+                        <span className="i-ph:x" />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {hiddenSurfaceTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={false}
+                  aria-controls={`${tab.id}-surface-panel`}
+                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
+                  onClick={() => openSurface(tab.id)}
+                  title={tab.description}
+                >
+                  <span className="i-ph:plus" />
+                  <span>Open {tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {activeSurface === 'chat' ? (
+              <div
+                id="chat-surface-panel"
+                role="tabpanel"
+                aria-labelledby="chat-surface-tab"
+                className="h-full min-h-0"
+              >
+                {chatSurface}
+              </div>
+            ) : null}
+
+            {activeSurface === 'workspace' ? (
+              <div
+                id="workspace-surface-panel"
+                role="tabpanel"
+                aria-labelledby="workspace-surface-tab"
+                className="h-full min-h-0 overflow-hidden py-3"
+              >
+                <ClientOnly>
+                  {() => (
+                    <Workbench
+                      embedded
+                      forceVisible
+                      chatStarted={chatStarted}
+                      isStreaming={isStreaming}
+                      setSelectedElement={setSelectedElement}
+                      onRequestClose={() => closeSurface('workspace')}
+                    />
+                  )}
+                </ClientOnly>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     );

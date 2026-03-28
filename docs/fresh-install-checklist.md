@@ -1,4 +1,4 @@
-# Fresh Install Checklist (bolt.gives v3.0.1)
+# Fresh Install Checklist (bolt.gives v3.0.2)
 
 This checklist is meant to validate a clean developer machine setup end-to-end.
 
@@ -19,6 +19,7 @@ chmod +x install-bolt-gives.sh
 ```
 
 Installer guarantees:
+
 - Ubuntu dependency installation
 - Node.js `22.x`
 - `pnpm 9.x` (repo-pinned to `9.14.4`)
@@ -49,6 +50,7 @@ Install these on Ubuntu:
    ```
 
 ## Manual install
+
 1. Clone the repo
    - `git clone https://github.com/embire2/bolt.gives.git`
    - `cd bolt.gives`
@@ -61,6 +63,7 @@ Install these on Ubuntu:
    - `NODE_OPTIONS=--max-old-space-size=4096 pnpm exec remix vite:build`
 
 ## Run
+
 1. Recommended
    - Use the installer-created services:
      - `sudo systemctl status bolt-gives-app --no-pager`
@@ -83,11 +86,13 @@ Validated self-host build command:
 - `NODE_OPTIONS=--max-old-space-size=4096 pnpm exec remix vite:build`
 
 ## Quality Gate
+
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 
 ## Optional (Sessions + Supabase)
+
 1. Configure Supabase vars in `.env.local`
 2. Create `public.bolt_sessions` table
    - Apply `docs/supabase/bolt_sessions.sql` in Supabase SQL editor

@@ -5,8 +5,9 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform, with a strong focus on reliability, transparent execution, and safe autonomous behavior.
 
 Current release line:
-- Stable: `v3.0.1`
-- In progress: `v3.0.2`
+
+- Stable: `v3.0.2`
+- In progress: `v3.0.3`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -19,6 +20,7 @@ Do not ship hidden behavior. If the agent takes actions, users should be able to
 - Optional staging branch: `alpha` (used when risky features need live soak first)
 
 If both `alpha` and `main` are active:
+
 - Land high-risk work on `alpha`
 - Verify on `https://alpha1.bolt.gives`
 - Fast-forward or merge cleanly into `main`
@@ -41,7 +43,8 @@ When uncertain, choose the smallest safe change that unblocks users.
 
 ## v3.0.2 / v3.0.3 Priority Stack
 
-### Completed (v1.0.3 baseline)
+### Completed baseline
+
 - Live Development Commentary Stream
   - Commentary is streamed incrementally and separated from code/action events.
 - Agent Anti-Stall + Auto-Recovery
@@ -50,13 +53,16 @@ When uncertain, choose the smallest safe change that unblocks users.
 - Safer autonomy modes
 - Architect self-heal v1 foundations
 - Provider/model/API-key persistence and cost estimation normalization
+- Installer-first self-host baseline
+- Hosted FREE provider with managed-token routing and silent fallback
+- Cloudflare managed-instance architecture docs and tenancy schema
 
 ### In Progress / Remaining
-- `v3.0.2`
-  - Zero-infra core runtime guarantee (no mandatory DB/services)
-  - Installer-first self-host reliability
-  - Commentary/layout polish and release-gate automation
+
 - `v3.0.3`
+  - Zero-infra core runtime guarantee (no mandatory DB/services)
+  - Managed Cloudflare instance control plane (spawn API, one-client / one-instance enforcement, rollout controller)
+  - Server-first heavy execution / browser offload
   - Client-hosted isolated instance kit + upgrade/rollback runbooks
   - Optional Teams add-on with role-based access controls
   - Collaboration audit trail and export
@@ -71,27 +77,33 @@ When uncertain, choose the smallest safe change that unblocks users.
 ## Mandatory Implementation Workflow
 
 1. Confirm current behavior
+
 - Reproduce the issue or validate feature gap.
 - Record exact file(s) and runtime path affected.
 
 2. Implement minimal safe fix
+
 - Keep protocol contracts backward compatible.
 - Add guardrails for strict providers when touching tool schemas.
 
 3. Add/Update tests
+
 - Add regression tests close to the changed code.
 - Include at least one test that would fail before the fix.
 
 4. Validate locally
+
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 
 5. Run targeted E2E smoke for core-path changes
+
 - Required when touching chat streaming, providers, tools, deployments, auth, or file actions.
 - Use at least one real provider path when credentials are available.
 
 6. Commit and push
+
 - Use Conventional Commits:
   - `fix: ...`
   - `feat: ...`
@@ -105,10 +117,12 @@ When uncertain, choose the smallest safe change that unblocks users.
 ## Deployment Rules (Cloudflare + alpha1)
 
 Production-like validation targets:
+
 - `https://alpha1.bolt.gives`
 - `https://ahmad.bolt.gives`
 
 When deploying:
+
 - Confirm build passes under Cloudflare constraints.
 - Confirm runtime starts and chat flow works.
 - Confirm static assets are fresh (logo/version/changelog visibility where applicable).
@@ -118,6 +132,7 @@ When deploying:
   - `https://ahmad.bolt.gives`
 
 If deployment fails:
+
 - Capture exact error text.
 - Patch root cause, not symptoms.
 - Re-run smoke test before declaring fixed.
@@ -136,11 +151,13 @@ If deployment fails:
 ## Documentation Rules
 
 When behavior changes, update docs in the same PR/commit set:
+
 - `CHANGELOG.md` for user-facing behavior
 - `README.md` for setup/usage changes
 - `ROADMAP.md` for roadmap status updates
 
 Roadmap items must be marked clearly:
+
 - `[x]` complete
 - `[~]` partial/in progress
 - `[ ]` not started
@@ -152,6 +169,7 @@ Include commit references for completed roadmap items when possible.
 ## Quality Bar Before Merge
 
 A change is done only when all are true:
+
 - Code compiles and tests pass.
 - Lint/typecheck pass.
 - Core flow still works end-to-end.

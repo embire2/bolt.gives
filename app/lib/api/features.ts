@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.2',
+    name: 'v3.0.2 cloudflare managed-instance blueprint',
+    description:
+      'The release line now documents the experimental one-client / one-instance Cloudflare managed service design, adds a real Chat/Workspace tab shell, and ships Pages FREE-provider relay fixes.',
+    releaseDate: '2026-03-28',
+  },
+  {
     id: 'release-v3.0.1',
     name: 'v3.0.1 hosted free-model fallback',
     description:
