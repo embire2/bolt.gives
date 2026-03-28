@@ -56,8 +56,12 @@ docs/instructions/Roadmap.md
 scripts/.tmp-*
 scripts/.tmp-replit-frames/
 .screenshots-dev.log
+output/
 
 # local operator files (not project source)
 bolt15february2026.tar.gz
 replit.mp4
 favicon.png
+
+# runtime collaboration artifacts
+.collab-docs/
