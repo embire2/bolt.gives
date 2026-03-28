@@ -23,37 +23,43 @@ jobs:
       - name: Check production deployment secrets
         id: check-secrets
         run: |
-          if [[ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" || -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
-            echo "Cloudflare production deployment secrets are missing." >&2
-            echo "Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository secrets." >&2
-            exit 1
+          if [[ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: actions/checkout@v4
 
       - name: Setup pnpm
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 9.14.4
           run_install: false
 
       - name: Setup Node.js
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22.22.0
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.check-secrets.outputs.configured == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build production bundle
+        if: steps.check-secrets.outputs.configured == 'true'
         env:
           NODE_OPTIONS: --max-old-space-size=6142
           NODE_ENV: production
         run: pnpm run build
 
       - name: Deploy to Cloudflare Pages
+        if: steps.check-secrets.outputs.configured == 'true'
         id: deploy
         uses: cloudflare/pages-action@v1
         with:
@@ -65,12 +71,23 @@ jobs:
           branch: main
 
       - name: Smoke test deployed site
+        if: steps.check-secrets.outputs.configured == 'true'
         run: |
           echo "Production URL: ${{ steps.deploy.outputs.url }}"
           curl -fLsS "${{ steps.deploy.outputs.url }}" >/tmp/pages.html
           grep -q "bolt.gives" /tmp/pages.html
 
+      - name: Production deployment not configured
+        if: steps.check-secrets.outputs.configured == 'false'
+        run: |
+          echo "Cloudflare production deployment is not configured for this repository."
+          echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to enable automatic Pages releases."
+
       - name: Workflow summary
         run: |
-          echo "Production Pages deployment completed."
-          echo "URL: ${{ steps.deploy.outputs.url }}"
+          if [[ "${{ steps.check-secrets.outputs.configured }}" == "true" ]]; then
+            echo "Production Pages deployment completed."
+            echo "URL: ${{ steps.deploy.outputs.url }}"
+          else
+            echo "Production Pages deployment skipped because Cloudflare repository secrets are not configured."
+          fi
