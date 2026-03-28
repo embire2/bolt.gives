@@ -22,6 +22,7 @@
 
 - Cloudflare Pages and preview deployments now resolve hosted FREE-provider credentials more reliably across Pages-style and Worker-style runtime contexts.
 - If a public Pages runtime does not have the managed FREE secret locally configured, hosted FREE requests can now relay through the managed runtime instead of failing with a token error.
+- Cloudflare Pages coding sessions now route collaboration/event websocket traffic to the managed collaboration backend instead of self-targeting `bolt-gives.pages.dev/collab`, which returned `404` and left long runs stalled behind heartbeat commentary without a stable preview.
 
 ### Changed
 
@@ -33,6 +34,7 @@
   - a future Pro path for dedicated `6 GiB` Cloudflare Containers
 - The main app shell now behaves like real tabs, with the `Workspace` surface closable/reopenable and persisted between sessions.
 - `main` now has a first-party Cloudflare Pages production deployment workflow so the Pages runtime can track the same release source-of-truth as GitHub, `alpha`, `alpha1`, and `ahmad`.
+- Cloudflare Pages and preview deployments now default unsafe/stale collaboration socket settings back to the managed backend automatically, so an old stored URL can no longer poison new coding runs.
 
 ### Verified
 

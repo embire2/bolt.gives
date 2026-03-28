@@ -39,6 +39,7 @@ Non-negotiable guardrails:
 - [x] Visible default FREE route pinned to `DeepSeek V3.2`.
 - [x] Silent hosted fallback chain to `qwen/qwen3-coder`.
 - [x] Cloudflare Pages / preview relay support for hosted FREE when the preview runtime does not have the managed secret locally configured.
+- [x] Cloudflare Pages clients automatically recover from unsafe/stale collaboration socket settings and reconnect to the managed collaboration backend instead of stalling on `/collab` websocket `404`s.
 
 3. Experimental Cloudflare managed-instance blueprint
 

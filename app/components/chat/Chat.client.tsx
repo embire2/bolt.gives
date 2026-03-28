@@ -9,6 +9,7 @@ import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
@@ -1795,7 +1796,7 @@ Requirements:
         let socket: WebSocket | undefined;
 
         try {
-          const base = window.localStorage.getItem('bolt_collab_server_url') || 'ws://localhost:1234';
+          const base = getCollaborationServerUrl();
           socket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
         } catch {
           socket = undefined;

@@ -7,25 +7,67 @@ import { logStore } from '~/lib/stores/logs';
 const COLLAB_SERVER_STORAGE_KEY = 'bolt_collab_server_url';
 const COLLAB_ENABLED_STORAGE_KEY = 'bolt_collab_enabled';
 const LOCAL_DEFAULT_COLLAB_SERVER_URL = 'ws://localhost:1234';
+const PAGES_DEFAULT_COLLAB_SERVER_URL = 'wss://alpha1.bolt.gives/collab';
+
+export function isLocalCollaborationHost(host: string) {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+export function isBoltPagesCollaborationHost(host: string) {
+  return host === 'bolt-gives.pages.dev' || host.endsWith('.bolt-gives.pages.dev');
+}
+
+export function resolveDefaultCollaborationServerUrl(options: { host: string; protocol: string; originHost?: string }) {
+  const { host, protocol, originHost = host } = options;
+
+  if (isLocalCollaborationHost(host)) {
+    return LOCAL_DEFAULT_COLLAB_SERVER_URL;
+  }
+
+  if (isBoltPagesCollaborationHost(host)) {
+    return PAGES_DEFAULT_COLLAB_SERVER_URL;
+  }
+
+  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
+
+  return `${wsProto}//${originHost}/collab`;
+}
+
+export function isUnsafeStoredCollaborationUrl(rawUrl: string, currentHost: string) {
+  try {
+    const parsed = new URL(rawUrl);
+
+    if (isLocalCollaborationHost(currentHost) || isLocalCollaborationHost(parsed.hostname)) {
+      return !isLocalCollaborationHost(currentHost) && isLocalCollaborationHost(parsed.hostname);
+    }
+
+    if (
+      isBoltPagesCollaborationHost(currentHost) &&
+      (parsed.hostname === currentHost || isBoltPagesCollaborationHost(parsed.hostname))
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 export function getDefaultCollaborationServerUrl() {
   if (typeof window === 'undefined') {
     return LOCAL_DEFAULT_COLLAB_SERVER_URL;
   }
 
-  const host = window.location.hostname;
-
   /*
    * Keep local dev behavior intact. The collab server defaults to 1234, while the
    * web app usually runs on 5173, so using a relative URL here would break dev.
    */
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
-    return LOCAL_DEFAULT_COLLAB_SERVER_URL;
-  }
-
-  const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-
-  return `${wsProto}//${window.location.host}/collab`;
+  return resolveDefaultCollaborationServerUrl({
+    host: window.location.hostname,
+    protocol: window.location.protocol,
+    originHost: window.location.host,
+  });
 }
 
 interface CollaborationBinding {
@@ -95,7 +137,19 @@ export function getCollaborationServerUrl() {
     return LOCAL_DEFAULT_COLLAB_SERVER_URL;
   }
 
-  return window.localStorage.getItem(COLLAB_SERVER_STORAGE_KEY) || getDefaultCollaborationServerUrl();
+  const stored = window.localStorage.getItem(COLLAB_SERVER_STORAGE_KEY);
+  const fallback = getDefaultCollaborationServerUrl();
+
+  if (!stored) {
+    return fallback;
+  }
+
+  if (isUnsafeStoredCollaborationUrl(stored, window.location.hostname)) {
+    window.localStorage.setItem(COLLAB_SERVER_STORAGE_KEY, fallback);
+    return fallback;
+  }
+
+  return stored;
 }
 
 export function setCollaborationServerUrl(url: string) {
