@@ -4,6 +4,10 @@ import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials
 const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://alpha1.bolt.gives';
 const HOSTED_FREE_PROXY_HOSTS = new Set(['bolt-gives.pages.dev']);
 
+function shouldUseDefaultRelayHost(hostname: string) {
+  return HOSTED_FREE_PROXY_HOSTS.has(hostname) || hostname.endsWith('.bolt-gives.pages.dev');
+}
+
 export function resolveHostedFreeRelayOrigin(options: {
   requestUrl: URL;
   providerName?: string;
@@ -21,7 +25,7 @@ export function resolveHostedFreeRelayOrigin(options: {
   const configuredRelayOrigin =
     normalizeHttpUrl(options.runtimeEnv?.HOSTED_FREE_RELAY_ORIGIN) ||
     normalizeHttpUrl(options.runtimeEnv?.BOLT_HOSTED_FREE_RELAY_ORIGIN);
-  const defaultRelayOrigin = HOSTED_FREE_PROXY_HOSTS.has(options.requestUrl.hostname)
+  const defaultRelayOrigin = shouldUseDefaultRelayHost(options.requestUrl.hostname)
     ? DEFAULT_HOSTED_FREE_RELAY_ORIGIN
     : undefined;
   const relayOrigin = configuredRelayOrigin || defaultRelayOrigin;

@@ -13,6 +13,17 @@ describe('resolveHostedFreeRelayOrigin', () => {
     expect(relayOrigin).toBe('https://alpha1.bolt.gives');
   });
 
+  it('enables the official relay for preview pages subdomains when the FREE key is absent', () => {
+    const relayOrigin = resolveHostedFreeRelayOrigin({
+      requestUrl: new URL('https://0e0a4d2d.bolt-gives.pages.dev/api/chat'),
+      providerName: 'FREE',
+      apiKey: '',
+      runtimeEnv: {},
+    });
+
+    expect(relayOrigin).toBe('https://alpha1.bolt.gives');
+  });
+
   it('does not relay when a local FREE key exists', () => {
     const relayOrigin = resolveHostedFreeRelayOrigin({
       requestUrl: new URL('https://bolt-gives.pages.dev/api/chat'),
