@@ -53,6 +53,7 @@ Non-negotiable guardrails:
 - [x] Release line and docs aligned on `v3.0.2`.
 - [x] Feature feed updated so users see the `v3.0.2` release summary after upgrade.
 - [x] Main shell split into top-level `Chat` / `Workspace` tabs with closable workspace persistence.
+- [x] GitHub-to-Cloudflare Pages production deployment workflow added so `main` can drive the Pages release path directly.
 
 ## v3.0.3 - Managed Control Plane + Server-First Execution
 

@@ -1,0 +1,76 @@
+name: Cloudflare Pages Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: pages-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check production deployment secrets
+        id: check-secrets
+        run: |
+          if [[ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" || -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
+            echo "Cloudflare production deployment secrets are missing." >&2
+            echo "Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.4
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production bundle
+        env:
+          NODE_OPTIONS: --max-old-space-size=6142
+          NODE_ENV: production
+        run: pnpm run build
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: bolt-gives
+          directory: build/client
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+      - name: Smoke test deployed site
+        run: |
+          echo "Production URL: ${{ steps.deploy.outputs.url }}"
+          curl -fLsS "${{ steps.deploy.outputs.url }}" >/tmp/pages.html
+          grep -q "bolt.gives" /tmp/pages.html
+
+      - name: Workflow summary
+        run: |
+          echo "Production Pages deployment completed."
+          echo "URL: ${{ steps.deploy.outputs.url }}"

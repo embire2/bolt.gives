@@ -32,6 +32,7 @@
   - a free experimental shared-runtime path
   - a future Pro path for dedicated `6 GiB` Cloudflare Containers
 - The main app shell now behaves like real tabs, with the `Workspace` surface closable/reopenable and persisted between sessions.
+- `main` now has a first-party Cloudflare Pages production deployment workflow so the Pages runtime can track the same release source-of-truth as GitHub, `alpha`, `alpha1`, and `ahmad`.
 
 ### Verified
 
