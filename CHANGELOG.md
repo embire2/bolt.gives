@@ -26,6 +26,8 @@
 - The hosted `FREE` provider is now the default provider selection and is pinned to `DeepSeek V3.2`.
 - The standard `OpenRouter` provider remains user-managed and continues to require the user's own OpenRouter API key for unrestricted model access.
 - Hosted free-provider requests now fail fast with a clear retry/switch-provider message when OpenRouter rate-limits or temporarily blocks the upstream `deepseek/deepseek-v3.2` route.
+- Cloudflare Pages demo requests for the hosted `FREE` provider now resolve server-managed credentials correctly across both Worker-style and Pages-style runtime contexts.
+- If the official `bolt-gives.pages.dev` deployment does not have a local hosted `FREE` secret configured, it now relays those `FREE` requests to the managed hosted runtime instead of failing with an API-key error.
 
 ### Security
 - Server-managed provider credentials are no longer eligible for `/api/export-api-keys`, preventing hosted fallback/provider secrets from being serialized back to the browser.

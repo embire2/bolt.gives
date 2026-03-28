@@ -11,6 +11,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
 import { ensureFreeProviderAvailability } from '~/lib/.server/llm/free-provider-preflight';
+import { relayHostedFreeRequest, resolveHostedFreeRelayOrigin } from '~/lib/.server/llm/hosted-free-relay';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -68,13 +69,15 @@ function validateTokenLimits(modelDetails: ModelInfo, requestedTokens: number): 
 }
 
 async function llmCallAction({ context, request }: ActionFunctionArgs) {
-  const { system, message, model, provider, streamOutput } = await request.json<{
+  const requestUrl = new URL(request.url);
+  const requestBody = await request.json<{
     system: string;
     message: string;
     model: string;
     provider: ProviderInfo;
     streamOutput?: boolean;
   }>();
+  const { system, message, model, provider, streamOutput } = requestBody;
 
   const { name: providerName } = provider;
 
@@ -113,6 +116,21 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     providerTokenKeyByName,
     serverManagedProviderNames,
   });
+  const hostedFreeRelayOrigin = resolveHostedFreeRelayOrigin({
+    requestUrl,
+    providerName,
+    apiKey: apiKeys[providerName],
+    runtimeEnv,
+  });
+
+  if (hostedFreeRelayOrigin) {
+    return relayHostedFreeRequest({
+      request,
+      requestUrl,
+      relayOrigin: hostedFreeRelayOrigin,
+      body: requestBody,
+    });
+  }
 
   if (streamOutput) {
     try {

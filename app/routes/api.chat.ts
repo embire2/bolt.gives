@@ -38,6 +38,7 @@ import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/li
 import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
+import { relayHostedFreeRequest, resolveHostedFreeRelayOrigin } from '~/lib/.server/llm/hosted-free-relay';
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
@@ -146,6 +147,7 @@ function parseJsonObject<T extends Record<string, any>>(raw: string | undefined,
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
+  const requestUrl = new URL(request.url);
   const requestPayload = await request.json<{
     messages: Messages;
     files: any;
@@ -218,6 +220,22 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     providerTokenKeyByName,
     serverManagedProviderNames,
   });
+  const hostedFreeRelayOrigin = resolveHostedFreeRelayOrigin({
+    requestUrl,
+    providerName: selectedProvider,
+    apiKey: selectedProvider ? apiKeys[selectedProvider] : undefined,
+    runtimeEnv,
+  });
+
+  if (hostedFreeRelayOrigin) {
+    return relayHostedFreeRequest({
+      request,
+      requestUrl,
+      relayOrigin: hostedFreeRelayOrigin,
+      body: requestPayload,
+    });
+  }
+
   const providerSettings: Record<string, IProviderSetting> = {
     ...cookieProviderSettings,
     ...bodyProviderSettings,
@@ -232,7 +250,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
   const requestStartedAt = Date.now();
   const runId = generateId();
-  const requestUrl = new URL(request.url);
   const requestDebugContext = {
     runId,
     route: requestUrl.pathname,
