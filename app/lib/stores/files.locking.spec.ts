@@ -106,6 +106,16 @@ describe('FilesStore locking', () => {
     expect(setItemSpy).toHaveBeenCalledTimes(1);
   });
 
+
+  it('rejects writes outside the webcontainer workdir', async () => {
+    const webcontainer = makeWebcontainer('/workspace');
+    const store = new FilesStore(Promise.resolve(webcontainer));
+    store.files.setKey('/workspace/a.txt', { type: 'file', content: 'same', isBinary: false, isLocked: false });
+
+    await expect(store.saveFile('/tmp/outside.txt', 'next')).rejects.toThrow(/invalid file path/i);
+    expect(webcontainer.fs.writeFile).not.toHaveBeenCalled();
+  });
+
   it('restoreSnapshot hydrates the file map and syncs text/binary files into the container', async () => {
     const webcontainer = makeWebcontainer('/workspace');
     const store = new FilesStore(Promise.resolve(webcontainer));

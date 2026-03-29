@@ -556,6 +556,17 @@ export class FilesStore {
     this.#modifiedFiles.clear();
   }
 
+  #toRelativeWorkdirPath(workdir: string, absolutePath: string, operation: 'write' | 'create' | 'mkdir' | 'delete') {
+    const relativePath = path.relative(workdir, absolutePath);
+    const normalized = relativePath.replace(/\\/g, '/');
+
+    if (!normalized || normalized === '.' || normalized.startsWith('../') || path.isAbsolute(normalized)) {
+      throw new Error(`EINVAL: invalid file path, ${operation} '${relativePath}'`);
+    }
+
+    return normalized;
+  }
+
   async saveFile(filePath: string, content: string) {
     const webcontainer = await this.#webcontainer;
 
@@ -566,11 +577,7 @@ export class FilesStore {
         throw new Error(`File is locked and cannot be modified: ${filePath}`);
       }
 
-      const relativePath = path.relative(webcontainer.workdir, filePath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid file path, write '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, filePath, 'write');
 
       const oldContent = this.getFile(filePath)?.content;
 
@@ -804,11 +811,7 @@ export class FilesStore {
         throw new Error(`Path is inside a locked folder and cannot be modified: ${filePath}`);
       }
 
-      const relativePath = path.relative(webcontainer.workdir, filePath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid file path, create '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, filePath, 'create');
 
       const dirPath = path.dirname(relativePath);
 
@@ -857,11 +860,7 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, folderPath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid folder path, create '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, folderPath, 'mkdir');
 
       await webcontainer.fs.mkdir(relativePath, { recursive: true });
 
