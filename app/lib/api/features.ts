@@ -1,0 +1,112 @@
+export interface Feature {
+  id: string;
+  name: string;
+  description: string;
+  viewed: boolean;
+  releaseDate: string;
+}
+
+const VIEWED_FEATURES_STORAGE_KEY = 'bolt_viewed_features';
+
+type FeatureDefinition = Omit<Feature, 'viewed'>;
+
+const FEATURE_FEED: FeatureDefinition[] = [
+  {
+    id: 'release-v3.0.2',
+    name: 'v3.0.2 cloudflare managed-instance blueprint',
+    description:
+      'The release line now documents the experimental one-client / one-instance Cloudflare managed service design, adds a real Chat/Workspace tab shell, and ships Pages FREE-provider relay fixes.',
+    releaseDate: '2026-03-28',
+  },
+  {
+    id: 'release-v3.0.1',
+    name: 'v3.0.1 hosted free-model fallback',
+    description:
+      'Hosted FREE now keeps DeepSeek V3.2 as the visible default while silently failing over to qwen/qwen3-coder, alongside a wider prompt rail and refreshed release docs.',
+    releaseDate: '2026-03-25',
+  },
+  {
+    id: 'release-v3.0.0',
+    name: 'v3.0.0 runtime reliability reset',
+    description:
+      'Starter continuation, provider/key normalization, dev-port resilience, path-safe file actions, and verified OpenAI gpt-5.4 live app generation.',
+    releaseDate: '2026-03-22',
+  },
+  {
+    id: 'release-v1.0.3',
+    name: 'v1.0.3 reliability hardening',
+    description:
+      'Architect recovery events, long-run timeline de-bloat, provider history persistence, and stricter runtime safeguards.',
+    releaseDate: '2026-02-20',
+  },
+  {
+    id: 'release-v1.0.2',
+    name: 'v1.0.2 transparency baseline',
+    description:
+      'Execution transparency panel, commentary instrumentation, reliability guardrails, and persistent project memory.',
+    releaseDate: '2026-02-17',
+  },
+  {
+    id: 'release-v1.0.1',
+    name: 'v1.0.1 multimodal and multi-step stability',
+    description:
+      'Image attachment support for prompts, stronger small-model behavior, and default multi-step backend execution.',
+    releaseDate: '2026-02-15',
+  },
+];
+
+function readViewedFeatureIds(): Set<string> {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+
+  try {
+    const raw = window.localStorage.getItem(VIEWED_FEATURES_STORAGE_KEY);
+
+    if (!raw) {
+      return new Set();
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    return new Set(parsed.filter((id): id is string => typeof id === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistViewedFeatureIds(ids: Set<string>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(VIEWED_FEATURES_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // Persistence failures should never block feature rendering.
+  }
+}
+
+export const getFeatureFlags = async (): Promise<Feature[]> => {
+  const viewedFeatureIds = readViewedFeatureIds();
+  const sorted = [...FEATURE_FEED].sort((a, b) => Date.parse(b.releaseDate) - Date.parse(a.releaseDate));
+
+  return sorted.map((feature) => ({
+    ...feature,
+    viewed: viewedFeatureIds.has(feature.id),
+  }));
+};
+
+export const markFeatureViewed = async (featureId: string): Promise<void> => {
+  if (!featureId) {
+    return;
+  }
+
+  const viewedFeatureIds = readViewedFeatureIds();
+  viewedFeatureIds.add(featureId);
+  persistViewedFeatureIds(viewedFeatureIds);
+};

@@ -1,0 +1,30 @@
+[package]
+name = "bolt-gives"
+description = "bolt.gives collaborative AI agent"
+authors = ["bolt.gives team <maintainers@bolt.gives>"]
+version = "1.0.2"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["shell-open"] }
+tauri-plugin-single-instance = "2.0"
+tauri-plugin-global-shortcut = "2.0"
+tauri-plugin-window-state = "2.0"
+tauri-plugin-updater = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
+url = "2.5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1

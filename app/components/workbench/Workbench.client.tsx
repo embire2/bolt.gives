@@ -1,0 +1,658 @@
+import { useStore } from '@nanostores/react';
+import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
+import { computed } from 'nanostores';
+import { Suspense, lazy, memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { toast } from 'react-toastify';
+import { Popover, Transition } from '@headlessui/react';
+import { diffLines, type Change } from 'diff';
+import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
+import type { FileHistory } from '~/types/actions';
+import {
+  type OnChangeCallback as OnEditorChange,
+  type OnScrollCallback as OnEditorScroll,
+} from '~/components/editor/codemirror/CodeMirrorEditor';
+import { IconButton } from '~/components/ui/IconButton';
+import { Slider, type SliderOptions } from '~/components/ui/Slider';
+import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
+import { classNames } from '~/utils/classNames';
+import { cubicEasingFn } from '~/utils/easings';
+import { renderLogger } from '~/utils/logger';
+import { EditorPanel } from './EditorPanel';
+import useViewport from '~/lib/hooks';
+
+import { usePreviewStore } from '~/lib/stores/previews';
+import { chatStore } from '~/lib/stores/chat';
+import type { ElementInfo } from './Inspector';
+import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
+import { useChatHistory } from '~/lib/persistence';
+import { streamingState } from '~/lib/stores/streaming';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+
+const LazyDiffView = lazy(() => import('./DiffView').then((module) => ({ default: module.DiffView })));
+const LazyPreview = lazy(() => import('./Preview').then((module) => ({ default: module.Preview })));
+const LazyPerformanceMonitor = lazy(() =>
+  import('./PerformanceMonitor').then((module) => ({ default: module.PerformanceMonitor })),
+);
+
+function WorkbenchPanelFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full items-center justify-center px-6 text-center">
+      <div>
+        <div className="text-sm font-medium text-bolt-elements-textPrimary">{label}</div>
+        <div className="mt-2 animate-pulse text-xs text-bolt-elements-textTertiary">Loading…</div>
+      </div>
+    </div>
+  );
+}
+
+interface WorkspaceProps {
+  chatStarted?: boolean;
+  isStreaming?: boolean;
+  embedded?: boolean;
+  forceVisible?: boolean;
+  onRequestClose?: () => void;
+  metadata?: {
+    gitUrl?: string;
+  };
+  updateChatMestaData?: (metadata: any) => void;
+  setSelectedElement?: (element: ElementInfo | null) => void;
+}
+
+const viewTransition = { ease: cubicEasingFn };
+
+const sliderOptions: SliderOptions<WorkbenchViewType> = {
+  left: {
+    value: 'code',
+    text: 'Code',
+  },
+  middle: {
+    value: 'diff',
+    text: 'Diff',
+  },
+  right: {
+    value: 'preview',
+    text: 'Preview',
+  },
+};
+
+const workbenchVariants = {
+  closed: {
+    width: 0,
+    transition: {
+      duration: 0.2,
+      ease: cubicEasingFn,
+    },
+  },
+  open: {
+    width: 'var(--workbench-width)',
+    transition: {
+      duration: 0.2,
+      ease: cubicEasingFn,
+    },
+  },
+} satisfies Variants;
+
+const FileModifiedDropdown = memo(
+  ({
+    fileHistory,
+    onSelectFile,
+  }: {
+    fileHistory: Record<string, FileHistory>;
+    onSelectFile: (filePath: string) => void;
+  }) => {
+    const modifiedFiles = Object.entries(fileHistory);
+    const hasChanges = modifiedFiles.length > 0;
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredFiles = useMemo(() => {
+      return modifiedFiles.filter(([filePath]) => filePath.toLowerCase().includes(searchQuery.toLowerCase()));
+    }, [modifiedFiles, searchQuery]);
+
+    return (
+      <div className="flex items-center gap-2">
+        <Popover className="relative">
+          {({ open }: { open: boolean }) => (
+            <>
+              <Popover.Button className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-item-contentDefault">
+                <span>File Changes</span>
+                {hasChanges && (
+                  <span className="w-5 h-5 rounded-full bg-accent-500/20 text-accent-500 text-xs flex items-center justify-center border border-accent-500/30">
+                    {modifiedFiles.length}
+                  </span>
+                )}
+              </Popover.Button>
+              <Transition
+                show={open}
+                enter="transition duration-100 ease-out"
+                enterFrom="transform scale-95 opacity-0"
+                enterTo="transform scale-100 opacity-100"
+                leave="transition duration-75 ease-out"
+                leaveFrom="transform scale-100 opacity-100"
+                leaveTo="transform scale-95 opacity-0"
+              >
+                <Popover.Panel className="absolute right-0 z-20 mt-2 w-80 origin-top-right rounded-xl bg-bolt-elements-background-depth-2 shadow-xl border border-bolt-elements-borderColor">
+                  <div className="p-2">
+                    <div className="relative mx-2 mb-2">
+                      <input
+                        type="text"
+                        placeholder="Search files..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2 text-bolt-elements-textTertiary">
+                        <div className="i-ph:magnifying-glass" />
+                      </div>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto">
+                      {filteredFiles.length > 0 ? (
+                        filteredFiles.map(([filePath, history]) => {
+                          const extension = filePath.split('.').pop() || '';
+                          const language = getLanguageFromExtension(extension);
+
+                          return (
+                            <button
+                              key={filePath}
+                              onClick={() => onSelectFile(filePath)}
+                              className="w-full px-3 py-2 text-left rounded-md hover:bg-bolt-elements-background-depth-1 transition-colors group bg-transparent"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="shrink-0 w-5 h-5 text-bolt-elements-textTertiary">
+                                  {['typescript', 'javascript', 'jsx', 'tsx'].includes(language) && (
+                                    <div className="i-ph:file-js" />
+                                  )}
+                                  {['css', 'scss', 'less'].includes(language) && <div className="i-ph:paint-brush" />}
+                                  {language === 'html' && <div className="i-ph:code" />}
+                                  {language === 'json' && <div className="i-ph:brackets-curly" />}
+                                  {language === 'python' && <div className="i-ph:file-text" />}
+                                  {language === 'markdown' && <div className="i-ph:article" />}
+                                  {['yaml', 'yml'].includes(language) && <div className="i-ph:file-text" />}
+                                  {language === 'sql' && <div className="i-ph:database" />}
+                                  {language === 'dockerfile' && <div className="i-ph:cube" />}
+                                  {language === 'shell' && <div className="i-ph:terminal" />}
+                                  {![
+                                    'typescript',
+                                    'javascript',
+                                    'css',
+                                    'html',
+                                    'json',
+                                    'python',
+                                    'markdown',
+                                    'yaml',
+                                    'yml',
+                                    'sql',
+                                    'dockerfile',
+                                    'shell',
+                                    'jsx',
+                                    'tsx',
+                                    'scss',
+                                    'less',
+                                  ].includes(language) && <div className="i-ph:file-text" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="truncate text-sm font-medium text-bolt-elements-textPrimary">
+                                        {filePath.split('/').pop()}
+                                      </span>
+                                      <span className="truncate text-xs text-bolt-elements-textTertiary">
+                                        {filePath}
+                                      </span>
+                                    </div>
+                                    {(() => {
+                                      // Calculate diff stats
+                                      const { additions, deletions } = (() => {
+                                        if (!history.originalContent) {
+                                          return { additions: 0, deletions: 0 };
+                                        }
+
+                                        const normalizedOriginal = history.originalContent.replace(/\r\n/g, '\n');
+                                        const normalizedCurrent =
+                                          history.versions[history.versions.length - 1]?.content.replace(
+                                            /\r\n/g,
+                                            '\n',
+                                          ) || '';
+
+                                        if (normalizedOriginal === normalizedCurrent) {
+                                          return { additions: 0, deletions: 0 };
+                                        }
+
+                                        const changes = diffLines(normalizedOriginal, normalizedCurrent, {
+                                          newlineIsToken: false,
+                                          ignoreWhitespace: true,
+                                          ignoreCase: false,
+                                        });
+
+                                        return changes.reduce(
+                                          (acc: { additions: number; deletions: number }, change: Change) => {
+                                            if (change.added) {
+                                              acc.additions += change.value.split('\n').length;
+                                            }
+
+                                            if (change.removed) {
+                                              acc.deletions += change.value.split('\n').length;
+                                            }
+
+                                            return acc;
+                                          },
+                                          { additions: 0, deletions: 0 },
+                                        );
+                                      })();
+
+                                      const showStats = additions > 0 || deletions > 0;
+
+                                      return (
+                                        showStats && (
+                                          <div className="flex items-center gap-1 text-xs shrink-0">
+                                            {additions > 0 && <span className="text-green-500">+{additions}</span>}
+                                            {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
+                                          </div>
+                                        )
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="flex flex-col items-center justify-center p-4 text-center">
+                          <div className="w-12 h-12 mb-2 text-bolt-elements-textTertiary">
+                            <div className="i-ph:file-dashed" />
+                          </div>
+                          <p className="text-sm font-medium text-bolt-elements-textPrimary">
+                            {searchQuery ? 'No matching files' : 'No modified files'}
+                          </p>
+                          <p className="text-xs text-bolt-elements-textTertiary mt-1">
+                            {searchQuery ? 'Try another search' : 'Changes will appear here as you edit'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {hasChanges && (
+                    <div className="border-t border-bolt-elements-borderColor p-2">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(filteredFiles.map(([filePath]) => filePath).join('\n'));
+                          toast('File list copied to clipboard', {
+                            icon: <div className="i-ph:check-circle text-accent-500" />,
+                          });
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
+                      >
+                        Copy File List
+                      </button>
+                    </div>
+                  )}
+                </Popover.Panel>
+              </Transition>
+            </>
+          )}
+        </Popover>
+      </div>
+    );
+  },
+);
+
+export const Workbench = memo(
+  ({
+    chatStarted,
+    isStreaming,
+    embedded = false,
+    forceVisible = false,
+    onRequestClose,
+    metadata: _metadata,
+    updateChatMestaData: _updateChatMestaData,
+    setSelectedElement,
+  }: WorkspaceProps) => {
+    renderLogger.trace('Workbench');
+
+    const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
+
+    // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
+
+    const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+    const showWorkbench = useStore(workbenchStore.showWorkbench);
+    const selectedFile = useStore(workbenchStore.selectedFile);
+    const currentDocument = useStore(workbenchStore.currentDocument);
+    const unsavedFiles = useStore(workbenchStore.unsavedFiles);
+    const files = useStore(workbenchStore.files);
+    const selectedView = useStore(workbenchStore.currentView);
+    const { showChat } = useStore(chatStore);
+    const canHideChat = showWorkbench || !showChat;
+
+    const isSmallViewport = useViewport(1280);
+    const streaming = useStore(streamingState);
+    const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
+    const { exportChat } = useChatHistory();
+    const [isSyncing, setIsSyncing] = useState(false);
+  const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
+    const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
+    const hasWorkspaceContent =
+      hasPreview ||
+      Boolean(selectedFile) ||
+      Boolean(currentDocument) ||
+      Object.keys(files).length > 0 ||
+      Boolean(isStreaming);
+    const shouldRenderWorkbench = embedded ? forceVisible : showWorkbench;
+    const canToggleChatSidebar = !embedded && canHideChat && !isSmallViewport;
+
+    const setSelectedView = (view: WorkbenchViewType) => {
+      workbenchStore.currentView.set(view);
+    };
+
+    useEffect(() => {
+      if (hasPreview) {
+        setSelectedView('preview');
+      }
+    }, [hasPreview]);
+
+    useEffect(() => {
+      setLoadedViews((current) => {
+        if (current.has(selectedView)) {
+          return current;
+        }
+
+        const next = new Set(current);
+        next.add(selectedView);
+
+        return next;
+      });
+    }, [selectedView]);
+
+    useEffect(() => {
+      workbenchStore.setDocuments(files);
+    }, [files]);
+
+    const onEditorChange = useCallback<OnEditorChange>((update) => {
+      workbenchStore.setCurrentDocumentContent(update.content);
+    }, []);
+
+    const onEditorScroll = useCallback<OnEditorScroll>((position) => {
+      workbenchStore.setCurrentDocumentScrollPosition(position);
+    }, []);
+
+    const onFileSelect = useCallback((filePath: string | undefined) => {
+      workbenchStore.setSelectedFile(filePath);
+    }, []);
+
+    const onFileSave = useCallback(() => {
+      workbenchStore
+        .saveCurrentDocument()
+        .then(() => {
+          // Explicitly refresh all previews after a file save
+          const previewStore = usePreviewStore();
+          previewStore.refreshAllPreviews();
+        })
+        .catch(() => {
+          toast.error('Failed to update file content');
+        });
+    }, []);
+
+    const onFileReset = useCallback(() => {
+      workbenchStore.resetCurrentDocument();
+    }, []);
+
+    const handleSelectFile = useCallback((filePath: string) => {
+      workbenchStore.setSelectedFile(filePath);
+      workbenchStore.currentView.set('diff');
+    }, []);
+
+    const handleSyncFiles = useCallback(async () => {
+      setIsSyncing(true);
+
+      try {
+        const directoryHandle = await window.showDirectoryPicker();
+        await workbenchStore.syncFiles(directoryHandle);
+        toast.success('Files synced successfully');
+      } catch (error) {
+        console.error('Error syncing files:', error);
+        toast.error('Failed to sync files');
+      } finally {
+        setIsSyncing(false);
+      }
+    }, []);
+
+    const workbenchPanel = (
+      <div className="h-full min-h-0 px-2 lg:px-4 pb-4">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-bolt-elements-borderColor/60 bg-bolt-elements-background-depth-2/90 backdrop-blur-xl shadow-2xl shadow-black/20">
+          <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
+            <button
+              className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
+              disabled={!canToggleChatSidebar}
+              onClick={() => {
+                if (canToggleChatSidebar) {
+                  chatStore.setKey('showChat', !showChat);
+                }
+              }}
+            />
+            <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
+            <div className="ml-auto mr-2">
+              <Suspense fallback={<div className="text-xs text-bolt-elements-textTertiary">Perf…</div>}>
+                <LazyPerformanceMonitor />
+              </Suspense>
+            </div>
+            {selectedView === 'code' && (
+              <div className="flex overflow-y-auto">
+                {/* Export Chat Button */}
+                <ExportChatButton exportChat={exportChat} />
+
+                {/* Sync Button */}
+                <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden ml-1">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger
+                      disabled={isSyncing || streaming}
+                      className="rounded-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.7"
+                    >
+                      {isSyncing ? 'Syncing...' : 'Sync'}
+                      <span className={classNames('i-ph:caret-down transition-transform')} />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content
+                      className={classNames(
+                        'min-w-[240px] z-[250]',
+                        'bg-white dark:bg-[#141414]',
+                        'rounded-lg shadow-lg',
+                        'border border-gray-200/50 dark:border-gray-800/50',
+                        'animate-in fade-in-0 zoom-in-95',
+                        'py-1',
+                      )}
+                      sideOffset={5}
+                      align="end"
+                    >
+                      <DropdownMenu.Item
+                        className={classNames(
+                          'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                        )}
+                        onClick={handleSyncFiles}
+                        disabled={isSyncing}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isSyncing ? <div className="i-ph:spinner" /> : <div className="i-ph:cloud-arrow-down" />}
+                          <span>{isSyncing ? 'Syncing...' : 'Sync Files'}</span>
+                        </div>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </div>
+
+                {/* Toggle Terminal Button */}
+                <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden ml-1">
+                  <button
+                    onClick={() => {
+                      workbenchStore.toggleTerminal(!workbenchStore.showTerminal.get());
+                    }}
+                    className="rounded-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.7"
+                  >
+                    <div className="i-ph:terminal" />
+                    Toggle Terminal
+                  </button>
+                </div>
+
+                {/* Test & Scan Button */}
+                <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden ml-1">
+                  <button
+                    onClick={() => {
+                      workbenchStore.runTestAndSecurityScan().catch(() => {
+                        toast.error('Failed to run test and scan');
+                      });
+                    }}
+                    disabled={testAndScanRunning || streaming}
+                    className="rounded-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.7"
+                  >
+                    <div className={testAndScanRunning ? 'i-ph:spinner animate-spin' : 'i-ph:shield-check'} />
+                    {testAndScanRunning ? 'Test & Scan...' : 'Test & Scan'}
+                  </button>
+                </div>
+
+                {/* Runtime Scanner Display Component */}
+                <div className="flex items-center gap-2 px-3 py-1.5 ml-2 border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-1">
+                  <button
+                    onClick={() => workbenchStore.toggleRuntimeScanner()}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                      isRuntimeScannerEnabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                        isRuntimeScannerEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-xs font-medium text-bolt-elements-textPrimary flex items-center gap-1">
+                    Runtime Scanner <div className="i-ph:info text-bolt-elements-textTertiary" />
+                  </span>
+                  <span className="ml-2 flex items-center gap-1 text-xs text-bolt-elements-textSecondary">
+                    {isRuntimeScannerEnabled ? (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600" />
+                        Inactive
+                      </>
+                    )}
+                  </span>
+                  <div className="i-ph:caret-up text-bolt-elements-textSecondary ml-1" />
+                </div>
+              </div>
+            )}
+
+            {selectedView === 'diff' && (
+              <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
+            )}
+            <IconButton
+              icon="i-ph:x-circle"
+              className="-mr-1"
+              size="xl"
+              onClick={() => {
+                if (embedded) {
+                  onRequestClose?.();
+                  return;
+                }
+
+                workbenchStore.showWorkbench.set(false);
+              }}
+            />
+          </div>
+          <div className="relative flex-1 overflow-hidden">
+            {hasWorkspaceContent ? (
+              <>
+                <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
+                  <EditorPanel
+                    editorDocument={currentDocument}
+                    isStreaming={isStreaming}
+                    selectedFile={selectedFile}
+                    files={files}
+                    unsavedFiles={unsavedFiles}
+                    fileHistory={fileHistory}
+                    onFileSelect={onFileSelect}
+                    onEditorScroll={onEditorScroll}
+                    onEditorChange={onEditorChange}
+                    onFileSave={onFileSave}
+                    onFileReset={onFileReset}
+                  />
+                </View>
+                {loadedViews.has('diff') ? (
+                  <View
+                    initial={{ x: '100%' }}
+                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
+                  >
+                    <Suspense fallback={<WorkbenchPanelFallback label="Loading diff view" />}>
+                      <LazyDiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
+                    </Suspense>
+                  </View>
+                ) : null}
+                {loadedViews.has('preview') ? (
+                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                    <Suspense fallback={<WorkbenchPanelFallback label="Loading preview" />}>
+                      <LazyPreview setSelectedElement={setSelectedElement} />
+                    </Suspense>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <div className="h-full flex items-center justify-center px-6 text-center">
+                <div className="max-w-md">
+                  <h3 className="text-lg font-semibold text-bolt-elements-textPrimary">Workspace standing by</h3>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    The editor and preview will appear here as soon as Bolt writes files or starts the app.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+
+    if (!chatStarted && !embedded) {
+      return null;
+    }
+
+    if (embedded) {
+      return shouldRenderWorkbench ? workbenchPanel : null;
+    }
+
+    return (
+      <motion.div
+        initial="closed"
+        animate={showWorkbench ? 'open' : 'closed'}
+        variants={workbenchVariants}
+        className="z-workbench"
+      >
+        <div
+          className={classNames(
+            'fixed top-[calc(var(--header-height)+1.2rem)] bottom-6 w-[var(--workbench-inner-width)] z-0 transition-[left,width] duration-200 bolt-ease-cubic-bezier',
+            {
+              'w-full': isSmallViewport,
+              'left-0': showWorkbench && isSmallViewport,
+              'left-[var(--workbench-left)]': showWorkbench,
+              'left-[100%]': !showWorkbench,
+            },
+          )}
+        >
+          <div className="absolute inset-0">{workbenchPanel}</div>
+        </div>
+      </motion.div>
+    );
+  },
+);
+
+// View component for rendering content with motion transitions
+interface ViewProps extends HTMLMotionProps<'div'> {
+  children: JSX.Element;
+}
+
+const View = memo(({ children, ...props }: ViewProps) => {
+  return (
+    <motion.div className="absolute inset-0" transition={viewTransition} {...props}>
+      {children}
+    </motion.div>
+  );
+});

@@ -1,0 +1,119 @@
+export type ContextAnnotation =
+  | {
+      type: 'codeContext';
+      files: string[];
+    }
+  | {
+      type: 'chatSummary';
+      summary: string;
+      chatId: string;
+    };
+
+export type ProgressAnnotation = {
+  type: 'progress';
+  label: string;
+  status: 'in-progress' | 'complete';
+  order: number;
+  message: string;
+};
+
+export type AgentCommentaryPhase = 'plan' | 'action' | 'verification' | 'next-step' | 'recovery';
+
+export type AgentCommentaryAnnotation = {
+  type: 'agent-commentary';
+  phase: AgentCommentaryPhase;
+  status: 'in-progress' | 'complete' | 'warning' | 'recovered';
+  order: number;
+  message: string;
+  detail?: string;
+  timestamp: string;
+};
+
+export type CheckpointType = 'checkpoint' | 'install-done' | 'preview-ready' | 'test-result' | 'deploy-result';
+
+export type CheckpointDataEvent = {
+  type: 'checkpoint';
+  checkpointType: CheckpointType;
+  status: 'in-progress' | 'complete' | 'error';
+  message: string;
+  timestamp: string;
+  command?: string;
+  exitCode?: number;
+  stderr?: string;
+};
+
+export type ToolCallAnnotation = {
+  type: 'toolCall';
+  toolCallId: string;
+  serverName: string;
+  toolName: string;
+  toolDescription: string;
+};
+
+export type ToolCallDataEvent = {
+  type: 'tool-call';
+  toolCallId: string;
+  serverName: string;
+  toolName: string;
+  toolDescription: string;
+  timestamp: string;
+};
+
+export type UsageDataEvent = {
+  type: 'usage';
+  completionTokens: number;
+  promptTokens: number;
+  totalTokens: number;
+  timestamp: string;
+};
+
+export type AgentRunMetricsSummary = {
+  totalRuns: number;
+  recoveryTriggeredRuns: number;
+  recoveredRuns: number;
+  manualInterventionRuns: number;
+  avgCommentaryFirstEventLatencyMs: number;
+  recoverySuccessRate: number;
+  manualInterventionRate: number;
+};
+
+export type AgentRunMetricsDataEvent = {
+  type: 'run-metrics';
+  runId: string;
+  provider: string;
+  model: string;
+  commentaryFirstEventLatencyMs: number | null;
+  recoveryTriggered: boolean;
+  recoverySucceeded: boolean;
+  manualIntervention: boolean;
+  timestamp: string;
+  aggregate: AgentRunMetricsSummary;
+};
+
+export type ProjectMemoryDataEvent = {
+  type: 'project-memory';
+  projectKey: string;
+  summary: string;
+  architecture: string;
+  latestGoal: string;
+  runCount: number;
+  updatedAt: string;
+};
+
+export type SubAgentEvent = {
+  type: 'sub-agent';
+  agentId: string;
+  agentType: string;
+  state: string;
+  model?: string;
+  provider?: string;
+  plan?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+};

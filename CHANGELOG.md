@@ -1,0 +1,299 @@
+# Changelog
+
+## v3.0.3 (in progress)
+
+### Added
+
+- Hosted preview health now includes a server-side `preview-status` path that tracks:
+  - latest preview log lines
+  - detected runtime alerts
+  - healthy/error state
+- Hosted preview state now streams over a compact server-side SSE feed so the browser can follow preview/recovery state changes without tight polling loops.
+- Technical timeline rendering now virtualizes large feed windows so long runs do not keep every historical card mounted in the browser at once.
+- Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
+- A live Playwright recovery smoke now generates a hosted app, intentionally corrupts it, and verifies end-to-end auto-recovery against `https://alpha1.bolt.gives`.
+
+### Changed
+
+- The workspace shell now lazy-loads more of the heavy client surfaces:
+  - `Workbench`
+  - `Preview`
+  - `DiffView`
+  - provider/settings/deploy/status surfaces
+  - commentary/timeline/status panels
+- Markdown rendering now loads behind a lighter shell, and the heavier markdown/code/thought/artifact surfaces are deferred until they are actually needed.
+- Hosted preview error detection now prefers server runtime diagnostics instead of scraping iframe DOM state in the browser.
+- Hosted preview polling now reads compact server status summaries and SSE updates instead of keeping more preview/error parsing logic in the client tab.
+- Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.
+- Architect/self-heal now verifies hosted preview health on the server after each workspace mutation, so broken apps can auto-restore even when the browser never catches the transient failure overlay.
+
+### Minor Features & Polish (Not as important)
+
+- **UI Theme Polish**: Replaced the primary purple accent with a modern red-to-blue gradient theme, including transparent header tabs.
+- **Editor Refinement**: Enhanced the CodeMirror editor panel with an inset card design for a premium glassmorphic feel.
+- **Web IDE Integration**: Added an "Open in Web IDE" button to the header for quick access to `webcontainer.codes`.
+- **Functional Runtime Scanner**: Added an active error monitor to the Workbench that intercepts runtime failures and automatically dispatches an auto-fix prompt to the AI agent.
+- **E2B Sandbox Support**: Added cloud-hosted Linux sandbox as a WebContainer alternative, configurable via Settings → Cloud Environments.
+- **Firecrawl Integration**: Added Firecrawl as a cloud alternative to the local Playwright web-browse server. Set `FIRECRAWL_API_KEY` env var or configure in Settings; automatic fallback to Playwright if Firecrawl is unavailable.
+- **WebContainer Stability**: Added an auto-recovery manager and serialized file write queue to prevent WASM lockups during heavy scaffolding.
+- **BoltContainer Runtime**: Added a custom-built WebContainer alternative with in-memory VFS, file watchers, E2B cloud command execution, and full drop-in API compatibility. Selectable via Settings → Cloud Environments → Runtime Engine.
+- **Architect Error Recovery**: Added 5 new self-heal rules for common WebContainer errors (jsh command not found, missing node_modules, pnpm not found, dependency install failures, Python/Django unsupported).
+- **Django/Python Support**: System prompts now guide the AI to use BoltContainer + E2B when users request Python/Django projects.
+- **Auto-Install Rules**: System prompts now enforce mandatory dependency installation before running any commands.
+
+### Planned
+
+- Build the actual managed Cloudflare instance control plane described in `docs/cloudflare-managed-instances.md`.
+- Move more preview/build/test execution off the browser and onto the server/runtime side.
+- Add health-verified rollout and rollback handling for managed client instances.
+
+## v3.0.2 (2026-03-28)
+
+### Added
+
+- Experimental Cloudflare managed-instance blueprint docs:
+  - `docs/cloudflare-managed-instances.md`
+  - `docs/cloudflare-managed-instances.sql`
+- Top-of-README product section describing the planned one-client / one-instance Cloudflare service using a `6 GiB` Node runtime.
+- A top-level tab shell that separates `Chat` from `Workspace`, so prompt/commentary stays isolated from files/preview/terminal and future product areas can live in their own tabs.
+
+### Fixed
+
+- Hosted `alpha1`, `ahmad`, and other managed instances now prefer the managed server-side runtime for installs, builds, dev servers, tests, preview hosting, and file sync instead of defaulting to the browser WebContainer path.
+- Hosted preview iframes now refresh after server-side file syncs land, so generated apps replace the fallback starter without forcing the user to manually reload the preview.
+- Managed instances now keep browser terminals in lightweight status-only mode instead of encouraging heavy interactive shells inside the client tab.
+- Cloudflare Pages and preview deployments now resolve hosted FREE-provider credentials more reliably across Pages-style and Worker-style runtime contexts.
+- If a public Pages runtime does not have the managed FREE secret locally configured, hosted FREE requests can now relay through the managed runtime instead of failing with a token error.
+- Cloudflare Pages coding sessions now route collaboration/event websocket traffic to the managed collaboration backend instead of self-targeting `bolt-gives.pages.dev/collab`, which returned `404` and left long runs stalled behind heartbeat commentary without a stable preview.
+
+### Changed
+
+- Updated the release line to `v3.0.2`.
+- README, roadmap, AGENTS instructions, and install docs now align on `v3.0.2` as the stable baseline and `v3.0.3` as the next target.
+- `FEATURE_FEED` now surfaces the `v3.0.2` release to users after upgrade.
+- Prompt/runtime guidance now assumes the managed hosted runtime first on live instances and treats WebContainer as the explicit fallback mode.
+- The Cloudflare managed-instance design is now split honestly into:
+  - a free experimental shared-runtime path
+  - a future Pro path for dedicated `6 GiB` Cloudflare Containers
+- The main app shell now behaves like real tabs, with the `Workspace` surface closable/reopenable and persisted between sessions.
+- `main` now has a first-party Cloudflare Pages production deployment workflow so the Pages runtime can track the same release source-of-truth as GitHub, `alpha`, `alpha1`, and `ahmad`.
+- Cloudflare Pages and preview deployments now default unsafe/stale collaboration socket settings back to the managed backend automatically, so an old stored URL can no longer poison new coding runs.
+
+### Verified
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build` passed.
+- Live browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4` by generating a React todo app whose hosted preview rendered the requested heading after server-side sync.
+
+## v3.0.1 (2026-03-25)
+
+### Added
+
+- Hosted `FREE` now includes an internal OpenRouter fallback chain. If `deepseek/deepseek-v3.2` is unavailable upstream, bolt.gives silently retries with `qwen/qwen3-coder` without changing the visible client model selection.
+
+### Changed
+
+- The desktop chat rail is wider so the left-side prompt and progress column has more usable room during long runs.
+- The visible default hosted provider/model remains `FREE` + `DeepSeek V3.2`.
+- The hidden fallback model is not exposed in the provider/model picker and is only used by the managed server path.
+
+### Verified
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build` passed.
+- Targeted FREE-provider fallback regressions passed.
+
+## v3.0.0 (2026-03-22)
+
+### Added
+
+- Preview runtime failures now route into Architect auto-repair detection so preview exceptions can be queued or repaired automatically instead of only surfacing a manual `Ask Bolt` path.
+- Commentary now has a dedicated `Live Commentary` feed, separated from the technical timeline so progress updates stay visible while coding runs are active.
+
+### Fixed
+
+- Starter/bootstrap runs no longer stop at scaffold-only output; continuation logic now detects scaffold-only, bootstrap-only, and run-intent-without-start responses and forces the implementation to continue.
+- Provider/model/API-key normalization now merges cookie, request-body, and runtime-environment keys before a run starts so invalid provider/key combinations fail less often.
+- Absolute artifact file paths are normalized before writing into the workspace, preventing broken writes like `/home/project/home/project/...` on live instances.
+- Local development startup now tolerates occupied helper ports by reusing healthy collaboration/web-browse sidecars instead of failing the entire dev boot.
+- Stream recovery and commentary heartbeat behavior were tightened so healthy runs do not false-timeout after valid output is already streaming.
+- Prompt library lookup now falls back safely instead of throwing on missing prompt identifiers.
+
+### Changed
+
+- Development, build, typecheck, and test scripts now run with an 18 GB Node heap baseline (`NODE_OPTIONS=--max-old-space-size=18432`) to stop local OOM failures during large builds.
+- Release verification now includes a live OpenAI `gpt-5.4` browser E2E for actual app creation rather than only unit/integration gates.
+
+### Verified
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build` passed.
+- New UI regressions passed:
+  - `app/components/chat/CommentaryFeed.spec.tsx`
+  - `app/components/chat/ChatAlert.spec.tsx`
+- Local dev smoke passed (`http://localhost:5174` loaded prompt box + model selector after helper-port reuse).
+- Live E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4` by building a React appointment scheduler whose preview rendered the required heading `OpenWeb Clinic Scheduler`.
+- Live smoke passed on `https://ahmad.bolt.gives` with OpenAI `gpt-5.4`.
+
+## v1.0.3.1 (2026-02-25)
+
+### Fixed
+
+- Reduced browser freeze risk during long coding runs by batching interactive step events before UI state updates, including merge/dedupe logic for repeated stdout/stderr/telemetry bursts.
+- Reduced preview thrash by disabling costly cross-tab preview/storage sync loops by default and preventing forced iframe reload cycles.
+- Lowered noisy terminal stream pressure by normalizing ANSI/progress spam and throttling package-manager progress chatter in action timelines.
+- Prevented unnecessary preview resets by only resetting iframe URL/path when the preview base URL actually changes.
+- Trimmed non-architect timeline window size to lower render pressure on constrained client machines.
+
+### Changed
+
+- Updated prompt workstyle guidance to avoid unnecessary heavy commands in WebContainer sessions (for example repeated install/build loops) unless explicitly requested.
+- Updated app and package version to `1.0.3.1`.
+
+## v1.0.3 (2026-02-20)
+
+### Added
+
+- Provider history persistence and quick-switch UI in model selection so users can jump back to previously working providers.
+- Structured Architect recovery timeline events (`diagnosis`, `attempt`, `outcome`, `blocked`) in execution feed.
+- Architect knowledgebase signatures for additional high-frequency failures:
+  - `npm-spawn-enoent`
+  - `vite-missing-package-specifier`
+  - `update-runtime-unenv-fs`
+  - `cloudflare-api-auth-10000`
+
+### Changed
+
+- Execution timeline de-bloat:
+  - increased retained event window for long runs with virtualization for large feeds
+  - dedicated Architect cards separated from regular step events
+- Updated app and package version to `1.0.3`.
+
+### Verified
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- Targeted E2E smoke passed on `https://alpha1.bolt.gives`:
+  - strict model: OpenAI `gpt-5-codex`
+  - standard model: OpenAI `gpt-4o`
+
+## v1.0.2 (2026-02-17)
+
+### Added
+
+- Reliability guardrails for tool schemas with compatibility checks and strict-profile validation.
+- `tool-schema-matrix` endpoint and regression tests for strict vs standard provider schema compatibility.
+- Run-level acceptance instrumentation for:
+  - commentary first-event latency
+  - stall auto-recovery success rate
+  - manual intervention rate
+- Persistent project memory (scoped summary/context reuse) with stream event handoff.
+- Minimal planner/worker sub-agent framework behind `BOLT_SUB_AGENTS_ENABLED`.
+
+### Changed
+
+- Execution transparency panel now surfaces acceptance metrics from live run events.
+- Chat pipeline records/aggregates run metrics and uses project memory to prime build prompts.
+- Updated app and package version to `1.0.2`.
+
+### Fixed (2026-02-18 reliability patch)
+
+- Shell command portability in Bolt Terminal:
+  - `test -f <file>` checks are now rewritten to `ls <file> >/dev/null 2>&1` for `jsh` compatibility.
+- Build-run continuity guardrail:
+  - If a user asks to run/preview an app and the model only scaffolds without a `<boltAction type="start">`, the backend now auto-continues once to complete install/start actions.
+- Prompt workstyle guidance now explicitly reinforces:
+  - scaffold + install + start for run requests
+  - portable file-check commands in shell steps
+  - explicit reporting of created file paths in final responses (for doc-generation and web-browse workflows)
+- Web browsing tool reliability:
+  - blocked/invalid/private URLs in `web_browse` now return a structured tool result instead of hard-failing the whole chat run
+  - upstream browse failures now return actionable failure summaries without crashing the request
+
+### Fixed (2026-02-20 graceful integration noise patch)
+
+- Supabase integration now runs only on explicit user actions:
+  - removed mount-time Supabase stats/API-key fetch calls from chat connection initialization
+  - kept manual connect/select/refresh flows intact
+- Supabase UI icon rendering no longer depends on external `cdn.simpleicons.org` requests in chat components (no CORS icon noise).
+- Update checks are now user-triggered only (manual `Check` in Update Manager); no background polling on chat load.
+- `/api/update` loader now degrades gracefully with a non-error response when checks cannot run in the current runtime.
+- Starter template release-fetch failures now degrade quietly to fallback behavior instead of noisy client console errors.
+
+### Fixed (2026-02-20 plain-English commentary + starter fallback patch)
+
+- Update manager now maps runtime-specific unenv/fs errors to a user-safe message instead of exposing low-level internals.
+- Chat commentary now:
+  - emits plain-English wording by default
+  - sends automatic heartbeat updates at least every 60 seconds during long runs
+  - keeps technical diagnostics out of default commentary cards
+- Execution timeline now collapses checkpoint command diagnostics under `Technical details` so default output remains readable.
+- Starter template loading now has built-in local fallback templates for every listed framework when remote template fetches fail.
+
+### Verified (2026-02-20 patch)
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+
+### Verified
+
+- `pnpm run typecheck` passed.
+- `pnpm run lint` passed.
+- `pnpm test` passed.
+- `pnpm run build:highmem` passed.
+- E2E smoke passed on `https://alpha1.bolt.gives`:
+  - strict model: OpenAI `gpt-5-codex`
+  - standard model: OpenAI `gpt-4o`
+
+## v1.0.1 (2026-02-15)
+
+### Fixed
+
+- Image prompts now reach vision-capable models: images are sent via `experimental_attachments` and converted into core `image` parts server-side.
+
+### Added
+
+- Small-model prompt variant and automatic selection for constrained models in build mode.
+- Smoke tests:
+  - `scripts/smoke-vision.mjs` (vision model image prompt)
+  - `scripts/smoke-small-model.mjs` (small model artifact/actions emission)
+  - `scripts/smoke-multistep.mjs` (multi-step tool usage)
+
+### Changed
+
+- Chat now initializes MCP settings early so persisted `maxLLMSteps` (default 5) is applied reliably.
+- Build command helper: `pnpm run build:highmem` sets Node heap to 6142 MB for CI/Cloud builds.
+
+## v1.0.0 (2026-02-14)
+
+bolt.gives is a collaborative AI coding workspace based on the upstream Bolt project.
+
+### Added
+
+- Real-time collaborative editing (Yjs + `y-websocket` compatible server), persisted to disk with inactive doc cleanup.
+- Interactive step runner with structured events (`step-start`, `stdout`, `stderr`, `step-end`, `error`, `complete`) and UI feed.
+- Session save/list/load/share via Supabase (`public.bolt_sessions`) with backward-compatible payload normalization.
+- Agent workflow: Plan/Act modes with checkpoint confirm/stop/revert and per-step diffs.
+- Model orchestrator for automatic model selection with transparency/logging.
+- Performance monitor (CPU/RAM sampling + token usage tracking) with threshold recommendations.
+- Deployment wizard: generate CI workflow files; rollback endpoint for Netlify/Vercel.
+- Plugin manager + marketplace registry support.
+
+### Changed
+
+- Updated the header branding to use `public/boltlogo2.png` and removed the old `logo.png`.
+- Introduced a build-time app version constant (`__APP_VERSION`) sourced from `package.json` and display it prominently in the header.
+- Added a `/changelog` page and header link so the changelog is visible on the live site.
+
+### Docs
+
+- Updated `README.md` with screenshots and local dev instructions.
+- Added `docs/fresh-install-checklist.md`.

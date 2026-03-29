@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
+import type { AgentCommentaryAnnotation, ProgressAnnotation } from '~/types/context';
+import {
+  deriveActionCount,
+  deriveProgressMessage,
+  deriveWhyThisAction,
+  hasPreviewVerification,
+} from './execution-status';
+
+function createTelemetryEvent(output: string, description = 'runtime telemetry'): InteractiveStepRunnerEvent {
+  return {
+    type: 'telemetry',
+    timestamp: new Date().toISOString(),
+    description,
+    output,
+  };
+}
+
+describe('execution-status helpers', () => {
+  it('detects preview verification from preview-ready telemetry', () => {
+    expect(hasPreviewVerification([createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready')])).toBe(
+      true,
+    );
+  });
+
+  it('upgrades preview pending progress once preview is verified', () => {
+    const progressEvents: ProgressAnnotation[] = [
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'complete',
+        order: 1,
+        message: 'Response Generated (preview not yet verified)',
+      },
+    ];
+
+    expect(
+      deriveProgressMessage(progressEvents, [
+        createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready'),
+      ]),
+    ).toBe('Response Generated (preview verified)');
+  });
+
+  it('keeps the original progress text when preview is still pending', () => {
+    const progressEvents: ProgressAnnotation[] = [
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'complete',
+        order: 1,
+        message: 'Response Generated (preview not yet verified)',
+      },
+    ];
+
+    expect(deriveProgressMessage(progressEvents, [])).toBe('Response Generated (preview not yet verified)');
+  });
+
+  it('reports preview-ready rationale once the preview is verified', () => {
+    const commentaryEvents: AgentCommentaryAnnotation[] = [
+      {
+        type: 'agent-commentary',
+        phase: 'next-step',
+        status: 'warning',
+        order: 3,
+        message: 'Execution finished, but preview verification is still pending.',
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    const progressEvents: ProgressAnnotation[] = [
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'complete',
+        order: 1,
+        message: 'Response Generated (preview not yet verified)',
+      },
+    ];
+
+    expect(
+      deriveWhyThisAction(commentaryEvents, progressEvents, [
+        createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready'),
+      ]),
+    ).toBe('The preview is live and ready for inspection.');
+  });
+
+  it('counts shell steps alongside tool calls', () => {
+    expect(
+      deriveActionCount(1, [
+        {
+          type: 'step-start',
+          timestamp: new Date().toISOString(),
+          description: 'Install dependencies',
+          command: ['npm', 'install'],
+        },
+        {
+          type: 'step-start',
+          timestamp: new Date().toISOString(),
+          description: 'Start app',
+          command: ['npm', 'run', 'dev'],
+        },
+      ]),
+    ).toBe(3);
+  });
+});

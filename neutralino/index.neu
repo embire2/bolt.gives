@@ -1,0 +1,59 @@
+import {
+  app,
+  window,
+  os,
+  dialog,
+  shell,
+} from "https://cdn.jsdelivr.net/npm/@neutralinojs/lib@5.0.0/+esm";
+
+// Log startup
+console.log("Starting bolt.gives Neutralino app...");
+console.log("Neutralino version:", await app.getNeutralinoVersion());
+console.log("Platform:", await os.platform());
+
+// Handle window events
+window.onClose(() => {
+  console.log("Window closing, exiting app...");
+  app.exit();
+});
+
+window.onFocus(() => {
+  console.log("Window focused");
+});
+
+window.onBlur(() => {
+  console.log("Window lost focus");
+});
+
+// IPC handlers for renderer communication
+const settings = {
+  port: 5173,
+  isDev: process.env.NODE_ENV !== "production"
+};
+
+console.log("Settings:", settings);
+
+// Initialize the app
+async function init() {
+  try {
+    // Get the URL based on environment
+    let url = settings.isDev 
+      ? `http://localhost:${settings.port}` 
+      : `file://${await app.getPath('resources')}/index.html`;
+    
+    console.log("Loading URL:", url);
+    
+    // Load the app
+    await window.navigate(url);
+    
+    // Set window title
+    await window.setTitle("bolt.gives");
+    
+    console.log("App initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize app:", error);
+  }
+}
+
+// Export for use
+export { init, settings };

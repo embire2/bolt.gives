@@ -1,0 +1,161 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { JSONValue } from 'ai';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
+
+vi.mock('~/lib/stores/workbench', async () => {
+  const { atom } = await import('nanostores');
+  const stepRunnerEvents = atom<InteractiveStepRunnerEvent[]>([]);
+
+  return {
+    workbenchStore: {
+      stepRunnerEvents,
+      clearStepRunnerEvents() {
+        stepRunnerEvents.set([]);
+      },
+    },
+  };
+});
+
+import { workbenchStore } from '~/lib/stores/workbench';
+
+let StepRunnerFeed: (typeof import('./StepRunnerFeed'))['StepRunnerFeed'];
+
+function createEvent(index: number, description: string): InteractiveStepRunnerEvent {
+  return {
+    type: 'step-start',
+    timestamp: new Date(Date.now() + index).toISOString(),
+    stepIndex: index,
+    description,
+  };
+}
+
+describe('StepRunnerFeed', () => {
+  beforeAll(async () => {
+    if (typeof window !== 'undefined') {
+      (window as { __vite_plugin_react_preamble_installed__?: boolean }).__vite_plugin_react_preamble_installed__ =
+        true;
+    }
+
+    StepRunnerFeed = (await import('./StepRunnerFeed')).StepRunnerFeed;
+  });
+
+  afterEach(() => {
+    cleanup();
+    workbenchStore.stepRunnerEvents.set([]);
+  });
+
+  it('renders only the retained event window', () => {
+    const events = Array.from({ length: 170 }, (_, index) => createEvent(index, `step-${index + 1}`));
+    workbenchStore.stepRunnerEvents.set(events);
+
+    render(<StepRunnerFeed />);
+
+    expect(screen.queryByText('Execution Timeline')).toBeTruthy();
+    expect(screen.queryByText('step-1')).toBeNull();
+    expect(screen.queryByText('step-74')).toBeNull();
+    expect(screen.queryByText('step-75')).toBeTruthy();
+    expect(screen.queryByText('step-170')).toBeTruthy();
+  });
+
+  it('clears events when the clear button is clicked', () => {
+    workbenchStore.stepRunnerEvents.set([createEvent(0, 'step-clear-test')]);
+
+    render(<StepRunnerFeed />);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(workbenchStore.stepRunnerEvents.get()).toHaveLength(0);
+  });
+
+  it('shows a suggested fix hint for error events', () => {
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        stepIndex: 0,
+        description: 'Run ESLint',
+        exitCode: 1,
+        error: 'lint failed',
+      },
+    ]);
+
+    render(<StepRunnerFeed />);
+
+    expect(screen.queryByText(/hint:/i)).toBeTruthy();
+    expect(screen.queryByText(/pnpm run lint/i)).toBeTruthy();
+  });
+
+  it('renders telemetry runner events', () => {
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'runtime telemetry',
+        output: 'memory 120/512 MB | stall 3s',
+      },
+    ]);
+
+    render(<StepRunnerFeed />);
+
+    expect(screen.queryByText(/\[telemetry\]/i)).toBeTruthy();
+    expect(screen.queryByText(/memory 120\/512 MB/i)).toBeTruthy();
+  });
+
+  it('renders streamed commentary events separately from runner events', () => {
+    const data = [
+      {
+        type: 'agent-commentary',
+        phase: 'plan',
+        status: 'in-progress',
+        order: 1,
+        message: 'Planning changes',
+        timestamp: new Date().toISOString(),
+      },
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'in-progress',
+        order: 2,
+        message: 'Generating response',
+      },
+    ] as JSONValue[];
+
+    render(<StepRunnerFeed data={data} />);
+
+    expect(screen.queryByText(/^Plan$/i)).toBeTruthy();
+    expect(screen.queryByText(/Planning changes/i)).toBeTruthy();
+    expect(screen.queryByText(/\[progress\]/i)).toBeNull();
+  });
+
+  it('renders checkpoint events with command diagnostics', () => {
+    const data = [
+      {
+        type: 'checkpoint',
+        checkpointType: 'install-done',
+        status: 'error',
+        message: 'Dependency installation failed.',
+        timestamp: new Date().toISOString(),
+        command: 'pnpm install',
+        exitCode: 1,
+        stderr: 'network error',
+      },
+    ] as JSONValue[];
+
+    render(<StepRunnerFeed data={data} />);
+
+    expect(screen.queryByText(/checkpoint\/install-done/i)).toBeTruthy();
+
+    const technicalSummary = screen.getByText(/Technical details/i);
+    const detailsElement = technicalSummary.closest('details');
+
+    expect(technicalSummary).toBeTruthy();
+    expect(detailsElement?.hasAttribute('open')).toBe(false);
+
+    fireEvent.click(technicalSummary);
+    expect(detailsElement?.hasAttribute('open')).toBe(true);
+    expect(screen.queryByText(/pnpm install/i)).toBeTruthy();
+    expect(screen.queryByText(/exit 1/i)).toBeTruthy();
+  });
+});
