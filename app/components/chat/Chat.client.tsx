@@ -419,6 +419,7 @@ export const ChatImpl = memo(
     const files = useStore(workbenchStore.files);
     const [designScheme, setDesignScheme] = useState<DesignScheme>(defaultDesignScheme);
     const actionAlert = useStore(workbenchStore.alert);
+    const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const deployAlert = useStore(workbenchStore.deployAlert);
     const supabaseConn = useStore(supabaseConnection);
     const selectedProject = supabaseConn.stats?.projects?.find(
@@ -594,6 +595,27 @@ export const ChatImpl = memo(
     useEffect(() => {
       fakeLoadingRef.current = fakeLoading;
     }, [fakeLoading]);
+
+    useEffect(() => {
+      if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
+        const isPreview = actionAlert.source === 'preview';
+        const prompt = `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${actionAlert.content}\n\`\`\`\n`;
+        
+        // Clear alerts before starting the fix to prevent duplicate triggers
+        workbenchStore.clearAlert();
+        if (isPreview) {
+          workbenchStore.clearPreviewAlert();
+        }
+
+        toast.info(`Runtime Scanner detected a ${isPreview ? 'preview' : 'terminal'} error and is auto-fixing it.`);
+
+        // Dispatch the error fix request
+        append({
+          role: 'user',
+          content: prompt,
+        });
+      }
+    }, [actionAlert, isRuntimeScannerEnabled, isLoading, fakeLoading, append]);
 
     useEffect(() => {
       const lastAssistantMessage = [...messages]

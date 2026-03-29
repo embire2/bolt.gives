@@ -802,7 +802,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       Getting started (no bolt.gives signup required)
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
-                      <div>1. Pick a provider (OpenAI, Anthropic, OpenRouter, Ollama, etc.) in the chat box.</div>
+                      <div>1. Pick a provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.) in the chat box.</div>
                       <div>
                         2. If you choose a cloud provider, you will need to sign up with that provider to get an API
                         key.
@@ -836,11 +836,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       <div ref={ref} className={classNames(styles.BaseChat, 'relative flex h-full min-h-0 w-full overflow-hidden')}>
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div className="flex h-full w-full min-h-0 flex-col overflow-hidden">
-          <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/95 px-2 py-2 backdrop-blur">
+          <div className="px-2 py-2">
             <div
               role="tablist"
               aria-label="Workspace surfaces"
-              className="flex flex-wrap items-center gap-2 pl-12 sm:pl-14"
+              className={classNames(styles.SurfaceRail, 'flex flex-wrap items-center gap-2 pl-12 sm:pl-14')}
             >
               {visibleSurfaceTabs.map((tab) => {
                 const isActive = activeSurface === tab.id;
@@ -851,10 +851,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   <div
                     key={tab.id}
                     className={classNames(
-                      'group flex items-center gap-1 rounded-full border px-2 py-1 text-sm transition-colors',
+                      styles.SurfaceTab,
+                      'group flex items-center gap-1 rounded-full px-2 py-1 text-sm transition-colors',
                       isActive
-                        ? 'border-accent-500/40 bg-accent-500/10 text-bolt-elements-textPrimary'
-                        : 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
+                        ? classNames(styles.SurfaceTabActive, 'bg-transparent text-bolt-elements-textPrimary')
+                        : 'bg-transparent text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
                     )}
                   >
                     <button
@@ -863,7 +864,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       role="tab"
                       aria-selected={isActive}
                       aria-controls={panelId}
-                      className="flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5"
+                      className={classNames(
+                        'flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5',
+                        isActive && styles.SurfaceTabLabelActive,
+                      )}
                       onClick={() => openSurface(tab.id)}
                       title={tab.description}
                     >
@@ -891,12 +895,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   role="tab"
                   aria-selected={false}
                   aria-controls={`${tab.id}-surface-panel`}
-                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
+                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-transparent px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
                   onClick={() => openSurface(tab.id)}
                   title={tab.description}
                 >
                   <span className="i-ph:plus" />
-                  <span>Open {tab.label}</span>
+                  <span className="text-bolt-elements-textPrimary">Open {tab.label}</span>
                 </button>
               ))}
             </div>

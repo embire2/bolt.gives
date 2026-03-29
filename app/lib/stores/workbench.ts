@@ -98,6 +98,7 @@ export class WorkbenchStore {
   interactiveStepEvents: WritableAtom<InteractiveStepRunnerEvent[]> =
     hotData?.interactiveStepEvents ?? atom<InteractiveStepRunnerEvent[]>([]);
   isTestAndScanRunning: WritableAtom<boolean> = hotData?.isTestAndScanRunning ?? atom<boolean>(false);
+  isRuntimeScannerEnabled: WritableAtom<boolean> = hotData?.isRuntimeScannerEnabled ?? atom<boolean>(false);
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
   #enqueueExecution = createResilientExecutionQueue((error) => {
@@ -134,6 +135,7 @@ export class WorkbenchStore {
       hot.data.autonomyMode = this.autonomyMode;
       hot.data.interactiveStepEvents = this.interactiveStepEvents;
       hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
+      hot.data.isRuntimeScannerEnabled = this.isRuntimeScannerEnabled;
       hot.data.hostedRuntimeSessionId = this.#hostedRuntimeSessionId;
 
       // Ensure binary files are properly preserved across hot reloads
@@ -402,6 +404,14 @@ export class WorkbenchStore {
 
   get testAndScanRunning() {
     return this.isTestAndScanRunning;
+  }
+
+  get runtimeScannerEnabled() {
+    return this.isRuntimeScannerEnabled;
+  }
+
+  toggleRuntimeScanner() {
+    this.isRuntimeScannerEnabled.set(!this.isRuntimeScannerEnabled.get());
   }
 
   toggleTerminal(value?: boolean) {

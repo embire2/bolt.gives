@@ -180,3 +180,56 @@ export interface RepositoryStats {
   hasPackageJson: boolean;
   hasDependencies: boolean;
 }
+
+// Git Insights Types
+export interface CommitActivity {
+  total: number;
+  week: number;
+  days: number[];
+}
+
+export interface ContributorStats {
+  total: number;
+  weeks: Array<{
+    w: number;
+    a: number;
+    d: number;
+    c: number;
+  }>;
+  author: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  };
+}
+
+export interface CommitHeatmapData {
+  date: string;
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface AuthorStats {
+  login: string;
+  avatar_url: string;
+  html_url: string;
+  contributions: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface RepoComparisonResult {
+  repo1: GitHubRepoInfo;
+  repo2: GitHubRepoInfo;
+  comparison: {
+    starsDiff: number;
+    forksDiff: number;
+    sizeDiff: number;
+    issuesDiff: number;
+    contributorsDiff: number;
+    languageOverlap: string[];
+    uniqueLanguages1: string[];
+    uniqueLanguages2: string[];
+  };
+}

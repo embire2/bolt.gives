@@ -178,6 +178,12 @@ Current roadmap split:
 - Top-level `Chat` / `Workspace` tabs with closable workspace persistence so prompt/commentary and files/preview can be focused independently.
 - Harder lazy-loading of `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and execution/commentary panels to reduce default browser load.
 - Deeper lazy-loading of markdown/code/thought/artifact rendering so message-heavy language tooling is deferred until it is actually used.
+- **Functional Runtime Scanner**: Active error monitoring in the Workbench that intercepts dev server/preview failures and automatically queues AI auto-fixes.
+- **Modern Red-to-Blue Theme**: Polished glassmorphism UI with transparent headers and an inset editor card design.
+- **Web IDE Integration**: Quick-access button to deploy or manipulate your workspace directly in `webcontainer.codes` via the header.
+- **E2B Sandbox Support**: Cloud-hosted Linux sandbox as an alternative to the in-browser WebContainer. Enable in Settings → Cloud Environments with your E2B API key.
+- **Firecrawl Integration**: Cloud-based web scraping via the Firecrawl API as an alternative to the local Playwright server. Configure via `FIRECRAWL_API_KEY` env var or in Settings.
+- **BoltContainer**: Custom WebContainer alternative built by bolt.gives. Features an in-memory VFS with file watchers, E2B cloud execution, and drop-in API compatibility. Select in Settings → Cloud Environments → Runtime Engine.
 - Experimental managed Cloudflare instance architecture documented in-repo, including one-client / one-instance enforcement, a no-cost shared-runtime path, a future `standard-2` (`6 GiB`) Pro tier, and automatic rollout design from `main`.
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.
@@ -187,7 +193,7 @@ Current roadmap split:
 - Architect self-heal knowledgebase for common scaffold/build/runtime failures.
 - Preview runtime errors can now be queued directly into Architect auto-repair instead of relying only on a manual `Ask Bolt` action.
 - Multi-provider model support and model/provider/API-key persistence.
-- Web browsing tools (`web_search`, `web_browse`) with Playwright-backed extraction.
+- Web browsing tools (`web_search`, `web_browse`) with Playwright-backed extraction (or Firecrawl when configured).
 - Real-time collaboration support (Yjs + websocket server).
 - First-party deployment support and update manager.
 - Cost estimation subsystem with cross-provider normalization.

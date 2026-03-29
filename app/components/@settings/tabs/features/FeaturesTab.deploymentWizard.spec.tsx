@@ -11,10 +11,17 @@ vi.mock('~/lib/hooks/useSettings', () => {
       isLatestBranch: true,
       contextOptimizationEnabled: true,
       eventLogs: true,
+      tabConfiguration: {
+        userTabs: [
+          { id: 'local-providers', visible: true, window: 'user', order: 0 },
+          { id: 'mcp', visible: true, window: 'user', order: 1 },
+        ],
+      },
       setAutoSelectTemplate: vi.fn(),
       enableLatestBranch: vi.fn(),
       enableContextOptimization: vi.fn(),
       setEventLogs: vi.fn(),
+      setUserTabVisibility: vi.fn(),
       setPromptId: vi.fn(),
       promptId: 'default',
     }),
@@ -121,5 +128,13 @@ describe('FeaturesTab deployment wizard', () => {
       deploymentId: 'dep_123',
       token: 'token',
     });
+  });
+
+  it('renders beta feature toggles', async () => {
+    render(<FeaturesTab />);
+
+    expect(screen.getByText('Beta Features')).toBeTruthy();
+    expect(screen.getByText('Local Providers Tab')).toBeTruthy();
+    expect(screen.getByText('MCP Servers Tab')).toBeTruthy();
   });
 });

@@ -9,6 +9,7 @@ import {
   enableContextOptimizationStore,
   tabConfigurationStore,
   resetTabConfiguration as resetTabConfig,
+  updateUserTabVisibility as updateUserTabVisibilityStore,
   updateProviderSettings as updateProviderSettingsStore,
   updateLatestBranch,
   updateAutoSelectTemplate,
@@ -62,6 +63,7 @@ export interface UseSettingsReturn {
   // Tab configuration
   tabConfiguration: TabWindowConfig;
   resetTabConfiguration: () => void;
+  setUserTabVisibility: (tabId: 'local-providers' | 'mcp', visible: boolean) => void;
 }
 
 // Add interface to match ProviderSetting type
@@ -171,6 +173,11 @@ export function useSettings(): UseSettingsReturn {
     [saveSettings],
   );
 
+  const setUserTabVisibility = useCallback((tabId: 'local-providers' | 'mcp', visible: boolean) => {
+    updateUserTabVisibilityStore(tabId, visible);
+    logStore.logSystem(`${tabId} tab ${visible ? 'enabled' : 'disabled'} from beta features`);
+  }, []);
+
   useEffect(() => {
     const providers = providersStore.get();
     const providerSetting: Record<string, IProviderSetting> = {}; // preserve the entire settings object for each provider
@@ -204,5 +211,6 @@ export function useSettings(): UseSettingsReturn {
     settings,
     tabConfiguration,
     resetTabConfiguration: resetTabConfig,
+    setUserTabVisibility,
   };
 }

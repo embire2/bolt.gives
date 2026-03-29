@@ -1,179 +1,103 @@
-# AGENTS.md
+# Agents.md
 
 ## Mission
 
-Build and maintain `bolt.gives` as a production-ready agentic coding platform, with a strong focus on reliability, transparent execution, and safe autonomous behavior.
+Ship `v1.0.3` as a commentary-first release where agent work is continuously visible, understandable, and verifiable in real time.
 
-Current release line:
+Secondary objective: lay architecture foundations for `v1.0.4` client-hosted private instances with Teams collaboration.
 
-- Stable: `v3.0.2`
-- In progress: `v3.0.3`
+## Active Release Line
 
-Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
+- Stable: `v1.0.3`
+- In progress: `v1.0.4`
+- Next: `v1.0.4` (client-hosted + Teams)
 
----
+## Operating Principles
 
-## Repository and Branch Rules
+- No hidden behavior: if the agent acts, users must see it.
+- No false success: completion messaging must match real execution results.
+- Keep fixes minimal, explicit, and test-backed.
+- Prefer clarity over cleverness in protocol and UI contracts.
 
-- Primary repo: `https://github.com/embire2/bolt.gives`
-- Primary working branch for live updates: `main`
-- Optional staging branch: `alpha` (used when risky features need live soak first)
+## Branching and Deployment
 
-If both `alpha` and `main` are active:
+- Primary branch: `main`
+- Optional soak branch: `alpha`
+- Live validation target: `https://alpha1.bolt.gives`
 
-- Land high-risk work on `alpha`
-- Verify on `https://alpha1.bolt.gives`
-- Fast-forward or merge cleanly into `main`
-- Keep `main` as the release source-of-truth; keep `alpha` fast-forwarded to `main` when no soak test is active.
+If changes are risky:
+1. Land on `alpha`
+2. Validate E2E on `alpha1`
+3. Fast-forward/merge into `main`
 
-Never force-push shared branches unless explicitly approved.
+## v1.0.3 Execution Priorities
 
----
+### P0 (Must ship)
+- [x] Commentary phase model and dedicated commentary cards
+- [x] Strict formatting contract for live updates (`Key changes`, `Next`)
+- [x] Sticky execution footer with model/step/elapsed/actions/recovery state
+- [x] First-class checkpoint events in timeline
+- [x] Honesty guardrails to prevent optimistic success reporting
 
-## Work Scope Rules
+### P1 (Ship if stable)
+- [ ] Commentary verbosity controls by autonomy mode
+- [ ] Export commentary transcript with phases
+- [ ] Timeline expand/collapse for dense runs
 
-- Prioritize valid, reproducible issues or clearly approved roadmap items.
-- One logical change per commit unless a larger atomic change is required for correctness.
-- Keep behavior changes explicit in commit messages and release notes.
-- Avoid refactors during hotfixes unless needed to fix the issue safely.
+## Delivery Workflow (Mandatory)
 
-When uncertain, choose the smallest safe change that unblocks users.
+1. Reproduce and document current behavior.
+2. Implement smallest safe change.
+3. Add regression tests near changed code.
+4. Run local validation:
+   - `pnpm run typecheck`
+   - `pnpm run lint`
+   - `pnpm test`
+5. Run targeted E2E smoke for core-path changes.
+6. Commit with Conventional Commits and push.
 
----
+## E2E Requirements for Core Flow Changes
 
-## v3.0.2 / v3.0.3 Priority Stack
-
-### Completed baseline
-
-- Live Development Commentary Stream
-  - Commentary is streamed incrementally and separated from code/action events.
-- Agent Anti-Stall + Auto-Recovery
-  - Loop/no-progress/timeout detection plus recovery backoff/finalize strategy.
-- Execution transparency panel + sticky footer
-- Safer autonomy modes
-- Architect self-heal v1 foundations
-- Provider/model/API-key persistence and cost estimation normalization
-- Installer-first self-host baseline
-- Hosted FREE provider with managed-token routing and silent fallback
-- Cloudflare managed-instance architecture docs and tenancy schema
-
-### In Progress / Remaining
-
-- `v3.0.3`
-  - Zero-infra core runtime guarantee (no mandatory DB/services)
-  - Managed Cloudflare instance control plane (spawn API, one-client / one-instance enforcement, rollout controller)
-  - Server-first heavy execution / browser offload
-  - Client-hosted isolated instance kit + upgrade/rollback runbooks
-  - Optional Teams add-on with role-based access controls
-  - Collaboration audit trail and export
-  - Architect v2 expansion (preflight checks, confidence-based recovery)
-  - Commentary v2 polish (plain-English default + contract/cadence tests)
-  - First-party template pack coverage + CI smoke tests
-  - Long-run performance/server-offload hardening
-  - Multi-instance safe update channels and health-verified rollbacks
-
----
-
-## Mandatory Implementation Workflow
-
-1. Confirm current behavior
-
-- Reproduce the issue or validate feature gap.
-- Record exact file(s) and runtime path affected.
-
-2. Implement minimal safe fix
-
-- Keep protocol contracts backward compatible.
-- Add guardrails for strict providers when touching tool schemas.
-
-3. Add/Update tests
-
-- Add regression tests close to the changed code.
-- Include at least one test that would fail before the fix.
-
-4. Validate locally
-
-- `pnpm run typecheck`
-- `pnpm run lint`
-- `pnpm test`
-
-5. Run targeted E2E smoke for core-path changes
-
-- Required when touching chat streaming, providers, tools, deployments, auth, or file actions.
-- Use at least one real provider path when credentials are available.
-
-6. Commit and push
-
-- Use Conventional Commits:
-  - `fix: ...`
-  - `feat: ...`
-  - `docs: ...`
-  - `test: ...`
-  - `refactor: ...`
-  - `chore: ...`
-
----
-
-## Deployment Rules (Cloudflare + alpha1)
-
-Production-like validation targets:
-
-- `https://alpha1.bolt.gives`
-- `https://ahmad.bolt.gives`
-
-When deploying:
-
-- Confirm build passes under Cloudflare constraints.
-- Confirm runtime starts and chat flow works.
-- Confirm static assets are fresh (logo/version/changelog visibility where applicable).
-- Confirm no auth/tool schema runtime errors in browser console and server logs.
-- Confirm both live domains return healthy responses after deployment:
-  - `https://alpha1.bolt.gives`
-  - `https://ahmad.bolt.gives`
-
-If deployment fails:
-
-- Capture exact error text.
-- Patch root cause, not symptoms.
-- Re-run smoke test before declaring fixed.
-
----
-
-## Security and Secrets
-
-- Never commit API keys, tokens, cookies, session dumps, or private logs.
-- Keep secrets in `.env.local` or environment variables (gitignored).
-- Redact credentials in screenshots, issue text, and commit messages.
-- Do not paste production secrets into CI output or PR discussion.
-
----
+When touching chat streaming, tool execution, action runner, or timeline:
+- Test with at least one strict provider path (OpenAI Codex class model).
+- Test with at least one standard provider path.
+- Verify:
+  - commentary-first-event latency
+  - checkpoint visibility
+  - truthful success/failure narration
+  - preview/app outcome for real coding tasks
 
 ## Documentation Rules
 
-When behavior changes, update docs in the same PR/commit set:
+For behavior changes, update in same change set:
+- `CHANGELOG.md`
+- `README.md` (if setup/usage changed)
+- `v1.0.3.md` (status + checkboxes + commit refs)
 
-- `CHANGELOG.md` for user-facing behavior
-- `README.md` for setup/usage changes
-- `ROADMAP.md` for roadmap status updates
-
-Roadmap items must be marked clearly:
-
+Checkbox status format:
 - `[x]` complete
-- `[~]` partial/in progress
+- `[~]` in progress
 - `[ ]` not started
 
-Include commit references for completed roadmap items when possible.
+## Security and Data Handling
 
----
+- Never commit secrets, keys, session tokens, cookies, or sensitive logs.
+- Keep secrets in environment variables or `.env.local` only.
+- Redact sensitive values from screenshots, logs, and commit text.
 
-## Quality Bar Before Merge
+## v1.0.4 Foundation Backlog (Do Not Skip)
 
-A change is done only when all are true:
+- [ ] Instance isolation model (compute + storage + config boundaries)
+- [ ] Client-hosted deployment bundle and runbook
+- [ ] Teams RBAC model (owner/admin/dev/viewer)
+- [ ] Shared workspace concurrency and conflict handling
+- [ ] Audit/event log model for compliance-grade traceability
 
-- Code compiles and tests pass.
-- Lint/typecheck pass.
-- Core flow still works end-to-end.
-- Docs reflect the new behavior.
-- No regressions introduced in adjacent critical paths.
+## Definition of Done
 
-If any item fails, do not mark the task complete.
+A task is complete only when:
+- behavior is correct and test-covered,
+- local checks pass,
+- required E2E passes,
+- docs are updated,
+- and no adjacent critical path regression is introduced.

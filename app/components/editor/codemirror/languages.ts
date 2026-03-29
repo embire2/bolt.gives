@@ -10,7 +10,7 @@ export const supportedLanguages = [
   }),
   LanguageDescription.of({
     name: 'TS',
-    extensions: ['ts'],
+    extensions: ['ts', 'mts'],
     async load() {
       return import('@codemirror/lang-javascript').then((module) => module.javascript({ typescript: true }));
     },

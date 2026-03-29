@@ -64,10 +64,10 @@ export default function SettingsTab() {
     return saved
       ? JSON.parse(saved)
       : {
-          notifications: true,
-          language: 'en',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        };
+        notifications: true,
+        language: 'en',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
   });
   const [modelOrchestrator, setModelOrchestrator] = useState<ModelOrchestratorSettings>(() =>
     getModelOrchestratorSettings(),
@@ -75,6 +75,19 @@ export default function SettingsTab() {
   const [performanceThresholds, setPerformanceThresholds] = useState<PerformanceThresholds>(() =>
     getPerformanceThresholds(),
   );
+
+  const [cloudEnvs, setCloudEnvs] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { e2bEnabled: false, e2bApiKey: '', firecrawlEnabled: false, firecrawlApiKey: '', runtime: 'webcontainer' };
+    }
+    return {
+      e2bEnabled: localStorage.getItem('bolt_e2b_enabled') === 'true',
+      e2bApiKey: localStorage.getItem('bolt_e2b_api_key') || '',
+      firecrawlEnabled: localStorage.getItem('bolt_firecrawl_enabled') === 'true',
+      firecrawlApiKey: localStorage.getItem('bolt_firecrawl_api_key') || '',
+      runtime: localStorage.getItem('bolt_runtime') || 'webcontainer',
+    };
+  });
 
   useEffect(() => {
     setCurrentTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -112,7 +125,7 @@ export default function SettingsTab() {
         transition={{ delay: 0.1 }}
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="i-ph:palette-fill w-4 h-4 text-purple-500" />
+          <div className="i-ph:palette-fill w-4 h-4 text-red-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-bolt-elements-textPrimary">Preferences</span>
         </div>
 
@@ -129,7 +142,7 @@ export default function SettingsTab() {
               'bg-[#FAFAFA] dark:bg-[#0A0A0A]',
               'border border-[#E5E5E5] dark:border-[#1A1A1A]',
               'text-bolt-elements-textPrimary',
-              'focus:outline-none focus:ring-2 focus:ring-purple-500/30',
+              'focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:focus:ring-blue-500/30',
               'transition-all duration-200',
             )}
           >
@@ -192,7 +205,7 @@ export default function SettingsTab() {
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="i-ph:clock-fill w-4 h-4 text-purple-500" />
+          <div className="i-ph:clock-fill w-4 h-4 text-red-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-bolt-elements-textPrimary">Time Settings</span>
         </div>
 
@@ -209,7 +222,7 @@ export default function SettingsTab() {
               'bg-[#FAFAFA] dark:bg-[#0A0A0A]',
               'border border-[#E5E5E5] dark:border-[#1A1A1A]',
               'text-bolt-elements-textPrimary',
-              'focus:outline-none focus:ring-2 focus:ring-purple-500/30',
+              'focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:focus:ring-blue-500/30',
               'transition-all duration-200',
             )}
           >
@@ -226,7 +239,7 @@ export default function SettingsTab() {
         transition={{ delay: 0.3 }}
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="i-ph:keyboard-fill w-4 h-4 text-purple-500" />
+          <div className="i-ph:keyboard-fill w-4 h-4 text-red-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-bolt-elements-textPrimary">Keyboard Shortcuts</span>
         </div>
 
@@ -261,7 +274,7 @@ export default function SettingsTab() {
         transition={{ delay: 0.4 }}
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="i-ph:cpu-fill w-4 h-4 text-purple-500" />
+          <div className="i-ph:cpu-fill w-4 h-4 text-red-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-bolt-elements-textPrimary">Model Orchestrator</span>
         </div>
 
@@ -306,7 +319,7 @@ export default function SettingsTab() {
         transition={{ delay: 0.45 }}
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="i-ph:gauge-fill w-4 h-4 text-purple-500" />
+          <div className="i-ph:gauge-fill w-4 h-4 text-red-500 dark:text-blue-400" />
           <span className="text-sm font-medium text-bolt-elements-textPrimary">Performance Thresholds</span>
         </div>
 
@@ -356,6 +369,117 @@ export default function SettingsTab() {
               )}
             />
           </label>
+        </div>
+      </motion.div>
+
+      {/* Cloud Environments (E2B & Firecrawl) */}
+      <motion.div
+        className="bg-white dark:bg-[#0A0A0A] rounded-lg shadow-sm dark:shadow-none p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <div className="i-ph:cloud-fill w-4 h-4 text-red-500 dark:text-blue-400" />
+          <span className="text-sm font-medium text-bolt-elements-textPrimary">Cloud Environments</span>
+        </div>
+
+        <div className="space-y-6">
+          {/* Runtime Engine Selector */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="i-ph:cpu-fill w-4 h-4 text-bolt-elements-textSecondary" />
+              <label className="block text-sm text-bolt-elements-textSecondary font-medium">Runtime Engine</label>
+            </div>
+            <select
+              value={cloudEnvs.runtime}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCloudEnvs((prev) => ({ ...prev, runtime: val }));
+                localStorage.setItem('bolt_runtime', val);
+                toast.success(`Runtime set to ${val === 'bolt-container' ? 'BoltContainer' : val === 'webcontainer' ? 'WebContainer' : val}. Reload to activate.`);
+              }}
+              className={classNames(
+                'w-full px-3 py-2 rounded-lg text-sm',
+                'bg-[#FAFAFA] dark:bg-[#0A0A0A]',
+                'border border-[#E5E5E5] dark:border-[#1A1A1A]',
+                'text-bolt-elements-textPrimary',
+                'focus:outline-none focus:ring-2 focus:ring-blue-500/30',
+                'transition-all duration-200',
+              )}
+            >
+              <option value="webcontainer">WebContainer (StackBlitz WASM — Default)</option>
+              <option value="bolt-container">BoltContainer (Custom — In-Memory VFS + E2B)</option>
+            </select>
+            <p className="text-xs text-bolt-elements-textSecondary mt-1">
+              BoltContainer uses an in-memory virtual filesystem with E2B cloud execution. Reload the page after changing.
+            </p>
+          </div>
+
+          <hr className="border-[#E5E5E5] dark:border-[#1A1A1A]" />
+          {/* E2B Sandbox */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-bolt-elements-textPrimary font-medium">E2B Sandbox (WebContainer Alternative)</span>
+              <Switch
+                checked={cloudEnvs.e2bEnabled}
+                onCheckedChange={(enabled) => {
+                  setCloudEnvs((prev) => ({ ...prev, e2bEnabled: enabled }));
+                  localStorage.setItem('bolt_e2b_enabled', String(enabled));
+                  toast.success(`E2B Sandbox ${enabled ? 'enabled' : 'disabled'}`);
+                }}
+              />
+            </div>
+            <label className="block text-sm text-bolt-elements-textSecondary">
+              API Key (Requires page reload to take effect if turning on)
+              <input
+                type="password"
+                placeholder="e2b_..."
+                value={cloudEnvs.e2bApiKey}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  setCloudEnvs((prev) => ({ ...prev, e2bApiKey: val }));
+                  localStorage.setItem('bolt_e2b_api_key', val);
+                }}
+                className={classNames(
+                  'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm text-bolt-elements-textPrimary',
+                )}
+              />
+            </label>
+          </div>
+
+          <hr className="border-[#E5E5E5] dark:border-[#1A1A1A]" />
+
+          {/* Firecrawl */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-bolt-elements-textPrimary font-medium">Firecrawl (Playwright Alternative)</span>
+              <Switch
+                checked={cloudEnvs.firecrawlEnabled}
+                onCheckedChange={(enabled) => {
+                  setCloudEnvs((prev) => ({ ...prev, firecrawlEnabled: enabled }));
+                  localStorage.setItem('bolt_firecrawl_enabled', String(enabled));
+                  toast.success(`Firecrawl ${enabled ? 'enabled' : 'disabled'}`);
+                }}
+              />
+            </div>
+            <label className="block text-sm text-bolt-elements-textSecondary">
+              API Key (Requires page reload to take effect if turning on)
+              <input
+                type="password"
+                placeholder="fc-..."
+                value={cloudEnvs.firecrawlApiKey}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  setCloudEnvs((prev) => ({ ...prev, firecrawlApiKey: val }));
+                  localStorage.setItem('bolt_firecrawl_api_key', val);
+                }}
+                className={classNames(
+                  'mt-1 w-full rounded-lg border border-[#E5E5E5] dark:border-[#1A1A1A] bg-[#FAFAFA] dark:bg-[#0A0A0A] px-3 py-2 text-sm text-bolt-elements-textPrimary',
+                )}
+              />
+            </label>
+          </div>
         </div>
       </motion.div>
     </div>

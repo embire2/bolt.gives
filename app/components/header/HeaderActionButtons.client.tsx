@@ -19,6 +19,18 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
       {/* Deploy Button */}
       {shouldShowButtons && <DeployButton />}
 
+      {/* Web IDE Button */}
+      {shouldShowButtons && (
+        <button
+          onClick={() => window.open('https://webcontainer.codes', '_blank')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary bg-transparent hover:bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-md transition-colors"
+          title="Open in Web IDE"
+        >
+          <div className="i-ph:code" />
+          <span className="hidden sm:inline-block">Open in Web IDE</span>
+        </button>
+      )}
+
       {/* Debug Tools */}
       {shouldShowButtons && (
         <div className="hidden xl:flex border border-bolt-elements-borderColor rounded-md overflow-hidden text-sm">

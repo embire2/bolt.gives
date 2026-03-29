@@ -330,6 +330,7 @@ export const Workbench = memo(
     const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
+  const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
     const hasWorkspaceContent =
       hasPreview ||
@@ -417,8 +418,8 @@ export const Workbench = memo(
     }, []);
 
     const workbenchPanel = (
-      <div className="h-full min-h-0 px-2 lg:px-4">
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 shadow-sm">
+      <div className="h-full min-h-0 px-2 lg:px-4 pb-4">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-bolt-elements-borderColor/60 bg-bolt-elements-background-depth-2/90 backdrop-blur-xl shadow-2xl shadow-black/20">
           <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
             <button
               className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
@@ -505,6 +506,39 @@ export const Workbench = memo(
                     <div className={testAndScanRunning ? 'i-ph:spinner animate-spin' : 'i-ph:shield-check'} />
                     {testAndScanRunning ? 'Test & Scan...' : 'Test & Scan'}
                   </button>
+                </div>
+
+                {/* Runtime Scanner Display Component */}
+                <div className="flex items-center gap-2 px-3 py-1.5 ml-2 border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-1">
+                  <button
+                    onClick={() => workbenchStore.toggleRuntimeScanner()}
+                    className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                      isRuntimeScannerEnabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                        isRuntimeScannerEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-xs font-medium text-bolt-elements-textPrimary flex items-center gap-1">
+                    Runtime Scanner <div className="i-ph:info text-bolt-elements-textTertiary" />
+                  </span>
+                  <span className="ml-2 flex items-center gap-1 text-xs text-bolt-elements-textSecondary">
+                    {isRuntimeScannerEnabled ? (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-600" />
+                        Inactive
+                      </>
+                    )}
+                  </span>
+                  <div className="i-ph:caret-up text-bolt-elements-textSecondary ml-1" />
                 </div>
               </div>
             )}

@@ -16,12 +16,30 @@ body {
 
 :root {
   --gradient-opacity: 0.8;
-  --primary-color: rgba(158, 117, 240, var(--gradient-opacity));
-  --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
-  --accent-color: rgba(128, 59, 239, var(--gradient-opacity));
-  // --primary-color: rgba(147, 112, 219, var(--gradient-opacity));
-  // --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
-  // --accent-color: rgba(180, 170, 220, var(--gradient-opacity));
+  --primary-color: rgba(239, 68, 68, var(--gradient-opacity));
+  --secondary-color: rgba(220, 38, 38, var(--gradient-opacity));
+  --accent-color: rgba(59, 130, 246, var(--gradient-opacity));
+  // --primary-color: rgba(239, 68, 68, var(--gradient-opacity));
+  // --secondary-color: rgba(168, 85, 247, var(--gradient-opacity));
+  // --accent-color: rgba(59, 130, 246, var(--gradient-opacity));
+}
+
+/* Crimson-Azure Gradient Theme Classes */
+.bg-gradient-crimson-azure {
+  background: linear-gradient(135deg, var(--bolt-gradient-crimson) 0%, var(--bolt-bg-gradient-mid) 50%, var(--bolt-gradient-azure) 100%);
+}
+
+.text-gradient-crimson-azure {
+  background: linear-gradient(135deg, var(--bolt-gradient-red) 0%, var(--bolt-gradient-blue) 50%, var(--bolt-gradient-azure) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-border-crimson-azure {
+  border: 2px solid transparent;
+  background: linear-gradient(var(--bolt-elements-bg-depth-1), var(--bolt-elements-bg-depth-1)) padding-box,
+              linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue), var(--bolt-gradient-azure)) border-box;
 }
 
 .modern-scrollbar {

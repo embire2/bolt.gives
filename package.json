@@ -11,6 +11,10 @@
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "deploy": "npm run build && wrangler pages deploy",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=18432 remix vite:build",
@@ -55,7 +59,11 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "pnpm build && tauri build",
     "neutralino:dev": "node scripts/electron-dev.mjs",
-    "neutralino:build": "pnpm build && node scripts/neutralino-build.mjs"
+    "neutralino:build": "pnpm build && node scripts/neutralino-build.mjs",
+    "mobile:ios": "cd apps/mobile && pnpm expo start --ios",
+    "mobile:android": "cd apps/mobile && pnpm expo start --android",
+    "mobile:web": "cd apps/mobile && pnpm expo start --web",
+    "dev:monorepo": "concurrently \"pnpm run dev\" \"pnpm run mobile:web\""
   },
   "engines": {
     "node": ">=18.18.0"
@@ -182,7 +190,15 @@
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.29",
     "zod": "^3.24.1",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.3",
+    "expo": "~52.0.0",
+    "expo-linear-gradient": "~14.0.1",
+    "expo-router": "~4.0.0",
+    "expo-barcode-scanner": "~13.0.0",
+    "react-native": "0.76.5",
+    "react-native-web": "~0.19.13",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-svg": "15.8.0"
   },
   "devDependencies": {
     "@blitz/eslint-plugin": "0.1.0",
@@ -229,7 +245,10 @@
     "vite-plugin-optimize-css-modules": "^1.1.0",
     "vite-tsconfig-paths": "^4.3.2",
     "vitest": "^2.1.7",
-    "wrangler": "^4.44.0"
+    "wrangler": "^4.44.0",
+    "expo-cli": "latest",
+    "nativewind": "^4.0.36",
+    "tailwindcss": "^3.4.0"
   },
   "resolutions": {
     "@typescript-eslint/utils": "^8.0.0-alpha.30"

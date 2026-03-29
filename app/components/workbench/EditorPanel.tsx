@@ -163,7 +163,7 @@ export const EditorPanel = memo(
                   </div>
                 )}
               </PanelHeader>
-              <div className="h-full flex-1 overflow-hidden modern-scrollbar">
+              <div className="h-full flex-1 overflow-hidden modern-scrollbar bg-bolt-elements-background-depth-2 rounded-lg mx-2 mb-2 border border-bolt-elements-borderColor shadow-sm">
                 <CodeMirrorEditor
                   theme={theme}
                   editable={!isStreaming && editorDocument !== undefined}

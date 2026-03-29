@@ -20,6 +20,58 @@ export interface DetailedRepoInfo extends GitHubRepoInfo {
   pull_requests_count?: number;
 }
 
+export interface CommitActivity {
+  total: number;
+  week: number;
+  days: number[];
+}
+
+export interface ContributorStats {
+  total: number;
+  weeks: Array<{
+    w: number;
+    a: number;
+    d: number;
+    c: number;
+  }>;
+  author: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  };
+}
+
+export interface CommitHeatmapData {
+  date: string;
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface AuthorStats {
+  login: string;
+  avatar_url: string;
+  html_url: string;
+  contributions: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface RepoComparisonResult {
+  repo1: DetailedRepoInfo;
+  repo2: DetailedRepoInfo;
+  comparison: {
+    starsDiff: number;
+    forksDiff: number;
+    sizeDiff: number;
+    issuesDiff: number;
+    contributorsDiff: number;
+    languageOverlap: string[];
+    uniqueLanguages1: string[];
+    uniqueLanguages2: string[];
+  };
+}
+
 export interface GitHubApiError {
   message: string;
   status: number;
@@ -443,6 +495,134 @@ export class GitHubApiServiceClass {
    */
   clearUserCache(_token: string): void {
     // This is a placeholder - implement user-specific caching if needed
+  }
+
+  /**
+   * Get commit activity for the past year (for heatmap visualization)
+   */
+  async getCommitActivity(owner: string, repo: string): Promise<CommitActivity[]> {
+    return this._makeRequestInternal<CommitActivity[]>(`/repos/${owner}/${repo}/stats/commit_activity`);
+  }
+
+  /**
+   * Generate heatmap data from commit activity
+   */
+  async getCommitHeatmap(owner: string, repo: string): Promise<CommitHeatmapData[]> {
+    const activity = await this.getCommitActivity(owner, repo);
+    const heatmapData: CommitHeatmapData[] = [];
+
+    for (const week of activity) {
+      const weekDate = new Date(week.week * 1000);
+      for (let day = 0; day < week.days.length; day++) {
+        const date = new Date(weekDate);
+        date.setDate(date.getDate() + day);
+        const count = week.days[day];
+        
+        let level: 0 | 1 | 2 | 3 | 4 = 0;
+        if (count > 0) level = 1;
+        if (count > 2) level = 2;
+        if (count > 5) level = 3;
+        if (count > 10) level = 4;
+
+        heatmapData.push({
+          date: date.toISOString().split('T')[0],
+          count,
+          level,
+        });
+      }
+    }
+
+    return heatmapData;
+  }
+
+  /**
+   * Get contributor statistics (additions/deletions per week)
+   * The GitHub API returns an array of contributor stats, one per author
+   */
+  async getContributorStats(owner: string, repo: string): Promise<ContributorStats[] | null> {
+    try {
+      return await this._makeRequestInternal<ContributorStats[]>(`/repos/${owner}/${repo}/stats/contributors`);
+    } catch (error) {
+      console.warn(`Could not fetch contributor stats for ${owner}/${repo}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get top contributors with their stats
+   */
+  async getTopContributors(owner: string, repo: string, limit: number = 10): Promise<AuthorStats[]> {
+    const contributors = await this._makeRequestInternal<any[]>(`/repos/${owner}/${repo}/contributors?per_page=${limit}`);
+    const contributorStatsArray = await this.getContributorStats(owner, repo);
+
+    // Create a map from author login/id to their stats for O(1) lookup
+    const statsMap = new Map<string, ContributorStats>();
+    if (contributorStatsArray) {
+      for (const stats of contributorStatsArray) {
+        if (stats.author?.login) {
+          statsMap.set(stats.author.login, stats);
+        }
+      }
+    }
+
+    return contributors.map((contributor) => {
+      // Find matching stats entry for this contributor by login
+      const contributorStats = statsMap.get(contributor.login);
+      const stats = contributorStats?.weeks?.[contributorStats.weeks.length - 1];
+      return {
+        login: contributor.login,
+        avatar_url: contributor.avatar_url,
+        html_url: contributor.html_url,
+        contributions: contributor.contributions,
+        additions: stats?.a || 0,
+        deletions: stats?.d || 0,
+      };
+    });
+  }
+
+  /**
+   * Get repository languages (bytes)
+   */
+  async getRepositoryLanguages(owner: string, repo: string): Promise<Record<string, number>> {
+    return this._makeRequestInternal<Record<string, number>>(`/repos/${owner}/${repo}/languages`);
+  }
+
+  /**
+   * Compare two repositories
+   */
+  async compareRepositories(
+    owner1: string, 
+    repo1: string, 
+    owner2: string, 
+    repo2: string
+  ): Promise<RepoComparisonResult> {
+    const [info1, info2, languages1, languages2] = await Promise.all([
+      this.getDetailedRepositoryInfo(owner1, repo1),
+      this.getDetailedRepositoryInfo(owner2, repo2),
+      this.getRepositoryLanguages(owner1, repo1),
+      this.getRepositoryLanguages(owner2, repo2),
+    ]);
+
+    const langKeys1 = Object.keys(languages1);
+    const langKeys2 = Object.keys(languages2);
+    const languageOverlap = langKeys1.filter(l => langKeys2.includes(l));
+    const uniqueLanguages1 = langKeys1.filter(l => !langKeys2.includes(l));
+    const uniqueLanguages2 = langKeys2.filter(l => !langKeys1.includes(l));
+
+    return {
+      repo1: info1,
+      repo2: info2,
+      comparison: {
+        starsDiff: info1.stargazers_count - info2.stargazers_count,
+        forksDiff: info1.forks_count - info2.forks_count,
+        sizeDiff: (info1.size || 0) - (info2.size || 0),
+        issuesDiff: (info1.issues_count || 0) - (info2.issues_count || 0),
+        contributorsDiff: (info1.contributors_count || 0) - (info2.contributors_count || 0),
+        languageOverlap,
+        uniqueLanguages1,
+        uniqueLanguages2,
+      },
+    };
   }
 }
 

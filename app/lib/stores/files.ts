@@ -54,6 +54,11 @@ export class FilesStore {
   #size = 0;
 
   /**
+   * Promise queue to serialize file writes and prevent WebContainer WASM lockups
+   */
+  #writeQueue: Promise<void> = Promise.resolve();
+
+  /**
    * @note Keeps track all modified files with their original content since the last user message.
    * Needs to be reset when the user sends another message and all changes have to be submitted
    * for the model to be aware of the changes.
@@ -551,6 +556,17 @@ export class FilesStore {
     this.#modifiedFiles.clear();
   }
 
+  #toRelativeWorkdirPath(workdir: string, absolutePath: string, operation: 'write' | 'create' | 'mkdir' | 'delete') {
+    const relativePath = path.relative(workdir, absolutePath);
+    const normalized = relativePath.replace(/\\/g, '/');
+
+    if (!normalized || normalized === '.' || normalized.startsWith('../') || path.isAbsolute(normalized)) {
+      throw new Error(`EINVAL: invalid file path, ${operation} '${relativePath}'`);
+    }
+
+    return normalized;
+  }
+
   async saveFile(filePath: string, content: string) {
     const webcontainer = await this.#webcontainer;
 
@@ -561,11 +577,7 @@ export class FilesStore {
         throw new Error(`File is locked and cannot be modified: ${filePath}`);
       }
 
-      const relativePath = path.relative(webcontainer.workdir, filePath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid file path, write '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, filePath, 'write');
 
       const oldContent = this.getFile(filePath)?.content;
 
@@ -578,7 +590,14 @@ export class FilesStore {
         return;
       }
 
-      await webcontainer.fs.writeFile(relativePath, content);
+      // Queue the write operation to prevent WASM lockups from concurrent writes
+      this.#writeQueue = this.#writeQueue.then(async () => {
+        await webcontainer.fs.writeFile(relativePath, content);
+      }).catch(err => {
+        logger.error('Error in write queue for', filePath, err);
+        throw err;
+      });
+      await this.#writeQueue;
 
       if (!this.#modifiedFiles.has(filePath)) {
         this.#modifiedFiles.set(filePath, oldContent);
@@ -792,11 +811,7 @@ export class FilesStore {
         throw new Error(`Path is inside a locked folder and cannot be modified: ${filePath}`);
       }
 
-      const relativePath = path.relative(webcontainer.workdir, filePath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid file path, create '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, filePath, 'create');
 
       const dirPath = path.dirname(relativePath);
 
@@ -845,11 +860,7 @@ export class FilesStore {
     const webcontainer = await this.#webcontainer;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, folderPath);
-
-      if (!relativePath) {
-        throw new Error(`EINVAL: invalid folder path, create '${relativePath}'`);
-      }
+      const relativePath = this.#toRelativeWorkdirPath(webcontainer.workdir, folderPath, 'mkdir');
 
       await webcontainer.fs.mkdir(relativePath, { recursive: true });
 

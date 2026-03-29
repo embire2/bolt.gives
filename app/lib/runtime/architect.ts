@@ -234,6 +234,96 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
       'Retry with a clean public https:// URL and continue execution only after tool success.',
     ],
   },
+  {
+    id: 'jsh-command-not-found',
+    title: 'Shell command not found in WebContainer',
+    source: 'terminal',
+    patterns: [
+      /jsh:\s*command not found/i,
+      /jsh:\s*[^:]+:\s*not found/i,
+      /sh:\s*\d+:\s*[^:]+:\s*not found/i,
+      /bash:\s*[^:]+:\s*command not found/i,
+    ],
+    maxAutoAttempts: 3,
+    guidance: [
+      'The command is not available in WebContainer. Use alternative package managers: pnpm (preferred) or npx.',
+      'Replace `npm` with `pnpm`, `npx` with `pnpm dlx`, and `yarn` with `pnpm`.',
+      'If a CLI tool is missing, install it first with `pnpm add -D <tool>` before running it.',
+      'For global tools, use `pnpm dlx <tool>` instead of installing globally.',
+      'Re-run the command and verify it succeeds before continuing.',
+    ],
+  },
+  {
+    id: 'missing-node-modules',
+    title: 'Missing node_modules — dependencies not installed',
+    source: 'terminal',
+    patterns: [
+      /Cannot find module/i,
+      /MODULE_NOT_FOUND/i,
+      /Error:\s*Cannot find package/i,
+      /ERR_MODULE_NOT_FOUND/i,
+    ],
+    maxAutoAttempts: 3,
+    guidance: [
+      'Dependencies have not been installed. Run `pnpm install` in the project directory first.',
+      'Verify package.json exists and has the required dependency listed.',
+      'If a specific package is missing, run `pnpm add <package-name>` to install it.',
+      'After installing, re-run the failed command and verify it succeeds.',
+    ],
+  },
+  {
+    id: 'pnpm-not-found',
+    title: 'pnpm binary not available',
+    source: 'terminal',
+    patterns: [
+      /jsh:\s*spawn pnpm ENOENT/i,
+      /pnpm:\s*command not found/i,
+      /pnpm:\s*not found/i,
+    ],
+    maxAutoAttempts: 2,
+    guidance: [
+      'pnpm is not available in the shell path. Try using npx to install it: `npx pnpm install`.',
+      'Alternatively, use the npm fallback if available: `npm install`.',
+      'If neither pnpm nor npm works, recommend switching the Runtime Engine to BoltContainer or E2B in Settings.',
+    ],
+  },
+  {
+    id: 'dependency-install-failed',
+    title: 'Package install failed',
+    source: 'terminal',
+    patterns: [
+      /ERR_PNPM_/i,
+      /npm ERR!/i,
+      /ERESOLVE unable to resolve/i,
+      /peer dependency conflict/i,
+      /ETARGET/i,
+    ],
+    maxAutoAttempts: 2,
+    guidance: [
+      'The package installation failed. Inspect the error for version conflicts or missing peer dependencies.',
+      'Try installing with `--legacy-peer-deps` or `--force` if there are peer conflicts.',
+      'If a specific version is unavailable, use the latest compatible version.',
+      'Clear caches with `pnpm store prune` and retry if the error seems transient.',
+    ],
+  },
+  {
+    id: 'python-django-unsupported',
+    title: 'Python/Django not natively supported in WebContainer',
+    source: 'terminal',
+    patterns: [
+      /python[23]?:\s*command not found/i,
+      /pip[23]?:\s*command not found/i,
+      /manage\.py:\s*not found/i,
+      /No module named django/i,
+    ],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Python and Django are not natively supported in WebContainer (WASM-based).',
+      'Switch to BoltContainer with E2B Sandbox enabled (Settings → Cloud Environments) for full Python/Django support.',
+      'With E2B enabled, you get a real Linux environment that supports Python, pip, Django, and all system packages.',
+      'If you must stay in WebContainer, suggest a JavaScript alternative (Next.js, Express) or use the E2B runtime.',
+    ],
+  },
 ];
 
 function buildFingerprint(input: string): string {

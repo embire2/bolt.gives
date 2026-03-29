@@ -1,7 +1,7 @@
 import { atom, map } from 'nanostores';
 import { PROVIDER_LIST } from '~/utils/constants';
 import type { IProviderConfig } from '~/types/model';
-import type { TabVisibilityConfig, TabWindowConfig, UserTabConfig } from '~/components/@settings/core/types';
+import type { TabType, TabVisibilityConfig, TabWindowConfig, UserTabConfig } from '~/components/@settings/core/types';
 import { DEFAULT_TAB_CONFIG } from '~/components/@settings/core/constants';
 import { toggleTheme } from './theme';
 import { create } from 'zustand';
@@ -370,6 +370,35 @@ export const resetTabConfiguration = () => {
 
   tabConfigurationStore.set(defaultConfig);
   localStorage.setItem('bolt_tab_configuration', JSON.stringify(defaultConfig));
+};
+
+export const updateUserTabVisibility = (tabId: TabType, visible: boolean) => {
+  const currentConfig = tabConfigurationStore.get();
+  const existingTab = currentConfig.userTabs.find((tab) => tab.id === tabId);
+
+  let nextTabs: UserTabConfig[];
+
+  if (existingTab) {
+    nextTabs = currentConfig.userTabs.map((tab) => (tab.id === tabId ? { ...tab, visible } : tab));
+  } else {
+    const defaultTab = DEFAULT_TAB_CONFIG.find((tab): tab is UserTabConfig => tab.id === tabId && tab.window === 'user');
+
+    if (!defaultTab) {
+      return;
+    }
+
+    nextTabs = [...currentConfig.userTabs, { ...defaultTab, visible }];
+  }
+
+  const nextConfig: TabWindowConfig = {
+    userTabs: nextTabs.sort((a, b) => a.order - b.order),
+  };
+
+  tabConfigurationStore.set(nextConfig);
+
+  if (isBrowser) {
+    localStorage.setItem('bolt_tab_configuration', JSON.stringify(nextConfig));
+  }
 };
 
 // First, let's define the SettingsStore interface

@@ -492,3 +492,194 @@ export function makeScaffoldCommandsProjectAware(
     warning: 'Skipped duplicate scaffolding command because the project is already initialized.',
   };
 }
+
+// ─── npm → pnpm Universal Rewriter ──────────────────────────────────────────
+
+const NPM_RUN_RE = /^npm\s+run\s+/i;
+const NPM_START_RE = /^npm\s+start\b/i;
+const NPM_TEST_RE = /^npm\s+test\b/i;
+const NPM_EXEC_RE = /^npm\s+exec\s+/i;
+const NPM_INIT_RE = /^npm\s+init\s+/i;
+const NPM_ADD_RE = /^npm\s+(add|install|i)\s+/i;
+const NPX_RE = /^npx\s+/i;
+const YARN_RE = /^yarn\s+/i;
+
+function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+  if (!trimmed) return { segment, modified: false };
+
+  // npm run <script> → pnpm run <script>
+  if (NPM_RUN_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+run\s+/i, 'pnpm run '), modified: true };
+  }
+
+  // npm start → pnpm start
+  if (NPM_START_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+start\b/i, 'pnpm start'), modified: true };
+  }
+
+  // npm test → pnpm test
+  if (NPM_TEST_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+test\b/i, 'pnpm test'), modified: true };
+  }
+
+  // npm exec <tool> → pnpm dlx <tool>
+  if (NPM_EXEC_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+exec\s+/i, 'pnpm dlx '), modified: true };
+  }
+
+  // npm init <initializer> → pnpm create <initializer>
+  if (NPM_INIT_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+init\s+/i, 'pnpm create '), modified: true };
+  }
+
+  // npm install/add <pkg> → pnpm add <pkg>  (with specific packages)
+  if (NPM_ADD_RE.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+(add|install|i)\s+/i, 'pnpm add '), modified: true };
+  }
+
+  // npm install (bare, no packages) → pnpm install
+  if (/^npm\s+(install|i)(\s*$|\s+--)/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^npm\s+(install|i)\b/i, 'pnpm install'), modified: true };
+  }
+
+  // npx <tool> → pnpm dlx <tool>
+  if (NPX_RE.test(trimmed)) {
+    // Keep --yes flag if present, remove it (pnpm dlx doesn't need it)
+    const rewritten = trimmed.replace(/^npx\s+/i, 'pnpm dlx ').replace(/\s+--yes\b/, '').replace(/\s+-y\b/, '');
+    return { segment: rewritten, modified: true };
+  }
+
+  return { segment, modified: false };
+}
+
+function rewriteYarnSegmentToPnpm(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+  if (!trimmed || !YARN_RE.test(trimmed)) return { segment, modified: false };
+
+  // yarn add → pnpm add
+  if (/^yarn\s+add\s+/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s+add\s+/i, 'pnpm add '), modified: true };
+  }
+
+  // yarn install → pnpm install
+  if (/^yarn\s*(install)?(\s*$|\s+--)/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s*(install)?\b/i, 'pnpm install'), modified: true };
+  }
+
+  // yarn run → pnpm run
+  if (/^yarn\s+run\s+/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s+run\s+/i, 'pnpm run '), modified: true };
+  }
+
+  // yarn <script> → pnpm <script> (for known scripts)
+  if (/^yarn\s+(dev|build|start|test|lint|format)\b/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s+/i, 'pnpm '), modified: true };
+  }
+
+  // yarn global add → pnpm add -g
+  if (/^yarn\s+global\s+add\s+/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s+global\s+add\s+/i, 'pnpm add -g '), modified: true };
+  }
+
+  // yarn remove → pnpm remove
+  if (/^yarn\s+remove\s+/i.test(trimmed)) {
+    return { segment: trimmed.replace(/^yarn\s+remove\s+/i, 'pnpm remove '), modified: true };
+  }
+
+  return { segment, modified: false };
+}
+
+/**
+ * Universally rewrite npm/npx/yarn commands to pnpm equivalents.
+ * This ensures commands actually work in WebContainer where npm may not be present.
+ */
+export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRewrite {
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
+
+  if (!trimmed) return { shouldModify: false };
+
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = false;
+
+  const rewrittenParts = parts.map((part) => {
+    // Try npm → pnpm
+    let rewritten = rewriteNpmSegmentToPnpm(part);
+    if (rewritten.modified) {
+      modifiedAny = true;
+      return rewritten.segment;
+    }
+
+    // Try yarn → pnpm
+    rewritten = rewriteYarnSegmentToPnpm(part);
+    if (rewritten.modified) {
+      modifiedAny = true;
+      return rewritten.segment;
+    }
+
+    return part;
+  });
+
+  if (!modifiedAny) return { shouldModify: false };
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: 'Rewrote npm/yarn/npx commands to pnpm equivalents for WebContainer compatibility.',
+  };
+}
+
+// ─── pip / Python Shim ───────────────────────────────────────────────────────
+
+const PIP_INSTALL_RE = /^(pip3?|python3?\s+-m\s+pip)\s+install\s+/i;
+const PIP_BARE_RE = /^pip3?\s+/i;
+const DJANGO_ADMIN_RE = /^django-admin\s+/i;
+const MANAGE_PY_RE = /^python3?\s+manage\.py\s+/i;
+
+/**
+ * Intercept Python/pip/Django commands and either:
+ * 1. Route them through E2B (if BoltContainer is active)
+ * 2. Show a helpful error message pointing to BoltContainer
+ */
+export function rewritePythonCommands(command: string): ShellCommandRewrite {
+  const trimmed = command.trim();
+  if (!trimmed) return { shouldModify: false };
+
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = false;
+
+  const rewrittenParts = parts.map((part) => {
+    const p = part.trim();
+
+    // pip install → echo helpful message  (in WebContainer mode, these just fail silently)
+    if (PIP_INSTALL_RE.test(p)) {
+      modifiedAny = true;
+      return `echo "\\x1b[33m[BoltContainer]\\x1b[0m pip is not available in WebContainer. Switch to BoltContainer + E2B in Settings → Cloud Environments for full Python/pip support." && ${p}`;
+    }
+
+    // django-admin → echo helpful message
+    if (DJANGO_ADMIN_RE.test(p)) {
+      modifiedAny = true;
+      return `echo "\\x1b[33m[BoltContainer]\\x1b[0m django-admin requires Python with Django installed. Switch to BoltContainer + E2B in Settings → Cloud Environments." && ${p}`;
+    }
+
+    // python manage.py → echo helpful message
+    if (MANAGE_PY_RE.test(p)) {
+      modifiedAny = true;
+      return `echo "\\x1b[33m[BoltContainer]\\x1b[0m Django manage.py requires a full Python environment. Switch to BoltContainer + E2B in Settings → Cloud Environments." && ${p}`;
+    }
+
+    return p;
+  });
+
+  if (!modifiedAny) return { shouldModify: false };
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: 'Added guidance for Python/pip commands that need BoltContainer + E2B.',
+  };
+}
+

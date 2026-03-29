@@ -140,13 +140,12 @@ jobs:
 
       - name: Calculate PR size
         id: pr-size
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: |
-          # Get the base branch (target branch)
-          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
-          
           # Count additions and deletions
-          ADDITIONS=$(git diff --numstat origin/$BASE_BRANCH...HEAD | awk '{sum += $1} END {print sum}')
-          DELETIONS=$(git diff --numstat origin/$BASE_BRANCH...HEAD | awk '{sum += $2} END {print sum}')
+          ADDITIONS=$(git diff --numstat "origin/$BASE_BRANCH...HEAD" | awk '{sum += $1} END {print sum}')
+          DELETIONS=$(git diff --numstat "origin/$BASE_BRANCH...HEAD" | awk '{sum += $2} END {print sum}')
           TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
           
           echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT

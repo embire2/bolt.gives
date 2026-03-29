@@ -21,6 +21,8 @@ import {
   makeScaffoldCommandsProjectAware,
   normalizeShellCommandSurface,
   unwrapCommandJsonEnvelope,
+  rewriteAllPackageManagersToPnpm,
+  rewritePythonCommands,
 } from './shell-command-utils';
 import { normalizeArtifactFilePath } from './file-paths';
 import type { FileMap } from '~/lib/stores/files';
@@ -880,7 +882,7 @@ export class ActionRunner {
     const webcontainer = await this.#webcontainer;
 
     // Create a new terminal specifically for the build
-    const buildProcess = await webcontainer.spawn('npm', ['run', 'build']);
+    const buildProcess = await webcontainer.spawn('pnpm', ['run', 'build']);
 
     let output = '';
     const outputPromise = buildProcess.output.pipeTo(
@@ -1096,6 +1098,8 @@ export class ActionRunner {
     );
     applyRewrite(makeInstallCommandsLowNoise(trimmedCommand));
     applyRewrite(makeFileChecksPortable(trimmedCommand));
+    applyRewrite(rewriteAllPackageManagersToPnpm(trimmedCommand));
+    applyRewrite(rewritePythonCommands(trimmedCommand));
 
     if (hasCommandRewrite) {
       return {

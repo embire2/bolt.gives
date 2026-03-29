@@ -321,7 +321,7 @@ ${escapeBoltTags(file.content)}
         </div>
       )}
 
-      {loading && <LoadingOverlay message="Please wait while we clone the repository..." />}
+      {loading && <LoadingOverlay className="text-bolt-elements-textPrimary dark:text-bolt-elements-textPrimary" message="Please wait while we clone the repository..." />}
     </>
   );
 }
