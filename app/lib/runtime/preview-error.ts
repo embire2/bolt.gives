@@ -11,6 +11,9 @@ const PREVIEW_ERROR_PATTERNS = [
   /Expected [^\n]+ but found end of file/i,
   /PREVIEW_UNCAUGHT_EXCEPTION/i,
   /PREVIEW_UNHANDLED_REJECTION/i,
+  /ELIFECYCLE/i,
+  /Command failed/i,
+  /error when starting dev server/i,
   /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
   /Unhandled\s+Promise\s+Rejection/i,
 ];

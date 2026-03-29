@@ -4,7 +4,6 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
-import { Messages } from './Messages.client';
 import { getApiKeysFromCookies } from './APIKeyManager';
 import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
@@ -15,22 +14,17 @@ import GitCloneButton from './GitCloneButton';
 import type { ProviderInfo } from '~/types/model';
 import StarterTemplates from './StarterTemplates';
 import type { ActionAlert, SupabaseAlert, DeployAlert, LlmErrorAlertType } from '~/types/actions';
-import DeployChatAlert from '~/components/deploy/DeployAlert';
 import ChatAlert from './ChatAlert';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import ProgressCompilation from './ProgressCompilation';
 import type { AgentRunMetricsDataEvent, ProgressAnnotation, UsageDataEvent } from '~/types/context';
-import { SupabaseChatAlert } from '~/components/chat/SupabaseAlert';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { useStore } from '@nanostores/react';
 import { StickToBottom, useStickToBottomContext } from '~/lib/hooks';
-import { ChatBox } from './ChatBox';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
-import LlmErrorAlert from './LLMApiAlert';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
-import { UpdateBanner } from './UpdateBanner';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
@@ -63,6 +57,8 @@ const SURFACE_TABS: SurfaceTabDefinition[] = [
 const LazyWorkbench = React.lazy(() =>
   import('~/components/workbench/Workbench.client').then((module) => ({ default: module.Workbench })),
 );
+const LazyMessages = React.lazy(() => import('./Messages.client').then((module) => ({ default: module.Messages })));
+const LazyChatBox = React.lazy(() => import('./ChatBox').then((module) => ({ default: module.ChatBox })));
 const LazyCommentaryFeed = React.lazy(() =>
   import('./CommentaryFeed').then((module) => ({ default: module.CommentaryFeed })),
 );
@@ -74,6 +70,16 @@ const LazyExecutionTransparencyPanel = React.lazy(() =>
 );
 const LazyExecutionStickyFooter = React.lazy(() =>
   import('./ExecutionStickyFooter').then((module) => ({ default: module.ExecutionStickyFooter })),
+);
+const LazyDeployChatAlert = React.lazy(() =>
+  import('~/components/deploy/DeployAlert').then((module) => ({ default: module.default })),
+);
+const LazySupabaseChatAlert = React.lazy(() =>
+  import('~/components/chat/SupabaseAlert').then((module) => ({ default: module.SupabaseChatAlert })),
+);
+const LazyLlmErrorAlert = React.lazy(() => import('./LLMApiAlert').then((module) => ({ default: module.default })));
+const LazyUpdateBanner = React.lazy(() =>
+  import('./UpdateBanner').then((module) => ({ default: module.UpdateBanner })),
 );
 
 function LazyPanelFallback({ title }: { title: string }) {
@@ -607,17 +613,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             <ClientOnly>
               {() => {
                 return chatStarted ? (
-                  <Messages
-                    className="z-1 mx-auto flex w-full flex-1 flex-col pb-4"
-                    messages={messages}
-                    isStreaming={isStreaming}
-                    append={append}
-                    chatMode={chatMode}
-                    setChatMode={setChatMode}
-                    provider={provider}
-                    model={model}
-                    addToolResult={addToolResult}
-                  />
+                  <Suspense fallback={<LazyPanelFallback title="Conversation" />}>
+                    <LazyMessages
+                      className="z-1 mx-auto flex w-full flex-1 flex-col pb-4"
+                      messages={messages}
+                      isStreaming={isStreaming}
+                      append={append}
+                      chatMode={chatMode}
+                      setChatMode={setChatMode}
+                      provider={provider}
+                      model={model}
+                      addToolResult={addToolResult}
+                    />
+                  </Suspense>
                 ) : null;
               }}
             </ClientOnly>
@@ -631,24 +639,28 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           >
             <div className="flex flex-col gap-2">
               {deployAlert && (
-                <DeployChatAlert
-                  alert={deployAlert}
-                  clearAlert={() => clearDeployAlert?.()}
-                  postMessage={(message: string | undefined) => {
-                    sendMessage?.({} as any, message);
-                    clearSupabaseAlert?.();
-                  }}
-                />
+                <Suspense fallback={<LazyPanelFallback title="Deployment Alert" />}>
+                  <LazyDeployChatAlert
+                    alert={deployAlert}
+                    clearAlert={() => clearDeployAlert?.()}
+                    postMessage={(message: string | undefined) => {
+                      sendMessage?.({} as any, message);
+                      clearSupabaseAlert?.();
+                    }}
+                  />
+                </Suspense>
               )}
               {supabaseAlert && (
-                <SupabaseChatAlert
-                  alert={supabaseAlert}
-                  clearAlert={() => clearSupabaseAlert?.()}
-                  postMessage={(message) => {
-                    sendMessage?.({} as any, message);
-                    clearSupabaseAlert?.();
-                  }}
-                />
+                <Suspense fallback={<LazyPanelFallback title="Supabase Alert" />}>
+                  <LazySupabaseChatAlert
+                    alert={supabaseAlert}
+                    clearAlert={() => clearSupabaseAlert?.()}
+                    postMessage={(message) => {
+                      sendMessage?.({} as any, message);
+                      clearSupabaseAlert?.();
+                    }}
+                  />
+                </Suspense>
               )}
               {actionAlert && (
                 <ChatAlert
@@ -661,7 +673,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   }}
                 />
               )}
-              {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
+              {llmErrorAlert && (
+                <Suspense fallback={<LazyPanelFallback title="Provider Alert" />}>
+                  <LazyLlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />
+                </Suspense>
+              )}
             </div>
             {chatStarted ? (
               <div className="space-y-2">
@@ -699,64 +715,68 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         isStreaming={isStreaming}
                       />
                     </Suspense>
-                    <UpdateBanner />
+                    <Suspense fallback={null}>
+                      <LazyUpdateBanner />
+                    </Suspense>
                   </div>
                 </div>
               </div>
             ) : null}
             <div className={classNames('flex flex-col gap-2', { 'sticky bottom-2 z-10': chatStarted })}>
-              <ChatBox
-                isModelSettingsCollapsed={isModelSettingsCollapsed}
-                setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
-                provider={provider}
-                setProvider={setProvider}
-                onProviderSelection={onProviderSelection}
-                providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
-                model={model}
-                setModel={setModel}
-                modelList={modelList}
-                apiKeys={apiKeys}
-                isModelLoading={isModelLoading}
-                onApiKeysChange={onApiKeysChange}
-                uploadedFiles={uploadedFiles}
-                setUploadedFiles={setUploadedFiles}
-                imageDataList={imageDataList}
-                setImageDataList={setImageDataList}
-                textareaRef={textareaRef}
-                input={input}
-                handleInputChange={handleInputChange}
-                handlePaste={handlePaste}
-                TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
-                TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
-                isStreaming={isStreaming}
-                handleStop={handleStop}
-                handleSendMessage={handleSendMessage}
-                enhancingPrompt={enhancingPrompt}
-                enhancePrompt={enhancePrompt}
-                isListening={isListening}
-                startListening={startListening}
-                stopListening={stopListening}
-                chatStarted={chatStarted}
-                exportChat={exportChat}
-                qrModalOpen={qrModalOpen}
-                setQrModalOpen={setQrModalOpen}
-                handleFileUpload={handleFileUpload}
-                chatMode={chatMode}
-                setChatMode={setChatMode}
-                designScheme={designScheme}
-                setDesignScheme={setDesignScheme}
-                selectedElement={selectedElement}
-                setSelectedElement={setSelectedElement}
-                onWebSearchResult={onWebSearchResult}
-                onSaveSession={onSaveSession}
-                onResumeSession={onResumeSession}
-                onShareSession={onShareSession}
-                agentMode={agentMode}
-                setAgentMode={setAgentMode}
-                onSketchChange={onSketchChange}
-                autonomyMode={autonomyMode}
-                setAutonomyMode={setAutonomyMode}
-              />
+              <Suspense fallback={<LazyPanelFallback title="Prompt Surface" />}>
+                <LazyChatBox
+                  isModelSettingsCollapsed={isModelSettingsCollapsed}
+                  setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
+                  provider={provider}
+                  setProvider={setProvider}
+                  onProviderSelection={onProviderSelection}
+                  providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
+                  model={model}
+                  setModel={setModel}
+                  modelList={modelList}
+                  apiKeys={apiKeys}
+                  isModelLoading={isModelLoading}
+                  onApiKeysChange={onApiKeysChange}
+                  uploadedFiles={uploadedFiles}
+                  setUploadedFiles={setUploadedFiles}
+                  imageDataList={imageDataList}
+                  setImageDataList={setImageDataList}
+                  textareaRef={textareaRef}
+                  input={input}
+                  handleInputChange={handleInputChange}
+                  handlePaste={handlePaste}
+                  TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
+                  TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
+                  isStreaming={isStreaming}
+                  handleStop={handleStop}
+                  handleSendMessage={handleSendMessage}
+                  enhancingPrompt={enhancingPrompt}
+                  enhancePrompt={enhancePrompt}
+                  isListening={isListening}
+                  startListening={startListening}
+                  stopListening={stopListening}
+                  chatStarted={chatStarted}
+                  exportChat={exportChat}
+                  qrModalOpen={qrModalOpen}
+                  setQrModalOpen={setQrModalOpen}
+                  handleFileUpload={handleFileUpload}
+                  chatMode={chatMode}
+                  setChatMode={setChatMode}
+                  designScheme={designScheme}
+                  setDesignScheme={setDesignScheme}
+                  selectedElement={selectedElement}
+                  setSelectedElement={setSelectedElement}
+                  onWebSearchResult={onWebSearchResult}
+                  onSaveSession={onSaveSession}
+                  onResumeSession={onResumeSession}
+                  onShareSession={onShareSession}
+                  agentMode={agentMode}
+                  setAgentMode={setAgentMode}
+                  onSketchChange={onSketchChange}
+                  autonomyMode={autonomyMode}
+                  setAutonomyMode={setAutonomyMode}
+                />
+              </Suspense>
               <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
                 <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives
                 can browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code>{' '}

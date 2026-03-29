@@ -32,6 +32,16 @@ export interface HostedRuntimePreviewStatus {
   } | null;
 }
 
+export interface HostedRuntimePreviewSummary {
+  sessionId: string;
+  preview: HostedRuntimePreviewInfo | null;
+  status: HostedRuntimePreviewStatus['status'];
+  healthy: boolean;
+  updatedAt: string | null;
+  alert: ActionAlert | null;
+  recovery: HostedRuntimePreviewStatus['recovery'];
+}
+
 export interface HostedPreviewReloadDecision {
   shouldReload: boolean;
   reloadKey: string | null;
@@ -245,6 +255,41 @@ export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promis
   }
 
   return (await response.json()) as HostedRuntimePreviewStatus;
+}
+
+export function subscribeHostedRuntimePreview(
+  sessionId: string,
+  callbacks: {
+    onMessage: (summary: HostedRuntimePreviewSummary) => void;
+    onError?: (error: Event | Error) => void;
+  },
+) {
+  if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+    return () => undefined;
+  }
+
+  const url = `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-events`;
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    if (!event.data) {
+      return;
+    }
+
+    try {
+      callbacks.onMessage(JSON.parse(event.data) as HostedRuntimePreviewSummary);
+    } catch (error) {
+      callbacks.onError?.(error instanceof Error ? error : new Error('Invalid preview event payload'));
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    callbacks.onError?.(error);
+  };
+
+  return () => {
+    eventSource.close();
+  };
 }
 
 export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {

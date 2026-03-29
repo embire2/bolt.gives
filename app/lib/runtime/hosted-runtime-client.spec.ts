@@ -5,6 +5,7 @@ import {
   fetchHostedRuntimePreviewStatus,
   reportHostedRuntimePreviewAlert,
   resolveHostedRuntimeBaseUrl,
+  subscribeHostedRuntimePreview,
   shouldReloadHostedPreviewIframe,
 } from './hosted-runtime-client';
 
@@ -197,5 +198,72 @@ describe('hosted runtime client', () => {
       shouldReload: false,
       reloadKey: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/::2026-03-29T12:00:00.000Z',
     });
+  });
+
+  it('subscribes to hosted preview events through EventSource', () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'alpha1.bolt.gives',
+        protocol: 'https:',
+        host: 'alpha1.bolt.gives',
+      },
+    });
+
+    const close = vi.fn();
+    let instance: FakeEventSource | null = null;
+    let capturedUrl = '';
+
+    class FakeEventSource {
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      close = close;
+      url: string;
+
+      constructor(url: string) {
+        this.url = url;
+        capturedUrl = url;
+        instance = this;
+      }
+    }
+
+    vi.stubGlobal('EventSource', FakeEventSource as unknown as typeof EventSource);
+
+    const onMessage = vi.fn();
+    const onError = vi.fn();
+
+    const unsubscribe = subscribeHostedRuntimePreview('abc123', {
+      onMessage,
+      onError,
+    });
+
+    expect(capturedUrl).toBe('https://alpha1.bolt.gives/runtime/sessions/abc123/preview-events');
+    expect(instance).not.toBeNull();
+
+    const source = instance as unknown as FakeEventSource;
+
+    source.onmessage?.({
+      data: JSON.stringify({
+        sessionId: 'abc123',
+        preview: null,
+        status: 'starting',
+        healthy: false,
+        updatedAt: '2026-03-29T12:00:00.000Z',
+        alert: null,
+        recovery: null,
+      }),
+    });
+
+    expect(onMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'abc123',
+        status: 'starting',
+      }),
+    );
+
+    source.onmessage?.({ data: 'not-json' });
+    expect(onError).toHaveBeenCalled();
+
+    unsubscribe();
+    expect(close).toHaveBeenCalled();
   });
 });

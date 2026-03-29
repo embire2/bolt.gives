@@ -5,9 +5,12 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import {
   extractHostedRuntimeSessionIdFromPreviewBaseUrl,
   fetchHostedRuntimeSnapshot,
+  type HostedRuntimePreviewStatus,
+  type HostedRuntimePreviewSummary,
   fetchHostedRuntimePreviewStatus,
   isHostedRuntimeEnabled,
   reportHostedRuntimePreviewAlert,
+  subscribeHostedRuntimePreview,
   shouldReloadHostedPreviewIframe,
 } from '~/lib/runtime/hosted-runtime-client';
 import { PortDropdown } from './PortDropdown';
@@ -60,6 +63,8 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: 'Desktop', width: 1920, height: 1080, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
+const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 12000;
+const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 4000;
 
 function normalizePreviewPath(value: string) {
   const trimmed = value.trim();
@@ -131,6 +136,195 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
   const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
+  const inspectHostedPreviewIframe = useCallback(
+    async (previewSessionId: string | null, serverSignature: string | null) => {
+      try {
+        const previewDocument = iframeRef.current?.contentDocument;
+        const iframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
+        const iframeSignature = iframeAlert ? `${iframeAlert.description}\n${iframeAlert.content}` : null;
+
+        if (iframeAlert && iframeSignature && iframeSignature !== lastPreviewAlertSignatureRef.current) {
+          lastPreviewAlertSignatureRef.current = iframeSignature;
+          workbenchStore.setPreviewAlert(iframeAlert);
+
+          if (previewSessionId && iframeSignature !== lastReportedHostedPreviewAlertSignatureRef.current) {
+            lastReportedHostedPreviewAlertSignatureRef.current = iframeSignature;
+
+            try {
+              await reportHostedRuntimePreviewAlert(previewSessionId, iframeAlert);
+            } catch {
+              // Ignore transient preview alert reporting failures and retry on the next event.
+            }
+          }
+
+          return;
+        }
+
+        if (!iframeSignature && serverSignature && lastPreviewAlertSignatureRef.current === serverSignature) {
+          return;
+        }
+
+        if (!iframeSignature && !serverSignature && lastPreviewAlertSignatureRef.current) {
+          lastPreviewAlertSignatureRef.current = null;
+          lastReportedHostedPreviewAlertSignatureRef.current = null;
+          workbenchStore.clearPreviewAlert();
+        }
+      } catch {
+        // Ignore transient iframe access failures and rely on runtime events.
+      }
+    },
+    [],
+  );
+
+  const applyHostedPreviewStatus = useCallback(
+    async (
+      status: HostedRuntimePreviewSummary | HostedRuntimePreviewStatus,
+      options: {
+        allowLogFallback?: boolean;
+      } = {},
+    ) => {
+      const previewSessionId =
+        extractHostedRuntimeSessionIdFromPreviewBaseUrl(status.preview?.baseUrl || activePreview?.baseUrl) ||
+        workbenchStore.hostedRuntimeSessionId;
+
+      if (
+        status.preview &&
+        (!activePreview ||
+          status.preview.baseUrl !== activePreview.baseUrl ||
+          status.preview.port !== activePreview.port)
+      ) {
+        workbenchStore.syncHostedPreview({
+          port: status.preview.port,
+          baseUrl: status.preview.baseUrl,
+          revision: activePreview?.revision,
+        });
+      }
+
+      const recentLogs = 'recentLogs' in status ? status.recentLogs : [];
+      const alert =
+        status.alert ||
+        (options.allowLogFallback && status.status === 'error'
+          ? extractPreviewAlertFromText(recentLogs.join('\n')) || {
+              type: 'error',
+              title: 'Preview Error',
+              description: 'The hosted preview reported an error.',
+              content:
+                recentLogs.join('\n').slice(0, 5000) ||
+                'The hosted preview failed, but no detailed diagnostic payload was available.',
+              source: 'preview',
+            }
+          : null);
+      const signature = alert ? `${alert.description}\n${alert.content}` : null;
+
+      if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
+        lastPreviewAlertSignatureRef.current = signature;
+        workbenchStore.setPreviewAlert(alert);
+      } else if (!signature && lastPreviewAlertSignatureRef.current) {
+        lastPreviewAlertSignatureRef.current = null;
+        workbenchStore.clearPreviewAlert();
+      }
+
+      if (
+        previewSessionId &&
+        status.recovery?.state === 'restored' &&
+        typeof status.recovery.token === 'number' &&
+        lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token
+      ) {
+        const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
+        await workbenchStore.restoreSnapshot(snapshotFiles);
+        lastAppliedHostedRecoveryTokenRef.current = status.recovery.token;
+        lastReloadedHostedRecoveryTokenRef.current = null;
+      }
+
+      await inspectHostedPreviewIframe(previewSessionId, signature);
+
+      const previewTarget = status.preview || activePreview;
+
+      if (!previewTarget) {
+        return;
+      }
+
+      const targetUrl = buildPreviewUrl(previewTarget.baseUrl, displayPath, previewTarget.revision);
+
+      if (
+        status.recovery?.state === 'restored' &&
+        lastAppliedHostedRecoveryTokenRef.current === status.recovery.token &&
+        lastReloadedHostedRecoveryTokenRef.current !== status.recovery.token &&
+        iframeRef.current
+      ) {
+        lastHostedPreviewReloadKeyRef.current = null;
+        lastReloadedHostedRecoveryTokenRef.current = status.recovery.token;
+        iframeRef.current.src = targetUrl;
+        setIframeUrl(targetUrl);
+      }
+
+      let frameLocation = '';
+
+      try {
+        frameLocation =
+          iframeRef.current?.contentWindow?.location?.href || iframeRef.current?.contentDocument?.location?.href || '';
+      } catch {
+        frameLocation = '';
+      }
+
+      const reloadDecision = shouldReloadHostedPreviewIframe({
+        frameLocation,
+        targetUrl,
+        status,
+        lastReloadKey: lastHostedPreviewReloadKeyRef.current,
+      });
+
+      if (reloadDecision.shouldReload && iframeRef.current) {
+        lastHostedPreviewReloadKeyRef.current = reloadDecision.reloadKey;
+        iframeRef.current.src = targetUrl;
+        setIframeUrl(targetUrl);
+
+        return;
+      }
+
+      if (!reloadDecision.reloadKey && lastHostedPreviewReloadKeyRef.current && frameLocation) {
+        lastHostedPreviewReloadKeyRef.current = null;
+      }
+    },
+    [activePreview, displayPath, inspectHostedPreviewIframe],
+  );
+
+  const handlePreviewFrameLoad = useCallback(() => {
+    if (hostedRuntimeEnabled) {
+      const previewSessionId =
+        extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) ||
+        workbenchStore.hostedRuntimeSessionId;
+      void inspectHostedPreviewIframe(previewSessionId, lastPreviewAlertSignatureRef.current);
+
+      return;
+    }
+
+    try {
+      const previewDocument = iframeRef.current?.contentDocument;
+
+      if (!previewDocument) {
+        return;
+      }
+
+      const alert = extractPreviewAlertFromDocument(previewDocument);
+      const signature = alert ? `${alert.description}\n${alert.content}` : null;
+
+      if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
+        lastPreviewAlertSignatureRef.current = signature;
+        workbenchStore.setPreviewAlert(alert);
+
+        return;
+      }
+
+      if (!signature && lastPreviewAlertSignatureRef.current) {
+        lastPreviewAlertSignatureRef.current = null;
+        workbenchStore.clearPreviewAlert();
+      }
+    } catch {
+      // Ignore iframe access failures on load and rely on the periodic local probe.
+    }
+  }, [activePreview?.baseUrl, hostedRuntimeEnabled, inspectHostedPreviewIframe]);
+
   useEffect(() => {
     if (!activePreview) {
       setIframeUrl(undefined);
@@ -171,170 +365,43 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
     if (hostedRuntimeEnabled) {
       let cancelled = false;
+      const previewSessionId =
+        extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) ||
+        workbenchStore.hostedRuntimeSessionId;
 
       const inspectHostedPreview = async () => {
         try {
-          const previewSessionId =
-            extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) ||
-            workbenchStore.hostedRuntimeSessionId;
           const status = await fetchHostedRuntimePreviewStatus(previewSessionId);
 
           if (cancelled) {
             return;
           }
 
-          if (
-            status.preview &&
-            (!activePreview ||
-              status.preview.baseUrl !== activePreview.baseUrl ||
-              status.preview.port !== activePreview.port)
-          ) {
-            workbenchStore.syncHostedPreview({
-              port: status.preview.port,
-              baseUrl: status.preview.baseUrl,
-              revision: activePreview?.revision,
-            });
-          }
-
-          const alert =
-            status.alert ||
-            (status.status === 'error'
-              ? extractPreviewAlertFromText(status.recentLogs.join('\n')) || {
-                  type: 'error',
-                  title: 'Preview Error',
-                  description: 'The hosted preview reported an error.',
-                  content:
-                    status.recentLogs.join('\n').slice(0, 5000) ||
-                    'The hosted preview failed, but no detailed diagnostic payload was available.',
-                  source: 'preview',
-                }
-              : null);
-          const signature = alert ? `${alert.description}\n${alert.content}` : null;
-
-          if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
-            lastPreviewAlertSignatureRef.current = signature;
-            workbenchStore.setPreviewAlert(alert);
-
-            return;
-          }
-
-          if (!signature && lastPreviewAlertSignatureRef.current) {
-            lastPreviewAlertSignatureRef.current = null;
-            workbenchStore.clearPreviewAlert();
-          }
-
-          if (
-            previewSessionId &&
-            status.recovery?.state === 'restored' &&
-            typeof status.recovery.token === 'number' &&
-            lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token
-          ) {
-            const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
-
-            if (cancelled) {
-              return;
-            }
-
-            await workbenchStore.restoreSnapshot(snapshotFiles);
-            lastAppliedHostedRecoveryTokenRef.current = status.recovery.token;
-            lastReloadedHostedRecoveryTokenRef.current = null;
-          }
-
-          try {
-            const previewDocument = iframeRef.current?.contentDocument;
-            const iframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
-            const iframeSignature = iframeAlert ? `${iframeAlert.description}\n${iframeAlert.content}` : null;
-
-            if (iframeAlert && iframeSignature && iframeSignature !== lastPreviewAlertSignatureRef.current) {
-              lastPreviewAlertSignatureRef.current = iframeSignature;
-              workbenchStore.setPreviewAlert(iframeAlert);
-
-              if (previewSessionId && iframeSignature !== lastReportedHostedPreviewAlertSignatureRef.current) {
-                lastReportedHostedPreviewAlertSignatureRef.current = iframeSignature;
-
-                try {
-                  await reportHostedRuntimePreviewAlert(previewSessionId, iframeAlert);
-                } catch {
-                  // Ignore transient preview alert reporting failures and retry on the next poll if needed.
-                }
-              }
-
-              return;
-            }
-
-            if (!iframeSignature && signature && lastPreviewAlertSignatureRef.current === signature) {
-              // Keep the server-reported alert active until the runtime status clears it.
-            } else if (!iframeSignature && !signature && lastPreviewAlertSignatureRef.current) {
-              lastPreviewAlertSignatureRef.current = null;
-              lastReportedHostedPreviewAlertSignatureRef.current = null;
-              workbenchStore.clearPreviewAlert();
-            }
-          } catch {
-            // Ignore transient iframe access failures and rely on status polling.
-          }
-
-          const previewTarget = status.preview || activePreview;
-
-          if (!previewTarget) {
-            return;
-          }
-
-          const targetUrl = buildPreviewUrl(previewTarget.baseUrl, displayPath, previewTarget.revision);
-
-          if (
-            status.recovery?.state === 'restored' &&
-            lastAppliedHostedRecoveryTokenRef.current === status.recovery.token &&
-            lastReloadedHostedRecoveryTokenRef.current !== status.recovery.token &&
-            iframeRef.current
-          ) {
-            lastHostedPreviewReloadKeyRef.current = null;
-            lastReloadedHostedRecoveryTokenRef.current = status.recovery.token;
-            iframeRef.current.src = targetUrl;
-            setIframeUrl(targetUrl);
-          }
-
-          let frameLocation = '';
-
-          try {
-            frameLocation =
-              iframeRef.current?.contentWindow?.location?.href ||
-              iframeRef.current?.contentDocument?.location?.href ||
-              '';
-          } catch {
-            frameLocation = '';
-          }
-
-          const reloadDecision = shouldReloadHostedPreviewIframe({
-            frameLocation,
-            targetUrl,
-            status,
-            lastReloadKey: lastHostedPreviewReloadKeyRef.current,
-          });
-
-          if (reloadDecision.shouldReload && iframeRef.current) {
-            lastHostedPreviewReloadKeyRef.current = reloadDecision.reloadKey;
-            iframeRef.current.src = targetUrl;
-            setIframeUrl(targetUrl);
-
-            return;
-          }
-
-          if (!reloadDecision.reloadKey && lastHostedPreviewReloadKeyRef.current && frameLocation) {
-            lastHostedPreviewReloadKeyRef.current = null;
-          }
+          await applyHostedPreviewStatus(status, { allowLogFallback: true });
         } catch {
-          // Ignore transient runtime status fetch failures and retry on the next interval.
+          // Ignore transient runtime status fetch failures and retry on the next reconcile interval.
         }
       };
 
       void inspectHostedPreview();
 
+      const unsubscribe = subscribeHostedRuntimePreview(previewSessionId, {
+        onMessage: (status) => {
+          if (cancelled) {
+            return;
+          }
+
+          void applyHostedPreviewStatus(status);
+        },
+      });
+
       const interval = window.setInterval(() => {
         void inspectHostedPreview();
-      }, 2500);
+      }, HOSTED_PREVIEW_RECONCILE_INTERVAL_MS);
 
       return () => {
         cancelled = true;
+        unsubscribe();
         window.clearInterval(interval);
       };
     }
@@ -366,14 +433,14 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       }
     };
 
-    const interval = window.setInterval(inspectPreview, 1500);
+    const interval = window.setInterval(inspectPreview, LOCAL_PREVIEW_INSPECT_INTERVAL_MS);
     const initialProbe = window.setTimeout(inspectPreview, 250);
 
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(initialProbe);
     };
-  }, [activePreview?.baseUrl, activePreview?.port, hostedRuntimeEnabled, iframeUrl]);
+  }, [activePreview?.baseUrl, activePreview?.port, applyHostedPreviewStatus, hostedRuntimeEnabled, iframeUrl]);
 
   const findMinPortIndex = useCallback(
     (minIndex: number, preview: { port: number }, index: number, array: { port: number }[]) => {
@@ -1270,6 +1337,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                     <iframe
                       key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
                       ref={iframeRef}
+                      onLoad={handlePreviewFrameLoad}
                       title="preview"
                       style={{
                         border: 'none',
@@ -1288,6 +1356,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 <iframe
                   key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
                   ref={iframeRef}
+                  onLoad={handlePreviewFrameLoad}
                   title="preview"
                   className="border-none w-full h-full bg-bolt-elements-background-depth-1"
                   src={iframeUrl}

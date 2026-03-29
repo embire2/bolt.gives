@@ -35,6 +35,7 @@
     "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=18432 tsc --pretty false --incremental",
     "gate:release": "node scripts/release-gate.mjs",
     "gate:release:live": "RELEASE_GATE_DOMAINS=https://alpha1.bolt.gives,https://ahmad.bolt.gives node scripts/release-gate.mjs",
+    "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
     "postinstall": "node scripts/install-playwright.mjs",

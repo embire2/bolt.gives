@@ -63,7 +63,8 @@ Current `v3.0.2` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
 - Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
-- More of the heavy desktop shell is now split into on-demand chunks, including `Workbench`, `Preview`, `DiffView`, and the execution/commentary panels.
+- More of the heavy desktop shell is now split into on-demand chunks, including `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and the execution/commentary panels.
+- Markdown, code rendering, thought blocks, and artifact rendering now sit behind deeper lazy boundaries so heavy language/rendering code only loads when a message actually needs it.
 - Long technical feeds now virtualize large event windows instead of keeping the full timeline mounted in the browser.
 - Hosted instances still default to a built-in `FREE` provider backed by `DeepSeek V3.2`.
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
@@ -72,6 +73,8 @@ Current `v3.0.2` release line:
 - Cloudflare Pages coding sessions now route collaboration/event websocket traffic to the managed collaboration backend instead of self-targeting nonexistent `/collab` endpoints, which previously left long runs stuck behind heartbeat commentary with no stable preview.
 - Hosted preview health/error detection now reads server-side preview diagnostics instead of depending on browser iframe scraping, which gives Architect a cleaner signal for self-heal on runtime failures.
 - Hosted preview status polling now follows the exact session id embedded in the active preview URL, so preview recovery stays attached to the real managed runtime session instead of stale client state.
+- Hosted preview updates now use compact server summaries plus SSE instead of relying on tight browser polling loops for state churn.
+- Hosted preview health is now verified on the server after workspace mutations, so self-heal can restore the last known good snapshot even if the browser never catches the transient failure overlay.
 - The main shell is now split into top-level `Chat` and `Workspace` tabs, so prompt/live commentary is isolated from files/preview/terminal and future surfaces can be opened or closed without crushing the prompt area.
 - This repo now includes the operator blueprint and tenancy schema for an experimental **one-client / one-instance Cloudflare managed service**, with:
   - a free experimental shared-runtime path
@@ -105,6 +108,7 @@ Release verdict for `v3.0.2`:
 - Live smoke still passes on `https://alpha1.bolt.gives`
 - Live smoke still passes on `https://ahmad.bolt.gives`
 - Live hosted-runtime browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4`, including server-side sync replacing the fallback starter inside preview without a manual reload.
+- Live hosted-runtime auto-recovery E2E now passes on `https://alpha1.bolt.gives` by generating a hosted app, intentionally breaking it, and verifying that the managed runtime restores the last known good snapshot and returns preview to healthy.
 
 What `v3.0.2` specifically changes:
 
@@ -113,8 +117,11 @@ What `v3.0.2` specifically changes:
 - Hosted preview failure detection now comes from retained server-side preview diagnostics, letting the app surface preview errors and self-heal candidates without asking the browser to inspect the iframe document itself.
 - Managed runtime session ids now stay literal and safe across workspace sync, preview URLs, preview-status lookups, and Architect recovery, which removes a hidden runtime id remap from the hosted path.
 - Browser terminals on hosted instances now stay lightweight and status-oriented instead of pulling heavy interactive shell work into the client tab.
-- `Workbench`, `Preview`, `DiffView`, and execution/commentary panels now load on demand, reducing the default browser bundle cost of the main shell.
+- `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and execution/commentary panels now load on demand, reducing the default browser bundle cost of the main shell.
+- Markdown/code/thought/artifact rendering now loads behind deeper lazy boundaries instead of front-loading language-heavy chat rendering into the initial shell.
 - Long technical feeds now virtualize large event lists so long coding sessions keep the browser responsive instead of mounting the full timeline at once.
+- Hosted preview state now reaches the browser through compact server summaries and SSE updates, which cuts the frequency and size of preview-status churn in the client tab.
+- Hosted runtime now performs its own preview health verification after workspace mutations, so a broken generated app can auto-heal even if the browser never captures the overlay/error document.
 - Cloudflare Pages / preview deployments now resolve hosted FREE-provider credentials correctly across both Pages-style and Worker-style runtime contexts.
 - If a public Pages runtime does not have a local hosted FREE secret, it can now relay hosted FREE requests back to the managed runtime instead of failing with a token error.
 - Public Pages deployments now automatically discard unsafe/stale collaboration socket settings and reconnect to the managed collaboration backend, preventing coding runs from pausing on repeated `/collab` websocket `404` failures.
@@ -165,9 +172,12 @@ Current roadmap split:
 - Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
 - Managed hosted runtime on live instances for installs, builds, tests, dev servers, preview hosting, and file sync, with browser-side WebContainer retained only as the fallback path.
 - Server-side preview diagnostics and status polling so preview failures can be detected and routed into self-heal without relying on browser-side iframe inspection.
+- Compact hosted preview SSE updates plus lower-frequency reconciliation polling instead of tight browser-side preview polling loops.
+- Server-side post-mutation preview health verification so self-heal can detect and restore broken generated apps without waiting for the browser to parse an iframe error state.
 - Cloudflare Pages / preview deployments can now reuse the hosted FREE route through the managed runtime when the preview deployment does not hold the managed secret itself.
 - Top-level `Chat` / `Workspace` tabs with closable workspace persistence so prompt/commentary and files/preview can be focused independently.
-- Harder lazy-loading of `Workbench`, `Preview`, `DiffView`, and execution/commentary panels to reduce default browser load.
+- Harder lazy-loading of `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and execution/commentary panels to reduce default browser load.
+- Deeper lazy-loading of markdown/code/thought/artifact rendering so message-heavy language tooling is deferred until it is actually used.
 - Experimental managed Cloudflare instance architecture documented in-repo, including one-client / one-instance enforcement, a no-cost shared-runtime path, a future `standard-2` (`6 GiB`) Pro tier, and automatic rollout design from `main`.
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.

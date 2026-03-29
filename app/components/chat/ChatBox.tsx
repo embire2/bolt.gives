@@ -1,9 +1,7 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
-import { ModelSelector } from '~/components/chat/ModelSelector';
-import { APIKeyManager } from './APIKeyManager';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import FilePreview from './FilePreview';
 import { ScreenshotStateManager } from './ScreenshotStateManager';
@@ -22,6 +20,11 @@ import { McpTools } from './MCPTools';
 import { WebSearch } from './WebSearch.client';
 import { SketchCanvas, type SketchElement } from './SketchCanvas';
 import { getAutonomyModeLabel, getNextAutonomyMode, type AutonomyMode } from '~/lib/runtime/autonomy';
+
+const LazyModelSelector = lazy(() =>
+  import('~/components/chat/ModelSelector').then((module) => ({ default: module.ModelSelector })),
+);
+const LazyApiKeyManager = lazy(() => import('./APIKeyManager').then((module) => ({ default: module.APIKeyManager })));
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -119,29 +122,45 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         <ClientOnly>
           {() => (
             <div className={props.isModelSettingsCollapsed ? 'hidden' : ''}>
-              <ModelSelector
-                key={props.provider?.name + ':' + props.modelList.length}
-                model={props.model}
-                setModel={props.setModel}
-                modelList={props.modelList}
-                provider={props.provider}
-                setProvider={props.setProvider}
-                onProviderSelection={props.onProviderSelection}
-                providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
-                apiKeys={props.apiKeys}
-                modelLoading={props.isModelLoading}
-              />
+              <Suspense
+                fallback={
+                  <div className="mb-2 rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                    Loading model controls...
+                  </div>
+                }
+              >
+                <LazyModelSelector
+                  key={props.provider?.name + ':' + props.modelList.length}
+                  model={props.model}
+                  setModel={props.setModel}
+                  modelList={props.modelList}
+                  provider={props.provider}
+                  setProvider={props.setProvider}
+                  onProviderSelection={props.onProviderSelection}
+                  providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
+                  apiKeys={props.apiKeys}
+                  modelLoading={props.isModelLoading}
+                />
+              </Suspense>
               {(props.providerList || []).length > 0 &&
                 props.provider &&
                 !LOCAL_PROVIDERS.includes(props.provider.name) &&
                 props.provider.allowsUserApiKey !== false && (
-                  <APIKeyManager
-                    provider={props.provider}
-                    apiKey={props.apiKeys[props.provider.name] || ''}
-                    setApiKey={(key) => {
-                      props.onApiKeysChange(props.provider.name, key);
-                    }}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                        Loading provider key controls...
+                      </div>
+                    }
+                  >
+                    <LazyApiKeyManager
+                      provider={props.provider}
+                      apiKey={props.apiKeys[props.provider.name] || ''}
+                      setApiKey={(key) => {
+                        props.onApiKeysChange(props.provider.name, key);
+                      }}
+                    />
+                  </Suspense>
                 )}
             </div>
           )}

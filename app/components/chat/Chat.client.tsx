@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react';
 import type { Message } from 'ai';
 import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { flushSync } from 'react-dom';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
@@ -13,7 +13,6 @@ import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
-import { BaseChat } from './BaseChat';
 import Cookies from 'js-cookie';
 import { debounce } from '~/utils/debounce';
 import { useSettings } from '~/lib/hooks/useSettings';
@@ -80,6 +79,7 @@ import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent, UsageDataEvent }
 import { requestLikelyNeedsMutatingActions } from '~/lib/runtime/mutating-intent';
 
 const logger = createScopedLogger('Chat');
+const LazyBaseChat = lazy(() => import('./BaseChat').then((module) => ({ default: module.BaseChat })));
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 const MAX_CHAT_DATA_EVENTS = 140;
@@ -369,6 +369,14 @@ export function Chat() {
         />
       )}
     </>
+  );
+}
+
+function ChatSurfaceFallback() {
+  return (
+    <div className="flex h-full min-h-0 w-full items-center justify-center bg-bolt-elements-background-depth-1 text-sm text-bolt-elements-textSecondary">
+      Loading chat shell...
+    </div>
   );
 }
 
@@ -2566,90 +2574,92 @@ Requirements:
         : undefined;
 
     return (
-      <BaseChat
-        ref={animationScope}
-        textareaRef={textareaRef}
-        input={input}
-        showChat={showChat}
-        chatStarted={chatStarted}
-        isStreaming={isLoading || fakeLoading}
-        onStreamingChange={(streaming) => {
-          streamingState.set(streaming);
-        }}
-        enhancingPrompt={enhancingPrompt}
-        promptEnhanced={promptEnhanced}
-        sendMessage={sendMessage}
-        model={model}
-        setModel={handleModelChange}
-        provider={provider}
-        setProvider={handleProviderChange}
-        onProviderSelection={handleProviderSelection}
-        providerList={activeProviders}
-        handleInputChange={(e) => {
-          onTextareaChange(e);
-          debouncedCachePrompt(e);
-        }}
-        handleStop={abort}
-        description={description}
-        importChat={importChat}
-        exportChat={exportChat}
-        messages={messages.map((message, i) => {
-          if (message.role === 'user') {
-            return message;
-          }
+      <Suspense fallback={<ChatSurfaceFallback />}>
+        <LazyBaseChat
+          ref={animationScope}
+          textareaRef={textareaRef}
+          input={input}
+          showChat={showChat}
+          chatStarted={chatStarted}
+          isStreaming={isLoading || fakeLoading}
+          onStreamingChange={(streaming) => {
+            streamingState.set(streaming);
+          }}
+          enhancingPrompt={enhancingPrompt}
+          promptEnhanced={promptEnhanced}
+          sendMessage={sendMessage}
+          model={model}
+          setModel={handleModelChange}
+          provider={provider}
+          setProvider={handleProviderChange}
+          onProviderSelection={handleProviderSelection}
+          providerList={activeProviders}
+          handleInputChange={(e) => {
+            onTextareaChange(e);
+            debouncedCachePrompt(e);
+          }}
+          handleStop={abort}
+          description={description}
+          importChat={importChat}
+          exportChat={exportChat}
+          messages={messages.map((message, i) => {
+            if (message.role === 'user') {
+              return message;
+            }
 
-          return {
-            ...message,
-            content: parsedMessages[i] || '',
-          };
-        })}
-        enhancePrompt={() => {
-          enhancePrompt(
-            input,
-            (input) => {
-              setInput(input);
-              scrollTextArea();
-            },
-            model,
-            provider,
-            apiKeys,
-          );
-        }}
-        uploadedFiles={uploadedFiles}
-        setUploadedFiles={setUploadedFiles}
-        imageDataList={imageDataList}
-        setImageDataList={setImageDataList}
-        actionAlert={actionAlert}
-        actionAlertAutoFixState={actionAlertAutoFixState}
-        clearAlert={() => workbenchStore.clearAlert()}
-        supabaseAlert={supabaseAlert}
-        clearSupabaseAlert={() => workbenchStore.clearSupabaseAlert()}
-        deployAlert={deployAlert}
-        clearDeployAlert={() => workbenchStore.clearDeployAlert()}
-        llmErrorAlert={llmErrorAlert}
-        clearLlmErrorAlert={clearApiErrorAlert}
-        data={boundedChatData}
-        chatMode={chatMode}
-        setChatMode={setChatMode}
-        append={append}
-        designScheme={designScheme}
-        setDesignScheme={setDesignScheme}
-        selectedElement={selectedElement}
-        setSelectedElement={setSelectedElement}
-        addToolResult={addToolResult}
-        onWebSearchResult={handleWebSearchResult}
-        onSaveSession={handleSaveSession}
-        onResumeSession={handleResumeSession}
-        onShareSession={handleShareSession}
-        agentMode={agentMode}
-        setAgentMode={setAgentMode}
-        onSketchChange={setSketchElements}
-        autonomyMode={autonomyMode}
-        setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
-        latestRunMetrics={latestRunMetrics}
-        latestUsage={latestUsage}
-        onApiKeysUpdated={handleApiKeysUpdated}
-      />
+            return {
+              ...message,
+              content: parsedMessages[i] || '',
+            };
+          })}
+          enhancePrompt={() => {
+            enhancePrompt(
+              input,
+              (input) => {
+                setInput(input);
+                scrollTextArea();
+              },
+              model,
+              provider,
+              apiKeys,
+            );
+          }}
+          uploadedFiles={uploadedFiles}
+          setUploadedFiles={setUploadedFiles}
+          imageDataList={imageDataList}
+          setImageDataList={setImageDataList}
+          actionAlert={actionAlert}
+          actionAlertAutoFixState={actionAlertAutoFixState}
+          clearAlert={() => workbenchStore.clearAlert()}
+          supabaseAlert={supabaseAlert}
+          clearSupabaseAlert={() => workbenchStore.clearSupabaseAlert()}
+          deployAlert={deployAlert}
+          clearDeployAlert={() => workbenchStore.clearDeployAlert()}
+          llmErrorAlert={llmErrorAlert}
+          clearLlmErrorAlert={clearApiErrorAlert}
+          data={boundedChatData}
+          chatMode={chatMode}
+          setChatMode={setChatMode}
+          append={append}
+          designScheme={designScheme}
+          setDesignScheme={setDesignScheme}
+          selectedElement={selectedElement}
+          setSelectedElement={setSelectedElement}
+          addToolResult={addToolResult}
+          onWebSearchResult={handleWebSearchResult}
+          onSaveSession={handleSaveSession}
+          onResumeSession={handleResumeSession}
+          onShareSession={handleShareSession}
+          agentMode={agentMode}
+          setAgentMode={setAgentMode}
+          onSketchChange={setSketchElements}
+          autonomyMode={autonomyMode}
+          setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
+          latestRunMetrics={latestRunMetrics}
+          latestUsage={latestUsage}
+          onApiKeysUpdated={handleApiKeysUpdated}
+        />
+      </Suspense>
     );
   },
 );

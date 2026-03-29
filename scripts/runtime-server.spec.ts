@@ -4,10 +4,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
+  buildPreviewStateSummary,
   commandNeedsProjectManifest,
   mergeWorkspaceFileMap,
   normalizeSessionId,
   normalizeIncomingPreviewAlert,
+  probeSessionPreviewHealth,
   resolveRuntimeWorkspaceRoot,
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
@@ -116,6 +118,59 @@ describe('runtime server workspace isolation', () => {
     expect(session.preview?.port).toBe(4110);
   });
 
+  it('builds a compact preview summary without shipping recent logs to the browser event stream', () => {
+    expect(
+      buildPreviewStateSummary({
+        id: 'session-compact',
+        preview: {
+          port: 4100,
+          baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-compact/4100',
+        },
+        previewDiagnostics: {
+          status: 'error',
+          healthy: false,
+          updatedAt: '2026-03-29T12:00:00.000Z',
+          recentLogs: ['line 1', 'line 2'],
+          alert: {
+            type: 'error',
+            title: 'Preview Error',
+            description: 'Unexpected token',
+            content: 'line 1',
+            source: 'preview',
+          },
+        },
+        previewRecovery: {
+          state: 'running',
+          token: 3,
+          message: 'Recovering',
+          updatedAt: '2026-03-29T12:00:01.000Z',
+        },
+      }),
+    ).toEqual({
+      sessionId: 'session-compact',
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-compact/4100',
+      },
+      status: 'error',
+      healthy: false,
+      updatedAt: '2026-03-29T12:00:00.000Z',
+      alert: {
+        type: 'error',
+        title: 'Preview Error',
+        description: 'Unexpected token',
+        content: 'line 1',
+        source: 'preview',
+      },
+      recovery: {
+        state: 'running',
+        token: 3,
+        message: 'Recovering',
+        updatedAt: '2026-03-29T12:00:01.000Z',
+      },
+    });
+  });
+
   it('normalizes browser-reported preview alerts before scheduling recovery', () => {
     expect(
       normalizeIncomingPreviewAlert({
@@ -132,6 +187,29 @@ describe('runtime server workspace isolation', () => {
       source: 'preview',
     });
     expect(normalizeIncomingPreviewAlert({})).toBeNull();
+  });
+
+  it('treats ELIFECYCLE preview logs as a hosted preview failure during health probes', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(' ELIFECYCLE  Command failed.\nerror when starting dev server', {
+        status: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+        },
+      }),
+    );
+
+    const result = await probeSessionPreviewHealth({
+      preview: {
+        port: 4103,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-probe/4103',
+      },
+    });
+
+    fetchSpy.mockRestore();
+
+    expect(result.healthy).toBe(false);
+    expect(result.alert?.description).toContain('ELIFECYCLE');
   });
 
   it('retries transient preview asset failures for browser GET requests only', () => {

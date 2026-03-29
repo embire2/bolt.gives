@@ -41,6 +41,9 @@ const PREVIEW_PORT_RANGE_START = Number(process.env.RUNTIME_PREVIEW_PORT_START |
 const PREVIEW_PORT_RANGE_END = Number(process.env.RUNTIME_PREVIEW_PORT_END || '4999');
 const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
 const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
+const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_DELAY_MS || '1200');
+const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_WINDOW_MS || '12000');
+const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
 const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500];
 const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
 const PREVIEW_ERROR_PATTERNS = [
@@ -53,6 +56,9 @@ const PREVIEW_ERROR_PATTERNS = [
   /Expected [^\n]+ but found end of file/i,
   /PREVIEW_UNCAUGHT_EXCEPTION/i,
   /PREVIEW_UNHANDLED_REJECTION/i,
+  /ELIFECYCLE/i,
+  /Command failed/i,
+  /error when starting dev server/i,
   /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
   /Unhandled\s+Promise\s+Rejection/i,
 ];
@@ -166,16 +172,50 @@ function createPreviewRecoveryState() {
   };
 }
 
+export function buildPreviewStateSummary(session) {
+  return {
+    sessionId: session.id,
+    preview: session.preview || null,
+    status: session.previewDiagnostics.status,
+    healthy: session.previewDiagnostics.healthy,
+    updatedAt: session.previewDiagnostics.updatedAt,
+    alert: session.previewDiagnostics.alert,
+    recovery: session.previewRecovery,
+  };
+}
+
+function writePreviewStateEvent(target, payload) {
+  target.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function broadcastPreviewState(session) {
+  if (!session.previewSubscribers || session.previewSubscribers.size === 0) {
+    return;
+  }
+
+  const payload = buildPreviewStateSummary(session);
+
+  for (const subscriber of session.previewSubscribers) {
+    try {
+      writePreviewStateEvent(subscriber, payload);
+    } catch {
+      session.previewSubscribers.delete(subscriber);
+    }
+  }
+}
+
 function touchPreviewDiagnostics(session, nextState) {
   session.previewDiagnostics = {
     ...session.previewDiagnostics,
     ...nextState,
     updatedAt: new Date().toISOString(),
   };
+  broadcastPreviewState(session);
 }
 
 function clearPreviewDiagnostics(session, status = 'idle') {
   session.previewDiagnostics = createPreviewDiagnostics(status);
+  broadcastPreviewState(session);
 }
 
 function setPreviewRecoveryState(session, state, message = null) {
@@ -187,6 +227,7 @@ function setPreviewRecoveryState(session, state, message = null) {
     message,
     updatedAt: new Date().toISOString(),
   };
+  broadcastPreviewState(session);
 }
 
 function clearPreviewRecoveryState(session) {
@@ -196,6 +237,7 @@ function clearPreviewRecoveryState(session) {
     message: null,
     updatedAt: new Date().toISOString(),
   };
+  broadcastPreviewState(session);
 }
 
 function cloneFileMap(fileMap) {
@@ -244,6 +286,13 @@ function cancelPendingPreviewAutoRestore(session) {
   }
 }
 
+function cancelPendingPreviewVerification(session) {
+  if (session.previewVerificationTimer) {
+    clearTimeout(session.previewVerificationTimer);
+    session.previewVerificationTimer = null;
+  }
+}
+
 function buildPreviewAlertFingerprint(alert) {
   if (!alert) {
     return '';
@@ -254,6 +303,7 @@ function buildPreviewAlertFingerprint(alert) {
 
 function markSessionMutationStart(session) {
   cancelPendingPreviewAutoRestore(session);
+  cancelPendingPreviewVerification(session);
   session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
   session.lastAutoRestoreFingerprint = null;
 
@@ -262,6 +312,64 @@ function markSessionMutationStart(session) {
   }
 
   clearPreviewRecoveryState(session);
+}
+
+export async function probeSessionPreviewHealth(session, requestPath = '/') {
+  const port = Number(session.preview?.port || 0);
+
+  if (!Number.isFinite(port) || port <= 0) {
+    return {
+      healthy: false,
+      statusCode: 0,
+      alert: {
+        type: 'error',
+        title: 'Preview Error',
+        description: 'Preview is not running on the hosted runtime.',
+        content: 'The hosted runtime has no active preview port for this session.',
+        source: 'preview',
+      },
+    };
+  }
+
+  try {
+    const response = await fetch(`http://${HOST}:${port}${requestPath}`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS),
+    });
+    const contentType = String(response.headers.get('content-type') || '');
+    const shouldReadBody =
+      /text\/html|javascript|ecmascript|text\/css/.test(contentType) || requestPath === '/' || requestPath.endsWith('.html');
+    const body = shouldReadBody ? await response.text() : '';
+    const alert =
+      extractPreviewAlertFromText(body) ||
+      (response.status >= 500
+        ? {
+            type: 'error',
+            title: 'Preview Error',
+            description: `Preview request failed with status ${response.status}`,
+            content: normalizePreviewText(body) || `Preview request to ${requestPath} failed with status ${response.status}.`,
+            source: 'preview',
+          }
+        : null);
+
+    return {
+      healthy: !alert && response.status >= 200 && response.status < 400,
+      statusCode: response.status,
+      alert,
+    };
+  } catch (error) {
+    return {
+      healthy: false,
+      statusCode: 0,
+      alert: {
+        type: 'error',
+        title: 'Preview Error',
+        description: error instanceof Error ? error.message : 'Preview health probe failed.',
+        content: `Hosted preview probe for ${requestPath} failed.`,
+        source: 'preview',
+      },
+    };
+  }
 }
 
 export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'preview-error') {
@@ -365,13 +473,105 @@ function schedulePreviewAutoRestore(session, alert) {
   session.autoRestoreTimer = setTimeout(() => {
     session.autoRestoreTimer = null;
 
-    if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId || session.previewDiagnostics.status !== 'error') {
-      return;
-    }
+    void (async () => {
+      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+        return;
+      }
 
-    session.lastAutoRestoreFingerprint = fingerprint;
-    void restoreSessionLastKnownGoodWorkspace(session, 'a preview compilation failure');
+      const probe = await probeSessionPreviewHealth(session);
+
+      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+        return;
+      }
+
+      if (!probe.alert) {
+        if (probe.healthy) {
+          touchPreviewDiagnostics(session, {
+            status: session.preview ? 'ready' : 'idle',
+            healthy: true,
+            alert: null,
+          });
+        }
+
+        return;
+      }
+
+      touchPreviewDiagnostics(session, {
+        status: 'error',
+        healthy: false,
+        alert: probe.alert,
+      });
+      session.lastAutoRestoreFingerprint = fingerprint;
+      await restoreSessionLastKnownGoodWorkspace(session, 'a preview compilation failure');
+    })();
   }, AUTO_RESTORE_DELAY_MS);
+}
+
+function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace update') {
+  if (!session.preview || !session.restorePointFileMap || session.autoRestoreInFlight) {
+    return;
+  }
+
+  cancelPendingPreviewVerification(session);
+  const mutationId = session.workspaceMutationId;
+
+  session.previewVerificationTimer = setTimeout(() => {
+    session.previewVerificationTimer = null;
+
+    void (async () => {
+      const deadline = Date.now() + POST_SYNC_PREVIEW_PROBE_WINDOW_MS;
+
+      while (Date.now() < deadline) {
+        if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+          return;
+        }
+
+        const probe = await probeSessionPreviewHealth(session);
+
+        if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+          return;
+        }
+
+        if (probe.alert) {
+          appendPreviewDiagnosticEntries(session, 'probe', `Detected preview failure after ${reason}: ${probe.alert.description}`);
+          touchPreviewDiagnostics(session, {
+            status: 'error',
+            healthy: false,
+            alert: probe.alert,
+          });
+          schedulePreviewAutoRestore(session, probe.alert);
+          return;
+        }
+
+        if (probe.healthy) {
+          touchPreviewDiagnostics(session, {
+            status: session.preview ? 'ready' : 'idle',
+            healthy: true,
+            alert: null,
+          });
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, POST_SYNC_PREVIEW_PROBE_INTERVAL_MS));
+      }
+
+      const timeoutAlert = {
+        type: 'error',
+        title: 'Preview Error',
+        description: `Preview did not recover after ${reason}.`,
+        content: 'The hosted runtime could not confirm a healthy preview after the latest workspace mutation.',
+        source: 'preview',
+      };
+
+      appendPreviewDiagnosticEntries(session, 'probe', timeoutAlert.description);
+      touchPreviewDiagnostics(session, {
+        status: 'error',
+        healthy: false,
+        alert: timeoutAlert,
+      });
+      schedulePreviewAutoRestore(session, timeoutAlert);
+    })();
+  }, POST_SYNC_PREVIEW_PROBE_DELAY_MS);
 }
 
 function recordPreviewLog(session, channel, chunk) {
@@ -449,6 +649,7 @@ function getSession(sessionId) {
       id: normalized,
       dir: path.join(PERSIST_ROOT, normalized),
       processes: new Map(),
+      previewSubscribers: new Set(),
       preview: undefined,
       previewDiagnostics: createPreviewDiagnostics(),
       previewRecovery: createPreviewRecoveryState(),
@@ -456,6 +657,7 @@ function getSession(sessionId) {
       restorePointFileMap: null,
       workspaceMutationId: 0,
       autoRestoreTimer: null,
+      previewVerificationTimer: null,
       autoRestoreInFlight: false,
       lastAutoRestoreFingerprint: null,
       operationQueue: Promise.resolve(),
@@ -694,6 +896,8 @@ export function updateSessionPreview(session, req, port) {
     baseUrl: previewBaseUrl,
   };
 
+  broadcastPreviewState(session);
+
   return session.preview;
 }
 
@@ -768,6 +972,7 @@ async function waitForPreview(port) {
 
 async function terminateSessionProcesses(session) {
   cancelPendingPreviewAutoRestore(session);
+  cancelPendingPreviewVerification(session);
 
   for (const [, handle] of session.processes.entries()) {
     handle.process.kill('SIGTERM');
@@ -1196,6 +1401,7 @@ export function createRuntimeServer() {
 
     const syncMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/sync$/);
     const previewStatusMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-status$/);
+    const previewEventsMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-events$/);
     const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
     const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
 
@@ -1215,6 +1421,43 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect preview status');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && previewEventsMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(previewEventsMatch[1]);
+        const session = getSession(requestedSessionId);
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-store',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'X-Accel-Buffering': 'no',
+        });
+
+        res.write(': connected\n\n');
+        writePreviewStateEvent(res, buildPreviewStateSummary(session));
+        session.previewSubscribers.add(res);
+
+        const heartbeat = setInterval(() => {
+          try {
+            res.write(': keepalive\n\n');
+          } catch {
+            clearInterval(heartbeat);
+            session.previewSubscribers.delete(res);
+          }
+        }, 15000);
+
+        req.on('close', () => {
+          clearInterval(heartbeat);
+          session.previewSubscribers.delete(res);
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to subscribe to preview events');
       }
       return;
     }
@@ -1280,6 +1523,7 @@ export function createRuntimeServer() {
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
           session.currentFileMap = mergeWorkspaceFileMap(session.currentFileMap, incomingFiles, { prune });
+          schedulePreviewVerificationAfterMutation(session, 'a workspace sync');
         });
         sendJson(res, 200, {
           ok: true,

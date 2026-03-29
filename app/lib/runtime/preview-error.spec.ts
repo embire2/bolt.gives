@@ -68,6 +68,14 @@ describe('extractPreviewAlertFromText', () => {
     expect(alert?.content).toContain('Expected identifier but found end of file');
   });
 
+  it('returns a preview alert for preview process lifecycle failures', () => {
+    const alert = extractPreviewAlertFromText(' ELIFECYCLE  Command failed.\nerror when starting dev server');
+
+    expect(alert?.source).toBe('preview');
+    expect(alert?.description).toContain('ELIFECYCLE');
+    expect(alert?.content).toContain('Command failed');
+  });
+
   it('returns null for healthy preview text', () => {
     expect(extractPreviewAlertFromText('Preview healthy and serving application output.')).toBeNull();
   });

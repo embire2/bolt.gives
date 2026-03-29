@@ -8,8 +8,10 @@
   - latest preview log lines
   - detected runtime alerts
   - healthy/error state
+- Hosted preview state now streams over a compact server-side SSE feed so the browser can follow preview/recovery state changes without tight polling loops.
 - Technical timeline rendering now virtualizes large feed windows so long runs do not keep every historical card mounted in the browser at once.
 - Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
+- A live Playwright recovery smoke now generates a hosted app, intentionally corrupts it, and verifies end-to-end auto-recovery against `https://alpha1.bolt.gives`.
 
 ### Changed
 
@@ -17,11 +19,13 @@
   - `Workbench`
   - `Preview`
   - `DiffView`
+  - provider/settings/deploy/status surfaces
   - commentary/timeline/status panels
+- Markdown rendering now loads behind a lighter shell, and the heavier markdown/code/thought/artifact surfaces are deferred until they are actually needed.
 - Hosted preview error detection now prefers server runtime diagnostics instead of scraping iframe DOM state in the browser.
-- Hosted preview polling now reads compact server status summaries instead of keeping more preview/error parsing logic in the client tab.
+- Hosted preview polling now reads compact server status summaries and SSE updates instead of keeping more preview/error parsing logic in the client tab.
 - Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.
-- Architect/self-heal now has a stronger runtime signal for hosted preview failures because preview exceptions and upstream proxy failures are retained on the managed runtime side.
+- Architect/self-heal now verifies hosted preview health on the server after each workspace mutation, so broken apps can auto-restore even when the browser never catches the transient failure overlay.
 
 ### Planned
 

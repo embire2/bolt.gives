@@ -72,11 +72,17 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 1. Server-first heavy execution
 
 - [~] Hosted installs/builds/dev servers/preview sync now run on the managed server runtime by default.
-- [~] Move the remaining heavy UI/runtime work off the client, especially long commentary/timeline rendering and any local fallback execution that still depends on WebContainer.
+- [~] Move the remaining heavy UI/runtime work off the client, especially any local fallback execution that still depends on WebContainer.
 - [~] Reduce client-side memory pressure during long sessions through bundle reduction, stricter virtualization, and lower-frequency state churn.
 - [~] Add stall/memory telemetry tied to concrete UI recovery actions.
 - [x] Hosted preview health/error polling now runs through a server-side preview status path instead of browser iframe scraping on the managed runtime path.
 - [x] Hosted preview status now follows the literal active runtime session instead of a hidden server-side session-id remap, so self-heal can target the real preview workspace reliably.
+- [x] Provider/settings/deploy surfaces inside the main chat shell now lazy-load behind deeper boundaries instead of inflating the default client bootstrap.
+- [x] Markdown/code/thought/artifact rendering now sits behind deeper lazy boundaries so language-heavy rendering only loads when a message actually needs it.
+- [x] Long technical feeds now virtualize large event windows instead of mounting the entire execution history in the browser.
+- [x] Hosted preview updates now use compact server summaries plus SSE instead of tight high-frequency browser polling loops.
+- [x] Hosted preview health is verified server-side after workspace mutations, so self-heal can restore the last known good snapshot without depending on the browser catching the failure overlay.
+- [x] Live browser E2E now intentionally breaks a generated hosted app and verifies end-to-end preview auto-recovery on `https://alpha1.bolt.gives`.
 
 2. Managed Cloudflare instance control plane
 
@@ -141,6 +147,7 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 - installer smoke suite
 - template smoke suite
 - strict + standard model E2E on `https://alpha1.bolt.gives`
+- hosted preview auto-recovery E2E on `https://alpha1.bolt.gives`
 - strict + standard model E2E on `https://ahmad.bolt.gives`
 - clean Ubuntu no-db startup/install E2E
 - multi-instance update/rollback E2E
