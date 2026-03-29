@@ -106,6 +106,7 @@ describe('FilesStore locking', () => {
     expect(setItemSpy).toHaveBeenCalledTimes(1);
   });
 
+
   it('rejects writes outside the webcontainer workdir', async () => {
     const webcontainer = makeWebcontainer('/workspace');
     const store = new FilesStore(Promise.resolve(webcontainer));

@@ -21,7 +21,7 @@
 - `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
 - Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
 - File-store writes now reject paths outside the WebContainer workdir, preventing accidental out-of-workspace writes that could trigger unstable sync behavior.
-
+]
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:
@@ -40,7 +40,7 @@
 
 ### Minor Features & Polish (Not as important)
 
-- **UI Theme Polish**: Replaced the primary purple accent with a modern red-to-blue gradient theme, including transparent header tabs.
+- **UI Theme Polish**: Replaced the primary blue accent with a modern red-to-blue gradient theme, including transparent header tabs.
 - **Editor Refinement**: Enhanced the CodeMirror editor panel with an inset card design for a premium glassmorphic feel.
 - **Web IDE Integration**: Added an "Open in Web IDE" button to the header for quick access to `webcontainer.codes`.
 - **Functional Runtime Scanner**: Added an active error monitor to the Workbench that intercepts runtime failures and automatically dispatches an auto-fix prompt to the AI agent.

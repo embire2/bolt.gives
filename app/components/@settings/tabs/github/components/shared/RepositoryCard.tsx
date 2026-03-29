@@ -189,12 +189,12 @@ export function RepositoryCard({
   const Component = onSelect ? 'button' : 'div';
   const interactiveProps = onSelect
     ? {
-        onClick: onSelect,
-        className: classNames(
-          'group cursor-pointer hover:border-bolt-elements-borderColorActive dark:hover:border-bolt-elements-borderColorActive transition-all duration-200',
-          className,
-        ),
-      }
+      onClick: onSelect,
+      className: classNames(
+        'group cursor-pointer hover:border-bolt-elements-borderColorActive dark:hover:border-bolt-elements-borderColorActive transition-all duration-200',
+        className,
+      ),
+    }
     : { className };
 
   return (
@@ -287,7 +287,7 @@ export function RepositoryCard({
               </span>
             )}
             {repository.fork && (
-              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
                 Fork
               </span>
             )}

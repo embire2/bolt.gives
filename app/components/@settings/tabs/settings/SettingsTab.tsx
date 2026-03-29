@@ -64,10 +64,10 @@ export default function SettingsTab() {
     return saved
       ? JSON.parse(saved)
       : {
-          notifications: true,
-          language: 'en',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        };
+        notifications: true,
+        language: 'en',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
   });
   const [modelOrchestrator, setModelOrchestrator] = useState<ModelOrchestratorSettings>(() =>
     getModelOrchestratorSettings(),
