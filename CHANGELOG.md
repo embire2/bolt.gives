@@ -17,6 +17,8 @@
 
 - Dependency installation no longer hard-fails when the Playwright Chromium download is blocked by network/domain policy during `postinstall`; installs now continue with a warning unless `PLAYWRIGHT_INSTALL_REQUIRED=1` is explicitly set.
 - Playwright postinstall now skips cleanly when the CLI is missing and writes its install marker directly, removing an unnecessary child-process `node -e` invocation.
+- Non-fatal Playwright browser install failures now still write a marker so future installs do not repeatedly retry known-blocked browser downloads.
+- `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
 - Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
 
 ### Changed
