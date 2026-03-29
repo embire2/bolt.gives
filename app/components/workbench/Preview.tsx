@@ -2,12 +2,20 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { IconButton } from '~/components/ui/IconButton';
 import { workbenchStore } from '~/lib/stores/workbench';
+import {
+  extractHostedRuntimeSessionIdFromPreviewBaseUrl,
+  fetchHostedRuntimeSnapshot,
+  fetchHostedRuntimePreviewStatus,
+  isHostedRuntimeEnabled,
+  reportHostedRuntimePreviewAlert,
+  shouldReloadHostedPreviewIframe,
+} from '~/lib/runtime/hosted-runtime-client';
 import { PortDropdown } from './PortDropdown';
 import { ScreenshotSelector } from './ScreenshotSelector';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
-import { extractPreviewAlertFromDocument } from '~/lib/runtime/preview-error';
+import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -111,12 +119,17 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [selectedWindowSize, setSelectedWindowSize] = useState<WindowSize>(WINDOW_SIZES[0]);
   const [isLandscape, setIsLandscape] = useState(false);
   const [showDeviceFrame, setShowDeviceFrame] = useState(true);
+  const lastReportedHostedPreviewAlertSignatureRef = useRef<string | null>(null);
   const [showDeviceFrameInPreview, setShowDeviceFrameInPreview] = useState(false);
   const expoUrl = useStore(expoUrlAtom);
   const [isExpoQrModalOpen, setIsExpoQrModalOpen] = useState(false);
   const lastBaseUrlRef = useRef<string | undefined>();
   const lastPreviewAlertSignatureRef = useRef<string | null>(null);
   const lastPreviewRevisionRef = useRef<number>(0);
+  const lastHostedPreviewReloadKeyRef = useRef<string | null>(null);
+  const lastAppliedHostedRecoveryTokenRef = useRef<number | null>(null);
+  const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
+  const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
   useEffect(() => {
     if (!activePreview) {
@@ -124,6 +137,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       setDisplayPath('/');
       lastBaseUrlRef.current = undefined;
       lastPreviewRevisionRef.current = 0;
+      lastHostedPreviewReloadKeyRef.current = null;
+      lastAppliedHostedRecoveryTokenRef.current = null;
+      lastReloadedHostedRecoveryTokenRef.current = null;
 
       return;
     }
@@ -151,6 +167,176 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       workbenchStore.clearPreviewAlert();
 
       return undefined;
+    }
+
+    if (hostedRuntimeEnabled) {
+      let cancelled = false;
+
+      const inspectHostedPreview = async () => {
+        try {
+          const previewSessionId =
+            extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) ||
+            workbenchStore.hostedRuntimeSessionId;
+          const status = await fetchHostedRuntimePreviewStatus(previewSessionId);
+
+          if (cancelled) {
+            return;
+          }
+
+          if (
+            status.preview &&
+            (!activePreview ||
+              status.preview.baseUrl !== activePreview.baseUrl ||
+              status.preview.port !== activePreview.port)
+          ) {
+            workbenchStore.syncHostedPreview({
+              port: status.preview.port,
+              baseUrl: status.preview.baseUrl,
+              revision: activePreview?.revision,
+            });
+          }
+
+          const alert =
+            status.alert ||
+            (status.status === 'error'
+              ? extractPreviewAlertFromText(status.recentLogs.join('\n')) || {
+                  type: 'error',
+                  title: 'Preview Error',
+                  description: 'The hosted preview reported an error.',
+                  content:
+                    status.recentLogs.join('\n').slice(0, 5000) ||
+                    'The hosted preview failed, but no detailed diagnostic payload was available.',
+                  source: 'preview',
+                }
+              : null);
+          const signature = alert ? `${alert.description}\n${alert.content}` : null;
+
+          if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
+            lastPreviewAlertSignatureRef.current = signature;
+            workbenchStore.setPreviewAlert(alert);
+
+            return;
+          }
+
+          if (!signature && lastPreviewAlertSignatureRef.current) {
+            lastPreviewAlertSignatureRef.current = null;
+            workbenchStore.clearPreviewAlert();
+          }
+
+          if (
+            previewSessionId &&
+            status.recovery?.state === 'restored' &&
+            typeof status.recovery.token === 'number' &&
+            lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token
+          ) {
+            const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
+
+            if (cancelled) {
+              return;
+            }
+
+            await workbenchStore.restoreSnapshot(snapshotFiles);
+            lastAppliedHostedRecoveryTokenRef.current = status.recovery.token;
+            lastReloadedHostedRecoveryTokenRef.current = null;
+          }
+
+          try {
+            const previewDocument = iframeRef.current?.contentDocument;
+            const iframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
+            const iframeSignature = iframeAlert ? `${iframeAlert.description}\n${iframeAlert.content}` : null;
+
+            if (iframeAlert && iframeSignature && iframeSignature !== lastPreviewAlertSignatureRef.current) {
+              lastPreviewAlertSignatureRef.current = iframeSignature;
+              workbenchStore.setPreviewAlert(iframeAlert);
+
+              if (previewSessionId && iframeSignature !== lastReportedHostedPreviewAlertSignatureRef.current) {
+                lastReportedHostedPreviewAlertSignatureRef.current = iframeSignature;
+
+                try {
+                  await reportHostedRuntimePreviewAlert(previewSessionId, iframeAlert);
+                } catch {
+                  // Ignore transient preview alert reporting failures and retry on the next poll if needed.
+                }
+              }
+
+              return;
+            }
+
+            if (!iframeSignature && signature && lastPreviewAlertSignatureRef.current === signature) {
+              // Keep the server-reported alert active until the runtime status clears it.
+            } else if (!iframeSignature && !signature && lastPreviewAlertSignatureRef.current) {
+              lastPreviewAlertSignatureRef.current = null;
+              lastReportedHostedPreviewAlertSignatureRef.current = null;
+              workbenchStore.clearPreviewAlert();
+            }
+          } catch {
+            // Ignore transient iframe access failures and rely on status polling.
+          }
+
+          const previewTarget = status.preview || activePreview;
+
+          if (!previewTarget) {
+            return;
+          }
+
+          const targetUrl = buildPreviewUrl(previewTarget.baseUrl, displayPath, previewTarget.revision);
+
+          if (
+            status.recovery?.state === 'restored' &&
+            lastAppliedHostedRecoveryTokenRef.current === status.recovery.token &&
+            lastReloadedHostedRecoveryTokenRef.current !== status.recovery.token &&
+            iframeRef.current
+          ) {
+            lastHostedPreviewReloadKeyRef.current = null;
+            lastReloadedHostedRecoveryTokenRef.current = status.recovery.token;
+            iframeRef.current.src = targetUrl;
+            setIframeUrl(targetUrl);
+          }
+
+          let frameLocation = '';
+
+          try {
+            frameLocation =
+              iframeRef.current?.contentWindow?.location?.href ||
+              iframeRef.current?.contentDocument?.location?.href ||
+              '';
+          } catch {
+            frameLocation = '';
+          }
+
+          const reloadDecision = shouldReloadHostedPreviewIframe({
+            frameLocation,
+            targetUrl,
+            status,
+            lastReloadKey: lastHostedPreviewReloadKeyRef.current,
+          });
+
+          if (reloadDecision.shouldReload && iframeRef.current) {
+            lastHostedPreviewReloadKeyRef.current = reloadDecision.reloadKey;
+            iframeRef.current.src = targetUrl;
+            setIframeUrl(targetUrl);
+
+            return;
+          }
+
+          if (!reloadDecision.reloadKey && lastHostedPreviewReloadKeyRef.current && frameLocation) {
+            lastHostedPreviewReloadKeyRef.current = null;
+          }
+        } catch {
+          // Ignore transient runtime status fetch failures and retry on the next interval.
+        }
+      };
+
+      void inspectHostedPreview();
+
+      const interval = window.setInterval(() => {
+        void inspectHostedPreview();
+      }, 2500);
+
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
     }
 
     const inspectPreview = () => {
@@ -187,7 +373,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       window.clearInterval(interval);
       window.clearTimeout(initialProbe);
     };
-  }, [iframeUrl]);
+  }, [activePreview?.baseUrl, activePreview?.port, hostedRuntimeEnabled, iframeUrl]);
 
   const findMinPortIndex = useCallback(
     (minIndex: number, preview: { port: number }, index: number, array: { port: number }[]) => {

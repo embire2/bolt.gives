@@ -1,8 +1,7 @@
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, type RefCallback, useEffect, useRef, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
-import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { Messages } from './Messages.client';
@@ -29,13 +28,9 @@ import { ChatBox } from './ChatBox';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
-import { StepRunnerFeed } from './StepRunnerFeed';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
-import { ExecutionTransparencyPanel } from './ExecutionTransparencyPanel';
-import { ExecutionStickyFooter } from './ExecutionStickyFooter';
 import { UpdateBanner } from './UpdateBanner';
-import { CommentaryFeed } from './CommentaryFeed';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
@@ -64,6 +59,31 @@ const SURFACE_TABS: SurfaceTabDefinition[] = [
     closable: true,
   },
 ];
+
+const LazyWorkbench = React.lazy(() =>
+  import('~/components/workbench/Workbench.client').then((module) => ({ default: module.Workbench })),
+);
+const LazyCommentaryFeed = React.lazy(() =>
+  import('./CommentaryFeed').then((module) => ({ default: module.CommentaryFeed })),
+);
+const LazyStepRunnerFeed = React.lazy(() =>
+  import('./StepRunnerFeed').then((module) => ({ default: module.StepRunnerFeed })),
+);
+const LazyExecutionTransparencyPanel = React.lazy(() =>
+  import('./ExecutionTransparencyPanel').then((module) => ({ default: module.ExecutionTransparencyPanel })),
+);
+const LazyExecutionStickyFooter = React.lazy(() =>
+  import('./ExecutionStickyFooter').then((module) => ({ default: module.ExecutionStickyFooter })),
+);
+
+function LazyPanelFallback({ title }: { title: string }) {
+  return (
+    <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-3 text-xs text-bolt-elements-textSecondary">
+      <div className="font-medium text-bolt-elements-textPrimary">{title}</div>
+      <div className="mt-2 animate-pulse text-bolt-elements-textTertiary">Loading…</div>
+    </div>
+  );
+}
 
 function readStoredSurfaceLayout(): { openTabs: SurfaceTabId[]; activeTab: SurfaceTabId } | null {
   if (typeof window === 'undefined') {
@@ -645,7 +665,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             </div>
             {chatStarted ? (
               <div className="space-y-2">
-                <CommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+                <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
+                  <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+                </Suspense>
                 <div
                   ref={technicalFeedRef}
                   className="modern-scrollbar min-h-[160px] max-h-[32vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2 sm:min-h-[190px] sm:max-h-[38vh] md:min-h-[220px] md:max-h-[44vh]"
@@ -655,17 +677,28 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   </div>
                   <div className="space-y-2">
                     {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
-                    <ExecutionTransparencyPanel
-                      data={data}
-                      model={model}
-                      provider={provider}
-                      isStreaming={isStreaming}
-                      autonomyMode={autonomyMode}
-                      latestRunMetrics={latestRunMetrics}
-                      latestUsage={latestUsage}
-                    />
-                    <StepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
-                    <ExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
+                    <Suspense fallback={<LazyPanelFallback title="Execution Transparency" />}>
+                      <LazyExecutionTransparencyPanel
+                        data={data}
+                        model={model}
+                        provider={provider}
+                        isStreaming={isStreaming}
+                        autonomyMode={autonomyMode}
+                        latestRunMetrics={latestRunMetrics}
+                        latestUsage={latestUsage}
+                      />
+                    </Suspense>
+                    <Suspense fallback={<LazyPanelFallback title="Technical Timeline" />}>
+                      <LazyStepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
+                    </Suspense>
+                    <Suspense fallback={<LazyPanelFallback title="Execution Status" />}>
+                      <LazyExecutionStickyFooter
+                        data={data}
+                        model={model}
+                        provider={provider}
+                        isStreaming={isStreaming}
+                      />
+                    </Suspense>
                     <UpdateBanner />
                   </div>
                 </div>
@@ -870,14 +903,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               >
                 <ClientOnly>
                   {() => (
-                    <Workbench
-                      embedded
-                      forceVisible
-                      chatStarted={chatStarted}
-                      isStreaming={isStreaming}
-                      setSelectedElement={setSelectedElement}
-                      onRequestClose={() => closeSurface('workspace')}
-                    />
+                    <Suspense fallback={<LazyPanelFallback title="Workspace" />}>
+                      <LazyWorkbench
+                        embedded
+                        forceVisible
+                        chatStarted={chatStarted}
+                        isStreaming={isStreaming}
+                        setSelectedElement={setSelectedElement}
+                        onRequestClose={() => closeSurface('workspace')}
+                      />
+                    </Suspense>
                   )}
                 </ClientOnly>
               </div>

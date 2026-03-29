@@ -103,13 +103,14 @@ export function extractPreviewPortFromOutput(text) {
     return undefined;
   }
 
-  const match = text.match(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):(\d+)(?:\/|\b)/i);
+  const normalizedText = text.replace(/\u001b\[[0-9;]*m/g, '').replace(/\u0000/g, '');
+  const matches = [...normalizedText.matchAll(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):(\d+)(?:\/|\b)/gi)];
 
-  if (!match) {
+  if (matches.length === 0) {
     return undefined;
   }
 
-  const port = Number(match[1]);
+  const port = Number(matches.at(-1)?.[1]);
 
   if (!Number.isFinite(port) || port <= 0) {
     return undefined;

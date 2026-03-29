@@ -143,6 +143,19 @@ describe('diagnoseArchitectIssue', () => {
     expect(diagnosis?.issueId).toBe('vite-preview-compile-error');
     expect(diagnosis?.maxAutoAttempts).toBe(2);
   });
+
+  it('detects the fallback starter still being visible in preview', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'warning',
+      title: 'Starter Placeholder Still Visible',
+      description: 'The preview is still showing the built-in fallback starter instead of the requested app.',
+      content: 'Vite + React\nYour fallback starter is ready.',
+      source: 'preview',
+    });
+
+    expect(diagnosis?.issueId).toBe('starter-placeholder-visible');
+    expect(diagnosis?.maxAutoAttempts).toBe(3);
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {
@@ -202,11 +215,13 @@ describe('buildArchitectAutoHealPrompt', () => {
       alert,
       diagnosis,
       attemptNumber: 1,
+      originalRequest: 'Build a doctor appointment scheduling app with reminders.',
     });
 
     expect(prompt).toContain(`${ARCHITECT_NAME} Auto-Heal`);
     expect(prompt).toContain('vite-fullcalendar-css-export');
     expect(prompt).toContain('/home/project/src/main.jsx');
+    expect(prompt).toContain('Build a doctor appointment scheduling app with reminders.');
     expect(prompt).toContain('Safety guardrails');
   });
 });

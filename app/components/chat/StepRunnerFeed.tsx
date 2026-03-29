@@ -1,4 +1,6 @@
 import { useStore } from '@nanostores/react';
+import { useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import type { JSONValue } from 'ai';
@@ -173,6 +175,10 @@ interface StepRunnerFeedProps {
   title?: string;
 }
 
+function estimateCardHeight(textLength: number, baseHeight = 104) {
+  return baseHeight + Math.min(280, Math.ceil(textLength / 120) * 22);
+}
+
 export function StepRunnerFeed(props: StepRunnerFeedProps) {
   const events = useStore(workbenchStore.stepRunnerEvents);
   const commentaryEvents =
@@ -180,16 +186,9 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
   const checkpointEvents = (props.data || []).filter(isCheckpointDataEvent).slice(-12);
   const architectEvents = events.filter(isArchitectTimelineEvent).slice(-16);
 
-  if (
-    events.length === 0 &&
-    commentaryEvents.length === 0 &&
-    checkpointEvents.length === 0 &&
-    architectEvents.length === 0
-  ) {
-    return null;
-  }
-
   const recent = events.filter((event) => !isArchitectTimelineEvent(event)).slice(-96);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const canVirtualize = typeof ResizeObserver === 'function';
 
   const getPrimaryText = (event: InteractiveStepRunnerEvent): string => {
     switch (event.type) {
@@ -217,25 +216,34 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
     }
   };
 
-  return (
-    <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium text-bolt-elements-textPrimary">{props.title || 'Execution Timeline'}</span>
-        <button
-          className="bg-transparent text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
-          onClick={() => workbenchStore.clearStepRunnerEvents()}
-        >
-          Clear
-        </button>
-      </div>
-      <div className="modern-scrollbar max-h-[44vh] sm:max-h-[30rem] space-y-2 overflow-x-hidden overflow-y-auto pr-1">
-        {commentaryEvents.map(renderCommentaryCard)}
-        {architectEvents.map(renderArchitectCard)}
-        {checkpointEvents.map((event, index) => (
-          <div
-            key={`${event.timestamp}-${event.checkpointType}-${index}`}
-            className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2"
-          >
+  const feedItems = useMemo(() => {
+    const items: Array<{ key: string; estimateSize: number; render: () => JSX.Element }> = [];
+
+    commentaryEvents.forEach((event, index) => {
+      const detailLength = `${event.message}\n${event.detail || ''}`.length;
+      items.push({
+        key: `commentary-${event.timestamp}-${event.phase}-${index}`,
+        estimateSize: estimateCardHeight(detailLength, 128),
+        render: () => renderCommentaryCard(event, index) as JSX.Element,
+      });
+    });
+
+    architectEvents.forEach((event, index) => {
+      const detailLength = `${event.description || ''}\n${event.output || ''}\n${event.error || ''}`.length;
+      items.push({
+        key: `architect-${event.timestamp}-${event.type}-${index}`,
+        estimateSize: estimateCardHeight(detailLength, 120),
+        render: () => renderArchitectCard(event, index) as JSX.Element,
+      });
+    });
+
+    checkpointEvents.forEach((event, index) => {
+      const detailLength = `${event.message}\n${event.command || ''}\n${event.stderr || ''}`.length;
+      items.push({
+        key: `checkpoint-${event.timestamp}-${event.checkpointType}-${index}`,
+        estimateSize: estimateCardHeight(detailLength, 132),
+        render: () => (
+          <div className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wide text-bolt-elements-textSecondary">
                 checkpoint/{event.checkpointType}
@@ -258,40 +266,110 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
               </details>
             ) : null}
           </div>
-        ))}
-        {recent.map((event, index) => {
-          const primaryText = getPrimaryText(event);
+        ),
+      });
+    });
 
-          return (
-            <div
-              key={`${event.timestamp}-${event.type}-${index}`}
-              className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2"
-            >
-              <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wide text-bolt-elements-textSecondary">
-                <span>[{event.type}]</span>
-                {typeof event.stepIndex === 'number' ? <span>step {event.stepIndex + 1}</span> : null}
-                {typeof event.exitCode === 'number' ? (
-                  <span className="rounded border border-bolt-elements-borderColor px-1 py-0">
-                    exit {event.exitCode}
-                  </span>
-                ) : null}
-              </div>
-              <div className="whitespace-pre-wrap break-words font-mono text-[12px] text-bolt-elements-textPrimary">
-                {primaryText}
-              </div>
-              {event.type === 'step-start' && event.command && event.command.length > 0 ? (
-                <div className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px] text-bolt-elements-textTertiary">
-                  {event.command.join(' ')}
-                </div>
-              ) : null}
-              {event.type === 'error' ? (
-                <div className="mt-1 whitespace-pre-wrap break-words text-xs text-bolt-elements-textTertiary">
-                  hint: {getSuggestedFix(event)}
-                </div>
+    recent.forEach((event, index) => {
+      const primaryText = getPrimaryText(event);
+      const detailLength = `${primaryText}\n${event.command?.join(' ') || ''}\n${event.error || ''}`.length;
+
+      items.push({
+        key: `event-${event.timestamp}-${event.type}-${index}`,
+        estimateSize: estimateCardHeight(detailLength, 104),
+        render: () => (
+          <div className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-2 py-2">
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wide text-bolt-elements-textSecondary">
+              <span>[{event.type}]</span>
+              {typeof event.stepIndex === 'number' ? <span>step {event.stepIndex + 1}</span> : null}
+              {typeof event.exitCode === 'number' ? (
+                <span className="rounded border border-bolt-elements-borderColor px-1 py-0">exit {event.exitCode}</span>
               ) : null}
             </div>
-          );
-        })}
+            <div className="whitespace-pre-wrap break-words font-mono text-[12px] text-bolt-elements-textPrimary">
+              {primaryText}
+            </div>
+            {event.type === 'step-start' && event.command && event.command.length > 0 ? (
+              <div className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px] text-bolt-elements-textTertiary">
+                {event.command.join(' ')}
+              </div>
+            ) : null}
+            {event.type === 'error' ? (
+              <div className="mt-1 whitespace-pre-wrap break-words text-xs text-bolt-elements-textTertiary">
+                hint: {getSuggestedFix(event)}
+              </div>
+            ) : null}
+          </div>
+        ),
+      });
+    });
+
+    return items;
+  }, [architectEvents, checkpointEvents, commentaryEvents, recent]);
+  const rowVirtualizer = useVirtualizer({
+    count: feedItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => feedItems[index]?.estimateSize ?? 120,
+    overscan: 8,
+  });
+  const shouldVirtualize = canVirtualize && feedItems.length > 24;
+
+  if (feedItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-medium text-bolt-elements-textPrimary">{props.title || 'Execution Timeline'}</span>
+        <button
+          className="bg-transparent text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
+          onClick={() => workbenchStore.clearStepRunnerEvents()}
+        >
+          Clear
+        </button>
+      </div>
+      <div
+        ref={scrollRef}
+        className="modern-scrollbar max-h-[44vh] overflow-x-hidden overflow-y-auto pr-1 sm:max-h-[30rem]"
+      >
+        {shouldVirtualize ? (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              position: 'relative',
+              width: '100%',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+              const item = feedItems[virtualItem.index];
+
+              return (
+                <div
+                  key={item.key}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                    paddingBottom: '0.5rem',
+                  }}
+                >
+                  {item.render()}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {feedItems.map((item) => (
+              <div key={item.key}>{item.render()}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

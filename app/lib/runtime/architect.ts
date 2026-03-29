@@ -29,6 +29,19 @@ export type ArchitectAutoHealDecision = {
 
 const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
   {
+    id: 'starter-placeholder-visible',
+    title: 'Fallback starter is still visible in preview',
+    source: 'preview',
+    patterns: [/Starter Placeholder Still Visible/i, /Your fallback starter is ready\./i],
+    maxAutoAttempts: 3,
+    guidance: [
+      'Continue from the existing project files and do not re-run scaffolding if package.json already exists.',
+      'Replace the fallback starter UI in the main entry screen (for example src/App.tsx, src/App.jsx, or app/page.tsx).',
+      'Implement the original user request rather than returning another scaffold or placeholder screen.',
+      'Keep the preview running and verify that the fallback starter text is gone before finishing.',
+    ],
+  },
+  {
     id: 'vite-fullcalendar-css-export',
     title: 'FullCalendar CSS export mismatch',
     source: 'preview',
@@ -306,8 +319,9 @@ export function buildArchitectAutoHealPrompt(options: {
   alert: ActionAlert;
   diagnosis: ArchitectDiagnosis;
   attemptNumber: number;
+  originalRequest?: string;
 }): string {
-  const { alert, diagnosis, attemptNumber } = options;
+  const { alert, diagnosis, attemptNumber, originalRequest } = options;
   const errorBlock = [alert.description, alert.content].filter(Boolean).join('\n');
   const numberedGuidance = diagnosis.guidance.map((line, idx) => `${idx + 1}. ${line}`).join('\n');
 
@@ -321,6 +335,7 @@ export function buildArchitectAutoHealPrompt(options: {
     '```',
     errorBlock,
     '```',
+    ...(originalRequest?.trim() ? ['', 'Original request to complete:', '```', originalRequest.trim(), '```'] : []),
     '',
     'Execute a safe self-heal workflow now:',
     numberedGuidance,

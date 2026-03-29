@@ -1,4 +1,5 @@
 import type { FileMap } from '~/lib/stores/files';
+import type { ActionAlert } from '~/types/actions';
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const PAGES_RUNTIME_BASE_URL = 'https://alpha1.bolt.gives/runtime';
@@ -13,6 +14,27 @@ export interface HostedRuntimeCommandResult {
   output: string;
   exitCode: number;
   preview?: HostedRuntimePreviewInfo;
+}
+
+export interface HostedRuntimePreviewStatus {
+  sessionId: string;
+  preview: HostedRuntimePreviewInfo | null;
+  status: 'idle' | 'starting' | 'ready' | 'error';
+  healthy: boolean;
+  updatedAt: string | null;
+  recentLogs: string[];
+  alert: ActionAlert | null;
+  recovery: {
+    state: 'idle' | 'running' | 'restored';
+    token: number;
+    message: string | null;
+    updatedAt: string | null;
+  } | null;
+}
+
+export interface HostedPreviewReloadDecision {
+  shouldReload: boolean;
+  reloadKey: string | null;
 }
 
 export type HostedRuntimeEvent =
@@ -59,6 +81,52 @@ export function getHostedRuntimeBaseUrl() {
     protocol: window.location.protocol,
     originHost: window.location.host,
   });
+}
+
+export function extractHostedRuntimeSessionIdFromPreviewBaseUrl(baseUrl: string | null | undefined): string | null {
+  if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+    return null;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    const match = url.pathname.match(/\/runtime\/preview\/([^/]+)\/\d+(?:\/|$)/);
+
+    return match?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function shouldReloadHostedPreviewIframe(options: {
+  frameLocation: string | null | undefined;
+  targetUrl: string;
+  status: Pick<HostedRuntimePreviewStatus, 'healthy' | 'updatedAt'>;
+  lastReloadKey?: string | null;
+}): HostedPreviewReloadDecision {
+  const frameLocation = String(options.frameLocation || '').trim();
+  const reloadKey = `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
+  const isBlockedFrame =
+    !frameLocation || frameLocation === 'about:blank' || frameLocation.startsWith('chrome-error://');
+
+  if (!options.status.healthy || !isBlockedFrame) {
+    return {
+      shouldReload: false,
+      reloadKey: null,
+    };
+  }
+
+  if (options.lastReloadKey === reloadKey) {
+    return {
+      shouldReload: false,
+      reloadKey,
+    };
+  }
+
+  return {
+    shouldReload: true,
+    reloadKey,
+  };
 }
 
 export function isHostedRuntimeEnabled() {
@@ -158,4 +226,56 @@ export async function runHostedRuntimeCommand(options: {
     exitCode,
     preview,
   };
+}
+
+export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promise<HostedRuntimePreviewStatus> {
+  const response = await fetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-status`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime preview status failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as HostedRuntimePreviewStatus;
+}
+
+export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {
+  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime snapshot failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { files?: FileMap };
+
+  return payload.files || {};
+}
+
+export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: ActionAlert) {
+  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ alert }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime preview alert failed with status ${response.status}`);
+  }
 }

@@ -6,7 +6,6 @@ import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import net from 'node:net';
 import {
   createPreviewProbeCoordinator,
@@ -37,9 +36,26 @@ const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6
 const PREVIEW_READY_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_READY_TIMEOUT_MS || '60000');
 const COMMAND_TIMEOUT_MS = Number(process.env.RUNTIME_COMMAND_TIMEOUT_MS || '900000');
 const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAIT_MS || '12000');
+const PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS || '15000');
 const PREVIEW_PORT_RANGE_START = Number(process.env.RUNTIME_PREVIEW_PORT_START || '4100');
 const PREVIEW_PORT_RANGE_END = Number(process.env.RUNTIME_PREVIEW_PORT_END || '4999');
+const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
+const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
+const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500];
 const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
+const PREVIEW_ERROR_PATTERNS = [
+  /\[plugin:vite:[^\]]+\]/i,
+  /Pre-transform error/i,
+  /Transform failed with \d+ error/i,
+  /Failed to resolve import/i,
+  /Failed to scan for dependencies from entries/i,
+  /Unexpected token/i,
+  /Expected [^\n]+ but found end of file/i,
+  /PREVIEW_UNCAUGHT_EXCEPTION/i,
+  /PREVIEW_UNHANDLED_REJECTION/i,
+  /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
+  /Unhandled\s+Promise\s+Rejection/i,
+];
 
 const sessions = new Map();
 
@@ -65,8 +81,363 @@ function sendText(res, status, text, extraHeaders = {}) {
   res.end(text);
 }
 
-function normalizeSessionId(sessionId) {
-  return createHash('sha256').update(sessionId).digest('hex').slice(0, 24);
+export function applyPreviewResponseHeaders(rawHeaders = {}) {
+  const headers = { ...rawHeaders };
+
+  delete headers['x-frame-options'];
+  delete headers['X-Frame-Options'];
+  delete headers['content-security-policy'];
+  delete headers['Content-Security-Policy'];
+  delete headers['content-security-policy-report-only'];
+  delete headers['Content-Security-Policy-Report-Only'];
+
+  return {
+    ...headers,
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+  };
+}
+
+export function shouldRetryPreviewProxyResponse({ method = 'GET', statusCode = 0, attempt = 0 } = {}) {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+
+  if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') {
+    return false;
+  }
+
+  if (![502, 503, 504].includes(Number(statusCode))) {
+    return false;
+  }
+
+  return attempt >= 0 && attempt < PREVIEW_PROXY_RETRY_DELAYS_MS.length;
+}
+
+function normalizePreviewText(value) {
+  return String(value || '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replace(/\u0000/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function extractPreviewAlertFromText(rawText) {
+  const combinedText = normalizePreviewText(rawText);
+
+  if (!combinedText) {
+    return null;
+  }
+
+  if (!PREVIEW_ERROR_PATTERNS.some((pattern) => pattern.test(combinedText))) {
+    return null;
+  }
+
+  const [firstLine = 'Preview failed to compile or run.'] = combinedText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    type: 'error',
+    title: 'Preview Error',
+    description: firstLine.slice(0, 220),
+    content: combinedText.slice(0, 5000),
+    source: 'preview',
+  };
+}
+
+function createPreviewDiagnostics(status = 'idle') {
+  return {
+    status,
+    healthy: false,
+    updatedAt: null,
+    recentLogs: [],
+    alert: null,
+  };
+}
+
+function createPreviewRecoveryState() {
+  return {
+    state: 'idle',
+    token: 0,
+    message: null,
+    updatedAt: null,
+  };
+}
+
+function touchPreviewDiagnostics(session, nextState) {
+  session.previewDiagnostics = {
+    ...session.previewDiagnostics,
+    ...nextState,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function clearPreviewDiagnostics(session, status = 'idle') {
+  session.previewDiagnostics = createPreviewDiagnostics(status);
+}
+
+function setPreviewRecoveryState(session, state, message = null) {
+  const previous = session.previewRecovery || createPreviewRecoveryState();
+
+  session.previewRecovery = {
+    state,
+    token: previous.token + 1,
+    message,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function clearPreviewRecoveryState(session) {
+  session.previewRecovery = {
+    ...(session.previewRecovery || createPreviewRecoveryState()),
+    state: 'idle',
+    message: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function cloneFileMap(fileMap) {
+  return JSON.parse(JSON.stringify(fileMap || {}));
+}
+
+export function mergeWorkspaceFileMap(currentFileMap, incomingFileMap, options = {}) {
+  const { prune = false } = options;
+  const nextFileMap = prune ? {} : cloneFileMap(currentFileMap || {});
+
+  for (const [filePath, dirent] of Object.entries(incomingFileMap || {})) {
+    if (dirent === undefined || dirent === null) {
+      delete nextFileMap[filePath];
+      continue;
+    }
+
+    nextFileMap[filePath] = { ...dirent };
+  }
+
+  return nextFileMap;
+}
+
+function appendPreviewDiagnosticEntries(session, channel, rawText) {
+  const normalized = normalizePreviewText(rawText);
+
+  if (!normalized) {
+    return session.previewDiagnostics.recentLogs;
+  }
+
+  const nextLogs = [
+    ...session.previewDiagnostics.recentLogs,
+    ...normalized.split('\n').filter(Boolean).map((line) => `[${channel}] ${line}`),
+  ].slice(-MAX_PREVIEW_LOG_LINES);
+
+  touchPreviewDiagnostics(session, {
+    recentLogs: nextLogs,
+  });
+
+  return nextLogs;
+}
+
+function cancelPendingPreviewAutoRestore(session) {
+  if (session.autoRestoreTimer) {
+    clearTimeout(session.autoRestoreTimer);
+    session.autoRestoreTimer = null;
+  }
+}
+
+function buildPreviewAlertFingerprint(alert) {
+  if (!alert) {
+    return '';
+  }
+
+  return `${alert.title}\n${alert.description}\n${String(alert.content || '').slice(0, 2000)}`;
+}
+
+function markSessionMutationStart(session) {
+  cancelPendingPreviewAutoRestore(session);
+  session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
+  session.lastAutoRestoreFingerprint = null;
+
+  if (session.previewDiagnostics.healthy && session.currentFileMap && Object.keys(session.currentFileMap).length > 0) {
+    session.restorePointFileMap = cloneFileMap(session.currentFileMap);
+  }
+
+  clearPreviewRecoveryState(session);
+}
+
+export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'preview-error') {
+  if (!session.restorePointFileMap || session.autoRestoreInFlight) {
+    return false;
+  }
+
+  session.autoRestoreInFlight = true;
+  setPreviewRecoveryState(
+    session,
+    'running',
+    'The hosted runtime is restoring the last known working workspace after a preview failure.',
+  );
+  appendPreviewDiagnosticEntries(
+    session,
+    'recovery',
+    `Restoring the last known working workspace snapshot after ${reason}.`,
+  );
+  touchPreviewDiagnostics(session, {
+    status: 'starting',
+    healthy: false,
+    alert: {
+      type: 'info',
+      title: 'Preview Recovery In Progress',
+      description: 'The hosted runtime is restoring the last known working workspace.',
+      content: `Recovery reason: ${reason}.`,
+      source: 'preview',
+    },
+  });
+
+  try {
+    await syncWorkspaceSnapshot(session, session.restorePointFileMap, { prune: false });
+    session.currentFileMap = cloneFileMap(session.restorePointFileMap);
+    let previewRecovered = false;
+
+    if (Number.isFinite(Number(session.preview?.port)) && Number(session.preview?.port) > 0) {
+      try {
+        await waitForPreview(Number(session.preview.port));
+        clearPreviewDiagnostics(session, session.preview ? 'ready' : 'idle');
+        appendPreviewDiagnosticEntries(session, 'recovery', 'Preview is healthy again after restoring the last known working workspace snapshot.');
+        touchPreviewDiagnostics(session, {
+          status: session.preview ? 'ready' : 'idle',
+          healthy: true,
+          alert: null,
+        });
+        previewRecovered = true;
+      } catch (error) {
+        appendPreviewDiagnosticEntries(
+          session,
+          'recovery',
+          `Workspace snapshot restored, but the preview is still warming up: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+
+    if (!previewRecovered) {
+      appendPreviewDiagnosticEntries(
+        session,
+        'recovery',
+        'Last known working workspace snapshot restored. Waiting for the preview to become healthy again.',
+      );
+    }
+
+    setPreviewRecoveryState(session, 'restored', 'The last known working workspace snapshot has been restored.');
+
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to restore the last known working workspace.';
+    appendPreviewDiagnosticEntries(session, 'recovery', `Restore failed: ${message}`);
+    touchPreviewDiagnostics(session, {
+      status: 'error',
+      healthy: false,
+      alert: {
+        type: 'error',
+        title: 'Preview Recovery Failed',
+        description: 'The hosted runtime could not restore the last known working workspace.',
+        content: message,
+        source: 'preview',
+      },
+    });
+
+    return false;
+  } finally {
+    session.autoRestoreInFlight = false;
+  }
+}
+
+function schedulePreviewAutoRestore(session, alert) {
+  if (!session.restorePointFileMap || session.autoRestoreInFlight) {
+    return;
+  }
+
+  const fingerprint = buildPreviewAlertFingerprint(alert);
+
+  if (!fingerprint || session.lastAutoRestoreFingerprint === fingerprint) {
+    return;
+  }
+
+  cancelPendingPreviewAutoRestore(session);
+  const mutationId = session.workspaceMutationId;
+  session.autoRestoreTimer = setTimeout(() => {
+    session.autoRestoreTimer = null;
+
+    if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId || session.previewDiagnostics.status !== 'error') {
+      return;
+    }
+
+    session.lastAutoRestoreFingerprint = fingerprint;
+    void restoreSessionLastKnownGoodWorkspace(session, 'a preview compilation failure');
+  }, AUTO_RESTORE_DELAY_MS);
+}
+
+function recordPreviewLog(session, channel, chunk) {
+  const normalized = normalizePreviewText(chunk);
+
+  if (!normalized) {
+    return;
+  }
+
+  const nextLogs = appendPreviewDiagnosticEntries(session, channel, normalized);
+  const detectedAlert = extractPreviewAlertFromText(nextLogs.join('\n'));
+
+  touchPreviewDiagnostics(session, {
+    status: detectedAlert ? 'error' : session.previewDiagnostics.status,
+    healthy: detectedAlert ? false : session.previewDiagnostics.healthy,
+    alert: detectedAlert || session.previewDiagnostics.alert,
+  });
+
+  if (detectedAlert) {
+    schedulePreviewAutoRestore(session, detectedAlert);
+  }
+}
+
+function recordPreviewResponse(session, body, statusCode, upstreamPath) {
+  const normalizedBody = normalizePreviewText(body);
+  const detectedAlert =
+    extractPreviewAlertFromText(normalizedBody) ||
+    (statusCode >= 500
+      ? {
+          type: 'error',
+          title: 'Preview Error',
+          description: `Preview request failed with status ${statusCode}`,
+          content: normalizedBody || `Preview request to ${upstreamPath} failed with status ${statusCode}.`,
+          source: 'preview',
+        }
+      : null);
+
+  if (detectedAlert) {
+    touchPreviewDiagnostics(session, {
+      status: 'error',
+      healthy: false,
+      alert: detectedAlert,
+    });
+    schedulePreviewAutoRestore(session, detectedAlert);
+
+    return;
+  }
+
+  if (statusCode >= 200 && statusCode < 400 && (upstreamPath === '/' || upstreamPath === '/index.html' || upstreamPath.endsWith('.html'))) {
+    touchPreviewDiagnostics(session, {
+      status: session.preview ? 'ready' : 'idle',
+      healthy: true,
+      alert: null,
+    });
+  }
+}
+
+export function normalizeSessionId(sessionId) {
+  const rawValue = String(sessionId || '').trim();
+  const normalized = rawValue.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
+
+  if (!normalized) {
+    throw new Error('Missing runtime session id');
+  }
+
+  return normalized;
 }
 
 function getSession(sessionId) {
@@ -79,6 +450,14 @@ function getSession(sessionId) {
       dir: path.join(PERSIST_ROOT, normalized),
       processes: new Map(),
       preview: undefined,
+      previewDiagnostics: createPreviewDiagnostics(),
+      previewRecovery: createPreviewRecoveryState(),
+      currentFileMap: {},
+      restorePointFileMap: null,
+      workspaceMutationId: 0,
+      autoRestoreTimer: null,
+      autoRestoreInFlight: false,
+      lastAutoRestoreFingerprint: null,
       operationQueue: Promise.resolve(),
     };
     sessions.set(normalized, session);
@@ -301,6 +680,46 @@ function getRequestOrigin(req) {
   return `${proto}://${host}`;
 }
 
+export function updateSessionPreview(session, req, port) {
+  if (!Number.isFinite(Number(port)) || Number(port) <= 0) {
+    return session.preview || null;
+  }
+
+  const resolvedPort = Number(port);
+  const previewBaseUrl = `${getRequestOrigin(req)}/runtime/preview/${session.id}/${resolvedPort}`;
+
+  session.preview = {
+    ...(session.preview || {}),
+    port: resolvedPort,
+    baseUrl: previewBaseUrl,
+  };
+
+  return session.preview;
+}
+
+export function normalizeIncomingPreviewAlert(input) {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const type = String(input.type || 'error').trim() || 'error';
+  const title = String(input.title || 'Preview Error').trim() || 'Preview Error';
+  const description = String(input.description || '').trim();
+  const content = String(input.content || '').trim();
+
+  if (!description && !content) {
+    return null;
+  }
+
+  return {
+    type,
+    title,
+    description: (description || title).slice(0, 220),
+    content: content.slice(0, 5000),
+    source: 'preview',
+  };
+}
+
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -348,12 +767,16 @@ async function waitForPreview(port) {
 }
 
 async function terminateSessionProcesses(session) {
+  cancelPendingPreviewAutoRestore(session);
+
   for (const [, handle] of session.processes.entries()) {
     handle.process.kill('SIGTERM');
   }
 
   session.processes.clear();
   session.preview = undefined;
+  clearPreviewDiagnostics(session);
+  clearPreviewRecoveryState(session);
 }
 
 async function handleRunCommand(req, res, session, body) {
@@ -387,6 +810,7 @@ async function handleRunCommand(req, res, session, body) {
     return;
   }
 
+  markSessionMutationStart(session);
   const env = {
     ...process.env,
     CI: '1',
@@ -398,6 +822,7 @@ async function handleRunCommand(req, res, session, body) {
 
   if (kind === 'start') {
     await terminateSessionProcesses(session);
+    clearPreviewDiagnostics(session, 'starting');
   }
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
@@ -427,12 +852,6 @@ async function handleRunCommand(req, res, session, body) {
   const previewCoordinator = createPreviewProbeCoordinator(waitForPreview);
   previewProbePromise = previewCoordinator.readyPromise;
 
-  if (kind === 'start') {
-    if (previewPort) {
-      previewCoordinator.startProbe(previewPort);
-    }
-  }
-
   const detectPreviewPort = (text) => {
     if (kind !== 'start') {
       return;
@@ -444,6 +863,7 @@ async function handleRunCommand(req, res, session, body) {
       return;
     }
 
+    updateSessionPreview(session, req, detectedPort);
     previewCoordinator.startProbe(detectedPort);
   };
 
@@ -451,6 +871,9 @@ async function handleRunCommand(req, res, session, body) {
     const text = chunk.toString();
     output += text;
     detectPreviewPort(text);
+    if (kind === 'start') {
+      recordPreviewLog(session, 'stdout', text);
+    }
     writeEvent({ type: 'stdout', chunk: text });
   });
 
@@ -458,6 +881,9 @@ async function handleRunCommand(req, res, session, body) {
     const text = chunk.toString();
     output += text;
     detectPreviewPort(text);
+    if (kind === 'start') {
+      recordPreviewLog(session, 'stderr', text);
+    }
     writeEvent({ type: 'stderr', chunk: text });
   });
 
@@ -470,8 +896,12 @@ async function handleRunCommand(req, res, session, body) {
         }),
       ]);
       const resolvedPort = (await previewProbePromise).port;
-      const previewBaseUrl = `${getRequestOrigin(req)}/runtime/preview/${session.id}/${resolvedPort}`;
-      session.preview = { port: resolvedPort, baseUrl: previewBaseUrl };
+      updateSessionPreview(session, req, resolvedPort);
+      touchPreviewDiagnostics(session, {
+        status: 'ready',
+        healthy: true,
+        alert: null,
+      });
       writeEvent({
         type: 'ready',
         preview: session.preview,
@@ -482,6 +912,18 @@ async function handleRunCommand(req, res, session, body) {
       res.end();
       return;
     } catch (error) {
+      touchPreviewDiagnostics(session, {
+        status: 'error',
+        healthy: false,
+        alert:
+          extractPreviewAlertFromText(output) || {
+            type: 'error',
+            title: 'Preview Error',
+            description: error instanceof Error ? error.message : String(error),
+            content: normalizePreviewText(output) || (error instanceof Error ? error.message : String(error)),
+            source: 'preview',
+          },
+      });
       writeEvent({ type: 'stderr', chunk: `${error instanceof Error ? error.message : String(error)}\n` });
       child.kill('SIGTERM');
       const exitCode = await exitPromise.catch(() => 1);
@@ -521,7 +963,7 @@ async function handleRunCommand(req, res, session, body) {
   }
 }
 
-function proxyPreviewRequest(req, res, pathname) {
+function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   const target = parsePreviewProxyRequestTarget(req.url || pathname);
 
   if (!target) {
@@ -538,6 +980,18 @@ function proxyPreviewRequest(req, res, pathname) {
   }
 
   const port = Number(portRaw);
+  const method = String(req.method || 'GET').toUpperCase();
+  const scheduleRetry = () => {
+    if (res.writableEnded || res.destroyed) {
+      return;
+    }
+
+    const delay = PREVIEW_PROXY_RETRY_DELAYS_MS[attempt] || 0;
+
+    setTimeout(() => {
+      proxyPreviewRequest(req, res, pathname, attempt + 1);
+    }, delay);
+  };
   const upstreamReq = http.request(
     {
       host: HOST,
@@ -550,12 +1004,36 @@ function proxyPreviewRequest(req, res, pathname) {
       },
     },
     (upstreamRes) => {
+      const statusCode = upstreamRes.statusCode || 502;
+
+      if (shouldRetryPreviewProxyResponse({ method, statusCode, attempt })) {
+        upstreamRes.resume();
+        upstreamRes.on('end', scheduleRetry);
+        return;
+      }
+
       const headers = { ...upstreamRes.headers };
       const contentType = String(headers['content-type'] || '');
       const shouldRewrite = /text\/html|javascript|ecmascript|text\/css/.test(contentType);
 
       if (!shouldRewrite) {
-        res.writeHead(upstreamRes.statusCode || 502, headers);
+        if (statusCode >= 500) {
+          const alert = {
+            type: 'error',
+            title: 'Preview Error',
+            description: `Preview request failed with status ${statusCode}`,
+            content: `Non-text preview response failed for ${upstreamPath}`,
+            source: 'preview',
+          };
+          touchPreviewDiagnostics(session, {
+            status: 'error',
+            healthy: false,
+            alert,
+          });
+          schedulePreviewAutoRestore(session, alert);
+        }
+
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
         upstreamRes.pipe(res);
         return;
       }
@@ -567,17 +1045,39 @@ function proxyPreviewRequest(req, res, pathname) {
       upstreamRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         const rewritten = rewritePreviewAssetUrls(body, previewBasePath);
+        recordPreviewResponse(session, rewritten, statusCode, upstreamPath);
 
         delete headers['content-length'];
         delete headers['content-encoding'];
 
-        res.writeHead(upstreamRes.statusCode || 502, headers);
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
         res.end(rewritten);
       });
     },
   );
 
+  upstreamReq.setTimeout(PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS, () => {
+    upstreamReq.destroy(new Error(`Preview upstream timed out after ${PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS}ms`));
+  });
+
   upstreamReq.on('error', (error) => {
+    if (shouldRetryPreviewProxyResponse({ method, statusCode: 502, attempt })) {
+      scheduleRetry();
+      return;
+    }
+
+    touchPreviewDiagnostics(session, {
+      status: 'error',
+      healthy: false,
+      alert: {
+        type: 'error',
+        title: 'Preview Error',
+        description: `Preview proxy failed: ${error.message}`,
+        content: `Proxy request to ${upstreamPath} failed.`,
+        source: 'preview',
+      },
+    });
+    schedulePreviewAutoRestore(session, session.previewDiagnostics.alert);
     sendText(res, 502, `Preview proxy failed: ${error.message}`);
   });
 
@@ -695,17 +1195,95 @@ export function createRuntimeServer() {
     }
 
     const syncMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/sync$/);
+    const previewStatusMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-status$/);
+    const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
+    const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
+
+    if (req.method === 'GET' && previewStatusMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(previewStatusMatch[1]);
+        const session = getSession(requestedSessionId);
+        sendJson(res, 200, {
+          sessionId: requestedSessionId,
+          preview: session.preview || null,
+          status: session.previewDiagnostics.status,
+          healthy: session.previewDiagnostics.healthy,
+          updatedAt: session.previewDiagnostics.updatedAt,
+          recentLogs: session.previewDiagnostics.recentLogs,
+          alert: session.previewDiagnostics.alert,
+          recovery: session.previewRecovery,
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect preview status');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && snapshotMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(snapshotMatch[1]);
+        const session = getSession(requestedSessionId);
+        sendJson(res, 200, {
+          sessionId: requestedSessionId,
+          files: session.currentFileMap || {},
+          recovery: session.previewRecovery,
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect runtime snapshot');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && previewAlertMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(previewAlertMatch[1]);
+        const session = getSession(requestedSessionId);
+        const body = await readJsonBody(req);
+        const alert = normalizeIncomingPreviewAlert(body.alert);
+
+        if (!alert) {
+          sendText(res, 400, 'Missing preview alert payload');
+          return;
+        }
+
+        appendPreviewDiagnosticEntries(
+          session,
+          'browser-preview',
+          `Browser reported preview failure: ${alert.description}\n${alert.content}`,
+        );
+        touchPreviewDiagnostics(session, {
+          status: 'error',
+          healthy: false,
+          alert,
+        });
+        schedulePreviewAutoRestore(session, alert);
+
+        sendJson(res, 200, {
+          ok: true,
+          sessionId: requestedSessionId,
+          recovery: session.previewRecovery,
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record preview alert');
+      }
+      return;
+    }
 
     if (req.method === 'POST' && syncMatch) {
       try {
-        const session = getSession(syncMatch[1]);
+        const requestedSessionId = normalizeSessionId(syncMatch[1]);
+        const session = getSession(requestedSessionId);
         const body = await readJsonBody(req);
-        await runSessionOperation(session, () =>
-          syncWorkspaceSnapshot(session, body.files || {}, { prune: body.prune === true }),
-        );
+        const incomingFiles = body.files || {};
+        const prune = body.prune === true;
+        await runSessionOperation(session, async () => {
+          markSessionMutationStart(session);
+          await syncWorkspaceSnapshot(session, incomingFiles, { prune });
+          session.currentFileMap = mergeWorkspaceFileMap(session.currentFileMap, incomingFiles, { prune });
+        });
         sendJson(res, 200, {
           ok: true,
-          sessionId: session.id,
+          sessionId: requestedSessionId,
           preview: session.preview || null,
         });
       } catch (error) {
@@ -718,7 +1296,7 @@ export function createRuntimeServer() {
 
     if (req.method === 'POST' && commandMatch) {
       try {
-        const session = getSession(commandMatch[1]);
+        const session = getSession(normalizeSessionId(commandMatch[1]));
         const body = await readJsonBody(req);
         await runSessionOperation(session, () => handleRunCommand(req, res, session, body));
       } catch (error) {
@@ -729,7 +1307,7 @@ export function createRuntimeServer() {
 
     if (req.method === 'DELETE' && commandMatch) {
       try {
-        const session = getSession(commandMatch[1]);
+        const session = getSession(normalizeSessionId(commandMatch[1]));
         await runSessionOperation(session, () => terminateSessionProcesses(session));
         sendJson(res, 200, { ok: true });
       } catch (error) {

@@ -289,6 +289,26 @@ export class PreviewsStore {
     this.previews.set(previews);
   }
 
+  replacePreview(previousPreview: PreviewInfo, nextPreview: PreviewInfo) {
+    const previews = [...this.previews.get()];
+    const existingIndex = previews.findIndex(
+      (preview) => preview.port === previousPreview.port && preview.baseUrl === previousPreview.baseUrl,
+    );
+
+    if (existingIndex >= 0) {
+      previews[existingIndex] = {
+        ...previews[existingIndex],
+        ...nextPreview,
+      };
+      previews.sort((left, right) => left.port - right.port);
+      this.previews.set(previews);
+
+      return;
+    }
+
+    this.setPreview(nextPreview);
+  }
+
   // Broadcast state change to all tabs
   broadcastStateChange(previewId: string) {
     const timestamp = Date.now();

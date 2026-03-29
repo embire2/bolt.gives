@@ -989,6 +989,10 @@ Requirements:
         return;
       }
 
+      if (actionAlert?.source === 'preview') {
+        return;
+      }
+
       const starterWorkspaceReady = hasMaterializedStarterWorkspace(files);
       const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(files);
 
@@ -1005,7 +1009,7 @@ Requirements:
 
       starterContinuationTriggeredRef.current = false;
       dispatchStarterContinuation('stream-finished');
-    }, [dispatchStarterContinuation, fakeLoading, files, isLoading]);
+    }, [actionAlert?.source, dispatchStarterContinuation, fakeLoading, files, isLoading]);
 
     useEffect(() => {
       if (selectionBootstrapRef.current || activeProviders.length === 0) {
@@ -2311,6 +2315,7 @@ Requirements:
           alert,
           diagnosis,
           attemptNumber,
+          originalRequest: pendingStarterContinuationRef.current || latestUserRequestRef.current || undefined,
         });
         const payload = buildModelSelectionEnvelope({
           model,

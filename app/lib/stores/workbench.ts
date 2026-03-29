@@ -8,6 +8,7 @@ import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
 import { PreviewsStore } from './previews';
+import type { PreviewInfo } from './previews';
 import { TerminalStore } from './terminal';
 import JSZip from 'jszip';
 import fileSaver from 'file-saver';
@@ -30,6 +31,7 @@ import {
 import { createResilientExecutionQueue } from '~/lib/runtime/serial-execution-queue';
 import { createScopedLogger } from '~/utils/logger';
 import { toWorkbenchAbsoluteFilePath } from '~/lib/runtime/file-paths';
+import { extractHostedRuntimeSessionIdFromPreviewBaseUrl } from '~/lib/runtime/hosted-runtime-client';
 
 const { saveAs } = fileSaver;
 const logger = createScopedLogger('WorkbenchStore');
@@ -275,6 +277,10 @@ export class WorkbenchStore {
     return this.#previewsStore.previews;
   }
 
+  get hostedRuntimeSessionId() {
+    return this.#hostedRuntimeSessionId;
+  }
+
   get files() {
     return this.#filesStore.files;
   }
@@ -316,6 +322,39 @@ export class WorkbenchStore {
   clearPreviewAlert() {
     if (this.actionAlert.get()?.source === 'preview') {
       this.actionAlert.set(undefined);
+    }
+  }
+
+  syncHostedPreview(preview: HostedPreviewSync) {
+    const currentPreviews = this.#previewsStore.previews.get();
+    const nextPreview = {
+      port: preview.port,
+      ready: true,
+      baseUrl: preview.baseUrl,
+      revision: preview.revision,
+    };
+    const nextHostedSessionId = extractHostedRuntimeSessionIdFromPreviewBaseUrl(preview.baseUrl);
+    const existingPreview = currentPreviews.find((candidate) => {
+      if (candidate.port === preview.port || candidate.baseUrl === preview.baseUrl) {
+        return true;
+      }
+
+      if (!nextHostedSessionId) {
+        return false;
+      }
+
+      return extractHostedRuntimeSessionIdFromPreviewBaseUrl(candidate.baseUrl) === nextHostedSessionId;
+    });
+
+    if (existingPreview) {
+      this.#previewsStore.replacePreview(existingPreview, nextPreview);
+    } else {
+      this.#previewsStore.setPreview(nextPreview);
+    }
+
+    if (!existingPreview) {
+      this.currentView.set('preview');
+      this.showWorkbench.set(true);
     }
   }
 
@@ -1420,5 +1459,7 @@ export class WorkbenchStore {
     }
   }
 }
+
+type HostedPreviewSync = Pick<PreviewInfo, 'port' | 'baseUrl' | 'revision'>;
 
 export const workbenchStore = new WorkbenchStore();

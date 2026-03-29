@@ -13,6 +13,14 @@ describe('runtime preview helpers', () => {
     expect(extractPreviewPortFromOutput('ready - started server on 0.0.0.0:3000, url: http://localhost:3000')).toBe(
       3000,
     );
+    expect(
+      extractPreviewPortFromOutput(
+        'Port 4100 is in use, trying another one...\n➜  Local:   http://127.0.0.1:4101/\n➜  Local:   http://127.0.0.1:4102/',
+      ),
+    ).toBe(4102);
+    expect(extractPreviewPortFromOutput('\u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   http://127.0.0.1:4103/')).toBe(
+      4103,
+    );
     expect(extractPreviewPortFromOutput('nothing useful here')).toBeUndefined();
   });
 

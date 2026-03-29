@@ -86,13 +86,13 @@ describe('BaseChat surface tabs', () => {
     expect(screen.queryByTestId('workbench-panel')).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
-    expect(screen.getByTestId('workbench-panel')).toBeTruthy();
+    expect(await screen.findByTestId('workbench-panel')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close Workspace tab' }));
     expect(screen.queryByTestId('workbench-panel')).toBeNull();
     expect(screen.getByRole('tab', { name: /Open Workspace/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /Open Workspace/i }));
-    expect(screen.getByTestId('workbench-panel')).toBeTruthy();
+    expect(await screen.findByTestId('workbench-panel')).toBeTruthy();
   });
 });

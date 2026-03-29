@@ -1,13 +1,12 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useState, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
 import { diffLines, type Change } from 'diff';
 import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
 import type { FileHistory } from '~/types/actions';
-import { DiffView } from './DiffView';
 import {
   type OnChangeCallback as OnEditorChange,
   type OnScrollCallback as OnEditorScroll,
@@ -19,7 +18,6 @@ import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { renderLogger } from '~/utils/logger';
 import { EditorPanel } from './EditorPanel';
-import { Preview } from './Preview';
 import useViewport from '~/lib/hooks';
 
 import { usePreviewStore } from '~/lib/stores/previews';
@@ -29,7 +27,23 @@ import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportCh
 import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { PerformanceMonitor } from './PerformanceMonitor';
+
+const LazyDiffView = lazy(() => import('./DiffView').then((module) => ({ default: module.DiffView })));
+const LazyPreview = lazy(() => import('./Preview').then((module) => ({ default: module.Preview })));
+const LazyPerformanceMonitor = lazy(() =>
+  import('./PerformanceMonitor').then((module) => ({ default: module.PerformanceMonitor })),
+);
+
+function WorkbenchPanelFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full items-center justify-center px-6 text-center">
+      <div>
+        <div className="text-sm font-medium text-bolt-elements-textPrimary">{label}</div>
+        <div className="mt-2 animate-pulse text-xs text-bolt-elements-textTertiary">Loading…</div>
+      </div>
+    </div>
+  );
+}
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -316,6 +330,7 @@ export const Workbench = memo(
     const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
+    const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
     const hasWorkspaceContent =
       hasPreview ||
       Boolean(selectedFile) ||
@@ -334,6 +349,19 @@ export const Workbench = memo(
         setSelectedView('preview');
       }
     }, [hasPreview]);
+
+    useEffect(() => {
+      setLoadedViews((current) => {
+        if (current.has(selectedView)) {
+          return current;
+        }
+
+        const next = new Set(current);
+        next.add(selectedView);
+
+        return next;
+      });
+    }, [selectedView]);
 
     useEffect(() => {
       workbenchStore.setDocuments(files);
@@ -403,7 +431,9 @@ export const Workbench = memo(
             />
             <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
             <div className="ml-auto mr-2">
-              <PerformanceMonitor />
+              <Suspense fallback={<div className="text-xs text-bolt-elements-textTertiary">Perf…</div>}>
+                <LazyPerformanceMonitor />
+              </Suspense>
             </div>
             {selectedView === 'code' && (
               <div className="flex overflow-y-auto">
@@ -514,15 +544,23 @@ export const Workbench = memo(
                     onFileReset={onFileReset}
                   />
                 </View>
-                <View
-                  initial={{ x: '100%' }}
-                  animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
-                >
-                  <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
-                </View>
-                <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
-                  <Preview setSelectedElement={setSelectedElement} />
-                </View>
+                {loadedViews.has('diff') ? (
+                  <View
+                    initial={{ x: '100%' }}
+                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
+                  >
+                    <Suspense fallback={<WorkbenchPanelFallback label="Loading diff view" />}>
+                      <LazyDiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
+                    </Suspense>
+                  </View>
+                ) : null}
+                {loadedViews.has('preview') ? (
+                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                    <Suspense fallback={<WorkbenchPanelFallback label="Loading preview" />}>
+                      <LazyPreview setSelectedElement={setSelectedElement} />
+                    </Suspense>
+                  </View>
+                ) : null}
               </>
             ) : (
               <div className="h-full flex items-center justify-center px-6 text-center">

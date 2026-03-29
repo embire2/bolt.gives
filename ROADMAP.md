@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-03-28
+Last updated: 2026-03-29
 
 Status legend:
 
@@ -72,9 +72,11 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 1. Server-first heavy execution
 
 - [~] Hosted installs/builds/dev servers/preview sync now run on the managed server runtime by default.
-- [ ] Move the remaining heavy UI/runtime work off the client, especially long commentary/timeline rendering and any local fallback execution that still depends on WebContainer.
-- [ ] Reduce client-side memory pressure during long sessions through bundle reduction, stricter virtualization, and lower-frequency state churn.
-- [ ] Add stall/memory telemetry tied to concrete UI recovery actions.
+- [~] Move the remaining heavy UI/runtime work off the client, especially long commentary/timeline rendering and any local fallback execution that still depends on WebContainer.
+- [~] Reduce client-side memory pressure during long sessions through bundle reduction, stricter virtualization, and lower-frequency state churn.
+- [~] Add stall/memory telemetry tied to concrete UI recovery actions.
+- [x] Hosted preview health/error polling now runs through a server-side preview status path instead of browser iframe scraping on the managed runtime path.
+- [x] Hosted preview status now follows the literal active runtime session instead of a hidden server-side session-id remap, so self-heal can target the real preview workspace reliably.
 
 2. Managed Cloudflare instance control plane
 
@@ -113,7 +115,7 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 7. Architect v2
 
 - [~] Expand failure signatures and preflight detection coverage.
-- [ ] Add confidence-scored recovery paths and mode-aware safe auto-fixes.
+- [~] Add confidence-scored recovery paths and mode-aware safe auto-fixes.
 - [ ] Keep recovery reporting plain-English by default with expandable technical detail.
 
 8. Cost and update integrity

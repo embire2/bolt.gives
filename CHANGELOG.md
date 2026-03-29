@@ -2,6 +2,27 @@
 
 ## v3.0.3 (in progress)
 
+### Added
+
+- Hosted preview health now includes a server-side `preview-status` path that tracks:
+  - latest preview log lines
+  - detected runtime alerts
+  - healthy/error state
+- Technical timeline rendering now virtualizes large feed windows so long runs do not keep every historical card mounted in the browser at once.
+- Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
+
+### Changed
+
+- The workspace shell now lazy-loads more of the heavy client surfaces:
+  - `Workbench`
+  - `Preview`
+  - `DiffView`
+  - commentary/timeline/status panels
+- Hosted preview error detection now prefers server runtime diagnostics instead of scraping iframe DOM state in the browser.
+- Hosted preview polling now reads compact server status summaries instead of keeping more preview/error parsing logic in the client tab.
+- Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.
+- Architect/self-heal now has a stronger runtime signal for hosted preview failures because preview exceptions and upstream proxy failures are retained on the managed runtime side.
+
 ### Planned
 
 - Build the actual managed Cloudflare instance control plane described in `docs/cloudflare-managed-instances.md`.
