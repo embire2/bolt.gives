@@ -97,6 +97,15 @@ describe('FilesStore locking', () => {
     expect(webcontainer.fs.writeFile).not.toHaveBeenCalled();
   });
 
+  it('coalesces duplicate lock writes to localStorage', () => {
+    const setItemSpy = vi.spyOn((globalThis as any).localStorage, 'setItem');
+
+    addLockedFolder('default', '/workspace/locked-dir');
+    addLockedFolder('default', '/workspace/locked-dir');
+
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('restoreSnapshot hydrates the file map and syncs text/binary files into the container', async () => {
     const webcontainer = makeWebcontainer('/workspace');
     const store = new FilesStore(Promise.resolve(webcontainer));
