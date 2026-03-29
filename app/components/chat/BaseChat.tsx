@@ -840,7 +840,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             <div
               role="tablist"
               aria-label="Workspace surfaces"
-              className="flex flex-wrap items-center gap-2 pl-12 sm:pl-14"
+              className={classNames(styles.SurfaceRail, 'flex flex-wrap items-center gap-2 pl-12 sm:pl-14')}
             >
               {visibleSurfaceTabs.map((tab) => {
                 const isActive = activeSurface === tab.id;
@@ -851,9 +851,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   <div
                     key={tab.id}
                     className={classNames(
-                      'group flex items-center gap-1 rounded-full px-2 py-1 text-sm transition-colors border border-transparent',
+                      styles.SurfaceTab,
+                      'group flex items-center gap-1 rounded-full px-2 py-1 text-sm transition-colors',
                       isActive
-                        ? 'bg-transparent text-bolt-elements-textPrimary'
+                        ? classNames(styles.SurfaceTabActive, 'bg-transparent text-bolt-elements-textPrimary')
                         : 'bg-transparent text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
                     )}
                   >
@@ -863,7 +864,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       role="tab"
                       aria-selected={isActive}
                       aria-controls={panelId}
-                      className="flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5"
+                      className={classNames(
+                        'flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5',
+                        isActive && styles.SurfaceTabLabelActive,
+                      )}
                       onClick={() => openSurface(tab.id)}
                       title={tab.description}
                     >
@@ -891,7 +895,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   role="tab"
                   aria-selected={false}
                   aria-controls={`${tab.id}-surface-panel`}
-                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
+                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-transparent px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
                   onClick={() => openSurface(tab.id)}
                   title={tab.description}
                 >

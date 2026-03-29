@@ -30,7 +30,7 @@ body {
 }
 
 .text-gradient-crimson-azure {
-  background: linear-gradient(135deg, #dc2626 0%, #8A5FFF 50%, #051937 100%);
+  background: linear-gradient(135deg, var(--bolt-gradient-red) 0%, var(--bolt-gradient-blue) 50%, var(--bolt-gradient-azure) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -39,7 +39,7 @@ body {
 .gradient-border-crimson-azure {
   border: 2px solid transparent;
   background: linear-gradient(var(--bolt-elements-bg-depth-1), var(--bolt-elements-bg-depth-1)) padding-box,
-              linear-gradient(135deg, #dc2626, #8A5FFF, #051937) border-box;
+              linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue), var(--bolt-gradient-azure)) border-box;
 }
 
 .modern-scrollbar {

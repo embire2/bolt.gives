@@ -13,6 +13,15 @@
 - Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
 - A live Playwright recovery smoke now generates a hosted app, intentionally corrupts it, and verifies end-to-end auto-recovery against `https://alpha1.bolt.gives`.
 
+### Fixed
+
+- Dependency installation no longer hard-fails when the Playwright Chromium download is blocked by network/domain policy during `postinstall`; installs now continue with a warning unless `PLAYWRIGHT_INSTALL_REQUIRED=1` is explicitly set.
+- Playwright postinstall now skips cleanly when the CLI is missing and writes its install marker directly, removing an unnecessary child-process `node -e` invocation.
+- Non-fatal Playwright browser install failures now still write a marker so future installs do not repeatedly retry known-blocked browser downloads.
+- `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
+- Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
+- File-store writes now reject paths outside the WebContainer workdir, preventing accidental out-of-workspace writes that could trigger unstable sync behavior.
+
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:
@@ -26,6 +35,8 @@
 - Hosted preview polling now reads compact server status summaries and SSE updates instead of keeping more preview/error parsing logic in the client tab.
 - Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.
 - Architect/self-heal now verifies hosted preview health on the server after each workspace mutation, so broken apps can auto-restore even when the browser never catches the transient failure overlay.
+- UI theme polish now removes remaining purple accents in primary settings surfaces in favor of a consistent red/blue palette, with stronger top-rail glow styling and more transparent Chat/Workspace surface tabs.
+- Red/blue glow colors are now centralized via theme variables and the heavier tab-rail effects are reduced/gated for accessibility/perf (`prefers-reduced-motion`, contrast-safe active tab fallback).
 
 ### Minor Features & Polish (Not as important)
 

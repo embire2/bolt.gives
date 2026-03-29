@@ -13,6 +13,7 @@ export interface LockedItem {
 
 // In-memory cache for locked items to reduce localStorage reads
 let lockedItemsCache: LockedItem[] | null = null;
+let lastPersistedLockedItemsJson: string | null = null;
 
 // Map for faster lookups by chatId and path
 const lockedItemsMap = new Map<string, Map<string, LockedItem>>();
@@ -57,6 +58,7 @@ function initializeCache(): LockedItem[] {
 
         // Update the cache
         lockedItemsCache = normalizedItems;
+        lastPersistedLockedItemsJson = JSON.stringify(normalizedItems);
 
         // Build the lookup maps
         rebuildLookupMaps(normalizedItems);
@@ -67,6 +69,7 @@ function initializeCache(): LockedItem[] {
 
     // Initialize with empty array if no data in localStorage
     lockedItemsCache = [];
+    lastPersistedLockedItemsJson = '[]';
 
     return [];
   } catch (error) {
@@ -107,7 +110,14 @@ export function saveLockedItems(items: LockedItem[]): void {
 
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
-      localStorage.setItem(LOCKED_FILES_KEY, JSON.stringify(items));
+      const serializedItems = JSON.stringify(items);
+
+      if (serializedItems === lastPersistedLockedItemsJson) {
+        return;
+      }
+
+      localStorage.setItem(LOCKED_FILES_KEY, serializedItems);
+      lastPersistedLockedItemsJson = serializedItems;
       logger.info(`Saved ${items.length} locked items to localStorage`);
     }
   } catch (error) {
@@ -143,6 +153,12 @@ export function addLockedItem(chatId: string, path: string, isFolder: boolean = 
 
   // Update the in-memory map directly for faster access
   const chatMap = getChatMap(chatId, true)!;
+  const existingItem = chatMap.get(path);
+
+  if (existingItem && existingItem.isFolder === isFolder) {
+    return;
+  }
+
   chatMap.set(path, newItem);
 
   // Remove any existing entry for this path in this chat and add the new one
@@ -181,9 +197,11 @@ export function removeLockedItem(chatId: string, path: string): void {
   // Update the in-memory map directly for faster access
   const chatMap = getChatMap(chatId);
 
-  if (chatMap) {
-    chatMap.delete(path);
+  if (!chatMap?.has(path)) {
+    return;
   }
+
+  chatMap.delete(path);
 
   // Filter out the item to remove for this specific chat
   const filteredItems = lockedItems.filter((item) => !(item.chatId === chatId && item.path === path));
@@ -430,6 +448,7 @@ export function migrateLegacyLocks(currentChatId: string): void {
 export function clearCache(): void {
   lockedItemsCache = null;
   lockedItemsMap.clear();
+  lastPersistedLockedItemsJson = null;
   logger.info('Cleared locked items cache');
 }
 
