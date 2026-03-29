@@ -13,6 +13,10 @@
 - Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
 - A live Playwright recovery smoke now generates a hosted app, intentionally corrupts it, and verifies end-to-end auto-recovery against `https://alpha1.bolt.gives`.
 
+### Fixed
+
+- Dependency installation no longer hard-fails when the Playwright Chromium download is blocked by network/domain policy during `postinstall`; installs now continue with a warning unless `PLAYWRIGHT_INSTALL_REQUIRED=1` is explicitly set.
+
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { shouldTreatInstallFailureAsFatal } from './install-playwright-utils.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const markerFile = path.join(ROOT, '.playwright-installed');
@@ -30,8 +31,15 @@ const result = spawnSync(process.execPath, [cliPath, 'install', 'chromium'], {
 });
 
 if (result.status !== 0) {
-  console.error('[playwright-install] failed to install Chromium browser');
-  process.exit(result.status || 1);
+  const message = '[playwright-install] failed to install Chromium browser';
+
+  if (shouldTreatInstallFailureAsFatal(process.env)) {
+    console.error(`${message} (fatal because PLAYWRIGHT_INSTALL_REQUIRED=1)`);
+    process.exit(result.status || 1);
+  }
+
+  console.warn(`${message}; continuing without bundled browser`);
+  process.exit(0);
 }
 
 spawnSync(process.execPath, ['-e', `require('fs').writeFileSync('${markerFile}', '${new Date().toISOString()}\\n')`], {
