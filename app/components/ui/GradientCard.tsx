@@ -4,14 +4,14 @@ import { classNames } from '~/utils/classNames';
 
 // Predefined gradient colors
 const GRADIENT_COLORS = [
-  'from-purple-500/10 to-blue-500/5',
+  'from-blue-500/10 to-blue-500/5',
   'from-blue-500/10 to-cyan-500/5',
   'from-cyan-500/10 to-green-500/5',
   'from-green-500/10 to-yellow-500/5',
   'from-yellow-500/10 to-orange-500/5',
   'from-orange-500/10 to-red-500/5',
   'from-red-500/10 to-pink-500/5',
-  'from-pink-500/10 to-purple-500/5',
+  'from-pink-500/10 to-blue-500/5',
 ];
 
 interface GradientCardProps {
@@ -57,13 +57,13 @@ export function GradientCard({
   // Animation variants for hover effect
   const hoverAnimation = hoverEffect
     ? {
-        whileHover: {
-          scale: 1.02,
-          y: -2,
-          transition: { type: 'spring', stiffness: 400, damping: 17 },
-        },
-        whileTap: { scale: 0.98 },
-      }
+      whileHover: {
+        scale: 1.02,
+        y: -2,
+        transition: { type: 'spring', stiffness: 400, damping: 17 },
+      },
+      whileTap: { scale: 0.98 },
+    }
     : undefined;
 
   return (

@@ -37,7 +37,7 @@
 
 ### Minor Features & Polish (Not as important)
 
-- **UI Theme Polish**: Replaced the primary purple accent with a modern red-to-blue gradient theme, including transparent header tabs.
+- **UI Theme Polish**: Replaced the primary blue accent with a modern red-to-blue gradient theme, including transparent header tabs.
 - **Editor Refinement**: Enhanced the CodeMirror editor panel with an inset card design for a premium glassmorphic feel.
 - **Web IDE Integration**: Added an "Open in Web IDE" button to the header for quick access to `webcontainer.codes`.
 - **Functional Runtime Scanner**: Added an active error monitor to the Workbench that intercepts runtime failures and automatically dispatches an auto-fix prompt to the AI agent.
