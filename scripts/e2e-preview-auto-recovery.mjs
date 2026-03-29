@@ -199,6 +199,24 @@ try {
     throw new Error(`Failed to corrupt generated app for recovery smoke: ${syncResponse.status}`);
   }
 
+  const breakDeadline = Date.now() + 30000;
+  let breakApplied = false;
+
+  while (Date.now() < breakDeadline) {
+    const brokenSnapshotResponse = await runtimeFetch(page, sessionId, 'snapshot');
+
+    if (brokenSnapshotResponse.ok && brokenSnapshotResponse.payload?.files?.[targetPath]?.content === brokenContent) {
+      breakApplied = true;
+      break;
+    }
+
+    await delay(500);
+  }
+
+  if (!breakApplied) {
+    throw new Error('Intentional preview break never reached the hosted runtime snapshot.');
+  }
+
   const deadline = Date.now() + 180000;
   const initialRecoveryToken = Number(syncResponse.payload?.recovery?.token || snapshotResponse.payload?.recovery?.token || 0);
   let sawError = false;
@@ -249,17 +267,18 @@ try {
       sawRestoredSnapshot = true;
     }
 
-    if (sawRecoveryTokenAdvance && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy && lastStatus.status === 'ready') {
+    if (sawError && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy && lastStatus.status === 'ready') {
       break;
     }
 
     await delay(1500);
   }
 
-  if (!lastStatus || !(sawRecoveryTokenAdvance && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy)) {
+  if (!lastStatus || !(breakApplied && sawError && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy)) {
     throw new Error(
       `Preview did not auto-recover after intentional break. Last status: ${JSON.stringify(
         {
+          breakApplied,
           lastStatus,
           sawError,
           sawRunningRecovery,
