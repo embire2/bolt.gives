@@ -53,6 +53,14 @@ function resolveActionStreamSampleIntervalMs(): number {
 
 const ACTION_STREAM_SAMPLE_INTERVAL_MS = resolveActionStreamSampleIntervalMs();
 
+function createHostedRuntimeSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
+
+  return `${Date.now()}`;
+}
+
 export interface ArtifactState {
   id: string;
   title: string;
@@ -97,6 +105,7 @@ export class WorkbenchStore {
   #pendingInteractiveEvents: InteractiveStepRunnerEvent[] = [];
   #interactiveEventsFlushHandle: ReturnType<typeof setTimeout> | null = null;
   #readyPreviewSignatures = new Set<string>();
+  #hostedRuntimeSessionId = hotData?.hostedRuntimeSessionId ?? createHostedRuntimeSessionId();
   constructor() {
     if (typeof window !== 'undefined') {
       try {
@@ -123,6 +132,7 @@ export class WorkbenchStore {
       hot.data.autonomyMode = this.autonomyMode;
       hot.data.interactiveStepEvents = this.interactiveStepEvents;
       hot.data.isTestAndScanRunning = this.isTestAndScanRunning;
+      hot.data.hostedRuntimeSessionId = this.#hostedRuntimeSessionId;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -294,8 +304,19 @@ export class WorkbenchStore {
   get alert() {
     return this.actionAlert;
   }
+  setAlert(alert: ActionAlert | undefined) {
+    this.actionAlert.set(alert);
+  }
+  setPreviewAlert(alert: ActionAlert) {
+    this.actionAlert.set(alert);
+  }
   clearAlert() {
     this.actionAlert.set(undefined);
+  }
+  clearPreviewAlert() {
+    if (this.actionAlert.get()?.source === 'preview') {
+      this.actionAlert.set(undefined);
+    }
   }
 
   get SupabaseAlert() {
@@ -778,6 +799,25 @@ export class WorkbenchStore {
       runner: new ActionRunner(
         webcontainer,
         () => this.boltTerminal,
+        () => this.files.get(),
+        (preview) => {
+          const existingPreview = this.#previewsStore.previews
+            .get()
+            .find((candidate) => candidate.port === preview.port || candidate.baseUrl === preview.baseUrl);
+
+          this.#previewsStore.setPreview({
+            port: preview.port,
+            ready: true,
+            baseUrl: preview.baseUrl,
+            revision: preview.revision,
+          });
+
+          if (!existingPreview) {
+            this.currentView.set('preview');
+            this.showWorkbench.set(true);
+          }
+        },
+        this.#hostedRuntimeSessionId,
         (alert) => {
           if (this.#reloadedMessages.has(messageId)) {
             return;
@@ -940,26 +980,31 @@ export class WorkbenchStore {
         this.setSelectedFile(fullPath);
       }
 
-      if (this.currentView.value !== 'code') {
+      const hasReadyPreview = this.#previewsStore.previews.get().some((preview) => preview.ready && preview.baseUrl);
+
+      if (this.currentView.value !== 'code' && !hasReadyPreview) {
         this.currentView.set('code');
       }
 
       const doc = this.#editorStore.documents.get()[fullPath];
 
-      if (!doc) {
-        await artifact.runner.runAction(data, isStreaming);
+      if (isStreaming) {
+        if (doc) {
+          this.#editorStore.updateFile(fullPath, data.action.content);
+        }
+
+        await artifact.runner.runAction(data, true);
+
+        return;
       }
 
-      this.#editorStore.updateFile(fullPath, data.action.content);
-
-      if (!isStreaming && data.action.content) {
-        await this.saveFile(fullPath);
-      }
-
-      if (!isStreaming) {
-        await artifact.runner.runAction(data);
-        this.resetAllFileModifications();
-      }
+      /*
+       * Persist the completed file change through the files store first so hosted-runtime
+       * snapshots include unopened files before the runtime sync runs.
+       */
+      await this.writeFile(fullPath, data.action.content);
+      await artifact.runner.runAction(data);
+      this.resetAllFileModifications();
     } else {
       await artifact.runner.runAction(data);
     }

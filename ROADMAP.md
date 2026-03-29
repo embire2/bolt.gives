@@ -10,7 +10,7 @@ Status legend:
 
 Latest shipped baseline:
 
-- [x] `v3.0.2` Cloudflare managed-instance blueprint, Pages FREE-provider relay fixes, and release-line cleanup.
+- [x] `v3.0.2` Cloudflare managed-instance blueprint, hosted FREE relay fixes, top-level tabs, and managed server-side runtime preview refresh.
 
 Release planning now tracks the live `v3.0.x` line directly. The old `v1.0.4` label is retired.
 
@@ -56,6 +56,13 @@ Non-negotiable guardrails:
 - [x] Main shell split into top-level `Chat` / `Workspace` tabs with closable workspace persistence.
 - [x] GitHub-to-Cloudflare Pages production deployment workflow added so `main` can drive the Pages release path directly.
 
+5. Managed server-first runtime (hosted instances)
+
+- [x] Hosted instances now prefer the managed server-side runtime for installs, builds, tests, dev servers, preview hosting, and file sync.
+- [x] Browser-side WebContainer is now the hosted fallback path instead of the default path.
+- [x] Hosted preview refresh now follows server-side file sync revisions so generated apps replace the starter without manual reloads.
+- [x] Hosted browser terminals now stay lightweight instead of running heavy interactive shells inside the client tab.
+
 ## v3.0.3 - Managed Control Plane + Server-First Execution
 
 Release theme: move heavy lifting off the browser, implement the actual managed Cloudflare spawn control plane, and harden collaboration/isolation.
@@ -64,8 +71,9 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 
 1. Server-first heavy execution
 
-- [ ] Move preview/build/test workloads that still depend on the browser onto server-side workers where feasible.
-- [ ] Reduce client-side memory pressure during long sessions.
+- [~] Hosted installs/builds/dev servers/preview sync now run on the managed server runtime by default.
+- [ ] Move the remaining heavy UI/runtime work off the client, especially long commentary/timeline rendering and any local fallback execution that still depends on WebContainer.
+- [ ] Reduce client-side memory pressure during long sessions through bundle reduction, stricter virtualization, and lower-frequency state churn.
 - [ ] Add stall/memory telemetry tied to concrete UI recovery actions.
 
 2. Managed Cloudflare instance control plane

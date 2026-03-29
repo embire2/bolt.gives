@@ -3,18 +3,49 @@ import { shouldUseClientStarterBootstrap } from './starter-bootstrap';
 
 describe('shouldUseClientStarterBootstrap', () => {
   it('uses client bootstrap for local providers', () => {
-    expect(shouldUseClientStarterBootstrap('LMStudio', 'llama-3.2')).toBe(true);
-    expect(shouldUseClientStarterBootstrap('Ollama', 'qwen2.5-coder:7b')).toBe(true);
+    expect(shouldUseClientStarterBootstrap({ providerName: 'LMStudio', modelName: 'llama-3.2', message: '' })).toBe(
+      true,
+    );
+    expect(
+      shouldUseClientStarterBootstrap({ providerName: 'Ollama', modelName: 'qwen2.5-coder:7b', message: '' }),
+    ).toBe(true);
   });
 
   it('uses client bootstrap for smaller remote models', () => {
-    expect(shouldUseClientStarterBootstrap('OpenAI', 'gpt-4o-mini')).toBe(true);
-    expect(shouldUseClientStarterBootstrap('Anthropic', 'claude-3-haiku-20240307')).toBe(true);
+    expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-4o-mini', message: '' })).toBe(
+      true,
+    );
+    expect(
+      shouldUseClientStarterBootstrap({
+        providerName: 'Anthropic',
+        modelName: 'claude-3-haiku-20240307',
+        message: '',
+      }),
+    ).toBe(true);
   });
 
   it('skips client bootstrap for larger capable models', () => {
-    expect(shouldUseClientStarterBootstrap('OpenAI', 'gpt-5.4')).toBe(false);
-    expect(shouldUseClientStarterBootstrap('OpenAI', 'gpt-5-codex')).toBe(false);
-    expect(shouldUseClientStarterBootstrap('Anthropic', 'claude-3-7-sonnet-latest')).toBe(false);
+    expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-5.4', message: '' })).toBe(false);
+    expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-5-codex', message: '' })).toBe(
+      false,
+    );
+    expect(
+      shouldUseClientStarterBootstrap({
+        providerName: 'Anthropic',
+        modelName: 'claude-3-7-sonnet-latest',
+        message: '',
+      }),
+    ).toBe(false);
+  });
+
+  it('forces starter bootstrap on hosted runtime when the request clearly needs a project template', () => {
+    expect(
+      shouldUseClientStarterBootstrap({
+        providerName: 'OpenAI',
+        modelName: 'gpt-5.4',
+        message: 'Build a React appointment scheduling app for a doctor office',
+        hostedRuntimeEnabled: true,
+      }),
+    ).toBe(true);
   });
 });

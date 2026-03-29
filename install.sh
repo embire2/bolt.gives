@@ -7,10 +7,12 @@ SERVICE_PREFIX="${SERVICE_PREFIX:-bolt-gives}"
 APP_PORT="${APP_PORT:-5173}"
 COLLAB_PORT="${COLLAB_PORT:-1234}"
 WEBBROWSE_PORT="${WEBBROWSE_PORT:-4179}"
+RUNTIME_PORT="${RUNTIME_PORT:-4321}"
 NODE_MAJOR="${NODE_MAJOR:-22}"
 PNPM_VERSION="${PNPM_VERSION:-9.14.4}"
 NODE_HEAP_MB="${NODE_HEAP_MB:-4096}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/bolt.gives}"
+RUNTIME_WORKSPACE_DIR="${RUNTIME_WORKSPACE_DIR:-${INSTALL_DIR%/}-runtime-workspaces}"
 INSTALL_DEPS=1
 INSTALL_SERVICE=1
 BUILD_APP=1
@@ -18,6 +20,7 @@ BUILD_APP=1
 APP_SERVICE="${SERVICE_PREFIX}-app"
 COLLAB_SERVICE="${SERVICE_PREFIX}-collab"
 WEBBROWSE_SERVICE="${SERVICE_PREFIX}-webbrowse"
+RUNTIME_SERVICE="${SERVICE_PREFIX}-runtime"
 
 usage() {
   cat <<'EOF'
@@ -36,8 +39,8 @@ Options:
   --help               Show this help
 
 Environment overrides:
-  INSTALL_DIR, BRANCH, REPO_URL, APP_PORT, COLLAB_PORT, WEBBROWSE_PORT,
-  SERVICE_PREFIX, NODE_MAJOR, PNPM_VERSION, NODE_HEAP_MB
+  INSTALL_DIR, BRANCH, REPO_URL, APP_PORT, COLLAB_PORT, WEBBROWSE_PORT, RUNTIME_PORT,
+  SERVICE_PREFIX, NODE_MAJOR, PNPM_VERSION, NODE_HEAP_MB, RUNTIME_WORKSPACE_DIR
 
 Notes:
   - Supported target: Ubuntu 18.04+.
@@ -217,6 +220,9 @@ prepare_env_file() {
   fi
 
   upsert_env_line "${env_file}" "NODE_OPTIONS" "--max-old-space-size=${NODE_HEAP_MB}"
+  upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
+  upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
+  mkdir -p "${RUNTIME_WORKSPACE_DIR}"
 }
 
 install_dependencies() {
@@ -273,7 +279,20 @@ export NODE_OPTIONS="\${NODE_OPTIONS:---max-old-space-size=${NODE_HEAP_MB}}"
 exec node scripts/web-browse-server.mjs
 EOF
 
-  chmod +x "${INSTALL_DIR}/bin/start-app.sh" "${INSTALL_DIR}/bin/start-collab.sh" "${INSTALL_DIR}/bin/start-webbrowse.sh"
+  cat > "${INSTALL_DIR}/bin/start-runtime.sh" <<EOF
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+cd "\${ROOT_DIR}"
+export NODE_ENV=production
+export PORT="\${PORT:-${RUNTIME_PORT}}"
+export RUNTIME_PORT="\${RUNTIME_PORT:-${RUNTIME_PORT}}"
+export RUNTIME_WORKSPACE_DIR="\${RUNTIME_WORKSPACE_DIR:-${RUNTIME_WORKSPACE_DIR}}"
+export NODE_OPTIONS="\${NODE_OPTIONS:---max-old-space-size=${NODE_HEAP_MB}}"
+exec node scripts/runtime-server.mjs
+EOF
+
+  chmod +x "${INSTALL_DIR}/bin/start-app.sh" "${INSTALL_DIR}/bin/start-collab.sh" "${INSTALL_DIR}/bin/start-webbrowse.sh" "${INSTALL_DIR}/bin/start-runtime.sh"
 }
 
 write_service_unit() {
@@ -313,10 +332,11 @@ install_systemd_services() {
   log "Installing systemd services"
   write_service_unit "${COLLAB_SERVICE}" "bolt.gives collaboration server" "${INSTALL_DIR}/bin/start-collab.sh" "" "" "${COLLAB_PORT}"
   write_service_unit "${WEBBROWSE_SERVICE}" "bolt.gives web browsing server" "${INSTALL_DIR}/bin/start-webbrowse.sh" "" "" "${WEBBROWSE_PORT}"
-  write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service" "${APP_PORT}"
+  write_service_unit "${RUNTIME_SERVICE}" "bolt.gives hosted runtime server" "${INSTALL_DIR}/bin/start-runtime.sh" "" "" "${RUNTIME_PORT}"
+  write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${APP_PORT}"
 
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${APP_SERVICE}"
+  sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"
 }
 
 wait_for_http() {
@@ -346,19 +366,24 @@ Services:
   ${APP_SERVICE}
   ${COLLAB_SERVICE}
   ${WEBBROWSE_SERVICE}
+  ${RUNTIME_SERVICE}
 
 Ports:
   app        http://127.0.0.1:${APP_PORT}
   collab     ws://127.0.0.1:${COLLAB_PORT}
   webbrowse  http://127.0.0.1:${WEBBROWSE_PORT}
+  runtime    http://127.0.0.1:${RUNTIME_PORT}
 
 Node heap baseline:
   NODE_OPTIONS=--max-old-space-size=${NODE_HEAP_MB}
 
+Hosted runtime workspace root:
+  ${RUNTIME_WORKSPACE_DIR}
+
 Next steps:
   1. Edit ${INSTALL_DIR}/.env.local and add any provider keys you want to use.
   2. Restart services after editing secrets:
-     sudo systemctl restart ${APP_SERVICE} ${COLLAB_SERVICE} ${WEBBROWSE_SERVICE}
+     sudo systemctl restart ${APP_SERVICE} ${COLLAB_SERVICE} ${WEBBROWSE_SERVICE} ${RUNTIME_SERVICE}
   3. Check service health:
      sudo systemctl status ${APP_SERVICE} --no-pager
 EOF

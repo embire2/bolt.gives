@@ -1,6 +1,8 @@
-import { WebContainer } from '@webcontainer/api';
+import type { WebContainer } from '@webcontainer/api';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import { WORK_DIR_NAME } from '~/utils/constants';
 import { cleanStackTrace } from '~/utils/stacktrace';
+import { createHostedWebContainerStub } from './hosted-stub';
 
 interface WebContainerContext {
   loaded: boolean;
@@ -27,13 +29,24 @@ if (!import.meta.env.SSR) {
     hotData?.webcontainer ??
     Promise.resolve()
       .then(() => {
-        return WebContainer.boot({
-          coep: 'credentialless',
-          workdirName: WORK_DIR_NAME,
-          forwardPreviewErrors: true, // Enable error forwarding from iframes
-        });
+        if (isHostedRuntimeEnabled()) {
+          return createHostedWebContainerStub();
+        }
+
+        return import('@webcontainer/api').then(({ WebContainer: webContainerApi }) =>
+          webContainerApi.boot({
+            coep: 'credentialless',
+            workdirName: WORK_DIR_NAME,
+            forwardPreviewErrors: true, // Enable error forwarding from iframes
+          }),
+        );
       })
       .then(async (webcontainer) => {
+        if (isHostedRuntimeEnabled()) {
+          webcontainerContext.loaded = false;
+          return webcontainer;
+        }
+
         webcontainerContext.loaded = true;
 
         const { workbenchStore } = await import('~/lib/stores/workbench');

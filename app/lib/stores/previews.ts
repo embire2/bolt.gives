@@ -1,5 +1,6 @@
 import type { WebContainer } from '@webcontainer/api';
 import { atom } from 'nanostores';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 
 // Extend Window interface to include our custom property
 declare global {
@@ -12,6 +13,7 @@ export interface PreviewInfo {
   port: number;
   ready: boolean;
   baseUrl: string;
+  revision?: number;
 }
 
 // Create a broadcast channel for preview updates
@@ -26,13 +28,18 @@ export class PreviewsStore {
   #refreshTimeouts = new Map<string, NodeJS.Timeout>();
   #REFRESH_DELAY = 300;
   #storageChannel?: BroadcastChannel;
+  #hostedRuntime = false;
 
   previews = atom<PreviewInfo[]>([]);
 
   constructor(webcontainerPromise: Promise<WebContainer>) {
     this.#webcontainer = webcontainerPromise;
-    this.#broadcastChannel = this.#maybeCreateChannel(PREVIEW_CHANNEL);
-    this.#storageChannel = this.#maybeCreateChannel('storage-sync-channel');
+    this.#hostedRuntime = isHostedRuntimeEnabled();
+
+    if (!this.#hostedRuntime) {
+      this.#broadcastChannel = this.#maybeCreateChannel(PREVIEW_CHANNEL);
+      this.#storageChannel = this.#maybeCreateChannel('storage-sync-channel');
+    }
 
     if (this.#broadcastChannel) {
       // Listen for preview updates from other tabs
@@ -65,7 +72,7 @@ export class PreviewsStore {
     // Override localStorage setItem to catch all changes
     const storage = this._getLocalStorage();
 
-    if (storage) {
+    if (storage && !this.#hostedRuntime) {
       const originalSetItem = storage.setItem.bind(storage);
 
       try {
@@ -203,6 +210,10 @@ export class PreviewsStore {
   }
 
   async #init() {
+    if (this.#hostedRuntime) {
+      return;
+    }
+
     const webcontainer = await this.#webcontainer;
 
     // Listen for server ready events
@@ -247,7 +258,35 @@ export class PreviewsStore {
   // Helper to extract preview ID from URL
   getPreviewId(url: string): string | null {
     const match = url.match(/^https?:\/\/([^.]+)\.local-credentialless\.webcontainer-api\.io/);
-    return match ? match[1] : null;
+
+    if (match) {
+      return match[1];
+    }
+
+    try {
+      return new URL(url).toString();
+    } catch {
+      return url || null;
+    }
+  }
+
+  setPreview(previewInfo: PreviewInfo) {
+    const previews = [...this.previews.get()];
+    const existingIndex = previews.findIndex(
+      (preview) => preview.port === previewInfo.port || preview.baseUrl === previewInfo.baseUrl,
+    );
+
+    if (existingIndex >= 0) {
+      previews[existingIndex] = {
+        ...previews[existingIndex],
+        ...previewInfo,
+      };
+    } else {
+      previews.push(previewInfo);
+    }
+
+    previews.sort((left, right) => left.port - right.port);
+    this.previews.set(previews);
   }
 
   // Broadcast state change to all tabs

@@ -265,6 +265,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [openSurfaces, setOpenSurfaces] = useState<SurfaceTabId[]>(['chat', 'workspace']);
     const [activeSurface, setActiveSurface] = useState<SurfaceTabId>('chat');
     const [surfaceLayoutHydrated, setSurfaceLayoutHydrated] = useState(false);
+    const providerListSignature = (providerList || PROVIDER_LIST).map((item) => item.name).join('|');
 
     useEffect(() => {
       if (expoUrl) {
@@ -411,7 +412,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             setIsModelLoading(undefined);
           });
       }
-    }, [providerList, provider]);
+    }, [providerListSignature]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
       const normalizedApiKey = apiKey.trim();

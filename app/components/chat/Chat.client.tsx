@@ -67,6 +67,7 @@ import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
 import { resolveStallPolicy } from '~/lib/runtime/stall-policy';
 import { shouldUseClientStarterBootstrap } from '~/lib/runtime/starter-bootstrap';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import {
   computeTextFileDelta,
   computeTextSnapshotRevertOps,
@@ -2057,7 +2058,12 @@ Requirements:
         setFakeLoading(true);
 
         const shouldBootstrapStarter = autoSelectTemplate
-          ? shouldUseClientStarterBootstrap(effectiveProvider.name, effectiveModel)
+          ? shouldUseClientStarterBootstrap({
+              providerName: effectiveProvider.name,
+              modelName: effectiveModel,
+              message: finalMessageContent,
+              hostedRuntimeEnabled: isHostedRuntimeEnabled(),
+            })
           : false;
 
         if (shouldBootstrapStarter) {

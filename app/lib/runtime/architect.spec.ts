@@ -130,6 +130,19 @@ describe('diagnoseArchitectIssue', () => {
     expect(diagnosis?.issueId).toBe('preview-runtime-exception');
     expect(diagnosis?.maxAutoAttempts).toBe(2);
   });
+
+  it('detects generic Vite preview compile failures', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'preview',
+      title: 'Preview Error',
+      description: '[plugin:vite:react-babel] /srv/runtime/src/App.tsx: Unexpected token (103:0)',
+      content: 'Unexpected token (103:0)',
+      source: 'preview',
+    });
+
+    expect(diagnosis?.issueId).toBe('vite-preview-compile-error');
+    expect(diagnosis?.maxAutoAttempts).toBe(2);
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {

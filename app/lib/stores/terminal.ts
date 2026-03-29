@@ -1,5 +1,6 @@
 import type { WebContainer, WebContainerProcess } from '@webcontainer/api';
 import { atom, type WritableAtom } from 'nanostores';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import type { ITerminal } from '~/types/terminal';
 import { newBoltShellProcess, newShellProcess } from '~/utils/shell';
 import { coloredText } from '~/utils/terminal';
@@ -30,6 +31,15 @@ export class TerminalStore {
     this.showTerminal.set(value !== undefined ? value : !this.showTerminal.get());
   }
   async attachBoltTerminal(terminal: ITerminal) {
+    if (isHostedRuntimeEnabled()) {
+      terminal.reset();
+      terminal.write(
+        `Hosted runtime active\r\nInteractive browser shells are disabled on managed instances.\r\nBolt runs install, build, and preview commands on the server and streams the result back into the workspace.\r\n`,
+      );
+
+      return;
+    }
+
     try {
       const wc = await this.#webcontainer;
       await this.#boltTerminal.init(wc, terminal);
@@ -40,6 +50,15 @@ export class TerminalStore {
   }
 
   async attachTerminal(terminal: ITerminal) {
+    if (isHostedRuntimeEnabled()) {
+      terminal.reset();
+      terminal.write(
+        `Hosted runtime active\r\nUse chat tasks to run commands on the server. Ad-hoc interactive browser terminals stay disabled on hosted instances to keep the browser lightweight.\r\n`,
+      );
+
+      return;
+    }
+
     try {
       const shellProcess = await newShellProcess(await this.#webcontainer, terminal);
       this.#terminals.push({ terminal, process: shellProcess });

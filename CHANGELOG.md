@@ -20,6 +20,9 @@
 
 ### Fixed
 
+- Hosted `alpha1`, `ahmad`, and other managed instances now prefer the managed server-side runtime for installs, builds, dev servers, tests, preview hosting, and file sync instead of defaulting to the browser WebContainer path.
+- Hosted preview iframes now refresh after server-side file syncs land, so generated apps replace the fallback starter without forcing the user to manually reload the preview.
+- Managed instances now keep browser terminals in lightweight status-only mode instead of encouraging heavy interactive shells inside the client tab.
 - Cloudflare Pages and preview deployments now resolve hosted FREE-provider credentials more reliably across Pages-style and Worker-style runtime contexts.
 - If a public Pages runtime does not have the managed FREE secret locally configured, hosted FREE requests can now relay through the managed runtime instead of failing with a token error.
 - Cloudflare Pages coding sessions now route collaboration/event websocket traffic to the managed collaboration backend instead of self-targeting `bolt-gives.pages.dev/collab`, which returned `404` and left long runs stalled behind heartbeat commentary without a stable preview.
@@ -29,6 +32,7 @@
 - Updated the release line to `v3.0.2`.
 - README, roadmap, AGENTS instructions, and install docs now align on `v3.0.2` as the stable baseline and `v3.0.3` as the next target.
 - `FEATURE_FEED` now surfaces the `v3.0.2` release to users after upgrade.
+- Prompt/runtime guidance now assumes the managed hosted runtime first on live instances and treats WebContainer as the explicit fallback mode.
 - The Cloudflare managed-instance design is now split honestly into:
   - a free experimental shared-runtime path
   - a future Pro path for dedicated `6 GiB` Cloudflare Containers
@@ -42,6 +46,7 @@
 - `pnpm run lint` passed.
 - `pnpm test` passed.
 - `pnpm run build` passed.
+- Live browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4` by generating a React todo app whose hosted preview rendered the requested heading after server-side sync.
 
 ## v3.0.1 (2026-03-25)
 

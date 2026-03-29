@@ -57,6 +57,8 @@ scripts/.tmp-*
 scripts/.tmp-replit-frames/
 .screenshots-dev.log
 output/
+tmp_*.cjs
+tmp_*.js
 
 # local operator files (not project source)
 bolt15february2026.tar.gz
@@ -65,3 +67,4 @@ favicon.png
 
 # runtime collaboration artifacts
 .collab-docs/
+.runtime-workspaces/

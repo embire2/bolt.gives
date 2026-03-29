@@ -7,6 +7,7 @@ import { ScreenshotSelector } from './ScreenshotSelector';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
+import { extractPreviewAlertFromDocument } from '~/lib/runtime/preview-error';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -52,6 +53,30 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
 
+function normalizePreviewPath(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return '/';
+  }
+
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+function buildPreviewUrl(baseUrl: string, displayPath: string, revision = 0) {
+  const normalizedPath = normalizePreviewPath(displayPath);
+  const previewBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const target = new URL(normalizedPath === '/' ? '' : normalizedPath.slice(1), previewBase);
+
+  if (revision > 0) {
+    target.searchParams.set('__bolt_preview_rev', String(revision));
+  } else {
+    target.searchParams.delete('__bolt_preview_rev');
+  }
+
+  return target.toString();
+}
+
 export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -90,24 +115,79 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const expoUrl = useStore(expoUrlAtom);
   const [isExpoQrModalOpen, setIsExpoQrModalOpen] = useState(false);
   const lastBaseUrlRef = useRef<string | undefined>();
+  const lastPreviewAlertSignatureRef = useRef<string | null>(null);
+  const lastPreviewRevisionRef = useRef<number>(0);
 
   useEffect(() => {
     if (!activePreview) {
       setIframeUrl(undefined);
       setDisplayPath('/');
       lastBaseUrlRef.current = undefined;
+      lastPreviewRevisionRef.current = 0;
 
       return;
     }
 
-    const { baseUrl } = activePreview;
+    const { baseUrl, revision = 0 } = activePreview;
 
     if (lastBaseUrlRef.current !== baseUrl) {
-      setIframeUrl(baseUrl);
+      setIframeUrl(buildPreviewUrl(baseUrl, '/', revision));
       setDisplayPath('/');
       lastBaseUrlRef.current = baseUrl;
+      lastPreviewRevisionRef.current = revision;
+
+      return;
     }
-  }, [activePreview?.baseUrl]);
+
+    if (lastPreviewRevisionRef.current !== revision) {
+      setIframeUrl(buildPreviewUrl(baseUrl, displayPath, revision));
+      lastPreviewRevisionRef.current = revision;
+    }
+  }, [activePreview?.baseUrl, activePreview?.revision, displayPath]);
+
+  useEffect(() => {
+    if (!iframeUrl) {
+      lastPreviewAlertSignatureRef.current = null;
+      workbenchStore.clearPreviewAlert();
+
+      return undefined;
+    }
+
+    const inspectPreview = () => {
+      try {
+        const previewDocument = iframeRef.current?.contentDocument;
+
+        if (!previewDocument) {
+          return;
+        }
+
+        const alert = extractPreviewAlertFromDocument(previewDocument);
+        const signature = alert ? `${alert.description}\n${alert.content}` : null;
+
+        if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
+          lastPreviewAlertSignatureRef.current = signature;
+          workbenchStore.setPreviewAlert(alert);
+
+          return;
+        }
+
+        if (!signature && lastPreviewAlertSignatureRef.current) {
+          lastPreviewAlertSignatureRef.current = null;
+          workbenchStore.clearPreviewAlert();
+        }
+      } catch {
+        // Ignore cross-origin/inaccessible preview frames and try again on the next interval.
+      }
+    };
+
+    const interval = window.setInterval(inspectPreview, 1500);
+    const initialProbe = window.setTimeout(inspectPreview, 250);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(initialProbe);
+    };
+  }, [iframeUrl]);
 
   const findMinPortIndex = useCallback(
     (minIndex: number, preview: { port: number }, index: number, array: { port: number }[]) => {
@@ -124,8 +204,10 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   }, [previews, findMinPortIndex]);
 
   const reloadPreview = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+    if (iframeRef.current && activePreview) {
+      const targetUrl = buildPreviewUrl(activePreview.baseUrl, displayPath, activePreview.revision);
+      iframeRef.current.src = targetUrl;
+      setIframeUrl(targetUrl);
     }
   };
 
@@ -550,7 +632,18 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           }
         }
       } else {
-        console.warn('[Preview] Invalid WebContainer URL:', activePreview.baseUrl);
+        const previewUrl = activePreview.baseUrl;
+        const width = isLandscape ? size.height : size.width;
+        const height = isLandscape ? size.width : size.height;
+        const newWindow = window.open(
+          previewUrl,
+          '_blank',
+          `width=${width},height=${height},menubar=no,toolbar=no,location=no,status=no`,
+        );
+
+        if (newWindow) {
+          newWindow.focus();
+        }
       }
     }
   };
@@ -707,7 +800,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                   targetPath = '/' + targetPath;
                 }
 
-                const fullUrl = activePreview.baseUrl + targetPath;
+                const fullUrl = buildPreviewUrl(activePreview.baseUrl, targetPath, activePreview.revision);
                 setIframeUrl(fullUrl);
                 setDisplayPath(targetPath);
 
@@ -797,7 +890,11 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                           );
 
                           if (!match) {
-                            console.warn('[Preview] Invalid WebContainer URL:', activePreview.baseUrl);
+                            window.open(
+                              activePreview.baseUrl,
+                              '_blank',
+                              'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes',
+                            );
                             return;
                           }
 
@@ -985,6 +1082,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                     />
 
                     <iframe
+                      key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
                       ref={iframeRef}
                       title="preview"
                       style={{
@@ -1002,6 +1100,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 </div>
               ) : (
                 <iframe
+                  key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
                   ref={iframeRef}
                   title="preview"
                   className="border-none w-full h-full bg-bolt-elements-background-depth-1"

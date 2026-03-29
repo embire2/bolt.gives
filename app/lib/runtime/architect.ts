@@ -55,6 +55,19 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'vite-preview-compile-error',
+    title: 'Vite compile error in preview',
+    source: 'preview',
+    patterns: [/\[plugin:vite:[^\]]+\]/i, /Unexpected token/i, /Transform failed/i, /Expected .* but found/i],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Inspect the exact Vite compile error and identify the file and line that broke the preview build.',
+      'Apply the smallest syntax or import fix needed to restore compilation without rewriting unrelated files.',
+      'If the error came from partial edits, repair the malformed JSX/TSX/CSS so the file parses cleanly again.',
+      'Restart or refresh the preview and verify the overlay is gone before finishing.',
+    ],
+  },
+  {
     id: 'missing-package-manifest',
     title: 'Project manifest missing',
     source: 'terminal',

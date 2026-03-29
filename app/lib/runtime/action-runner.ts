@@ -23,6 +23,13 @@ import {
   unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
 import { normalizeArtifactFilePath } from './file-paths';
+import type { FileMap } from '~/lib/stores/files';
+import {
+  isHostedRuntimeEnabled,
+  runHostedRuntimeCommand,
+  syncHostedRuntimeWorkspace,
+  type HostedRuntimePreviewInfo,
+} from './hosted-runtime-client';
 
 const logger = createScopedLogger('ActionRunner');
 const NOISY_PACKAGE_PROGRESS_RE =
@@ -91,9 +98,20 @@ class ActionCommandError extends Error {
 }
 
 export class ActionRunner {
+  static readonly HOSTED_FILE_FLUSH_DEBOUNCE_MS = 350;
   #webcontainer: Promise<WebContainer>;
   #currentExecutionPromise: Promise<void> = Promise.resolve();
   #shellTerminal: () => BoltShell;
+  #getFilesSnapshot?: () => FileMap;
+  #onPreviewReady?: (preview: HostedRuntimePreviewInfo) => void;
+  #hostedRuntimeSessionId?: string;
+  #hostedRuntimeFullSyncPending = true;
+  #lastHostedRuntimeFileContents = new Map<string, string>();
+  #pendingHostedRuntimeFiles = new Map<string, string>();
+  #hostedRuntimeFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  #hostedRuntimeFlushPromise: Promise<void> = Promise.resolve();
+  #lastHostedRuntimePreview?: HostedRuntimePreviewInfo;
+  #hostedRuntimePreviewRevision = 0;
   #stepEventSocket?: WebSocket;
   runnerId = atom<string>(`${Date.now()}`);
   actions: ActionsMap = map({});
@@ -106,6 +124,9 @@ export class ActionRunner {
   constructor(
     webcontainerPromise: Promise<WebContainer>,
     getShellTerminal: () => BoltShell,
+    getFilesSnapshot?: () => FileMap,
+    onPreviewReady?: (preview: HostedRuntimePreviewInfo) => void,
+    hostedRuntimeSessionId?: string,
     onAlert?: (alert: ActionAlert) => void,
     onSupabaseAlert?: (alert: SupabaseAlert) => void,
     onDeployAlert?: (alert: DeployAlert) => void,
@@ -113,10 +134,232 @@ export class ActionRunner {
   ) {
     this.#webcontainer = webcontainerPromise;
     this.#shellTerminal = getShellTerminal;
+    this.#getFilesSnapshot = getFilesSnapshot;
+    this.#onPreviewReady = onPreviewReady;
+    this.#hostedRuntimeSessionId = hostedRuntimeSessionId;
     this.onAlert = onAlert;
     this.onSupabaseAlert = onSupabaseAlert;
     this.onDeployAlert = onDeployAlert;
     this.onStepRunnerEvent = onStepRunnerEvent;
+  }
+
+  #getHostedRuntimeSessionId() {
+    return this.#hostedRuntimeSessionId || this.runnerId.get();
+  }
+
+  async #syncHostedRuntimeSnapshot() {
+    if (!isHostedRuntimeEnabled() || !this.#getFilesSnapshot) {
+      return;
+    }
+
+    if (!this.#hostedRuntimeFullSyncPending) {
+      return;
+    }
+
+    const files = this.#getFilesSnapshot();
+
+    await syncHostedRuntimeWorkspace({
+      sessionId: this.#getHostedRuntimeSessionId(),
+      files,
+      prune: false,
+    });
+
+    this.#hostedRuntimeFullSyncPending = false;
+    this.#lastHostedRuntimeFileContents.clear();
+
+    for (const [filePath, dirent] of Object.entries(files)) {
+      if (dirent?.type === 'file' && !dirent.isBinary) {
+        this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
+      }
+    }
+
+    for (const [filePath, content] of [...this.#pendingHostedRuntimeFiles.entries()]) {
+      if (this.#lastHostedRuntimeFileContents.get(filePath) === content) {
+        this.#pendingHostedRuntimeFiles.delete(filePath);
+      }
+    }
+
+    this.#emitHostedPreviewRefresh();
+  }
+
+  async #flushHostedRuntimePendingFiles() {
+    if (!isHostedRuntimeEnabled() || this.#pendingHostedRuntimeFiles.size === 0) {
+      return;
+    }
+
+    if (this.#hostedRuntimeFlushTimer) {
+      clearTimeout(this.#hostedRuntimeFlushTimer);
+      this.#hostedRuntimeFlushTimer = null;
+    }
+
+    const files = Object.fromEntries(
+      [...this.#pendingHostedRuntimeFiles.entries()].map(([filePath, content]) => [
+        filePath,
+        {
+          type: 'file',
+          content,
+          isBinary: false,
+        } as FileMap[string],
+      ]),
+    ) satisfies FileMap;
+
+    this.#pendingHostedRuntimeFiles.clear();
+
+    await syncHostedRuntimeWorkspace({
+      sessionId: this.#getHostedRuntimeSessionId(),
+      prune: false,
+      files,
+    });
+
+    this.#hostedRuntimeFullSyncPending = false;
+
+    for (const [filePath, dirent] of Object.entries(files)) {
+      if (dirent?.type === 'file' && !dirent.isBinary) {
+        this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
+      }
+    }
+
+    this.#emitHostedPreviewRefresh();
+  }
+
+  #setHostedPreview(preview: HostedRuntimePreviewInfo) {
+    this.#hostedRuntimePreviewRevision = 0;
+
+    this.#lastHostedRuntimePreview = {
+      ...preview,
+      revision: this.#hostedRuntimePreviewRevision,
+    };
+
+    this.#onPreviewReady?.(this.#lastHostedRuntimePreview);
+  }
+
+  #emitHostedPreviewRefresh() {
+    if (!this.#lastHostedRuntimePreview) {
+      return;
+    }
+
+    this.#hostedRuntimePreviewRevision += 1;
+    this.#lastHostedRuntimePreview = {
+      ...this.#lastHostedRuntimePreview,
+      revision: this.#hostedRuntimePreviewRevision,
+    };
+    this.#onPreviewReady?.(this.#lastHostedRuntimePreview);
+  }
+
+  #scheduleHostedRuntimeFileFlush() {
+    if (!isHostedRuntimeEnabled()) {
+      return;
+    }
+
+    if (this.#hostedRuntimeFlushTimer) {
+      clearTimeout(this.#hostedRuntimeFlushTimer);
+    }
+
+    this.#hostedRuntimeFlushTimer = setTimeout(() => {
+      this.#hostedRuntimeFlushTimer = null;
+      this.#hostedRuntimeFlushPromise = this.#hostedRuntimeFlushPromise
+        .then(() => this.#flushHostedRuntimePendingFiles())
+        .catch((error) => {
+          logger.error('Failed to flush hosted runtime file batch', error);
+        });
+    }, ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS);
+  }
+
+  async #syncHostedRuntimeFile(filePath: string, content: string) {
+    if (!isHostedRuntimeEnabled()) {
+      return;
+    }
+
+    const webcontainer = await this.#webcontainer;
+    const normalizedFilePath = normalizeArtifactFilePath(filePath, webcontainer.workdir);
+
+    if (
+      this.#lastHostedRuntimeFileContents.get(normalizedFilePath) === content &&
+      this.#pendingHostedRuntimeFiles.get(normalizedFilePath) !== content
+    ) {
+      this.#hostedRuntimeFullSyncPending = false;
+      return;
+    }
+
+    if (this.#pendingHostedRuntimeFiles.get(normalizedFilePath) === content) {
+      return;
+    }
+
+    this.#pendingHostedRuntimeFiles.set(normalizedFilePath, content);
+    this.#scheduleHostedRuntimeFileFlush();
+  }
+
+  async #runHostedShellLikeCommand(options: { action: ActionState; description: string; kind: 'shell' | 'start' }) {
+    const { action, description, kind } = options;
+    await this.#syncHostedRuntimeSnapshot();
+    await this.#hostedRuntimeFlushPromise;
+    await this.#flushHostedRuntimePendingFiles();
+
+    let finalOutput = '';
+    let finalExitCode = 0;
+    let stepError: string | undefined;
+    const stepSocket = this.#getStepEventSocket();
+    const stepRunner = new InteractiveStepRunner(
+      {
+        executeStep: async (_step: InteractiveStep, context) => {
+          const resp = await runHostedRuntimeCommand({
+            sessionId: this.#getHostedRuntimeSessionId(),
+            command: action.content,
+            kind,
+            onEvent: (event) => {
+              if (event.type === 'stdout') {
+                const normalized = normalizeShellChunkForTimeline(event.chunk);
+
+                if (normalized.trim()) {
+                  context.onStdout(normalized);
+                }
+              } else if (event.type === 'stderr') {
+                const normalized = normalizeShellChunkForTimeline(event.chunk);
+
+                if (normalized.trim()) {
+                  context.onStderr(normalized);
+                }
+              } else if (event.type === 'status') {
+                context.onStdout(`${event.message}\n`);
+              } else if (event.type === 'ready') {
+                this.#setHostedPreview(event.preview);
+              }
+            },
+          });
+
+          finalOutput = resp.output;
+          finalExitCode = resp.exitCode;
+
+          return {
+            exitCode: resp.exitCode,
+            stdout: resp.output,
+            stderr: resp.exitCode === 0 ? '' : resp.output,
+          };
+        },
+      },
+      stepSocket,
+    );
+
+    stepRunner.addEventListener('event', (event) => {
+      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+      this.onStepRunnerEvent?.(detail);
+
+      if (detail.type === 'error') {
+        stepError = detail.error || 'Step execution failed';
+      }
+    });
+
+    await stepRunner.run([
+      {
+        description,
+        command: [action.content],
+      },
+    ]);
+
+    if (stepError || finalExitCode !== 0) {
+      const enhancedError = this.#createEnhancedShellError(action.content, finalExitCode, finalOutput);
+      throw new ActionCommandError(enhancedError.title, stepError || enhancedError.details);
+    }
   }
 
   addAction(data: ActionCallbackData) {
@@ -191,7 +434,7 @@ export class ActionRunner {
           break;
         }
         case 'file': {
-          await this.#runFileAction(action);
+          await this.#runFileAction(action, isStreaming);
           break;
         }
         case 'supabase': {
@@ -217,8 +460,12 @@ export class ActionRunner {
           break;
         }
         case 'start': {
-          // making the start app non blocking
+          if (isHostedRuntimeEnabled()) {
+            await this.#runStartAction(actionId, action);
+            break;
+          }
 
+          // making the local start app non blocking
           this.#runStartAction(actionId, action)
             .then(() => this.#updateAction(actionId, { status: 'complete' }))
             .catch((err: Error) => {
@@ -283,6 +530,23 @@ export class ActionRunner {
   async #runShellAction(actionId: string, action: ActionState) {
     if (action.type !== 'shell') {
       unreachable('Expected shell action');
+    }
+
+    if (isHostedRuntimeEnabled()) {
+      const validationResult = await this.#validateShellCommand(action.content);
+
+      if (validationResult.shouldModify && validationResult.modifiedCommand) {
+        action.content = validationResult.modifiedCommand;
+        this.#updateAction(actionId, { ...action } as any);
+      }
+
+      await this.#runHostedShellLikeCommand({
+        action,
+        description: `Run shell command: ${action.content}`,
+        kind: 'shell',
+      });
+
+      return;
     }
 
     const shell = this.#shellTerminal();
@@ -386,6 +650,24 @@ export class ActionRunner {
   async #runStartAction(actionId: string, action: ActionState) {
     if (action.type !== 'start') {
       unreachable('Expected shell action');
+    }
+
+    if (isHostedRuntimeEnabled()) {
+      const validationResult = await this.#validateShellCommand(action.content);
+
+      if (validationResult.shouldModify && validationResult.modifiedCommand) {
+        logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
+        action.content = validationResult.modifiedCommand;
+        this.#updateAction(actionId, { ...action } as any);
+      }
+
+      await this.#runHostedShellLikeCommand({
+        action,
+        description: `Start application: ${action.content}`,
+        kind: 'start',
+      });
+
+      return;
     }
 
     if (!this.#shellTerminal) {
@@ -495,7 +777,7 @@ export class ActionRunner {
     }
   }
 
-  async #runFileAction(action: ActionState) {
+  async #runFileAction(action: ActionState, isStreaming: boolean = false) {
     if (action.type !== 'file') {
       unreachable('Expected file action');
     }
@@ -503,6 +785,18 @@ export class ActionRunner {
     const webcontainer = await this.#webcontainer;
     const normalizedFilePath = normalizeArtifactFilePath(action.filePath, webcontainer.workdir);
     const relativePath = nodePath.relative(webcontainer.workdir, normalizedFilePath);
+    const existingFile = this.#getFilesSnapshot?.()[normalizedFilePath];
+    const hostedRuntimeEnabled = isHostedRuntimeEnabled();
+
+    if (
+      existingFile?.type === 'file' &&
+      !existingFile.isBinary &&
+      existingFile.content === action.content &&
+      (!hostedRuntimeEnabled || this.#lastHostedRuntimeFileContents.get(normalizedFilePath) === action.content)
+    ) {
+      this.#lastHostedRuntimeFileContents.set(normalizedFilePath, action.content);
+      return;
+    }
 
     let folder = nodePath.dirname(relativePath);
 
@@ -521,6 +815,12 @@ export class ActionRunner {
     try {
       await webcontainer.fs.writeFile(relativePath, action.content);
       logger.debug(`File written ${relativePath}`);
+
+      await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
+
+      if (!isStreaming) {
+        await this.#hostedRuntimeFlushPromise;
+      }
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
     }

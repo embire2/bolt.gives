@@ -61,6 +61,8 @@ Next release targets:
 
 Current `v3.0.2` release line:
 
+- Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
+- Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
 - Hosted instances still default to a built-in `FREE` provider backed by `DeepSeek V3.2`.
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
 - Hosted FREE still silently falls back to `qwen/qwen3-coder` if `DeepSeek V3.2` is unavailable, without exposing the fallback model in the client UI.
@@ -98,9 +100,13 @@ Release verdict for `v3.0.2`:
 - Cloudflare Pages FREE-provider path now passes live verification
 - Live smoke still passes on `https://alpha1.bolt.gives`
 - Live smoke still passes on `https://ahmad.bolt.gives`
+- Live hosted-runtime browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4`, including server-side sync replacing the fallback starter inside preview without a manual reload.
 
 What `v3.0.2` specifically changes:
 
+- Hosted instances now prefer the managed server-side runtime for installs, builds, preview hosting, and file sync, with WebContainer reduced to the fallback path instead of the default.
+- Hosted preview iframes now refresh when new server-side file sync revisions land, so generated apps replace the starter automatically.
+- Browser terminals on hosted instances now stay lightweight and status-oriented instead of pulling heavy interactive shell work into the client tab.
 - Cloudflare Pages / preview deployments now resolve hosted FREE-provider credentials correctly across both Pages-style and Worker-style runtime contexts.
 - If a public Pages runtime does not have a local hosted FREE secret, it can now relay hosted FREE requests back to the managed runtime instead of failing with a token error.
 - Public Pages deployments now automatically discard unsafe/stale collaboration socket settings and reconnect to the managed collaboration backend, preventing coding runs from pausing on repeated `/collab` websocket `404` failures.
@@ -113,7 +119,7 @@ What `v3.0.2` specifically changes:
 What is still true after `v3.0.2`:
 
 - The validated OpenAI core path is now working.
-- The browser client is still heavier than it should be, especially during long projects.
+- The heaviest hosted install/build/preview work is now off the browser, but the client bundle and long-run UI rendering are still heavier than they should be.
 - `ROADMAP.md` now tracks the current stable `v3.0.2` baseline and the next major delivery bucket `v3.0.3`.
 
 ## Screenshots
@@ -149,6 +155,7 @@ Current roadmap split:
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
 - Silent internal hosted-model fallback from `DeepSeek V3.2` to `qwen/qwen3-coder` when the primary upstream route is unavailable.
 - Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
+- Managed hosted runtime on live instances for installs, builds, tests, dev servers, preview hosting, and file sync, with browser-side WebContainer retained only as the fallback path.
 - Cloudflare Pages / preview deployments can now reuse the hosted FREE route through the managed runtime when the preview deployment does not hold the managed secret itself.
 - Top-level `Chat` / `Workspace` tabs with closable workspace persistence so prompt/commentary and files/preview can be focused independently.
 - Experimental managed Cloudflare instance architecture documented in-repo, including one-client / one-instance enforcement, a no-cost shared-runtime path, a future `standard-2` (`6 GiB`) Pro tier, and automatic rollout design from `main`.
