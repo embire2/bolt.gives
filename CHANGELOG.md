@@ -13,6 +13,14 @@
 - Hosted preview status polling now derives the active runtime session directly from the live preview URL, so self-heal can follow the exact managed preview session even after restarts or stale client state.
 - A live Playwright recovery smoke now generates a hosted app, intentionally corrupts it, and verifies end-to-end auto-recovery against `https://alpha1.bolt.gives`.
 
+### Fixed
+
+- Dependency installation no longer hard-fails when the Playwright Chromium download is blocked by network/domain policy during `postinstall`; installs now continue with a warning unless `PLAYWRIGHT_INSTALL_REQUIRED=1` is explicitly set.
+- Playwright postinstall now skips cleanly when the CLI is missing and writes its install marker directly, removing an unnecessary child-process `node -e` invocation.
+- Non-fatal Playwright browser install failures now still write a marker so future installs do not repeatedly retry known-blocked browser downloads.
+- `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
+- Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
+
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:
