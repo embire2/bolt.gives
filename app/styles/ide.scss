@@ -1,0 +1,47 @@
+.ide-panel {
+  min-height: 100vh;
+  padding: 4rem clamp(1rem, 5vw, 4rem);
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  background: radial-gradient(circle at top, rgba(74, 123, 255, 0.15), transparent 55%),
+    linear-gradient(180deg, rgba(8, 8, 8, 0.85), rgba(9, 12, 15, 0.95));
+}
+
+.ide-panel__header {
+  max-width: 840px;
+}
+
+.ide-panel__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ide-panel__title {
+  font-size: clamp(2.25rem, 3vw, 3rem);
+  margin: 0.35rem 0;
+  font-weight: 700;
+}
+
+.ide-panel__description {
+  color: rgba(226, 232, 240, 0.78);
+  line-height: 1.5;
+}
+
+.ide-panel__frame {
+  width: 100%;
+  flex: 1;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.65);
+  box-shadow: 0 0 45px rgba(15, 23, 42, 0.8);
+}
+
+.ide-panel__frame iframe {
+  width: 100%;
+  height: 80vh;
+  border: none;
+}

@@ -21,6 +21,8 @@
 - `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
 - Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
 - File-store writes now reject paths outside the WebContainer workdir, preventing accidental out-of-workspace writes that could trigger unstable sync behavior.
+- Fixed a JSX regression in `ColorSchemeDialog` that broke Vite/esbuild transforms (`Expected ")" but found "className"`), restoring the design palette dialog render path.
+- `webcontainer.connect.$id` now boots a local WebContainer instance (with in-page status + boot error handling) instead of relying only on `setupConnect`.
 ]
 ### Changed
 
@@ -37,6 +39,8 @@
 - Architect/self-heal now verifies hosted preview health on the server after each workspace mutation, so broken apps can auto-restore even when the browser never catches the transient failure overlay.
 - UI theme polish now removes remaining purple accents in primary settings surfaces in favor of a consistent red/blue palette, with stronger top-rail glow styling and more transparent Chat/Workspace surface tabs.
 - Red/blue glow colors are now centralized via theme variables and the heavier tab-rail effects are reduced/gated for accessibility/perf (`prefers-reduced-motion`, contrast-safe active tab fallback).
+- Chat/Workspace tabs now keep explicit readable active-label colors, and the app now includes a global cursor-follow glow layer with tuned light-theme surface tokens so white mode has cleaner contrast and less harsh blocks.
+- WebContainer connect responses now send `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Opener-Policy: same-origin` so browser WebContainer boot can run under the required isolation model.
 
 ### Minor Features & Polish (Not as important)
 

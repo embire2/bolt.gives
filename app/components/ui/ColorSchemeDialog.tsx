@@ -218,14 +218,10 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
                       />
                     )}
                     {f.key === 'gradient' && (
-
                       <div
                         className="w-6 h-6 rounded-lg opacity-90"
                         style={{ background: 'linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue))' }}
                       />
-
-                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-400 via-pink-400 to-indigo-400 opacity-90" />
-
                     )}
                     {f.key === 'shadow' && (
                       <div className="relative">

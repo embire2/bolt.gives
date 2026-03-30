@@ -58,40 +58,31 @@
   height: 74px;
   pointer-events: none;
   background:
-    radial-gradient(55% 120% at 8% 0%, color-mix(in srgb, var(--bolt-gradient-red), transparent calc((1 - var(--bolt-surface-glow-strength)) * 100%)), transparent 70%),
-    radial-gradient(55% 120% at 92% 0%, color-mix(in srgb, var(--bolt-gradient-blue), transparent calc((1 - var(--bolt-surface-glow-strength)) * 100%)), transparent 70%);
+    radial-gradient(55% 120% at 8% 0%, color-mix(in srgb, var(--bolt-gradient-red), transparent 92%), transparent 72%),
+    radial-gradient(55% 120% at 92% 0%, color-mix(in srgb, var(--bolt-gradient-blue), transparent 92%), transparent 72%);
   filter: blur(var(--bolt-surface-glow-blur));
   z-index: -1;
 }
 
 .SurfaceTab {
   background: transparent;
-  border: 1px solid transparent;
-  transition: color 0.2s ease, filter 0.2s ease;
+  border: 0;
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+  transition: color 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
 }
 
 .SurfaceTab:hover {
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--bolt-gradient-blue), transparent 75%));
+  background-color: color-mix(in srgb, var(--bolt-elements-bg-depth-1), transparent 95%);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bolt-gradient-blue), transparent 80%));
 }
 
 .SurfaceTabActive {
   color: #fff;
+  background-color: color-mix(in srgb, var(--bolt-elements-bg-depth-1), transparent 94%);
   text-shadow:
-    0 0 8px color-mix(in srgb, var(--bolt-gradient-blue), transparent 55%),
-    0 0 6px color-mix(in srgb, var(--bolt-gradient-red), transparent 65%);
-}
-
-.SurfaceTabLabelActive {
-  color: var(--bolt-elements-textPrimary);
-}
-
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .SurfaceTabLabelActive {
-    background-image: linear-gradient(90deg, var(--bolt-gradient-red), var(--bolt-gradient-blue));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
+    0 0 8px color-mix(in srgb, var(--bolt-gradient-blue), transparent 58%),
+    0 0 6px color-mix(in srgb, var(--bolt-gradient-red), transparent 68%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -110,8 +101,4 @@
 }
 
 @media (prefers-contrast: more) {
-  .SurfaceTabLabelActive {
-    background-image: none !important;
-    color: var(--bolt-elements-textPrimary) !important;
-  }
 }
