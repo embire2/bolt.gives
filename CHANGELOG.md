@@ -30,7 +30,20 @@
   - `DiffView`
   - provider/settings/deploy/status surfaces
   - commentary/timeline/status panels
+- Production builds now force production React/Scheduler bundles instead of accidentally inflating client chunks with development builds.
+- Vite now uses explicit manual chunking for the main client subsystems:
+  - `react-core`
+  - `markdown-shiki`
+  - `editor-codemirror`
+  - `terminal-xterm`
+  - `collaboration-yjs`
+  - `git-export`
+  - `charts-pdf`
+  - `ui-vendor`
+  - `llm-vendor`
 - Markdown rendering now loads behind a lighter shell, and the heavier markdown/code/thought/artifact surfaces are deferred until they are actually needed.
+- Runtime code, artifact shell blocks, tool invocation payloads, and diff lines now default to lightweight plain rendering instead of shipping client-side Shiki highlighting across the default chat/workspace path.
+- Workbench export, repository push, and test/security scan integrations now lazy-load their heavy dependencies (`jszip`, `file-saver`, `@octokit/rest`, collaboration helpers, and test-security helpers) instead of inflating the default store bootstrap.
 - Hosted preview error detection now prefers server runtime diagnostics instead of scraping iframe DOM state in the browser.
 - Hosted preview polling now reads compact server status summaries and SSE updates instead of keeping more preview/error parsing logic in the client tab.
 - Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.

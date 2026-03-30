@@ -2,29 +2,12 @@ import { useStore } from '@nanostores/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { computed } from 'nanostores';
 import { memo, useEffect, useRef, useState } from 'react';
-import { createHighlighter, type BundledLanguage, type BundledTheme, type HighlighterGeneric } from 'shiki';
 import type { ActionState } from '~/lib/runtime/action-runner';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { WORK_DIR } from '~/utils/constants';
 import { toWorkbenchAbsoluteFilePath, toWorkbenchRelativeFilePath } from '~/lib/runtime/file-paths';
-
-const highlighterOptions = {
-  langs: ['shell'],
-  themes: ['light-plus', 'dark-plus'],
-};
-
-const hotData = import.meta.hot?.data ?? {};
-
-const shellHighlighter: HighlighterGeneric<BundledLanguage, BundledTheme> =
-  hotData?.shellHighlighter ?? (await createHighlighter(highlighterOptions));
-
-if (import.meta.hot) {
-  const hot = import.meta.hot as any;
-  hot.data ??= {};
-  hot.data.shellHighlighter = shellHighlighter;
-}
 
 interface ArtifactProps {
   messageId: string;
@@ -169,15 +152,11 @@ interface ShellCodeBlockProps {
 
 function ShellCodeBlock({ classsName, code }: ShellCodeBlockProps) {
   return (
-    <div
-      className={classNames('text-xs', classsName)}
-      dangerouslySetInnerHTML={{
-        __html: shellHighlighter.codeToHtml(code, {
-          lang: 'shell',
-          theme: 'dark-plus',
-        }),
-      }}
-    ></div>
+    <div className={classNames('text-xs', classsName)}>
+      <pre className="overflow-x-auto rounded-md bg-bolt-elements-background-depth-2 p-2 text-xs text-bolt-elements-textPrimary">
+        <code>{code}</code>
+      </pre>
+    </div>
   );
 }
 
