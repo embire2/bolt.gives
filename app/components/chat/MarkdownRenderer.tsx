@@ -1,6 +1,5 @@
 import { Suspense, memo, useMemo, lazy } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import type { BundledLanguage } from 'shiki';
 import type { Message } from 'ai';
 import { createScopedLogger } from '~/utils/logger';
 import { rehypePlugins, remarkPlugins, allowedHTMLElements } from '~/utils/markdown';
@@ -123,11 +122,7 @@ export const MarkdownRenderer = memo(
 
             return (
               <Suspense fallback={<pre {...rest}>{firstChild.children[0].value}</pre>}>
-                <LazyCodeBlock
-                  code={firstChild.children[0].value}
-                  language={language as BundledLanguage}
-                  {...codeProps}
-                />
+                <LazyCodeBlock code={firstChild.children[0].value} language={language} {...codeProps} />
               </Suspense>
             );
           }

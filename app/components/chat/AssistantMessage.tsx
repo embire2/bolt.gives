@@ -1,4 +1,4 @@
-import { memo, Fragment } from 'react';
+import { memo, Fragment, Suspense, lazy } from 'react';
 import { Markdown } from './Markdown';
 import type { JSONValue } from 'ai';
 import Popover from '~/components/ui/Popover';
@@ -15,9 +15,12 @@ import type {
   FileUIPart,
   StepStartUIPart,
 } from '@ai-sdk/ui-utils';
-import { ToolInvocations } from './ToolInvocations';
 import type { ToolCallAnnotation } from '~/types/context';
 import { toWorkbenchAbsoluteFilePath, toWorkbenchRelativeFilePath } from '~/lib/runtime/file-paths';
+
+const LazyToolInvocations = lazy(() =>
+  import('./ToolInvocations').then((module) => ({ default: module.ToolInvocations })),
+);
 
 interface AssistantMessageProps {
   content: string;
@@ -165,11 +168,19 @@ export const AssistantMessage = memo(
           {content}
         </Markdown>
         {toolInvocations && toolInvocations.length > 0 && (
-          <ToolInvocations
-            toolInvocations={toolInvocations}
-            toolCallAnnotations={toolCallAnnotations}
-            addToolResult={addToolResult}
-          />
+          <Suspense
+            fallback={
+              <div className="rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                Loading tool activity...
+              </div>
+            }
+          >
+            <LazyToolInvocations
+              toolInvocations={toolInvocations}
+              toolCallAnnotations={toolCallAnnotations}
+              addToolResult={addToolResult}
+            />
+          </Suspense>
         )}
       </div>
     );

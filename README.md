@@ -63,6 +63,9 @@ Current `v3.0.2` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
 - Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
+- Production builds now split the client more aggressively into explicit subsystem chunks instead of one oversized generic vendor path.
+- The heaviest default browser path no longer carries client-side Shiki syntax highlighting for chat code blocks, tool payloads, artifact shell blocks, or diff rendering.
+- Workbench export, repository push, and test/security scan integrations now lazy-load their heavy dependencies instead of inflating the shared startup store.
 - More of the heavy desktop shell is now split into on-demand chunks, including `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and the execution/commentary panels.
 - Markdown, code rendering, thought blocks, and artifact rendering now sit behind deeper lazy boundaries so heavy language/rendering code only loads when a message actually needs it.
 - Long technical feeds now virtualize large event windows instead of keeping the full timeline mounted in the browser.
@@ -184,6 +187,9 @@ Current roadmap split:
 - **E2B Sandbox Support**: Cloud-hosted Linux sandbox as an alternative to the in-browser WebContainer. Enable in Settings → Cloud Environments with your E2B API key.
 - **Firecrawl Integration**: Cloud-based web scraping via the Firecrawl API as an alternative to the local Playwright server. Configure via `FIRECRAWL_API_KEY` env var or in Settings.
 - **BoltContainer**: Custom WebContainer alternative built by bolt.gives. Features an in-memory VFS with file watchers, E2B cloud execution, and drop-in API compatibility. Select in Settings → Cloud Environments → Runtime Engine.
+- Explicit manual Vite chunking for the major client subsystems so React/editor/terminal/collaboration/markdown/git/chart code no longer collapses into one oversized generic vendor blob.
+- Lightweight default code/tool/artifact/diff rendering that removes client-side Shiki from the normal runtime path.
+- Lazy workbench integrations for export, repository push, and test/security scan flows so heavy libraries only load when the user actually opens those actions.
 - Experimental managed Cloudflare instance architecture documented in-repo, including one-client / one-instance enforcement, a no-cost shared-runtime path, a future `standard-2` (`6 GiB`) Pro tier, and automatic rollout design from `main`.
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.

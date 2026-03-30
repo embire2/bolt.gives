@@ -21,9 +21,12 @@
 - `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
 - Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
 - File-store writes now reject paths outside the WebContainer workdir, preventing accidental out-of-workspace writes that could trigger unstable sync behavior.
+
 - Fixed a JSX regression in `ColorSchemeDialog` that broke Vite/esbuild transforms (`Expected ")" but found "className"`), restoring the design palette dialog render path.
 - `webcontainer.connect.$id` now boots a local WebContainer instance (with in-page status + boot error handling) instead of relying only on `setupConnect`.
-]
+
+- `ChatBox` no longer attempts to SSR the client-only web-search control, which restores hosted home-page rendering on `alpha1`/`ahmad` after the workspace merge.
+
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:
@@ -32,7 +35,20 @@
   - `DiffView`
   - provider/settings/deploy/status surfaces
   - commentary/timeline/status panels
+- Production builds now force production React/Scheduler bundles instead of accidentally inflating client chunks with development builds.
+- Vite now uses explicit manual chunking for the main client subsystems:
+  - `react-core`
+  - `markdown-shiki`
+  - `editor-codemirror`
+  - `terminal-xterm`
+  - `collaboration-yjs`
+  - `git-export`
+  - `charts-pdf`
+  - `ui-vendor`
+  - `llm-vendor`
 - Markdown rendering now loads behind a lighter shell, and the heavier markdown/code/thought/artifact surfaces are deferred until they are actually needed.
+- Runtime code, artifact shell blocks, tool invocation payloads, and diff lines now default to lightweight plain rendering instead of shipping client-side Shiki highlighting across the default chat/workspace path.
+- Workbench export, repository push, and test/security scan integrations now lazy-load their heavy dependencies (`jszip`, `file-saver`, `@octokit/rest`, collaboration helpers, and test-security helpers) instead of inflating the default store bootstrap.
 - Hosted preview error detection now prefers server runtime diagnostics instead of scraping iframe DOM state in the browser.
 - Hosted preview polling now reads compact server status summaries and SSE updates instead of keeping more preview/error parsing logic in the client tab.
 - Managed runtime sessions now preserve literal safe session ids instead of hashing them server-side, which keeps workspace sync, preview URLs, preview-status lookups, and Architect recovery on one identifier.

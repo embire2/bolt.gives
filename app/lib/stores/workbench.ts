@@ -10,18 +10,11 @@ import { FilesStore, type FileMap } from './files';
 import { PreviewsStore } from './previews';
 import type { PreviewInfo } from './previews';
 import { TerminalStore } from './terminal';
-import JSZip from 'jszip';
-import fileSaver from 'file-saver';
-import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 import { extractRelativePath } from '~/utils/diff';
 import { description } from '~/lib/persistence';
-import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
-import { InteractiveStepRunner } from '~/lib/runtime/interactive-step-runner';
-import { createTestAndSecuritySteps, getMissingJestStubs } from '~/lib/runtime/test-security';
-import { getCollaborationServerUrl } from '~/lib/collaboration/client';
 import {
   AUTONOMY_MODE_STORAGE_KEY,
   DEFAULT_AUTONOMY_MODE,
@@ -33,7 +26,6 @@ import { createScopedLogger } from '~/utils/logger';
 import { toWorkbenchAbsoluteFilePath } from '~/lib/runtime/file-paths';
 import { extractHostedRuntimeSessionIdFromPreviewBaseUrl } from '~/lib/runtime/hosted-runtime-client';
 
-const { saveAs } = fileSaver;
 const logger = createScopedLogger('WorkbenchStore');
 const hotData = import.meta.hot?.data ?? {};
 const DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS = 100;
@@ -1069,7 +1061,8 @@ export class WorkbenchStore {
   }
 
   async downloadZip() {
-    const zip = new JSZip();
+    const [{ default: jsZip }, fileSaver] = await Promise.all([import('jszip'), import('file-saver')]);
+    const zip = new jsZip();
     const files = this.files.get();
 
     // Get the project name from the description input, or use a default name
@@ -1103,7 +1096,7 @@ export class WorkbenchStore {
 
     // Generate the zip file and save it
     const content = await zip.generateAsync({ type: 'blob' });
-    saveAs(content, `${uniqueProjectName}.zip`);
+    fileSaver.saveAs(content, `${uniqueProjectName}.zip`);
   }
 
   async runTestAndSecurityScan() {
@@ -1116,6 +1109,12 @@ export class WorkbenchStore {
     try {
       const changes = this.getFileModifcations() || {};
       const changedPaths = Object.keys(changes);
+      const [{ getMissingJestStubs, createTestAndSecuritySteps }, interactiveStepRunnerModule, collaborationClient] =
+        await Promise.all([
+          import('~/lib/runtime/test-security'),
+          import('~/lib/runtime/interactive-step-runner'),
+          import('~/lib/collaboration/client'),
+        ]);
       const missingStubs = getMissingJestStubs(this.files.get(), changedPaths);
 
       for (const stub of missingStubs) {
@@ -1129,7 +1128,7 @@ export class WorkbenchStore {
 
       try {
         if (typeof window !== 'undefined') {
-          const base = getCollaborationServerUrl();
+          const base = collaborationClient.getCollaborationServerUrl();
           eventSocket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
         }
       } catch {
@@ -1137,7 +1136,7 @@ export class WorkbenchStore {
       }
 
       const steps = createTestAndSecuritySteps();
-      const runner = new InteractiveStepRunner(
+      const runner = new interactiveStepRunnerModule.InteractiveStepRunner(
         {
           executeStep: async (step, context) => {
             const commandText =
@@ -1220,8 +1219,9 @@ export class WorkbenchStore {
       const isGitHub = provider === 'github';
       const isGitLab = provider === 'gitlab';
 
-      const authToken = token || Cookies.get(isGitHub ? 'githubToken' : 'gitlabToken');
-      const owner = username || Cookies.get(isGitHub ? 'githubUsername' : 'gitlabUsername');
+      const cookies = (await import('js-cookie')).default;
+      const authToken = token || cookies.get(isGitHub ? 'githubToken' : 'gitlabToken');
+      const owner = username || cookies.get(isGitHub ? 'githubUsername' : 'gitlabUsername');
 
       if (!authToken || !owner) {
         throw new Error(`${provider} token or username is not set in cookies or provided.`);
@@ -1234,11 +1234,13 @@ export class WorkbenchStore {
       }
 
       if (isGitHub) {
-        // Initialize Octokit with the auth token
-        const octokit = new Octokit({ auth: authToken });
+        const octokitModule = await import('@octokit/rest');
+
+        // Initialize Octokit with the auth token.
+        const octokit = new octokitModule.Octokit({ auth: authToken });
 
         // Check if the repository already exists before creating it
-        let repo: RestEndpointMethodTypes['repos']['get']['response']['data'];
+        let repo: any;
         let visibilityJustChanged = false;
 
         try {

@@ -4,12 +4,10 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import type { FileMap } from '~/lib/stores/files';
 import type { EditorDocument } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { diffLines, type Change } from 'diff';
-import { getHighlighter } from 'shiki';
 import '~/styles/diff-view.css';
 import { diffFiles, extractRelativePath } from '~/utils/diff';
 import type { FileHistory } from '~/types/actions';
 import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
-import { themeStore } from '~/lib/stores/theme';
 
 interface CodeComparisonProps {
   beforeCode: string;
@@ -344,55 +342,31 @@ const renderContentWarning = (type: 'binary' | 'error') => (
   </div>
 );
 
-const NoChangesView = memo(
-  ({
-    beforeCode,
-    language,
-    highlighter,
-    theme,
-  }: {
-    beforeCode: string;
-    language: string;
-    highlighter: any;
-    theme: string;
-  }) => (
-    <div className="h-full flex flex-col items-center justify-center p-4">
-      <div className="text-center text-bolt-elements-textTertiary">
-        <div className="i-ph:files text-4xl text-green-400 mb-2 mx-auto" />
-        <p className="font-medium text-bolt-elements-textPrimary">Files are identical</p>
-        <p className="text-sm mt-1">Both versions match exactly</p>
+const NoChangesView = memo(({ beforeCode }: { beforeCode: string }) => (
+  <div className="h-full flex flex-col items-center justify-center p-4">
+    <div className="text-center text-bolt-elements-textTertiary">
+      <div className="i-ph:files text-4xl text-green-400 mb-2 mx-auto" />
+      <p className="font-medium text-bolt-elements-textPrimary">Files are identical</p>
+      <p className="text-sm mt-1">Both versions match exactly</p>
+    </div>
+    <div className="mt-4 w-full max-w-2xl bg-bolt-elements-background-depth-1 rounded-lg border border-bolt-elements-borderColor overflow-hidden">
+      <div className="p-2 text-xs font-bold text-bolt-elements-textTertiary border-b border-bolt-elements-borderColor">
+        Current Content
       </div>
-      <div className="mt-4 w-full max-w-2xl bg-bolt-elements-background-depth-1 rounded-lg border border-bolt-elements-borderColor overflow-hidden">
-        <div className="p-2 text-xs font-bold text-bolt-elements-textTertiary border-b border-bolt-elements-borderColor">
-          Current Content
-        </div>
-        <div className="overflow-auto max-h-96">
-          {beforeCode.split('\n').map((line, index) => (
-            <div key={index} className="flex group min-w-fit">
-              <div className={lineNumberStyles}>{index + 1}</div>
-              <div className={lineContentStyles}>
-                <span className="mr-2"> </span>
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: highlighter
-                      ? highlighter
-                          .codeToHtml(line, {
-                            lang: language,
-                            theme: theme === 'dark' ? 'github-dark' : 'github-light',
-                          })
-                          .replace(/<\/?pre[^>]*>/g, '')
-                          .replace(/<\/?code[^>]*>/g, '')
-                      : line,
-                  }}
-                />
-              </div>
+      <div className="overflow-auto max-h-96">
+        {beforeCode.split('\n').map((line, index) => (
+          <div key={index} className="flex group min-w-fit">
+            <div className={lineNumberStyles}>{index + 1}</div>
+            <div className={lineContentStyles}>
+              <span className="mr-2"> </span>
+              <span>{line}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
-  ),
-);
+  </div>
+));
 
 // Otimização do processamento de diferenças com memoização
 const useProcessChanges = (beforeCode: string, afterCode: string) => {
@@ -405,30 +379,20 @@ const CodeLine = memo(
     lineNumber,
     content,
     type,
-    highlighter,
     language,
     block,
-    theme,
   }: {
     lineNumber: number;
     content: string;
     type: 'added' | 'removed' | 'unchanged';
-    highlighter: any;
     language: string;
     block: DiffBlock;
-    theme: string;
   }) => {
     const bgColor = diffLineStyles[type];
 
     const renderContent = () => {
       if (type === 'unchanged' || !block.charChanges) {
-        const highlightedCode = highlighter
-          ? highlighter
-              .codeToHtml(content, { lang: language, theme: theme === 'dark' ? 'github-dark' : 'github-light' })
-              .replace(/<\/?pre[^>]*>/g, '')
-              .replace(/<\/?code[^>]*>/g, '')
-          : content;
-        return <span dangerouslySetInnerHTML={{ __html: highlightedCode }} />;
+        return <span data-language={language}>{content}</span>;
       }
 
       return (
@@ -436,17 +400,11 @@ const CodeLine = memo(
           {block.charChanges.map((change, index) => {
             const changeClass = changeColorStyles[change.type];
 
-            const highlightedCode = highlighter
-              ? highlighter
-                  .codeToHtml(change.value, {
-                    lang: language,
-                    theme: theme === 'dark' ? 'github-dark' : 'github-light',
-                  })
-                  .replace(/<\/?pre[^>]*>/g, '')
-                  .replace(/<\/?code[^>]*>/g, '')
-              : change.value;
-
-            return <span key={index} className={changeClass} dangerouslySetInnerHTML={{ __html: highlightedCode }} />;
+            return (
+              <span key={index} className={changeClass} data-language={language}>
+                {change.value}
+              </span>
+            );
           })}
         </>
       );
@@ -541,55 +499,8 @@ const FileInfo = memo(
   },
 );
 
-// Create and manage a single highlighter instance at the module level
-let highlighterInstance: any = null;
-let highlighterPromise: Promise<any> | null = null;
-
-const getSharedHighlighter = async () => {
-  if (highlighterInstance) {
-    return highlighterInstance;
-  }
-
-  if (highlighterPromise) {
-    return highlighterPromise;
-  }
-
-  highlighterPromise = getHighlighter({
-    themes: ['github-dark', 'github-light'],
-    langs: [
-      'typescript',
-      'javascript',
-      'json',
-      'html',
-      'css',
-      'jsx',
-      'tsx',
-      'python',
-      'php',
-      'java',
-      'c',
-      'cpp',
-      'csharp',
-      'go',
-      'ruby',
-      'rust',
-      'plaintext',
-    ],
-  });
-
-  highlighterInstance = await highlighterPromise;
-  highlighterPromise = null;
-
-  // Clear the promise once resolved
-  return highlighterInstance;
-};
-
 const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }: CodeComparisonProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Use state to hold the shared highlighter instance
-  const [highlighter, setHighlighter] = useState<any>(null);
-  const theme = useStore(themeStore);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -597,31 +508,8 @@ const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }
 
   const { unifiedBlocks, hasChanges, isBinary, error } = useProcessChanges(beforeCode, afterCode);
 
-  useEffect(() => {
-    // Fetch the shared highlighter instance
-    getSharedHighlighter().then(setHighlighter);
-
-    /*
-     * No cleanup needed here for the highlighter instance itself,
-     * as it's managed globally. Shiki instances don't typically
-     * need disposal unless you are dynamically loading/unloading themes/languages.
-     * If you were dynamically loading, you might need a more complex
-     * shared instance manager with reference counting or similar.
-     * For static themes/langs, a single instance is sufficient.
-     */
-  }, []); // Empty dependency array ensures this runs only once on mount
-
   if (isBinary || error) {
     return renderContentWarning(isBinary ? 'binary' : 'error');
-  }
-
-  // Render a loading state or null while highlighter is not ready
-  if (!highlighter) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-bolt-elements-textTertiary">Loading diff...</div>
-      </div>
-    );
   }
 
   return (
@@ -644,15 +532,13 @@ const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }
                   lineNumber={block.lineNumber}
                   content={block.content}
                   type={block.type}
-                  highlighter={highlighter} // Pass the shared instance
                   language={language}
                   block={block}
-                  theme={theme}
                 />
               ))}
             </div>
           ) : (
-            <NoChangesView beforeCode={beforeCode} language={language} highlighter={highlighter} theme={theme} />
+            <NoChangesView beforeCode={beforeCode} />
           )}
         </div>
       </div>

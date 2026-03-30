@@ -6,6 +6,7 @@ import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
 import { execSync } from 'child_process';
+import { getManualChunkName } from './build-utils/manual-chunks';
 
 // Load environment variables from multiple files
 dotenv.config({ path: '.env.local' });
@@ -22,9 +23,11 @@ const getGitHash = () => {
 };
 
 export default defineConfig((config) => {
+  const nodeEnv = config.mode === 'production' ? 'production' : process.env.NODE_ENV || 'development';
+
   return {
     define: {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+      'process.env.NODE_ENV': JSON.stringify(nodeEnv),
       __COMMIT_HASH: JSON.stringify(getGitHash()),
       __APP_VERSION: JSON.stringify(process.env.npm_package_version || '1.0.1'),
     },
@@ -32,6 +35,13 @@ export default defineConfig((config) => {
       target: 'esnext',
       // Lowers peak memory usage during production builds by skipping gzip/brotli size estimates.
       reportCompressedSize: false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            return getManualChunkName(id);
+          },
+        },
+      },
     },
     plugins: [
       nodePolyfills({
@@ -67,7 +77,9 @@ export default defineConfig((config) => {
         },
       }),
       UnoCSS(),
-      tsconfigPaths(),
+      tsconfigPaths({
+        ignoreConfigErrors: true,
+      }),
       chrome129IssuePlugin(),
       config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
     ],

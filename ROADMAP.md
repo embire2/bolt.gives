@@ -75,6 +75,9 @@ Release theme: move heavy lifting off the browser, implement the actual managed 
 - [~] Move the remaining heavy UI/runtime work off the client, especially any local fallback execution that still depends on WebContainer.
 - [~] Reduce client-side memory pressure during long sessions through bundle reduction, stricter virtualization, and lower-frequency state churn.
 - [~] Add stall/memory telemetry tied to concrete UI recovery actions.
+- [x] Introduced explicit manual chunking for the main client subsystems (`react-core`, markdown, editor, terminal, collaboration, git/export, charts, UI, and LLM vendor paths) so the browser no longer pays for one oversized generic vendor blob.
+- [x] Removed client-side Shiki highlighting from the default chat/workspace runtime path; code/tool/artifact/diff surfaces now render lightweight plain text unless a heavier surface is explicitly requested later.
+- [x] Moved workbench export, repository, and test/security integrations behind lazy imports so heavy libraries do not inflate the shared startup store.
 - [x] Hosted preview health/error polling now runs through a server-side preview status path instead of browser iframe scraping on the managed runtime path.
 - [x] Hosted preview status now follows the literal active runtime session instead of a hidden server-side session-id remap, so self-heal can target the real preview workspace reliably.
 - [x] Provider/settings/deploy surfaces inside the main chat shell now lazy-load behind deeper boundaries instead of inflating the default client bootstrap.
