@@ -21,7 +21,8 @@
 - `PLAYWRIGHT_INSTALL_REQUIRED` now treats common truthy values (`1`, `true`, `yes`, etc.) as strict mode and common false-like values (`0`, `false`, `no`, `off`) as non-strict.
 - Locked file persistence now avoids duplicate `localStorage` writes for unchanged lock state, reducing UI-thread storage churn during repeated lock/unlock actions.
 - File-store writes now reject paths outside the WebContainer workdir, preventing accidental out-of-workspace writes that could trigger unstable sync behavior.
-]
+- `ChatBox` no longer attempts to SSR the client-only web-search control, which restores hosted home-page rendering on `alpha1`/`ahmad` after the workspace merge.
+
 ### Changed
 
 - The workspace shell now lazy-loads more of the heavy client surfaces:
