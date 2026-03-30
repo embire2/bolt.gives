@@ -230,13 +230,13 @@ export default function LocalProvidersTab() {
                 current.map((m) =>
                   m.name === modelName
                     ? {
-                      ...m,
-                      progress: {
-                        current: data.completed,
-                        total: data.total,
-                        status: data.status,
-                      },
-                    }
+                        ...m,
+                        progress: {
+                          current: data.completed,
+                          total: data.total,
+                          status: data.status,
+                        },
+                      }
                     : m,
                 ),
               );

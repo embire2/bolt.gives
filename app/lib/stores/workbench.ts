@@ -1,6 +1,6 @@
 import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
-import { ActionRunner } from '~/lib/runtime/action-runner';
+import type { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
@@ -821,7 +821,7 @@ export class WorkbenchStore {
     this.#reloadedMessages = new Set(messages);
   }
 
-  addArtifact({ messageId, title, id, type }: ArtifactCallbackData) {
+  async addArtifact({ messageId, title, id, type }: ArtifactCallbackData) {
     const artifact = this.#getArtifact(id);
 
     if (artifact) {
@@ -832,12 +832,14 @@ export class WorkbenchStore {
       this.artifactIdList.push(id);
     }
 
+    const actionRunnerModule = await import('~/lib/runtime/action-runner');
+
     this.artifacts.setKey(id, {
       id,
       title,
       closed: false,
       type,
-      runner: new ActionRunner(
+      runner: new actionRunnerModule.ActionRunner(
         webcontainer,
         () => this.boltTerminal,
         () => this.files.get(),
@@ -1109,11 +1111,11 @@ export class WorkbenchStore {
     try {
       const changes = this.getFileModifcations() || {};
       const changedPaths = Object.keys(changes);
-      const [{ getMissingJestStubs, createTestAndSecuritySteps }, interactiveStepRunnerModule, collaborationClient] =
+      const [{ getMissingJestStubs, createTestAndSecuritySteps }, interactiveStepRunnerModule, collaborationConfig] =
         await Promise.all([
           import('~/lib/runtime/test-security'),
           import('~/lib/runtime/interactive-step-runner'),
-          import('~/lib/collaboration/client'),
+          import('~/lib/collaboration/config'),
         ]);
       const missingStubs = getMissingJestStubs(this.files.get(), changedPaths);
 
@@ -1128,7 +1130,7 @@ export class WorkbenchStore {
 
       try {
         if (typeof window !== 'undefined') {
-          const base = collaborationClient.getCollaborationServerUrl();
+          const base = collaborationConfig.getCollaborationServerUrl();
           eventSocket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
         }
       } catch {

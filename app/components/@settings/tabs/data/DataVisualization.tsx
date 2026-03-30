@@ -1,33 +1,72 @@
-import { useState, useEffect } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  PointElement,
-  LineElement,
-} from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
+import { useEffect, useMemo, useState } from 'react';
+import type { ComponentType } from 'react';
 import type { Chat } from '~/lib/persistence/chats';
 import { classNames } from '~/utils/classNames';
 
-// Register ChartJS components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement);
+type ChartComponentProps = {
+  data: unknown;
+  options: unknown;
+};
+
+type ChartComponents = {
+  Bar: ComponentType<ChartComponentProps>;
+  Pie: ComponentType<ChartComponentProps>;
+};
 
 type DataVisualizationProps = {
   chats: Chat[];
 };
 
 export function DataVisualization({ chats }: DataVisualizationProps) {
-  const [chatsByDate, setChatsByDate] = useState<Record<string, number>>({});
+  const [chartsByDate, setChatsByDate] = useState<Record<string, number>>({});
   const [messagesByRole, setMessagesByRole] = useState<Record<string, number>>({});
   const [apiKeyUsage, setApiKeyUsage] = useState<Array<{ provider: string; count: number }>>([]);
   const [averageMessagesPerChat, setAverageMessagesPerChat] = useState<number>(0);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [chartComponents, setChartComponents] = useState<ChartComponents | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([import('chart.js'), import('react-chartjs-2')]).then(([chartJsModule, chartReactModule]) => {
+      if (cancelled) {
+        return;
+      }
+
+      const {
+        Chart,
+        CategoryScale,
+        LinearScale,
+        BarElement,
+        Title,
+        Tooltip,
+        Legend,
+        ArcElement,
+        PointElement,
+        LineElement,
+      } = chartJsModule;
+      Chart.register(
+        CategoryScale,
+        LinearScale,
+        BarElement,
+        Title,
+        Tooltip,
+        Legend,
+        ArcElement,
+        PointElement,
+        LineElement,
+      );
+
+      setChartComponents({
+        Bar: chartReactModule.Bar as ComponentType<ChartComponentProps>,
+        Pie: chartReactModule.Pie as ComponentType<ChartComponentProps>,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark');
@@ -47,11 +86,10 @@ export function DataVisualization({ chats }: DataVisualizationProps) {
   }, []);
 
   useEffect(() => {
-    if (!chats || chats.length === 0) {
+    if (!chats.length) {
       return;
     }
 
-    // Process chat data
     const chatDates: Record<string, number> = {};
     const roleCounts: Record<string, number> = {};
     const apiUsage: Record<string, number> = {};
@@ -85,65 +123,33 @@ export function DataVisualization({ chats }: DataVisualizationProps) {
     setAverageMessagesPerChat(totalMessages / chats.length);
   }, [chats]);
 
-  // Get theme colors from CSS variables to ensure theme consistency
   const getThemeColor = (varName: string): string => {
-    // Get the CSS variable value from document root
     if (typeof document !== 'undefined') {
       return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
     }
 
-    // Fallback for SSR
     return isDarkMode ? '#FFFFFF' : '#000000';
   };
 
-  // Theme-aware chart colors with enhanced dark mode visibility using CSS variables
   const chartColors = {
     grid: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
     text: getThemeColor('--bolt-elements-textPrimary'),
-    textSecondary: getThemeColor('--bolt-elements-textSecondary'),
-    background: getThemeColor('--bolt-elements-bg-depth-1'),
-    accent: getThemeColor('--bolt-elements-button-primary-text'),
     border: getThemeColor('--bolt-elements-borderColor'),
   };
 
   const getChartColors = (index: number) => {
-    // Define color palettes based on Bolt design tokens
     const baseColors = [
-      // Indigo
-      {
-        base: getThemeColor('--bolt-elements-button-primary-text'),
-      },
-
-      // Pink
-      {
-        base: isDarkMode ? 'rgb(244, 114, 182)' : 'rgb(236, 72, 153)',
-      },
-
-      // Green
-      {
-        base: getThemeColor('--bolt-elements-icon-success'),
-      },
-
-      // Yellow
-      {
-        base: isDarkMode ? 'rgb(250, 204, 21)' : 'rgb(234, 179, 8)',
-      },
-
-      // Blue
-      {
-        base: isDarkMode ? 'rgb(56, 189, 248)' : 'rgb(14, 165, 233)',
-      },
+      getThemeColor('--bolt-elements-button-primary-text'),
+      isDarkMode ? 'rgb(244, 114, 182)' : 'rgb(236, 72, 153)',
+      getThemeColor('--bolt-elements-icon-success'),
+      isDarkMode ? 'rgb(250, 204, 21)' : 'rgb(234, 179, 8)',
+      isDarkMode ? 'rgb(56, 189, 248)' : 'rgb(14, 165, 233)',
     ];
 
-    // Get the base color for this index
-    const color = baseColors[index % baseColors.length].base;
-
-    // Parse color and generate variations with appropriate opacity
-    let r = 0,
-      g = 0,
-      b = 0;
-
-    // Handle rgb/rgba format
+    const color = baseColors[index % baseColors.length];
+    let r = 0;
+    let g = 0;
+    let b = 0;
     const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
     const rgbaMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/);
 
@@ -152,9 +158,7 @@ export function DataVisualization({ chats }: DataVisualizationProps) {
     } else if (rgbaMatch) {
       [, r, g, b] = rgbaMatch.map(Number);
     } else if (color.startsWith('#')) {
-      // Handle hex format
-      const hex = color.slice(1);
-      const bigint = parseInt(hex, 16);
+      const bigint = parseInt(color.slice(1), 16);
       r = (bigint >> 16) & 255;
       g = (bigint >> 8) & 255;
       b = bigint & 255;
@@ -166,219 +170,176 @@ export function DataVisualization({ chats }: DataVisualizationProps) {
     };
   };
 
-  const chartData = {
-    history: {
-      labels: Object.keys(chatsByDate),
-      datasets: [
-        {
-          label: 'Chats Created',
-          data: Object.values(chatsByDate),
-          backgroundColor: getChartColors(0).bg,
-          borderColor: getChartColors(0).border,
-          borderWidth: 1,
-        },
-      ],
-    },
-    roles: {
-      labels: Object.keys(messagesByRole),
-      datasets: [
-        {
-          label: 'Messages by Role',
-          data: Object.values(messagesByRole),
-          backgroundColor: Object.keys(messagesByRole).map((_, i) => getChartColors(i).bg),
-          borderColor: Object.keys(messagesByRole).map((_, i) => getChartColors(i).border),
-          borderWidth: 1,
-        },
-      ],
-    },
-    apiUsage: {
-      labels: apiKeyUsage.map((item) => item.provider),
-      datasets: [
-        {
-          label: 'API Usage',
-          data: apiKeyUsage.map((item) => item.count),
-          backgroundColor: apiKeyUsage.map((_, i) => getChartColors(i).bg),
-          borderColor: apiKeyUsage.map((_, i) => getChartColors(i).border),
-          borderWidth: 1,
-        },
-      ],
-    },
-  };
+  const chartData = useMemo(
+    () => ({
+      history: {
+        labels: Object.keys(chartsByDate),
+        datasets: [
+          {
+            label: 'Chats Created',
+            data: Object.values(chartsByDate),
+            backgroundColor: getChartColors(0).bg,
+            borderColor: getChartColors(0).border,
+            borderWidth: 1,
+          },
+        ],
+      },
+      roles: {
+        labels: Object.keys(messagesByRole),
+        datasets: [
+          {
+            label: 'Messages by Role',
+            data: Object.values(messagesByRole),
+            backgroundColor: Object.keys(messagesByRole).map((_, i) => getChartColors(i).bg),
+            borderColor: Object.keys(messagesByRole).map((_, i) => getChartColors(i).border),
+            borderWidth: 1,
+          },
+        ],
+      },
+      apiUsage: {
+        labels: apiKeyUsage.map((item) => item.provider),
+        datasets: [
+          {
+            label: 'API Usage',
+            data: apiKeyUsage.map((item) => item.count),
+            backgroundColor: apiKeyUsage.map((_, i) => getChartColors(i).bg),
+            borderColor: apiKeyUsage.map((_, i) => getChartColors(i).border),
+            borderWidth: 1,
+          },
+        ],
+      },
+    }),
+    [apiKeyUsage, chartsByDate, isDarkMode, messagesByRole],
+  );
 
-  const baseChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    color: chartColors.text,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
+  const baseChartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      color: chartColors.text,
+      plugins: {
+        legend: {
+          position: 'top' as const,
+          labels: {
+            color: chartColors.text,
+            font: {
+              weight: 'bold' as const,
+              size: 12,
+            },
+            padding: 16,
+            usePointStyle: true,
+          },
+        },
+        title: {
+          display: true,
           color: chartColors.text,
           font: {
+            size: 16,
             weight: 'bold' as const,
-            size: 12,
           },
           padding: 16,
-          usePointStyle: true,
+        },
+        tooltip: {
+          titleColor: chartColors.text,
+          bodyColor: chartColors.text,
+          backgroundColor: isDarkMode ? 'rgba(23, 23, 23, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+          borderColor: chartColors.border,
+          borderWidth: 1,
         },
       },
-      title: {
-        display: true,
-        color: chartColors.text,
-        font: {
-          size: 16,
-          weight: 'bold' as const,
-        },
-        padding: 16,
-      },
-      tooltip: {
-        titleColor: chartColors.text,
-        bodyColor: chartColors.text,
-        backgroundColor: isDarkMode
-          ? 'rgba(23, 23, 23, 0.8)' // Dark bg using Tailwind gray-900
-          : 'rgba(255, 255, 255, 0.8)', // Light bg
-        borderColor: chartColors.border,
-        borderWidth: 1,
-      },
-    },
-  };
+    }),
+    [chartColors.border, chartColors.text, isDarkMode],
+  );
 
-  const chartOptions = {
-    ...baseChartOptions,
-    plugins: {
-      ...baseChartOptions.plugins,
-      title: {
-        ...baseChartOptions.plugins.title,
-        text: 'Chat History',
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          color: chartColors.grid,
-          drawBorder: false,
-        },
-        border: {
-          display: false,
-        },
-        ticks: {
-          color: chartColors.text,
-          font: {
-            weight: 500,
-          },
+  const chartOptions = useMemo(
+    () => ({
+      ...baseChartOptions,
+      plugins: {
+        ...baseChartOptions.plugins,
+        title: {
+          ...baseChartOptions.plugins.title,
+          text: 'Chat History',
         },
       },
-      y: {
-        grid: {
-          color: chartColors.grid,
-          drawBorder: false,
+      scales: {
+        x: {
+          grid: { color: chartColors.grid, drawBorder: false },
+          border: { display: false },
+          ticks: { color: chartColors.text, font: { weight: 500 } },
         },
-        border: {
-          display: false,
-        },
-        ticks: {
-          color: chartColors.text,
-          font: {
-            weight: 500,
-          },
+        y: {
+          grid: { color: chartColors.grid, drawBorder: false },
+          border: { display: false },
+          ticks: { color: chartColors.text },
         },
       },
-    },
-  };
+    }),
+    [baseChartOptions, chartColors.grid, chartColors.text],
+  );
 
-  const pieOptions = {
-    ...baseChartOptions,
-    plugins: {
-      ...baseChartOptions.plugins,
-      title: {
-        ...baseChartOptions.plugins.title,
-        text: 'Message Distribution',
-      },
-      legend: {
-        ...baseChartOptions.plugins.legend,
-        position: 'right' as const,
-      },
-      datalabels: {
-        color: chartColors.text,
-        font: {
-          weight: 'bold' as const,
-        },
-      },
-    },
-  };
-
-  if (chats.length === 0) {
+  if (!chartComponents) {
     return (
-      <div className="text-center py-8">
-        <div className="i-ph-chart-line-duotone w-12 h-12 mx-auto mb-4 text-bolt-elements-textTertiary opacity-80" />
-        <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-2">No Data Available</h3>
-        <p className="text-bolt-elements-textSecondary">
-          Start creating chats to see your usage statistics and data visualization.
-        </p>
+      <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 text-sm text-bolt-elements-textSecondary">
+        Loading visualizations…
       </div>
     );
   }
 
-  const cardClasses = classNames(
-    'p-6 rounded-lg shadow-sm',
-    'bg-bolt-elements-bg-depth-1',
-    'border border-bolt-elements-borderColor',
-  );
-
-  const statClasses = classNames('text-3xl font-bold text-bolt-elements-textPrimary', 'flex items-center gap-3');
+  const { Bar, Pie } = chartComponents;
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-4">Total Chats</h3>
-          <div className={statClasses}>
-            <div className="i-ph-chats-duotone w-8 h-8 text-indigo-500 dark:text-indigo-400" />
-            <span>{chats.length}</span>
-          </div>
-        </div>
-
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-4">Total Messages</h3>
-          <div className={statClasses}>
-            <div className="i-ph-chat-text-duotone w-8 h-8 text-pink-500 dark:text-pink-400" />
-            <span>{Object.values(messagesByRole).reduce((sum, count) => sum + count, 0)}</span>
-          </div>
-        </div>
-
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-4">Avg. Messages/Chat</h3>
-          <div className={statClasses}>
-            <div className="i-ph-chart-bar-duotone w-8 h-8 text-green-500 dark:text-green-400" />
-            <span>{averageMessagesPerChat.toFixed(1)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-6">Chat History</h3>
-          <div className="h-64">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4">
+          <h3 className="mb-4 text-base font-semibold text-bolt-elements-textPrimary">Chat History</h3>
+          <div className="h-72">
             <Bar data={chartData.history} options={chartOptions} />
           </div>
         </div>
-
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-6">Message Distribution</h3>
-          <div className="h-64">
-            <Pie data={chartData.roles} options={pieOptions} />
+        <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4">
+          <h3 className="mb-4 text-base font-semibold text-bolt-elements-textPrimary">Message Roles</h3>
+          <div className="h-72">
+            <Pie
+              data={chartData.roles}
+              options={{
+                ...baseChartOptions,
+                plugins: {
+                  ...baseChartOptions.plugins,
+                  title: { ...baseChartOptions.plugins.title, text: 'Messages by Role' },
+                },
+              }}
+            />
           </div>
         </div>
       </div>
 
-      {apiKeyUsage.length > 0 && (
-        <div className={cardClasses}>
-          <h3 className="text-lg font-medium text-bolt-elements-textPrimary mb-6">API Usage by Provider</h3>
-          <div className="h-64">
-            <Pie data={chartData.apiUsage} options={pieOptions} />
+      <div className="grid gap-4 md:grid-cols-3">
+        <div
+          className={classNames(
+            'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4',
+          )}
+        >
+          <div className="text-sm text-bolt-elements-textSecondary">Average messages per chat</div>
+          <div className="mt-2 text-2xl font-semibold text-bolt-elements-textPrimary">
+            {averageMessagesPerChat.toFixed(1)}
           </div>
         </div>
-      )}
+        <div
+          className={classNames(
+            'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4',
+          )}
+        >
+          <div className="text-sm text-bolt-elements-textSecondary">Assistant provider usage</div>
+          <div className="mt-3 space-y-2">
+            {apiKeyUsage.slice(0, 5).map((item) => (
+              <div key={item.provider} className="flex items-center justify-between text-sm">
+                <span className="text-bolt-elements-textPrimary">{item.provider}</span>
+                <span className="text-bolt-elements-textSecondary">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -354,7 +354,7 @@ export default function NetlifyTab() {
             if (isFreeAccount) {
               toast.info(
                 'Analytics unavailable on free accounts. Site info: ' +
-                `${siteData.name} (${siteData.state || 'Unknown'})`,
+                  `${siteData.name} (${siteData.state || 'Unknown'})`,
               );
             } else {
               toast.error(`Failed to load analytics: ${errorText}`);

@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.3',
+    name: 'v3.0.3 server-first runtime and tenant admin baseline',
+    description:
+      'The browser now carries less runtime weight, editor/collaboration/chart surfaces are deferred harder, sidebar access is explicit again, and server-hosted instances get a bootstrap tenant admin dashboard.',
+    releaseDate: '2026-03-30',
+  },
+  {
     id: 'release-v3.0.2',
     name: 'v3.0.2 cloudflare managed-instance blueprint',
     description:

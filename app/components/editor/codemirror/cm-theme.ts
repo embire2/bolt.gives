@@ -1,11 +1,27 @@
 import { Compartment, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode';
 import type { Theme } from '~/types/theme.js';
 import type { EditorSettings } from './CodeMirrorEditor.js';
 
 export const darkTheme = EditorView.theme({}, { dark: true });
 export const themeSelection = new Compartment();
+
+const fallbackLightTheme = EditorView.theme({});
+const fallbackDarkTheme = EditorView.theme(
+  {
+    '&': {
+      backgroundColor: '#0f172a',
+      color: '#e2e8f0',
+    },
+    '.cm-gutters': {
+      backgroundColor: '#0f172a',
+      color: '#94a3b8',
+    },
+  },
+  { dark: true },
+);
+
+let cachedThemesPromise: Promise<{ vscodeDark: Extension; vscodeLight: Extension }> | null = null;
 
 export function getTheme(theme: Theme, settings: EditorSettings = {}): Extension {
   return [
@@ -14,8 +30,29 @@ export function getTheme(theme: Theme, settings: EditorSettings = {}): Extension
   ];
 }
 
-export function reconfigureTheme(theme: Theme) {
-  return themeSelection.reconfigure(theme === 'dark' ? getDarkTheme() : getLightTheme());
+export function reconfigureTheme(theme: Theme, extension?: Extension) {
+  return themeSelection.reconfigure(extension ? [extension] : theme === 'dark' ? getDarkTheme() : getLightTheme());
+}
+
+export async function loadThemeExtension(theme: Theme) {
+  if (!cachedThemesPromise) {
+    cachedThemesPromise = import('@uiw/codemirror-theme-vscode').then(({ vscodeDark, vscodeLight }) => ({
+      vscodeDark,
+      vscodeLight,
+    }));
+  }
+
+  const themes = await cachedThemesPromise;
+
+  return theme === 'dark' ? themes.vscodeDark : themes.vscodeLight;
+}
+
+function getLightTheme() {
+  return fallbackLightTheme;
+}
+
+function getDarkTheme() {
+  return fallbackDarkTheme;
 }
 
 function getEditorTheme(settings: EditorSettings) {
@@ -181,12 +218,4 @@ function getEditorTheme(settings: EditorSettings) {
       },
     },
   });
-}
-
-function getLightTheme() {
-  return vscodeLight;
-}
-
-function getDarkTheme() {
-  return vscodeDark;
 }

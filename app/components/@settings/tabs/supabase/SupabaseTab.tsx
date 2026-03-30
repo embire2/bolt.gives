@@ -839,11 +839,11 @@ export default function SupabaseTab() {
                             const avgTablesPerProject =
                               totalProjects > 0
                                 ? Math.round(
-                                  (connection.stats?.projects?.reduce(
-                                    (sum, p) => sum + (p.stats?.database?.tables || 0),
-                                    0,
-                                  ) || 0) / totalProjects,
-                                )
+                                    (connection.stats?.projects?.reduce(
+                                      (sum, p) => sum + (p.stats?.database?.tables || 0),
+                                      0,
+                                    ) || 0) / totalProjects,
+                                  )
                                 : 0;
 
                             return [

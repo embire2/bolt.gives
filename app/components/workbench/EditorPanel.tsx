@@ -1,9 +1,8 @@
 import { useStore } from '@nanostores/react';
-import { memo, useMemo } from 'react';
+import { lazy, memo, Suspense, useMemo } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  CodeMirrorEditor,
   type EditorDocument,
   type EditorSettings,
   type OnChangeCallback as OnEditorChange,
@@ -25,6 +24,10 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { Search } from './Search'; // <-- Ensure Search is imported
 import { classNames } from '~/utils/classNames'; // <-- Import classNames if not already present
 import { LockManager } from './LockManager'; // <-- Import LockManager
+
+const LazyCodeMirrorEditor = lazy(() =>
+  import('~/components/editor/codemirror/CodeMirrorEditor').then((module) => ({ default: module.CodeMirrorEditor })),
+);
 
 interface EditorPanelProps {
   files?: FileMap;
@@ -164,16 +167,24 @@ export const EditorPanel = memo(
                 )}
               </PanelHeader>
               <div className="h-full flex-1 overflow-hidden modern-scrollbar bg-bolt-elements-background-depth-2 rounded-lg mx-2 mb-2 border border-bolt-elements-borderColor shadow-sm">
-                <CodeMirrorEditor
-                  theme={theme}
-                  editable={!isStreaming && editorDocument !== undefined}
-                  settings={editorSettings}
-                  doc={editorDocument}
-                  autoFocusOnDocumentChange={!isMobile()}
-                  onScroll={onEditorScroll}
-                  onChange={onEditorChange}
-                  onSave={onFileSave}
-                />
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-sm text-bolt-elements-textSecondary">
+                      Loading editor…
+                    </div>
+                  }
+                >
+                  <LazyCodeMirrorEditor
+                    theme={theme}
+                    editable={!isStreaming && editorDocument !== undefined}
+                    settings={editorSettings}
+                    doc={editorDocument}
+                    autoFocusOnDocumentChange={!isMobile()}
+                    onScroll={onEditorScroll}
+                    onChange={onEditorChange}
+                    onSave={onFileSave}
+                  />
+                </Suspense>
               </div>
             </Panel>
           </PanelGroup>

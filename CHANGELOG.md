@@ -1,9 +1,10 @@
 # Changelog
 
-## v3.0.3 (in progress)
+## v3.0.3 (2026-03-30)
 
 ### Added
 
+- Bootstrap `Tenant Admin` dashboard for server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
 - Hosted preview health now includes a server-side `preview-status` path that tracks:
   - latest preview log lines
   - detected runtime alerts
@@ -15,6 +16,8 @@
 
 ### Fixed
 
+- Provider/model visibility is restored directly above the prompt box, and supported providers still expose user-managed API key controls.
+- Sidebar access no longer depends on a tiny hover strip; the header toggle and left-edge opener make the menu reliably discoverable again.
 - Dependency installation no longer hard-fails when the Playwright Chromium download is blocked by network/domain policy during `postinstall`; installs now continue with a warning unless `PLAYWRIGHT_INSTALL_REQUIRED=1` is explicitly set.
 - Playwright postinstall now skips cleanly when the CLI is missing and writes its install marker directly, removing an unnecessary child-process `node -e` invocation.
 - Non-fatal Playwright browser install failures now still write a marker so future installs do not repeatedly retry known-blocked browser downloads.
@@ -29,6 +32,7 @@
 
 ### Changed
 
+- Release/versioning/docs now align on the `v3.0.3` line, with `v3.0.4` opened as the next roadmap target.
 - The workspace shell now lazy-loads more of the heavy client surfaces:
   - `Workbench`
   - `Preview`
@@ -46,6 +50,9 @@
   - `charts-pdf`
   - `ui-vendor`
   - `llm-vendor`
+- Collaboration configuration helpers now live outside the heavy Yjs client path, reducing the amount of collaboration code pulled into non-collab runtime surfaces.
+- Editor loading is deferred harder: the editor shell is lazy-loaded and the heavier vscode theme payload now loads only when the editor is actually in use.
+- Settings data/event-log surfaces now lazy-load their chart/PDF dependencies instead of front-loading them into the main settings/control-panel path.
 - Markdown rendering now loads behind a lighter shell, and the heavier markdown/code/thought/artifact surfaces are deferred until they are actually needed.
 - Runtime code, artifact shell blocks, tool invocation payloads, and diff lines now default to lightweight plain rendering instead of shipping client-side Shiki highlighting across the default chat/workspace path.
 - Workbench export, repository push, and test/security scan integrations now lazy-load their heavy dependencies (`jszip`, `file-saver`, `@octokit/rest`, collaboration helpers, and test-security helpers) instead of inflating the default store bootstrap.

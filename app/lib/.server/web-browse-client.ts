@@ -82,11 +82,7 @@ async function callService<T>(
  * Scrape a page using the Firecrawl cloud API.
  * Returns a BrowserPageResponse shaped object for drop-in compatibility.
  */
-async function browsePageWithFirecrawl(
-  url: string,
-  apiKey: string,
-  maxChars: number,
-): Promise<BrowserPageResponse> {
+async function browsePageWithFirecrawl(url: string, apiKey: string, maxChars: number): Promise<BrowserPageResponse> {
   const response = await fetch(`${FIRECRAWL_API_URL}/scrape`, {
     method: 'POST',
     headers: {
@@ -106,7 +102,7 @@ async function browsePageWithFirecrawl(
     throw new Error(`Firecrawl API error (${response.status}): ${errorText}`);
   }
 
-  const result = await response.json() as any;
+  const result = (await response.json()) as any;
 
   if (!result.success || !result.data) {
     throw new Error('Firecrawl returned an unsuccessful response');
@@ -123,9 +119,11 @@ async function browsePageWithFirecrawl(
     description: metadata.description || metadata.ogDescription || '',
     content: markdown,
     headings: [],
-    links: (result.data.links || []).slice(0, 40).map((link: string | { url: string; text?: string }) =>
-      typeof link === 'string' ? { title: '', url: link } : { title: link.text || '', url: link.url },
-    ),
+    links: (result.data.links || [])
+      .slice(0, 40)
+      .map((link: string | { url: string; text?: string }) =>
+        typeof link === 'string' ? { title: '', url: link } : { title: link.text || '', url: link.url },
+      ),
   };
 }
 
@@ -156,7 +154,7 @@ async function searchWebWithFirecrawl(
     throw new Error(`Firecrawl search API error (${response.status}): ${errorText}`);
   }
 
-  const result = await response.json() as any;
+  const result = (await response.json()) as any;
 
   return {
     query,

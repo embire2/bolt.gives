@@ -6,7 +6,6 @@ import { useStore } from '@nanostores/react';
 import { classNames } from '~/utils/classNames';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Dialog, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
-import { jsPDF } from 'jspdf';
 import { toast } from 'react-toastify';
 
 interface SelectOption {
@@ -474,8 +473,10 @@ export function EventLogsTab() {
     }
   };
 
-  const exportAsPDF = () => {
+  const exportAsPDF = async () => {
     try {
+      const { jsPDF } = await import('jspdf');
+
       // Create new PDF document
       const doc = new jsPDF();
       const lineHeight = 7;

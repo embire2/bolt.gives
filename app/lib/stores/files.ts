@@ -591,12 +591,14 @@ export class FilesStore {
       }
 
       // Queue the write operation to prevent WASM lockups from concurrent writes
-      this.#writeQueue = this.#writeQueue.then(async () => {
-        await webcontainer.fs.writeFile(relativePath, content);
-      }).catch(err => {
-        logger.error('Error in write queue for', filePath, err);
-        throw err;
-      });
+      this.#writeQueue = this.#writeQueue
+        .then(async () => {
+          await webcontainer.fs.writeFile(relativePath, content);
+        })
+        .catch((err) => {
+          logger.error('Error in write queue for', filePath, err);
+          throw err;
+        });
       await this.#writeQueue;
 
       if (!this.#modifiedFiles.has(filePath)) {

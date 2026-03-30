@@ -130,22 +130,25 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
             key={f.key}
             type="button"
             onClick={() => handleFontToggle(f.key)}
-            className={`group p-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive ${font.includes(f.key)
+            className={`group p-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive ${
+              font.includes(f.key)
                 ? 'bg-bolt-elements-item-backgroundAccent border-bolt-elements-borderColorActive shadow-lg'
                 : 'bg-bolt-elements-background-depth-3 border-bolt-elements-borderColor hover:border-bolt-elements-borderColorActive hover:bg-bolt-elements-bg-depth-2'
-              }`}
+            }`}
           >
             <div className="text-center space-y-2">
               <div
-                className={`text-2xl font-medium transition-colors ${font.includes(f.key) ? 'text-bolt-elements-item-contentAccent' : 'text-bolt-elements-textPrimary'
-                  }`}
+                className={`text-2xl font-medium transition-colors ${
+                  font.includes(f.key) ? 'text-bolt-elements-item-contentAccent' : 'text-bolt-elements-textPrimary'
+                }`}
                 style={{ fontFamily: f.key }}
               >
                 {f.preview}
               </div>
               <div
-                className={`text-sm font-medium transition-colors ${font.includes(f.key) ? 'text-bolt-elements-item-contentAccent' : 'text-bolt-elements-textSecondary'
-                  }`}
+                className={`text-sm font-medium transition-colors ${
+                  font.includes(f.key) ? 'text-bolt-elements-item-contentAccent' : 'text-bolt-elements-textSecondary'
+                }`}
               >
                 {f.label}
               </div>
@@ -177,14 +180,16 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
               <button
                 type="button"
                 onClick={() => handleFeatureToggle(f.key)}
-                className={`group relative w-full p-6 text-sm font-medium transition-all duration-200 bg-bolt-elements-background-depth-3 text-bolt-elements-item-textSecondary ${f.key === 'rounded'
+                className={`group relative w-full p-6 text-sm font-medium transition-all duration-200 bg-bolt-elements-background-depth-3 text-bolt-elements-item-textSecondary ${
+                  f.key === 'rounded'
                     ? isSelected
                       ? 'rounded-3xl'
                       : 'rounded-xl'
                     : f.key === 'border'
                       ? 'rounded-lg'
                       : 'rounded-xl'
-                  } ${f.key === 'border'
+                } ${
+                  f.key === 'border'
                     ? isSelected
                       ? 'border-3 border-bolt-elements-borderColorActive bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
                       : 'border-2 border-bolt-elements-borderColor hover:border-bolt-elements-borderColorActive text-bolt-elements-textSecondary'
@@ -193,7 +198,7 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
                       : isSelected
                         ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-lg'
                         : 'bg-bolt-elements-bg-depth-3 hover:bg-bolt-elements-bg-depth-2 text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary'
-                  } ${f.key === 'shadow' ? (isSelected ? 'shadow-xl' : 'shadow-lg') : 'shadow-md'}`}
+                } ${f.key === 'shadow' ? (isSelected ? 'shadow-xl' : 'shadow-lg') : 'shadow-md'}`}
                 style={{
                   ...(f.key === 'gradient' && {
                     background: isSelected
@@ -207,43 +212,51 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
                   <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-bolt-elements-bg-depth-1 bg-opacity-20">
                     {f.key === 'rounded' && (
                       <div
-                        className={`w-6 h-6 bg-current transition-all duration-200 ${isSelected ? 'rounded-full' : 'rounded'
-                          } opacity-80`}
+                        className={`w-6 h-6 bg-current transition-all duration-200 ${
+                          isSelected ? 'rounded-full' : 'rounded'
+                        } opacity-80`}
                       />
                     )}
                     {f.key === 'border' && (
                       <div
-                        className={`w-6 h-6 rounded-lg transition-all duration-200 ${isSelected ? 'border-3 border-current opacity-90' : 'border-2 border-current opacity-70'
-                          }`}
+                        className={`w-6 h-6 rounded-lg transition-all duration-200 ${
+                          isSelected ? 'border-3 border-current opacity-90' : 'border-2 border-current opacity-70'
+                        }`}
                       />
                     )}
                     {f.key === 'gradient' && (
                       <div
                         className="w-6 h-6 rounded-lg opacity-90"
-                        style={{ background: 'linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue))' }}
+                        style={{
+                          background: 'linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue))',
+                        }}
                       />
                     )}
                     {f.key === 'shadow' && (
                       <div className="relative">
                         <div
-                          className={`w-6 h-6 bg-current rounded-lg transition-all duration-200 ${isSelected ? 'opacity-90' : 'opacity-70'
-                            }`}
+                          className={`w-6 h-6 bg-current rounded-lg transition-all duration-200 ${
+                            isSelected ? 'opacity-90' : 'opacity-70'
+                          }`}
                         />
                         <div
-                          className={`absolute top-1 left-1 w-6 h-6 bg-current rounded-lg transition-all duration-200 ${isSelected ? 'opacity-40' : 'opacity-30'
-                            }`}
+                          className={`absolute top-1 left-1 w-6 h-6 bg-current rounded-lg transition-all duration-200 ${
+                            isSelected ? 'opacity-40' : 'opacity-30'
+                          }`}
                         />
                       </div>
                     )}
                     {f.key === 'frosted-glass' && (
                       <div className="relative">
                         <div
-                          className={`w-6 h-6 rounded-lg transition-all duration-200 backdrop-blur-sm bg-white/20 border border-white/30 ${isSelected ? 'opacity-90' : 'opacity-70'
-                            }`}
+                          className={`w-6 h-6 rounded-lg transition-all duration-200 backdrop-blur-sm bg-white/20 border border-white/30 ${
+                            isSelected ? 'opacity-90' : 'opacity-70'
+                          }`}
                         />
                         <div
-                          className={`absolute inset-0 w-6 h-6 rounded-lg transition-all duration-200 backdrop-blur-md bg-gradient-to-br from-white/10 to-transparent ${isSelected ? 'opacity-60' : 'opacity-40'
-                            }`}
+                          className={`absolute inset-0 w-6 h-6 rounded-lg transition-all duration-200 backdrop-blur-md bg-gradient-to-br from-white/10 to-transparent ${
+                            isSelected ? 'opacity-60' : 'opacity-40'
+                          }`}
                         />
                       </div>
                     )}
@@ -291,10 +304,11 @@ export const ColorSchemeDialog: React.FC<ColorSchemeDialogProps> = ({ setDesignS
                 <button
                   key={tab.key}
                   onClick={() => setActiveSection(tab.key as any)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${activeSection === tab.key
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    activeSection === tab.key
                       ? 'bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary shadow-md'
                       : 'bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary hover:bg-bolt-elements-bg-depth-2'
-                    }`}
+                  }`}
                 >
                   <span className={`${tab.icon} text-lg`} />
                   <span>{tab.label}</span>

@@ -513,16 +513,30 @@ export class GitHubApiServiceClass {
 
     for (const week of activity) {
       const weekDate = new Date(week.week * 1000);
+
       for (let day = 0; day < week.days.length; day++) {
         const date = new Date(weekDate);
         date.setDate(date.getDate() + day);
+
         const count = week.days[day];
-        
+
         let level: 0 | 1 | 2 | 3 | 4 = 0;
-        if (count > 0) level = 1;
-        if (count > 2) level = 2;
-        if (count > 5) level = 3;
-        if (count > 10) level = 4;
+
+        if (count > 0) {
+          level = 1;
+        }
+
+        if (count > 2) {
+          level = 2;
+        }
+
+        if (count > 5) {
+          level = 3;
+        }
+
+        if (count > 10) {
+          level = 4;
+        }
 
         heatmapData.push({
           date: date.toISOString().split('T')[0],
@@ -552,11 +566,14 @@ export class GitHubApiServiceClass {
    * Get top contributors with their stats
    */
   async getTopContributors(owner: string, repo: string, limit: number = 10): Promise<AuthorStats[]> {
-    const contributors = await this._makeRequestInternal<any[]>(`/repos/${owner}/${repo}/contributors?per_page=${limit}`);
+    const contributors = await this._makeRequestInternal<any[]>(
+      `/repos/${owner}/${repo}/contributors?per_page=${limit}`,
+    );
     const contributorStatsArray = await this.getContributorStats(owner, repo);
 
     // Create a map from author login/id to their stats for O(1) lookup
     const statsMap = new Map<string, ContributorStats>();
+
     if (contributorStatsArray) {
       for (const stats of contributorStatsArray) {
         if (stats.author?.login) {
@@ -569,6 +586,7 @@ export class GitHubApiServiceClass {
       // Find matching stats entry for this contributor by login
       const contributorStats = statsMap.get(contributor.login);
       const stats = contributorStats?.weeks?.[contributorStats.weeks.length - 1];
+
       return {
         login: contributor.login,
         avatar_url: contributor.avatar_url,
@@ -591,10 +609,10 @@ export class GitHubApiServiceClass {
    * Compare two repositories
    */
   async compareRepositories(
-    owner1: string, 
-    repo1: string, 
-    owner2: string, 
-    repo2: string
+    owner1: string,
+    repo1: string,
+    owner2: string,
+    repo2: string,
   ): Promise<RepoComparisonResult> {
     const [info1, info2, languages1, languages2] = await Promise.all([
       this.getDetailedRepositoryInfo(owner1, repo1),
@@ -605,9 +623,9 @@ export class GitHubApiServiceClass {
 
     const langKeys1 = Object.keys(languages1);
     const langKeys2 = Object.keys(languages2);
-    const languageOverlap = langKeys1.filter(l => langKeys2.includes(l));
-    const uniqueLanguages1 = langKeys1.filter(l => !langKeys2.includes(l));
-    const uniqueLanguages2 = langKeys2.filter(l => !langKeys1.includes(l));
+    const languageOverlap = langKeys1.filter((l) => langKeys2.includes(l));
+    const uniqueLanguages1 = langKeys1.filter((l) => !langKeys2.includes(l));
+    const uniqueLanguages2 = langKeys2.filter((l) => !langKeys1.includes(l));
 
     return {
       repo1: info1,

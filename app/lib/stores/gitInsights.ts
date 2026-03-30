@@ -29,7 +29,7 @@ export const gitInsightsActions = {
    */
   async loadInsights(repoFullName: string) {
     const [owner, repo] = repoFullName.split('/');
-    
+
     gitInsightsStore.set({ ...gitInsightsStore.get(), isLoading: true, error: null, currentRepo: repoFullName });
 
     try {
@@ -101,23 +101,24 @@ export const gitInsightsActions = {
 
     try {
       const files = workbenchStore.files.get();
-      
+
       if (filePath) {
         // Generate docs for specific file
         const dirent = files[filePath];
+
         if (!dirent || dirent.type !== 'file' || !dirent.content) {
           throw new Error(`File not found: ${filePath}`);
         }
 
         const result = await analysisService.generateDocumentation(filePath, dirent.content);
-        
+
         // Create a new file with the documentation
         const docPath = filePath.replace(/\.[^.]+$/, '.docs.md');
         await workbenchStore.createFile(docPath, result.content);
       } else {
         // Generate README for the project
         const filesToAnalyze: Record<string, { content: string; path: string }> = {};
-        
+
         for (const [filePath, dirent] of Object.entries(files)) {
           if (dirent && dirent.type === 'file' && dirent.content) {
             filesToAnalyze[filePath] = {
@@ -129,7 +130,7 @@ export const gitInsightsActions = {
 
         const projectName = 'Current Project';
         const readmeContent = await analysisService.generateProjectReadme(filesToAnalyze, projectName);
-        
+
         // Create or update README
         await workbenchStore.createFile('README.md', readmeContent);
       }

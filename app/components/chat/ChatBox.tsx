@@ -17,7 +17,6 @@ import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
-import { WebSearch } from './WebSearch.client';
 import { SketchCanvas, type SketchElement } from './SketchCanvas';
 import { getAutonomyModeLabel, getNextAutonomyMode, type AutonomyMode } from '~/lib/runtime/autonomy';
 
@@ -25,6 +24,7 @@ const LazyModelSelector = lazy(() =>
   import('~/components/chat/ModelSelector').then((module) => ({ default: module.ModelSelector })),
 );
 const LazyApiKeyManager = lazy(() => import('./APIKeyManager').then((module) => ({ default: module.APIKeyManager })));
+const LazyWebSearch = lazy(() => import('./WebSearch.client').then((module) => ({ default: module.WebSearch })));
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -124,6 +124,27 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         <rect className={classNames(styles.PromptEffectLine)} pathLength="100" strokeLinecap="round"></rect>
         <rect className={classNames(styles.PromptShine)} x="48" y="24" width="70" height="1"></rect>
       </svg>
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+        <span className="font-medium text-bolt-elements-textTertiary">Provider</span>
+        <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textPrimary">
+          {props.provider?.label || props.provider?.name || 'Not selected'}
+        </span>
+        {props.model ? (
+          <>
+            <span className="text-bolt-elements-textTertiary">Model</span>
+            <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textPrimary">
+              {props.model}
+            </span>
+          </>
+        ) : null}
+        <button
+          type="button"
+          className="ml-auto rounded border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary hover:border-bolt-elements-focus hover:text-bolt-elements-textPrimary"
+          onClick={() => props.setIsModelSettingsCollapsed(false)}
+        >
+          Change provider
+        </button>
+      </div>
       <div>
         <ClientOnly>
           {() => (
@@ -306,7 +327,16 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
             <SketchCanvas onChange={props.onSketchChange} />
-            <ClientOnly>{() => <WebSearch onSearchResult={(result) => props.onWebSearchResult?.(result)} disabled={props.isStreaming} />}</ClientOnly>
+            <ClientOnly>
+              {() => (
+                <Suspense fallback={null}>
+                  <LazyWebSearch
+                    onSearchResult={(result) => props.onWebSearchResult?.(result)}
+                    disabled={props.isStreaming}
+                  />
+                </Suspense>
+              )}
+            </ClientOnly>
             <IconButton
               title="Enhance prompt"
               disabled={props.input.length === 0 || props.enhancingPrompt}

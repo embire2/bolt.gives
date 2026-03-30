@@ -1,15 +1,6 @@
 import React, { useMemo } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import type { CommitHeatmapData, AuthorStats } from '~/lib/services/githubApiService';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
@@ -38,8 +29,9 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
     const result: CommitHeatmapData[][] = [];
     let currentWeek: CommitHeatmapData[] = [];
 
-    heatmapData.forEach((day, index) => {
+    heatmapData.forEach((day) => {
       currentWeek.push(day);
+
       if (currentWeek.length === 7) {
         result.push(currentWeek);
         currentWeek = [];
@@ -59,27 +51,30 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
   };
 
   // Chart data for contributors
-  const contributorChartData = useMemo(() => ({
-    labels: contributors.map(c => c.login),
-    datasets: [
-      {
-        label: 'Contributions',
-        data: contributors.map(c => c.contributions),
-        backgroundColor: 'rgba(138, 95, 255, 0.7)',
-        borderColor: 'rgba(138, 95, 255, 1)',
-        borderWidth: 1,
-      },
-    ],
-  }), [contributors]);
+  const contributorChartData = useMemo(
+    () => ({
+      labels: contributors.map((c) => c.login),
+      datasets: [
+        {
+          label: 'Contributions',
+          data: contributors.map((c) => c.contributions),
+          backgroundColor: 'rgba(138, 95, 255, 0.7)',
+          borderColor: 'rgba(138, 95, 255, 1)',
+          borderWidth: 1,
+        },
+      ],
+    }),
+    [contributors],
+  );
 
   // Language distribution from contributors
   const languageChartData = useMemo(() => {
     const topContributors = contributors.slice(0, 5);
     return {
-      labels: topContributors.map(c => c.login),
+      labels: topContributors.map((c) => c.login),
       datasets: [
         {
-          data: topContributors.map(c => c.contributions),
+          data: topContributors.map((c) => c.contributions),
           backgroundColor: [
             'rgba(138, 95, 255, 0.7)',
             'rgba(239, 68, 68, 0.7)',
@@ -179,16 +174,18 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
       {/* Commit Activity Heatmap */}
       <div className="bg-bolt-elements-background-depth-2 rounded-lg p-4 border border-bolt-elements-borderColor">
         <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-4">Commit Activity</h3>
-        
+
         <div className="overflow-x-auto">
           <div className="flex gap-1 min-w-max">
             {weeks.map((week, weekIndex) => (
               <div key={weekIndex} className="flex flex-col gap-1">
                 {Array.from({ length: 7 }).map((_, dayIndex) => {
                   const dayData = week[dayIndex];
+
                   if (!dayData) {
                     return <div key={dayIndex} className="w-3 h-3" />;
                   }
+
                   return (
                     <div
                       key={dayIndex}
@@ -205,7 +202,7 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
         {/* Legend */}
         <div className="flex items-center gap-2 mt-4 text-xs text-bolt-elements-textTertiary">
           <span>Less</span>
-          {[0, 1, 2, 3, 4].map(level => (
+          {[0, 1, 2, 3, 4].map((level) => (
             <div key={level} className={`w-3 h-3 rounded-sm ${getLevelColor(level)}`} />
           ))}
           <span>More</span>
@@ -221,21 +218,15 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
           <div className="text-sm text-bolt-elements-textSecondary">Total Contributions</div>
         </div>
         <div className="bg-bolt-elements-background-depth-2 rounded-lg p-4 border border-bolt-elements-borderColor">
-          <div className="text-2xl font-bold text-green-500">
-            {contributors.length}
-          </div>
+          <div className="text-2xl font-bold text-green-500">{contributors.length}</div>
           <div className="text-sm text-bolt-elements-textSecondary">Contributors</div>
         </div>
         <div className="bg-bolt-elements-background-depth-2 rounded-lg p-4 border border-bolt-elements-borderColor">
-          <div className="text-2xl font-bold text-blue-500">
-            {heatmapData.filter(d => d.count > 0).length}
-          </div>
+          <div className="text-2xl font-bold text-blue-500">{heatmapData.filter((d) => d.count > 0).length}</div>
           <div className="text-sm text-bolt-elements-textSecondary">Active Days</div>
         </div>
         <div className="bg-bolt-elements-background-depth-2 rounded-lg p-4 border border-bolt-elements-borderColor">
-          <div className="text-2xl font-bold text-orange-500">
-            {Math.max(...heatmapData.map(d => d.count), 0)}
-          </div>
+          <div className="text-2xl font-bold text-orange-500">{Math.max(...heatmapData.map((d) => d.count), 0)}</div>
           <div className="text-sm text-bolt-elements-textSecondary">Busiest Day</div>
         </div>
       </div>
@@ -290,16 +281,12 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
       <div className="bg-bolt-elements-background-depth-2 rounded-lg p-4 border border-bolt-elements-borderColor">
         <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-4">Contributor Details</h3>
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {contributors.map(contributor => (
+          {contributors.map((contributor) => (
             <div
               key={contributor.login}
               className="flex items-center gap-3 p-2 rounded-md hover:bg-bolt-elements-background-depth-1 transition-colors"
             >
-              <img
-                src={contributor.avatar_url}
-                alt={contributor.login}
-                className="w-8 h-8 rounded-full"
-              />
+              <img src={contributor.avatar_url} alt={contributor.login} className="w-8 h-8 rounded-full" />
               <a
                 href={contributor.html_url}
                 target="_blank"
@@ -309,9 +296,7 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
                 {contributor.login}
               </a>
               <div className="text-right">
-                <div className="text-sm font-medium text-bolt-elements-textPrimary">
-                  {contributor.contributions}
-                </div>
+                <div className="text-sm font-medium text-bolt-elements-textPrimary">{contributor.contributions}</div>
                 <div className="text-xs text-bolt-elements-textTertiary">
                   +{contributor.additions} -{contributor.deletions}
                 </div>

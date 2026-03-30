@@ -189,12 +189,12 @@ export function RepositoryCard({
   const Component = onSelect ? 'button' : 'div';
   const interactiveProps = onSelect
     ? {
-      onClick: onSelect,
-      className: classNames(
-        'group cursor-pointer hover:border-bolt-elements-borderColorActive dark:hover:border-bolt-elements-borderColorActive transition-all duration-200',
-        className,
-      ),
-    }
+        onClick: onSelect,
+        className: classNames(
+          'group cursor-pointer hover:border-bolt-elements-borderColorActive dark:hover:border-bolt-elements-borderColorActive transition-all duration-200',
+          className,
+        ),
+      }
     : { className };
 
   return (

@@ -9,7 +9,7 @@ import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { getCollaborationServerUrl } from '~/lib/collaboration/client';
+import { getCollaborationServerUrl } from '~/lib/collaboration/config';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
@@ -427,7 +427,7 @@ export const ChatImpl = memo(
     );
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
-    const [provider, setProvider] = useState(() => {
+    const [provider, setProvider] = useState<ProviderInfo>(() => {
       const savedProvider = Cookies.get('selectedProvider');
       return resolveProviderInfo(savedProvider);
     });
@@ -472,11 +472,19 @@ export const ChatImpl = memo(
     const initializeMcp = useMCPStore((state) => state.initialize);
 
     useEffect(() => {
+      if (provider?.name) {
+        return;
+      }
+
+      setProvider(DEFAULT_PROVIDER as ProviderInfo);
+    }, [provider]);
+
+    useEffect(() => {
       runContextRef.current = {
         model,
-        providerName: provider.name,
+        providerName: provider?.name || DEFAULT_PROVIDER.name,
       };
-    }, [model, provider.name]);
+    }, [model, provider]);
 
     useEffect(() => {
       if (provider.name !== 'FREE') {
@@ -600,9 +608,10 @@ export const ChatImpl = memo(
       if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
         const isPreview = actionAlert.source === 'preview';
         const prompt = `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${actionAlert.content}\n\`\`\`\n`;
-        
+
         // Clear alerts before starting the fix to prevent duplicate triggers
         workbenchStore.clearAlert();
+
         if (isPreview) {
           workbenchStore.clearPreviewAlert();
         }
@@ -2612,10 +2621,10 @@ Requirements:
           sendMessage={sendMessage}
           model={model}
           setModel={handleModelChange}
-          provider={provider}
+          provider={provider || (DEFAULT_PROVIDER as ProviderInfo)}
           setProvider={handleProviderChange}
           onProviderSelection={handleProviderSelection}
-          providerList={activeProviders}
+          providerList={activeProviders.length > 0 ? activeProviders : [DEFAULT_PROVIDER as ProviderInfo]}
           handleInputChange={(e) => {
             onTextareaChange(e);
             debouncedCachePrompt(e);

@@ -9,6 +9,14 @@ import { APP_VERSION } from '~/lib/version';
 export function Header() {
   const chat = useStore(chatStore);
 
+  const handleSidebarToggle = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent('bolt-sidebar-toggle'));
+  };
+
   return (
     <header
       className={classNames('flex items-center px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]', {
@@ -16,8 +24,15 @@ export function Header() {
         'border-bolt-elements-borderColor': chat.started,
       })}
     >
-      <div className="flex items-center gap-1.5 sm:gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
-        <div className="i-ph:sidebar-simple-duotone text-lg sm:text-xl" />
+      <div className="flex items-center gap-1.5 sm:gap-2 z-logo text-bolt-elements-textPrimary">
+        <button
+          type="button"
+          onClick={handleSidebarToggle}
+          aria-label="Open sidebar"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-bolt-elements-textPrimary transition-colors hover:bg-bolt-elements-background-depth-2"
+        >
+          <div className="i-ph:sidebar-simple-duotone text-lg sm:text-xl" />
+        </button>
         <a href="/" className="text-2xl font-semibold text-accent flex items-center">
           {/* <span className="i-bolt:logo-text?mask w-[46px] inline-block" /> */}
           <img
@@ -37,6 +52,12 @@ export function Header() {
       </span>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <a
+          href="/tenant-admin"
+          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+        >
+          Tenant Admin
+        </a>
         <a
           href="/changelog"
           className="text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"

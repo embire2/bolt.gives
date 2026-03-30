@@ -279,7 +279,7 @@ export const Menu = () => {
   }, [open, selectionMode]);
 
   useEffect(() => {
-    const enterThreshold = 20;
+    const enterThreshold = 48;
     const exitThreshold = 20;
 
     function onMouseMove(event: MouseEvent) {
@@ -303,6 +303,23 @@ export const Menu = () => {
     };
   }, [isSettingsOpen]);
 
+  useEffect(() => {
+    const onToggle = () => {
+      setOpen((current) => !current);
+    };
+    const onOpen = () => {
+      setOpen(true);
+    };
+
+    window.addEventListener('bolt-sidebar-toggle', onToggle as EventListener);
+    window.addEventListener('bolt-sidebar-open', onOpen as EventListener);
+
+    return () => {
+      window.removeEventListener('bolt-sidebar-toggle', onToggle as EventListener);
+      window.removeEventListener('bolt-sidebar-open', onOpen as EventListener);
+    };
+  }, []);
+
   const handleDuplicate = async (id: string) => {
     await duplicateCurrentChat(id);
     loadEntries(); // Reload the list after duplication
@@ -324,6 +341,16 @@ export const Menu = () => {
 
   return (
     <>
+      <button
+        type="button"
+        aria-label="Open sidebar"
+        onMouseEnter={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        className="fixed left-0 top-[72px] z-sidebar flex h-24 w-5 items-center justify-center rounded-r-xl border border-l-0 border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/95 text-bolt-elements-textSecondary shadow-sm transition-colors hover:text-bolt-elements-textPrimary"
+      >
+        <div className="i-ph:caret-right text-sm" />
+      </button>
       <motion.div
         ref={menuRef}
         initial="closed"

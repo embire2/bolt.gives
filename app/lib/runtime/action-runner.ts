@@ -11,7 +11,7 @@ import {
   type InteractiveStep,
   type InteractiveStepRunnerEvent,
 } from '~/lib/runtime/interactive-step-runner';
-import { getCollaborationServerUrl } from '~/lib/collaboration/client';
+import { getCollaborationServerUrl } from '~/lib/collaboration/config';
 import {
   decodeHtmlCommandDelimiters,
   makeCreateViteNonInteractive,

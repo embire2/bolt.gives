@@ -64,10 +64,10 @@ export default function SettingsTab() {
     return saved
       ? JSON.parse(saved)
       : {
-        notifications: true,
-        language: 'en',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      };
+          notifications: true,
+          language: 'en',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
   });
   const [modelOrchestrator, setModelOrchestrator] = useState<ModelOrchestratorSettings>(() =>
     getModelOrchestratorSettings(),
@@ -78,8 +78,15 @@ export default function SettingsTab() {
 
   const [cloudEnvs, setCloudEnvs] = useState(() => {
     if (typeof window === 'undefined') {
-      return { e2bEnabled: false, e2bApiKey: '', firecrawlEnabled: false, firecrawlApiKey: '', runtime: 'webcontainer' };
+      return {
+        e2bEnabled: false,
+        e2bApiKey: '',
+        firecrawlEnabled: false,
+        firecrawlApiKey: '',
+        runtime: 'webcontainer',
+      };
     }
+
     return {
       e2bEnabled: localStorage.getItem('bolt_e2b_enabled') === 'true',
       e2bApiKey: localStorage.getItem('bolt_e2b_api_key') || '',
@@ -397,7 +404,9 @@ export default function SettingsTab() {
                 const val = e.target.value;
                 setCloudEnvs((prev) => ({ ...prev, runtime: val }));
                 localStorage.setItem('bolt_runtime', val);
-                toast.success(`Runtime set to ${val === 'bolt-container' ? 'BoltContainer' : val === 'webcontainer' ? 'WebContainer' : val}. Reload to activate.`);
+                toast.success(
+                  `Runtime set to ${val === 'bolt-container' ? 'BoltContainer' : val === 'webcontainer' ? 'WebContainer' : val}. Reload to activate.`,
+                );
               }}
               className={classNames(
                 'w-full px-3 py-2 rounded-lg text-sm',
@@ -412,7 +421,8 @@ export default function SettingsTab() {
               <option value="bolt-container">BoltContainer (Custom — In-Memory VFS + E2B)</option>
             </select>
             <p className="text-xs text-bolt-elements-textSecondary mt-1">
-              BoltContainer uses an in-memory virtual filesystem with E2B cloud execution. Reload the page after changing.
+              BoltContainer uses an in-memory virtual filesystem with E2B cloud execution. Reload the page after
+              changing.
             </p>
           </div>
 
@@ -420,7 +430,9 @@ export default function SettingsTab() {
           {/* E2B Sandbox */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-bolt-elements-textPrimary font-medium">E2B Sandbox (WebContainer Alternative)</span>
+              <span className="text-sm text-bolt-elements-textPrimary font-medium">
+                E2B Sandbox (WebContainer Alternative)
+              </span>
               <Switch
                 checked={cloudEnvs.e2bEnabled}
                 onCheckedChange={(enabled) => {
@@ -453,7 +465,9 @@ export default function SettingsTab() {
           {/* Firecrawl */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-bolt-elements-textPrimary font-medium">Firecrawl (Playwright Alternative)</span>
+              <span className="text-sm text-bolt-elements-textPrimary font-medium">
+                Firecrawl (Playwright Alternative)
+              </span>
               <Switch
                 checked={cloudEnvs.firecrawlEnabled}
                 onCheckedChange={(enabled) => {

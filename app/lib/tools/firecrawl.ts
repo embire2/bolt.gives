@@ -3,7 +3,10 @@ import { createScopedLogger } from '~/utils/logger';
 const logger = createScopedLogger('FirecrawlRunner');
 
 export function isFirecrawlEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
   return localStorage.getItem('bolt_firecrawl_enabled') === 'true' && !!localStorage.getItem('bolt_firecrawl_api_key');
 }
 
@@ -65,7 +68,7 @@ export async function scrapeWithFirecrawl(url: string): Promise<FirecrawlScrapeR
         data: {
           markdown: data.data.markdown || '',
           title: data.data.metadata?.title || url,
-          url: url,
+          url,
         },
       };
     } else {

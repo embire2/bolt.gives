@@ -8,7 +8,7 @@ interface GradientBackgroundProps {
 
 /**
  * GradientBackground - Applies the Crimson-Azure gradient theme to the application
- * 
+ *
  * The gradient creates a visually striking dark theme:
  * - Start: Crimson dark (#450A0A)
  * - Middle: Near black (#0A0A0A)
@@ -25,11 +25,7 @@ export const GradientBackground: React.FC<GradientBackgroundProps> = ({
     subtle: 'bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900',
   }[variant];
 
-  return (
-    <div className={`min-h-screen ${gradientClass} ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`min-h-screen ${gradientClass} ${className}`}>{children}</div>;
 };
 
 /**

@@ -96,9 +96,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
                 Most popular choice for running open-source models locally with desktop app
               </p>
             </div>
-            <span className="px-3 py-1 bg-blue-500/10 text-blue-500 text-xs font-medium rounded-full">
-              Recommended
-            </span>
+            <span className="px-3 py-1 bg-blue-500/10 text-blue-500 text-xs font-medium rounded-full">Recommended</span>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">

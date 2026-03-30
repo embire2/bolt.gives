@@ -5,13 +5,20 @@ const logger = createScopedLogger('E2BRunner');
 const E2B_API_URL = 'https://api.e2b.dev/v1';
 
 export function isE2BSandboxEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
   return localStorage.getItem('bolt_e2b_enabled') === 'true' && !!localStorage.getItem('bolt_e2b_api_key');
 }
 
 function getApiKey(): string {
   const key = localStorage.getItem('bolt_e2b_api_key');
-  if (!key) throw new Error('E2B API key not found. Please add it in Settings → Cloud Environments.');
+
+  if (!key) {
+    throw new Error('E2B API key not found. Please add it in Settings → Cloud Environments.');
+  }
+
   return key;
 }
 
@@ -56,6 +63,7 @@ export async function createE2BSandbox(): Promise<E2BSandboxSession> {
   };
 
   logger.info(`E2B Sandbox created: ${activeSandbox.sandboxId}`);
+
   return activeSandbox;
 }
 
@@ -82,20 +90,17 @@ export async function runE2BSandboxCommand(options: {
   options.onEvent?.({ type: 'status', message: `Running in E2B: ${options.command}` });
 
   try {
-    const response = await fetch(
-      `${E2B_API_URL}/sandboxes/${activeSandbox.sandboxId}/commands`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-E2B-API-Key': apiKey,
-        },
-        body: JSON.stringify({
-          cmd: options.command,
-          timeout: 120, // 2 minute command timeout
-        }),
+    const response = await fetch(`${E2B_API_URL}/sandboxes/${activeSandbox.sandboxId}/commands`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-E2B-API-Key': apiKey,
       },
-    );
+      body: JSON.stringify({
+        cmd: options.command,
+        timeout: 120, // 2 minute command timeout
+      }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -124,6 +129,7 @@ export async function runE2BSandboxCommand(options: {
     };
   } catch (error) {
     logger.error('E2B Sandbox execution failed', error);
+
     const errMsg = error instanceof Error ? error.message : String(error);
     options.onEvent?.({ type: 'stderr', chunk: errMsg });
 
@@ -148,27 +154,26 @@ export async function writeFileToE2B(filePath: string, content: string): Promise
     throw new Error('No active E2B Sandbox.');
   }
 
-  await fetch(
-    `${E2B_API_URL}/sandboxes/${activeSandbox.sandboxId}/filesystem`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-E2B-API-Key': apiKey,
-      },
-      body: JSON.stringify({
-        path: filePath,
-        content,
-      }),
+  await fetch(`${E2B_API_URL}/sandboxes/${activeSandbox.sandboxId}/filesystem`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-E2B-API-Key': apiKey,
     },
-  );
+    body: JSON.stringify({
+      path: filePath,
+      content,
+    }),
+  });
 }
 
 /**
  * Destroy the active E2B Sandbox session.
  */
 export async function destroyE2BSandbox(): Promise<void> {
-  if (!activeSandbox) return;
+  if (!activeSandbox) {
+    return;
+  }
 
   const apiKey = getApiKey();
 

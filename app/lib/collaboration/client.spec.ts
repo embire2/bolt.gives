@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isUnsafeStoredCollaborationUrl, resolveDefaultCollaborationServerUrl } from './client';
+import { isUnsafeStoredCollaborationUrl, resolveDefaultCollaborationServerUrl } from './config';
 
 describe('collaboration client URL resolution', () => {
   it('uses localhost collaboration server for local development', () => {

@@ -21,7 +21,7 @@
 
 ## Experimental Cloudflare Instance Spawn
 
-`v3.0.2` adds the implementation blueprint for an **experimental managed Cloudflare instance service** for bolt.gives.
+`v3.0.3` keeps the implementation blueprint for an **experimental managed Cloudflare instance service** for bolt.gives and adds the first server-hosted tenant-admin baseline.
 
 What is technically possible at **no cost from Cloudflare** today:
 
@@ -49,17 +49,17 @@ Important:
 - This is a **real implementation plan and operator blueprint**, not a claim that a fully public self-service spawn API is already live.
 - The free experimental path is designed around Cloudflare's free-tier products.
 - The dedicated `6 GiB` Node instance is intentionally moved to the future Pro path, because Cloudflare Containers do not provide that tier at zero cost.
-- The public, automated spawn control plane is tracked in `ROADMAP.md` under `v3.0.3`.
+- The public, automated spawn control plane is tracked in `ROADMAP.md` under `v3.0.4`.
 
 ## App Overview
 
-Current version: **v3.0.2**
+Current version: **v3.0.3**
 
 Next release targets:
 
-- `v3.0.3`: server-first heavy execution + managed Cloudflare instance control plane.
+- `v3.0.4`: managed Cloudflare control plane, tenant hardening, and the next browser-weight reduction pass.
 
-Current `v3.0.2` release line:
+Current `v3.0.3` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
 - Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
@@ -79,6 +79,9 @@ Current `v3.0.2` release line:
 - Hosted preview updates now use compact server summaries plus SSE instead of relying on tight browser polling loops for state churn.
 - Hosted preview health is now verified on the server after workspace mutations, so self-heal can restore the last known good snapshot even if the browser never catches the transient failure overlay.
 - The main shell is now split into top-level `Chat` and `Workspace` tabs, so prompt/live commentary is isolated from files/preview/terminal and future surfaces can be opened or closed without crushing the prompt area.
+- Provider/model visibility is restored directly above the prompt box so users can always see what AI path is active.
+- Sidebar access is explicit again through the header button plus a wider hover target.
+- A bootstrap `Tenant Admin` dashboard is now available on server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
 - This repo now includes the operator blueprint and tenancy schema for an experimental **one-client / one-instance Cloudflare managed service**, with:
   - a free experimental shared-runtime path
   - a future Pro path for dedicated `6 GiB` Node containers
@@ -104,7 +107,7 @@ Release verdict for `v3.0.1`:
 - Live smoke passed on `https://alpha1.bolt.gives`
 - Live smoke passed on `https://ahmad.bolt.gives`
 
-Release verdict for `v3.0.2`:
+Release verdict for `v3.0.3`:
 
 - Local gates passed: `typecheck`, `lint`, `test`, `build`
 - Cloudflare Pages FREE-provider path now passes live verification
@@ -113,7 +116,7 @@ Release verdict for `v3.0.2`:
 - Live hosted-runtime browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4`, including server-side sync replacing the fallback starter inside preview without a manual reload.
 - Live hosted-runtime auto-recovery E2E now passes on `https://alpha1.bolt.gives` by generating a hosted app, intentionally breaking it, and verifying that the managed runtime restores the last known good snapshot and returns preview to healthy.
 
-What `v3.0.2` specifically changes:
+What `v3.0.3` specifically changes:
 
 - Hosted instances now prefer the managed server-side runtime for installs, builds, preview hosting, and file sync, with WebContainer reduced to the fallback path instead of the default.
 - Hosted preview iframes now refresh when new server-side file sync revisions land, so generated apps replace the starter automatically.
@@ -132,13 +135,13 @@ What `v3.0.2` specifically changes:
   - free experimental shared-runtime path at no platform cost
   - future Pro path for dedicated Cloudflare Containers `standard-2` (`6 GiB`)
   - automatic rollout design from `main`
-- Release/versioning/docs are now aligned on the `v3.0.2` line.
+- Release/versioning/docs are now aligned on the `v3.0.3` line.
 
-What is still true after `v3.0.2`:
+What still remains after `v3.0.3`:
 
 - The validated OpenAI core path is now working.
 - The heaviest hosted install/build/preview work is now off the browser, but the client bundle and long-run UI rendering are still heavier than they should be.
-- `ROADMAP.md` now tracks the current stable `v3.0.2` baseline and the next major delivery bucket `v3.0.3`.
+- `ROADMAP.md` now tracks the current stable `v3.0.3` baseline and the next major delivery bucket `v3.0.4`.
 
 ## Screenshots
 
@@ -157,7 +160,7 @@ System in action:
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
-## Roadmap (Post-3.0.2)
+## Roadmap (Post-3.0.3)
 
 Roadmap files:
 
@@ -165,10 +168,10 @@ Roadmap files:
 
 Current roadmap split:
 
-- `v3.0.2`: shipped baseline for installer-first self-hosting, hosted FREE reliability, and the Cloudflare managed-instance blueprint.
-- `v3.0.3`: server-first heavy execution, first-party template coverage, the actual managed Cloudflare control plane, optional teams mode, and update/audit hardening.
+- `v3.0.3`: shipped baseline for server-first hosted execution, prompt/sidebar usability recovery, and the tenant-admin bootstrap.
+- `v3.0.4`: managed Cloudflare control plane, tenant hardening, remaining browser-weight reduction, and operator/rollback tooling.
 
-## Current Features (v3.0.2)
+## Current Features (v3.0.3)
 
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
 - Silent internal hosted-model fallback from `DeepSeek V3.2` to `qwen/qwen3-coder` when the primary upstream route is unavailable.

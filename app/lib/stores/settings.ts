@@ -381,7 +381,9 @@ export const updateUserTabVisibility = (tabId: TabType, visible: boolean) => {
   if (existingTab) {
     nextTabs = currentConfig.userTabs.map((tab) => (tab.id === tabId ? { ...tab, visible } : tab));
   } else {
-    const defaultTab = DEFAULT_TAB_CONFIG.find((tab): tab is UserTabConfig => tab.id === tabId && tab.window === 'user');
+    const defaultTab = DEFAULT_TAB_CONFIG.find(
+      (tab): tab is UserTabConfig => tab.id === tabId && tab.window === 'user',
+    );
 
     if (!defaultTab) {
       return;

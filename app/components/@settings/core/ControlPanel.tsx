@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useMemo } from 'react';
 import { useStore } from '@nanostores/react';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { classNames } from '~/utils/classNames';
@@ -19,8 +19,6 @@ import ProfileTab from '~/components/@settings/tabs/profile/ProfileTab';
 import SettingsTab from '~/components/@settings/tabs/settings/SettingsTab';
 import NotificationsTab from '~/components/@settings/tabs/notifications/NotificationsTab';
 import FeaturesTab from '~/components/@settings/tabs/features/FeaturesTab';
-import { DataTab } from '~/components/@settings/tabs/data/DataTab';
-import { EventLogsTab } from '~/components/@settings/tabs/event-logs/EventLogsTab';
 import GitHubTab from '~/components/@settings/tabs/github/GitHubTab';
 import GitLabTab from '~/components/@settings/tabs/gitlab/GitLabTab';
 import SupabaseTab from '~/components/@settings/tabs/supabase/SupabaseTab';
@@ -29,6 +27,13 @@ import NetlifyTab from '~/components/@settings/tabs/netlify/NetlifyTab';
 import CloudProvidersTab from '~/components/@settings/tabs/providers/cloud/CloudProvidersTab';
 import LocalProvidersTab from '~/components/@settings/tabs/providers/local/LocalProvidersTab';
 import McpTab from '~/components/@settings/tabs/mcp/McpTab';
+
+const LazyDataTab = lazy(() =>
+  import('~/components/@settings/tabs/data/DataTab').then((module) => ({ default: module.DataTab })),
+);
+const LazyEventLogsTab = lazy(() =>
+  import('~/components/@settings/tabs/event-logs/EventLogsTab').then((module) => ({ default: module.EventLogsTab })),
+);
 
 interface ControlPanelProps {
   open: boolean;
@@ -132,7 +137,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
       case 'features':
         return <FeaturesTab />;
       case 'data':
-        return <DataTab />;
+        return (
+          <Suspense fallback={<div className="p-6 text-sm text-bolt-elements-textSecondary">Loading data tools…</div>}>
+            <LazyDataTab />
+          </Suspense>
+        );
       case 'cloud-providers':
         return <CloudProvidersTab />;
       case 'local-providers':
@@ -148,7 +157,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
       case 'netlify':
         return <NetlifyTab />;
       case 'event-logs':
-        return <EventLogsTab />;
+        return (
+          <Suspense fallback={<div className="p-6 text-sm text-bolt-elements-textSecondary">Loading event logs…</div>}>
+            <LazyEventLogsTab />
+          </Suspense>
+        );
       case 'mcp':
         return <McpTab />;
 

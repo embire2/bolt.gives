@@ -330,7 +330,7 @@ export const Workbench = memo(
     const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
-  const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
+    const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
     const hasWorkspaceContent =
       hasPreview ||

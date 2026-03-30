@@ -49,9 +49,7 @@ export class AnalysisServiceClass {
   /**
    * Analyze files for security vulnerabilities and code health issues
    */
-  async analyzeFiles(
-    files: Record<string, { content: string; path: string }>,
-  ): Promise<AnalysisResult> {
+  async analyzeFiles(files: Record<string, { content: string; path: string }>): Promise<AnalysisResult> {
     const filesArray = Object.entries(files).map(([path, file]) => ({
       path,
       content: file.content.substring(0, 5000), // Limit content size
@@ -63,24 +61,24 @@ export class AnalysisServiceClass {
 
     // Analyze each file for common issues
     for (const file of filesArray) {
-      const issues = this.detectIssues(file.path, file.content);
+      const issues = this._detectIssues(file.path, file.content);
       vulnerabilities.push(...issues.vulnerabilities);
       codeHealthIssues.push(...issues.healthIssues);
     }
 
     // Deduct points based on issues found
-    const criticalVulns = vulnerabilities.filter(v => v.severity === 'critical').length;
-    const highVulns = vulnerabilities.filter(v => v.severity === 'high').length;
-    const mediumVulns = vulnerabilities.filter(v => v.severity === 'medium').length;
-    
+    const criticalVulns = vulnerabilities.filter((v) => v.severity === 'critical').length;
+    const highVulns = vulnerabilities.filter((v) => v.severity === 'high').length;
+    const mediumVulns = vulnerabilities.filter((v) => v.severity === 'medium').length;
+
     overallScore -= criticalVulns * 20;
     overallScore -= highVulns * 10;
     overallScore -= mediumVulns * 5;
     overallScore -= codeHealthIssues.length * 2;
-    
+
     overallScore = Math.max(0, overallScore);
 
-    const summary = this.generateSummary(vulnerabilities, codeHealthIssues, overallScore);
+    const summary = this._generateSummary(vulnerabilities, codeHealthIssues, overallScore);
 
     return {
       timestamp: new Date().toISOString(),
@@ -95,15 +93,21 @@ export class AnalysisServiceClass {
   /**
    * Detect common issues in file content
    */
-  private detectIssues(filePath: string, content: string) {
+  private _detectIssues(filePath: string, content: string) {
     const vulnerabilities: SecurityVulnerability[] = [];
     const healthIssues: CodeHealthIssue[] = [];
     const lines = content.split('\n');
 
-    // Check for hardcoded secrets - use function to create fresh regex each time
-    // to avoid lastIndex issues with global regexes
+    /*
+     * Check for hardcoded secrets - use function to create fresh regex each time
+     * to avoid lastIndex issues with global regexes
+     */
     const secretPatternDefs = [
-      { pattern: 'password\\s*=\\s*[\'"][^\'"]+[\'"]', severity: 'critical' as const, category: 'Hardcoded Credentials' },
+      {
+        pattern: 'password\\s*=\\s*[\'"][^\'"]+[\'"]',
+        severity: 'critical' as const,
+        category: 'Hardcoded Credentials',
+      },
       { pattern: 'api[_-]?key\\s*=\\s*[\'"][^\'"]+[\'"]', severity: 'high' as const, category: 'API Key Exposure' },
       { pattern: 'secret\\s*=\\s*[\'"][^\'"]+[\'"]', severity: 'high' as const, category: 'Secret Exposure' },
       { pattern: 'token\\s*=\\s*[\'"][^\'"]+[\'"]', severity: 'high' as const, category: 'Token Exposure' },
@@ -113,14 +117,53 @@ export class AnalysisServiceClass {
 
     // Check for common security issues - use function to create fresh regex each time
     const securityPatternDefs = [
-      { pattern: 'eval\\s*\\(', severity: 'high' as const, category: 'Code Injection', suggestion: 'Avoid using eval()' },
-      { pattern: 'innerHTML\\s*=', severity: 'medium' as const, category: 'XSS Vulnerability', suggestion: 'Use textContent instead' },
-      { pattern: 'dangerouslySetInnerHTML', severity: 'medium' as const, category: 'XSS Risk', suggestion: 'Sanitize content before using' },
-      { pattern: 'process\\.env\\.NODE_ENV\\s*===\s*[\'"]development[\'"]', severity: 'low' as const, category: 'Debug Code' },
-      { pattern: 'console\\.log\\s*\\(', severity: 'low' as const, category: 'Debug Statement', suggestion: 'Remove console.log in production' },
-      { pattern: 'TODO|FIXME|XXX|HACK', severity: 'low' as const, category: 'Technical Debt', suggestion: 'Address TODO items' },
-      { pattern: 'catch\\s*\\(\\s*\\)\\s*{}', severity: 'medium' as const, category: 'Empty Catch Block', suggestion: 'Handle errors properly' },
-      { pattern: 'setTimeout\\s*\\(\\s*[\'"]', severity: 'medium' as const, category: 'String setTimeout', suggestion: 'Use function reference' },
+      {
+        pattern: 'eval\\s*\\(',
+        severity: 'high' as const,
+        category: 'Code Injection',
+        suggestion: 'Avoid using eval()',
+      },
+      {
+        pattern: 'innerHTML\\s*=',
+        severity: 'medium' as const,
+        category: 'XSS Vulnerability',
+        suggestion: 'Use textContent instead',
+      },
+      {
+        pattern: 'dangerouslySetInnerHTML',
+        severity: 'medium' as const,
+        category: 'XSS Risk',
+        suggestion: 'Sanitize content before using',
+      },
+      {
+        pattern: 'process\\.env\\.NODE_ENV\\s*===\s*[\'"]development[\'"]',
+        severity: 'low' as const,
+        category: 'Debug Code',
+      },
+      {
+        pattern: 'console\\.log\\s*\\(',
+        severity: 'low' as const,
+        category: 'Debug Statement',
+        suggestion: 'Remove console.log in production',
+      },
+      {
+        pattern: 'TODO|FIXME|XXX|HACK',
+        severity: 'low' as const,
+        category: 'Technical Debt',
+        suggestion: 'Address TODO items',
+      },
+      {
+        pattern: 'catch\\s*\\(\\s*\\)\\s*{}',
+        severity: 'medium' as const,
+        category: 'Empty Catch Block',
+        suggestion: 'Handle errors properly',
+      },
+      {
+        pattern: 'setTimeout\\s*\\(\\s*[\'"]',
+        severity: 'medium' as const,
+        category: 'String setTimeout',
+        suggestion: 'Use function reference',
+      },
     ];
 
     lines.forEach((line, index) => {
@@ -129,6 +172,7 @@ export class AnalysisServiceClass {
       // Check for secrets - create fresh regex for each line to avoid lastIndex issues
       for (const def of secretPatternDefs) {
         const regex = new RegExp(def.pattern, 'i');
+
         if (regex.test(line)) {
           vulnerabilities.push({
             severity: def.severity,
@@ -144,6 +188,7 @@ export class AnalysisServiceClass {
       // Check for security issues - create fresh regex for each line to avoid lastIndex issues
       for (const def of securityPatternDefs) {
         const regex = new RegExp(def.pattern);
+
         if (regex.test(line)) {
           healthIssues.push({
             type: def.severity === 'high' ? 'security' : def.severity === 'medium' ? 'bug' : 'best-practice',
@@ -174,22 +219,22 @@ export class AnalysisServiceClass {
   /**
    * Generate summary of analysis results
    */
-  private generateSummary(
+  private _generateSummary(
     vulnerabilities: SecurityVulnerability[],
     healthIssues: CodeHealthIssue[],
     score: number,
   ): string {
-    const critical = vulnerabilities.filter(v => v.severity === 'critical').length;
-    const high = vulnerabilities.filter(v => v.severity === 'high').length;
-    const medium = vulnerabilities.filter(v => v.severity === 'medium').length;
-    const low = vulnerabilities.filter(v => v.severity === 'low').length;
+    const critical = vulnerabilities.filter((v) => v.severity === 'critical').length;
+    const high = vulnerabilities.filter((v) => v.severity === 'high').length;
+    const medium = vulnerabilities.filter((v) => v.severity === 'medium').length;
+    const low = vulnerabilities.filter((v) => v.severity === 'low').length;
 
     let summary = `Code health score: ${score}/100. `;
-    
+
     if (critical > 0 || high > 0) {
       summary += `Found ${critical} critical and ${high} high severity security issues. `;
     }
-    
+
     if (medium > 0 || low > 0) {
       summary += `${medium} medium and ${low} low severity issues found. `;
     }
@@ -225,16 +270,18 @@ export class AnalysisServiceClass {
 
     const { format, includeExamples = true, includeTypeInfo = true } = options;
     const fileExtension = filePath.split('.').pop() || '';
-    
+
     let prompt = `Generate ${format === 'markdown' ? 'Markdown' : format === 'jsdoc' ? 'JSDoc' : 'HTML'} documentation for the following code file: ${filePath}\n\n`;
-    
+
     if (includeExamples) {
       prompt += 'Include practical usage examples where appropriate.\n';
     }
+
     if (includeTypeInfo) {
       prompt += 'Include type information and parameter descriptions.\n';
     }
-    prompt += `\n\`\`\`${this.getLanguageFromExtension(fileExtension)}\n${content.substring(0, 8000)}\n\`\`\``;
+
+    prompt += `\n\`\`\`${this._getLanguageFromExtension(fileExtension)}\n${content.substring(0, 8000)}\n\`\`\``;
 
     const result = await generateText({
       model: this._model,
@@ -245,7 +292,7 @@ export class AnalysisServiceClass {
     return {
       file: filePath,
       content: result.text,
-      language: this.getLanguageFromExtension(fileExtension),
+      language: this._getLanguageFromExtension(fileExtension),
     };
   }
 
@@ -261,24 +308,28 @@ export class AnalysisServiceClass {
     }
 
     const fileList = Object.keys(files).slice(0, 50).join('\n- ');
-    const packageJson = files['package.json']?.content 
-      ? JSON.parse(files['package.json'].content) 
-      : null;
+    const packageJson = files['package.json']?.content ? JSON.parse(files['package.json'].content) : null;
 
     const prompt = `Generate a comprehensive README.md for a project called "${projectName}". 
 
 Project structure:
 - ${fileList}
 
-${packageJson ? `
+${
+  packageJson
+    ? `
 Project metadata:
 - Name: ${packageJson.name}
 - Description: ${packageJson.description || 'N/A'}
 - Version: ${packageJson.version || 'N/A'}
 - Main entry: ${packageJson.main || 'N/A'}
 - Scripts: ${Object.keys(packageJson.scripts || {}).join(', ')}
-- Dependencies: ${Object.keys(packageJson.dependencies || {}).slice(0, 10).join(', ')}
-` : ''}
+- Dependencies: ${Object.keys(packageJson.dependencies || {})
+        .slice(0, 10)
+        .join(', ')}
+`
+    : ''
+}
 
 Generate a professional README with:
 1. Project title and description
@@ -303,7 +354,7 @@ Format as clean Markdown.`;
   /**
    * Get language from file extension
    */
-  private getLanguageFromExtension(extension: string): string {
+  private _getLanguageFromExtension(extension: string): string {
     const languageMap: Record<string, string> = {
       js: 'javascript',
       jsx: 'javascript',

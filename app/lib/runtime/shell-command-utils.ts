@@ -506,7 +506,10 @@ const YARN_RE = /^yarn\s+/i;
 
 function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: boolean } {
   const trimmed = segment.trim();
-  if (!trimmed) return { segment, modified: false };
+
+  if (!trimmed) {
+    return { segment, modified: false };
+  }
 
   // npm run <script> → pnpm run <script>
   if (NPM_RUN_RE.test(trimmed)) {
@@ -546,7 +549,10 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
   // npx <tool> → pnpm dlx <tool>
   if (NPX_RE.test(trimmed)) {
     // Keep --yes flag if present, remove it (pnpm dlx doesn't need it)
-    const rewritten = trimmed.replace(/^npx\s+/i, 'pnpm dlx ').replace(/\s+--yes\b/, '').replace(/\s+-y\b/, '');
+    const rewritten = trimmed
+      .replace(/^npx\s+/i, 'pnpm dlx ')
+      .replace(/\s+--yes\b/, '')
+      .replace(/\s+-y\b/, '');
     return { segment: rewritten, modified: true };
   }
 
@@ -555,7 +561,10 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
 
 function rewriteYarnSegmentToPnpm(segment: string): { segment: string; modified: boolean } {
   const trimmed = segment.trim();
-  if (!trimmed || !YARN_RE.test(trimmed)) return { segment, modified: false };
+
+  if (!trimmed || !YARN_RE.test(trimmed)) {
+    return { segment, modified: false };
+  }
 
   // yarn add → pnpm add
   if (/^yarn\s+add\s+/i.test(trimmed)) {
@@ -599,7 +608,9 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
   const normalizedCommand = delimiterNormalization.modifiedCommand || command;
   const trimmed = normalizedCommand.trim();
 
-  if (!trimmed) return { shouldModify: false };
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
 
   const parts = trimmed.split(/\s*&&\s*/);
   let modifiedAny = false;
@@ -607,6 +618,7 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
   const rewrittenParts = parts.map((part) => {
     // Try npm → pnpm
     let rewritten = rewriteNpmSegmentToPnpm(part);
+
     if (rewritten.modified) {
       modifiedAny = true;
       return rewritten.segment;
@@ -614,6 +626,7 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
 
     // Try yarn → pnpm
     rewritten = rewriteYarnSegmentToPnpm(part);
+
     if (rewritten.modified) {
       modifiedAny = true;
       return rewritten.segment;
@@ -622,7 +635,9 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
     return part;
   });
 
-  if (!modifiedAny) return { shouldModify: false };
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
 
   return {
     shouldModify: true,
@@ -634,7 +649,6 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
 // ─── pip / Python Shim ───────────────────────────────────────────────────────
 
 const PIP_INSTALL_RE = /^(pip3?|python3?\s+-m\s+pip)\s+install\s+/i;
-const PIP_BARE_RE = /^pip3?\s+/i;
 const DJANGO_ADMIN_RE = /^django-admin\s+/i;
 const MANAGE_PY_RE = /^python3?\s+manage\.py\s+/i;
 
@@ -645,7 +659,10 @@ const MANAGE_PY_RE = /^python3?\s+manage\.py\s+/i;
  */
 export function rewritePythonCommands(command: string): ShellCommandRewrite {
   const trimmed = command.trim();
-  if (!trimmed) return { shouldModify: false };
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
 
   const parts = trimmed.split(/\s*&&\s*/);
   let modifiedAny = false;
@@ -674,7 +691,9 @@ export function rewritePythonCommands(command: string): ShellCommandRewrite {
     return p;
   });
 
-  if (!modifiedAny) return { shouldModify: false };
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
 
   return {
     shouldModify: true,
@@ -682,4 +701,3 @@ export function rewritePythonCommands(command: string): ShellCommandRewrite {
     warning: 'Added guidance for Python/pip commands that need BoltContainer + E2B.',
   };
 }
-

@@ -7,6 +7,7 @@ import { constants as fsConstants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import crypto from 'node:crypto';
 import {
   createPreviewProbeCoordinator,
   extractPreviewPortFromOutput,
@@ -62,10 +63,38 @@ const PREVIEW_ERROR_PATTERNS = [
   /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
   /Unhandled\s+Promise\s+Rejection/i,
 ];
+const TENANT_REGISTRY_PATH = process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
 
 const sessions = new Map();
 
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
+
+function hashTenantSecret(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+async function ensureTenantRegistry() {
+  try {
+    const raw = await fs.readFile(TENANT_REGISTRY_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
+    const registry = {
+      admin: {
+        username: 'admin',
+        passwordHash: hashTenantSecret('admin'),
+      },
+      tenants: [],
+    };
+    await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+    return registry;
+  }
+}
+
+async function writeTenantRegistry(registry) {
+  await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
+  await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+}
 
 function sendJson(res, status, payload, extraHeaders = {}) {
   res.writeHead(status, {
@@ -1404,6 +1433,74 @@ export function createRuntimeServer() {
     const previewEventsMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-events$/);
     const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
     const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
+
+    if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
+      try {
+        const registry = await ensureTenantRegistry();
+        sendJson(res, 200, {
+          supported: true,
+          tenants: registry.tenants || [],
+          defaultAdmin: { username: 'admin' },
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect tenant registry');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/verify-admin') {
+      try {
+        const body = await readJsonBody(req);
+        const registry = await ensureTenantRegistry();
+        const username = String(body.username || '');
+        const password = String(body.password || '');
+
+        if (username !== registry.admin?.username || hashTenantSecret(password) !== registry.admin?.passwordHash) {
+          sendText(res, 401, 'Invalid tenant admin credentials.');
+          return;
+        }
+
+        sendJson(res, 200, { ok: true });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to verify tenant admin');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/tenants') {
+      try {
+        const body = await readJsonBody(req);
+        const name = String(body.name || '').trim();
+        const email = String(body.email || '').trim().toLowerCase();
+        const password = String(body.password || '').trim();
+
+        if (!name || !email || !password) {
+          sendText(res, 400, 'Name, email, and password are required.');
+          return;
+        }
+
+        const registry = await ensureTenantRegistry();
+
+        if (registry.tenants.some((tenant) => tenant.email === email)) {
+          sendText(res, 400, 'A tenant with that email already exists.');
+          return;
+        }
+
+        registry.tenants.unshift({
+          id: `${Date.now()}`,
+          name,
+          email,
+          passwordHash: hashTenantSecret(password),
+          createdAt: new Date().toISOString(),
+        });
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to create tenant');
+      }
+      return;
+    }
 
     if (req.method === 'GET' && previewStatusMatch) {
       try {

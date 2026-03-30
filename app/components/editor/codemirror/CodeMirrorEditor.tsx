@@ -23,11 +23,11 @@ import { debounce } from '~/utils/debounce';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { isFileLocked, getCurrentChatId } from '~/utils/fileLocks';
 import { BinaryContent } from './BinaryContent';
-import { getTheme, reconfigureTheme } from './cm-theme';
+import { getTheme, loadThemeExtension, reconfigureTheme } from './cm-theme';
 import { indentKeyBinding } from './indent';
 import { getLanguage } from './languages';
 import { createEnvMaskingExtension } from './EnvMasking';
-import { getCollaborationExtension, isCollaborationEnabled } from '~/lib/collaboration/client';
+import { isCollaborationEnabled } from '~/lib/collaboration/config';
 
 const logger = createScopedLogger('CodeMirrorEditor');
 
@@ -145,6 +145,7 @@ export const CodeMirrorEditor = memo(
     // Add a compartment for the env masking extension
     const [envMaskingCompartment] = useState(new Compartment());
     const [collaborationCompartment] = useState(new Compartment());
+    const activeCollaborationFileRef = useRef<string | null>(null);
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView>();
@@ -247,6 +248,16 @@ export const CodeMirrorEditor = memo(
       viewRef.current.dispatch({
         effects: [reconfigureTheme(theme)],
       });
+
+      void loadThemeExtension(theme).then((extension) => {
+        if (!viewRef.current || themeRef.current !== theme) {
+          return;
+        }
+
+        viewRef.current.dispatch({
+          effects: [reconfigureTheme(theme, extension)],
+        });
+      });
     }, [theme]);
 
     useEffect(() => {
@@ -281,23 +292,38 @@ export const CodeMirrorEditor = memo(
       }
 
       let state = editorStates.get(doc.filePath);
-      const collaborationExtension =
-        isCollaborationEnabled() && doc.filePath ? [getCollaborationExtension(doc.filePath, doc.value)] : [];
+      const collaborationEnabled = isCollaborationEnabled() && Boolean(doc.filePath);
+      const needsCollaborationBinding = collaborationEnabled && activeCollaborationFileRef.current !== doc.filePath;
 
       if (!state) {
         state = newEditorState(doc.value, theme, settings, onScrollRef, debounceScroll, onSaveRef, [
           languageCompartment.of([]),
           envMaskingCompartment.of([createEnvMaskingExtension(() => docRef.current?.filePath)]),
-          collaborationCompartment.of(collaborationExtension),
+          collaborationCompartment.of([]),
         ]);
 
         editorStates.set(doc.filePath, state);
       }
 
       view.setState(state);
-      view.dispatch({
-        effects: [collaborationCompartment.reconfigure(collaborationExtension)],
-      });
+
+      if (!collaborationEnabled) {
+        activeCollaborationFileRef.current = null;
+        view.dispatch({
+          effects: [collaborationCompartment.reconfigure([])],
+        });
+      } else if (needsCollaborationBinding) {
+        void import('~/lib/collaboration/client').then(({ getCollaborationExtension }) => {
+          if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
+            return;
+          }
+
+          activeCollaborationFileRef.current = doc.filePath;
+          viewRef.current.dispatch({
+            effects: [collaborationCompartment.reconfigure([getCollaborationExtension(doc.filePath, doc.value)])],
+          });
+        });
+      }
 
       setEditorDocument(
         view,

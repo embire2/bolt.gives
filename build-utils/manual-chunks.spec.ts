@@ -22,8 +22,8 @@ describe('getManualChunkName', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/jszip/lib/index.js')).toBe('git-export');
   });
 
-  it('extracts react core, ui, and diagram dependencies from the generic vendor chunk', () => {
-    expect(getManualChunkName('/root/bolt.gives/node_modules/react/index.js')).toBe('react-core');
+  it('extracts framework, ui, and diagram dependencies from the generic vendor chunk', () => {
+    expect(getManualChunkName('/root/bolt.gives/node_modules/react/index.js')).toBe('framework-vendor');
     expect(getManualChunkName('/root/bolt.gives/node_modules/lucide-react/dist/esm/lucide-react.js')).toBe(
       'ui-vendor',
     );

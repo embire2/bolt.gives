@@ -57,13 +57,13 @@ export function GradientCard({
   // Animation variants for hover effect
   const hoverAnimation = hoverEffect
     ? {
-      whileHover: {
-        scale: 1.02,
-        y: -2,
-        transition: { type: 'spring', stiffness: 400, damping: 17 },
-      },
-      whileTap: { scale: 0.98 },
-    }
+        whileHover: {
+          scale: 1.02,
+          y: -2,
+          transition: { type: 'spring', stiffness: 400, damping: 17 },
+        },
+        whileTap: { scale: 0.98 },
+      }
     : undefined;
 
   return (

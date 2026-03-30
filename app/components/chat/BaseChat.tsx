@@ -786,6 +786,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             <div className="flex justify-center gap-2">
               {ImportButtons(importChat)}
               <GitCloneButton importChat={importChat} />
+              <a
+                href="/tenant-admin"
+                className="inline-flex items-center gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
+              >
+                <span className="i-ph:buildings text-base" />
+                Tenant Admin
+              </a>
             </div>
           )}
           <div className="flex flex-col gap-5">
@@ -798,12 +805,18 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       Getting started (no bolt.gives signup required)
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
-                      <div>1. Pick a provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.) in the chat box.</div>
+                      <div>
+                        1. Pick a provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.) in the chat box.
+                      </div>
                       <div>
                         2. If you choose a cloud provider, you will need to sign up with that provider to get an API
                         key.
                       </div>
                       <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
+                      <div>
+                        4. If you self-host for a team or customers, open <code>/tenant-admin</code> to manage tenant
+                        accounts on this server.
+                      </div>
                       <div className="mt-2 text-xs">
                         Note: keys are stored in your browser and sent with your requests to talk to your selected
                         provider.

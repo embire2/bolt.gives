@@ -257,12 +257,7 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     id: 'missing-node-modules',
     title: 'Missing node_modules — dependencies not installed',
     source: 'terminal',
-    patterns: [
-      /Cannot find module/i,
-      /MODULE_NOT_FOUND/i,
-      /Error:\s*Cannot find package/i,
-      /ERR_MODULE_NOT_FOUND/i,
-    ],
+    patterns: [/Cannot find module/i, /MODULE_NOT_FOUND/i, /Error:\s*Cannot find package/i, /ERR_MODULE_NOT_FOUND/i],
     maxAutoAttempts: 3,
     guidance: [
       'Dependencies have not been installed. Run `pnpm install` in the project directory first.',
@@ -275,11 +270,7 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     id: 'pnpm-not-found',
     title: 'pnpm binary not available',
     source: 'terminal',
-    patterns: [
-      /jsh:\s*spawn pnpm ENOENT/i,
-      /pnpm:\s*command not found/i,
-      /pnpm:\s*not found/i,
-    ],
+    patterns: [/jsh:\s*spawn pnpm ENOENT/i, /pnpm:\s*command not found/i, /pnpm:\s*not found/i],
     maxAutoAttempts: 2,
     guidance: [
       'pnpm is not available in the shell path. Try using npx to install it: `npx pnpm install`.',
@@ -291,13 +282,7 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     id: 'dependency-install-failed',
     title: 'Package install failed',
     source: 'terminal',
-    patterns: [
-      /ERR_PNPM_/i,
-      /npm ERR!/i,
-      /ERESOLVE unable to resolve/i,
-      /peer dependency conflict/i,
-      /ETARGET/i,
-    ],
+    patterns: [/ERR_PNPM_/i, /npm ERR!/i, /ERESOLVE unable to resolve/i, /peer dependency conflict/i, /ETARGET/i],
     maxAutoAttempts: 2,
     guidance: [
       'The package installation failed. Inspect the error for version conflicts or missing peer dependencies.',

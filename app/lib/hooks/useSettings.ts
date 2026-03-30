@@ -17,7 +17,7 @@ import {
   updateEventLogs,
   updatePromptId,
 } from '~/lib/stores/settings';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Cookies from 'js-cookie';
 import type { IProviderSetting, ProviderInfo, IProviderConfig } from '~/types/model';
 import type { TabWindowConfig } from '~/components/@settings/core/types';
@@ -78,7 +78,6 @@ export function useSettings(): UseSettingsReturn {
   const promptId = useStore(promptStore);
   const isLatestBranch = useStore(latestBranchStore);
   const autoSelectTemplate = useStore(autoSelectStarterTemplate);
-  const [activeProviders, setActiveProviders] = useState<ProviderInfo[]>([]);
   const contextOptimizationEnabled = useStore(enableContextOptimizationStore);
   const tabConfiguration = useStore(tabConfigurationStore);
   const [settings, setSettings] = useState<Settings>(() => {
@@ -93,12 +92,24 @@ export function useSettings(): UseSettingsReturn {
     };
   });
 
-  useEffect(() => {
-    const active = Object.entries(providers)
+  const activeProviders = useMemo(() => {
+    const enabledProviders = Object.entries(providers)
       .filter(([_key, provider]) => provider.settings.enabled)
-      .map(([_k, p]) => p);
+      .map(([_k, provider]) => provider as ProviderInfo);
 
-    setActiveProviders(active);
+    if (enabledProviders.length > 0) {
+      return enabledProviders;
+    }
+
+    const freeProvider = Object.values(providers).find((provider) => provider.name === 'FREE') as
+      | ProviderInfo
+      | undefined;
+
+    if (freeProvider) {
+      return [freeProvider];
+    }
+
+    return [];
   }, [providers]);
 
   const saveSettings = useCallback((newSettings: Partial<Settings>) => {
