@@ -128,7 +128,11 @@ class LogStore {
   }
 
   private _generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = Date.now().toString(36);
+    const randomPart = typeof crypto !== 'undefined' && crypto.getRandomValues
+      ? Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(36).padStart(2, '0')).join('')
+      : Math.random().toString(36).substr(2, 9);
+    return `${timestamp}-${randomPart}`;
   }
 
   private _trimLogs() {

@@ -116,7 +116,13 @@ export class PreviewsStore {
   private _getTabId(): string {
     if (typeof window !== 'undefined') {
       if (!window._tabId) {
-        window._tabId = Math.random().toString(36).substring(2, 15);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+          const randomBytes = new Uint8Array(8);
+          crypto.getRandomValues(randomBytes);
+          window._tabId = Array.from(randomBytes, (b) => b.toString(36).padStart(2, '0')).join('');
+        } else {
+          window._tabId = Math.random().toString(36).substring(2, 15);
+        }
       }
 
       return window._tabId;
