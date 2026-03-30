@@ -17,6 +17,16 @@ export interface FirecrawlScrapeResult {
   error?: string;
 }
 
+interface FirecrawlApiResponse {
+  success?: boolean;
+  data?: {
+    markdown?: string;
+    metadata?: {
+      title?: string;
+    };
+  };
+}
+
 /**
  * Scrapes a URL using the Firecrawl API instead of local Playwright.
  */
@@ -47,13 +57,13 @@ export async function scrapeWithFirecrawl(url: string): Promise<FirecrawlScrapeR
       throw new Error(`Firecrawl API error: ${response.status} - ${errorData}`);
     }
 
-    const data = await response.json();
-    
+    const data = (await response.json()) as FirecrawlApiResponse;
+
     if (data.success && data.data) {
       return {
         success: true,
         data: {
-          markdown: data.data.markdown,
+          markdown: data.data.markdown || '',
           title: data.data.metadata?.title || url,
           url: url,
         },
