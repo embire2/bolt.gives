@@ -62,10 +62,6 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
     for (let attempt = 1; attempt <= MCP_MAX_RETRIES; attempt++) {
       try {
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('MCP initialization timeout')), MCP_INIT_TIMEOUT);
-        });
-
         if (isBrowser) {
           const savedConfig = localStorage.getItem(MCP_SETTINGS_KEY);
 
@@ -73,9 +69,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
             try {
               const settings = JSON.parse(savedConfig) as MCPSettings;
 
-              const updatePromise = updateServerConfigWithTimeout(settings.mcpConfig, MCP_INIT_TIMEOUT);
-
-              const serverTools = await Promise.race([updatePromise, timeoutPromise]);
+              const serverTools = await updateServerConfigWithTimeout(settings.mcpConfig, MCP_INIT_TIMEOUT);
               set(() => ({ settings, serverTools }));
             } catch (error) {
               console.error('Error parsing saved mcp config:', error);
@@ -105,7 +99,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 
     const finalError = lastError?.message || 'MCP initialization failed';
     set(() => ({
-      isInitialized: true,
+      isInitialized: false,
       isInitializing: false,
       initializeError: finalError,
     }));
@@ -168,19 +162,12 @@ async function updateServerConfigWithTimeout(config: MCPConfig, timeoutMs: numbe
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch('/api/mcp-update-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+    return await updateServerConfig(config);
+  } catch (error) {
+    if ((error as Error).name === 'AbortError' || (error as Error).message?.includes('aborted')) {
+      throw new Error(`MCP initialization timed out after ${timeoutMs}ms`);
     }
-
-    const data = (await response.json()) as MCPServerTools;
-    return data;
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }

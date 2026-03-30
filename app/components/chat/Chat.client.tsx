@@ -485,7 +485,9 @@ export const ChatImpl = memo(
 
       const instanceSelection =
         typeof window !== 'undefined' ? readInstanceSelection(window.location.hostname) : undefined;
-      const savedModelFromInstance = instanceSelection?.modelName;
+
+      const savedModelFromInstance =
+        instanceSelection?.providerName === provider.name ? instanceSelection?.modelName : undefined;
       const savedModelFromCookie = Cookies.get('selectedModel');
       const rememberedModel = getRememberedProviderModel(provider.name);
 
