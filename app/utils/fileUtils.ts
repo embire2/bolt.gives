@@ -21,16 +21,7 @@ export const IGNORE_PATTERNS = [
 export const MAX_FILES = 1000;
 export const ig = ignore().add(IGNORE_PATTERNS);
 
-function getSecureRandomId(): string {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const randomBytes = new Uint8Array(16);
-    crypto.getRandomValues(randomBytes);
-    return Array.from(randomBytes, (byte) => byte.toString(36).padStart(2, '0')).join('').substring(0, 13);
-  }
-  return Math.random().toString(36).substring(2, 15);
-}
-
-export const generateId = () => getSecureRandomId();
+export const generateId = () => Math.random().toString(36).substring(2, 15);
 
 export const isBinaryFile = async (file: File): Promise<boolean> => {
   const chunkSize = 1024;
