@@ -278,6 +278,10 @@ export function pickPreferredProviderName(options: PickPreferredProviderNameOpti
     return usableProvider;
   }
 
+  if (!hasAnyUsableProvider && activeSet.has('FREE')) {
+    return 'FREE';
+  }
+
   return activeProviderNames[0];
 }
 
