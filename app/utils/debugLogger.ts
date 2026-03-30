@@ -1068,11 +1068,7 @@ class DebugLogger {
   }
 
   private _generateSessionId(): string {
-    const timestamp = Date.now().toString(36);
-    const randomPart = typeof crypto !== 'undefined' && crypto.getRandomValues
-      ? Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(36).padStart(2, '0')).join('')
-      : Math.random().toString(36).substring(2, 11);
-    return `session_${timestamp}_${randomPart}`;
+    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   clearLogs(): void {

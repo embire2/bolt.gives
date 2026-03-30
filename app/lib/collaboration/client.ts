@@ -90,17 +90,8 @@ const userPalette = [
   { color: '#8acb88', light: '#8acb8833' },
 ];
 
-function getSecureRandomIndex(max: number): number {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const randomBytes = new Uint8Array(1);
-    crypto.getRandomValues(randomBytes);
-    return randomBytes[0] % max;
-  }
-  return Math.floor(Math.random() * max);
-}
-
 function getRandomColor() {
-  return userPalette[getSecureRandomIndex(userPalette.length)];
+  return userPalette[Math.floor(Math.random() * userPalette.length)];
 }
 
 function getOrCreateClientId() {
@@ -112,10 +103,7 @@ function getOrCreateClientId() {
   let clientId = window.localStorage.getItem(key);
 
   if (!clientId) {
-    const randomPart = typeof crypto !== 'undefined' && crypto.getRandomValues
-      ? Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(36).padStart(2, '0')).join('')
-      : Math.floor(Math.random() * 1_000_000).toString(36);
-    clientId = `user-${randomPart}`;
+    clientId = `user-${Math.floor(Math.random() * 1_000_000)}`;
     window.localStorage.setItem(key, clientId);
   }
 

@@ -84,8 +84,8 @@ const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 const MAX_CHAT_DATA_EVENTS = 140;
 const MAX_STEP_RUNNER_EVENTS = 96;
-const TELEMETRY_SAMPLE_MS = 30000;
-const TELEMETRY_EMIT_INTERVAL_MS = 120000;
+const TELEMETRY_SAMPLE_MS = 10000;
+const TELEMETRY_EMIT_INTERVAL_MS = 60000;
 const STEP_EVENT_FLUSH_MS = 250;
 const TELEMETRY_OUTPUT_MAX_CHARS = 1600;
 const TELEMETRY_MERGE_WINDOW_MS = 20000;
@@ -483,31 +483,21 @@ export const ChatImpl = memo(
         return;
       }
 
-      const instanceSelection =
-        typeof window !== 'undefined' ? readInstanceSelection(window.location.hostname) : undefined;
-
-      const savedModelFromInstance =
-        instanceSelection?.providerName === provider.name ? instanceSelection?.modelName : undefined;
-      const savedModelFromCookie = Cookies.get('selectedModel');
-      const rememberedModel = getRememberedProviderModel(provider.name);
-
       const visibleDefaultModel = provider.staticModels?.[0]?.name || DEFAULT_MODEL;
 
-      const existingModel = savedModelFromInstance || savedModelFromCookie || rememberedModel || visibleDefaultModel;
-
-      if (!existingModel || model === existingModel) {
+      if (!visibleDefaultModel || model === visibleDefaultModel) {
         return;
       }
 
-      setModel(existingModel);
-      Cookies.set('selectedModel', existingModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
-      rememberProviderModelSelection(provider.name, existingModel);
+      setModel(visibleDefaultModel);
+      Cookies.set('selectedModel', visibleDefaultModel, { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+      rememberProviderModelSelection(provider.name, visibleDefaultModel);
 
       if (typeof window !== 'undefined') {
         rememberInstanceSelection({
           hostname: window.location.hostname,
           providerName: provider.name,
-          modelName: existingModel,
+          modelName: visibleDefaultModel,
         });
       }
     }, [model, provider]);
