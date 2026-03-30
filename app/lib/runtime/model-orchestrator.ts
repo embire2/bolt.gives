@@ -173,7 +173,10 @@ function pickFallbackProviderForInvalidSelection(options: {
   }
 
   return (
-    providersWithModels.find((provider) => !STRICT_CONFIG_FALLBACK_PROVIDERS.has(provider.name)) ||
+    providersWithModels.find(
+      (provider) =>
+        !STRICT_CONFIG_FALLBACK_PROVIDERS.has(provider.name) && provider.name !== 'Google',
+    ) ||
     providersWithModels[0]
   );
 }

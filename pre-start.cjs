@@ -1,26 +1,37 @@
 const { execSync } = require('child_process');
 
-// Get git hash with fallback
+/**
+ * Retrieves the current git hash with a clean fallback.
+ */
 const getGitHash = () => {
   try {
-    return execSync('git rev-parse --short HEAD').toString().trim();
+    // stdio: 'pipe' ensures no git errors clutter the UI
+    return execSync('git rev-parse --short HEAD', { stdio: 'pipe' }).toString().trim();
   } catch {
     return 'no-git-info';
   }
 };
 
-let commitJson = {
-  hash: JSON.stringify(getGitHash()),
-  version: JSON.stringify(process.env.npm_package_version),
-};
+const version = process.env.npm_package_version || '0.0.0';
+const hash = getGitHash();
+
+// ANSI Escape Codes for Styling
+const cyan = '\x1b[36m';
+const yellow = '\x1b[33m';
+const bold = '\x1b[1m';
+const reset = '\x1b[0m';
+
+const border = `${cyan}★━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━★${reset}`;
+const title = `${bold}B O L T . G I V E S${reset}`.padStart(30).padEnd(46);
 
 console.log(`
-★═══════════════════════════════════════★
-         B O L T . G I V E S
-         ⚡️  Welcome  ⚡️
-★═══════════════════════════════════════★
+${border}
+║${title}║
+         🤖⚡️  Welcome  ⚡️🤖
+${border}
+${yellow}📍 Version Tag:${reset}    v${version}
+${yellow}📍 Commit Hash:${reset}    ${hash}
+
+  Please wait until the URL appears here...
+${border}
 `);
-console.log('📍 Current Version Tag:', `v${commitJson.version}`);
-console.log('📍 Current Commit Version:', commitJson.hash);
-console.log('  Please wait until the URL appears here');
-console.log('★═══════════════════════════════════════★');

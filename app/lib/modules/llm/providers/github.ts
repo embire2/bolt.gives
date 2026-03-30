@@ -4,6 +4,14 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
+const shouldLogGitHubProviderDebug = import.meta.env.DEV;
+
+function githubProviderDebugLog(...args: unknown[]) {
+  if (shouldLogGitHubProviderDebug) {
+    console.log(...args);
+  }
+}
+
 export default class GithubProvider extends BaseProvider {
   name = 'Github';
   getApiKeyLink = 'https://github.com/settings/personal-access-tokens';
@@ -78,13 +86,13 @@ export default class GithubProvider extends BaseProvider {
     });
 
     if (!apiKey) {
-      console.log('GitHub: No API key found. Make sure GITHUB_API_KEY is set in your .env.local file');
+      githubProviderDebugLog('GitHub: No API key found. Make sure GITHUB_API_KEY is set in your .env.local file');
 
       // Return static models if no API key is available
       return this.staticModels;
     }
 
-    console.log('GitHub: API key found, attempting to fetch dynamic models...');
+    githubProviderDebugLog('GitHub: API key found, attempting to fetch dynamic models...');
 
     try {
       // Try to fetch dynamic models from GitHub API
@@ -96,7 +104,7 @@ export default class GithubProvider extends BaseProvider {
 
       if (response.ok) {
         const data = (await response.json()) as { data?: any[] };
-        console.log('GitHub: Successfully fetched models from API');
+        githubProviderDebugLog('GitHub: Successfully fetched models from API');
 
         if (data.data && Array.isArray(data.data)) {
           return data.data.map((model: any) => ({
@@ -115,7 +123,7 @@ export default class GithubProvider extends BaseProvider {
     }
 
     // Fallback to static models
-    console.log('GitHub: Using static models as fallback');
+    githubProviderDebugLog('GitHub: Using static models as fallback');
 
     return this.staticModels;
   }
@@ -128,7 +136,7 @@ export default class GithubProvider extends BaseProvider {
   }): LanguageModelV1 {
     const { model, serverEnv, apiKeys, providerSettings } = options;
 
-    console.log(`GitHub: Creating model instance for ${model}`);
+    githubProviderDebugLog(`GitHub: Creating model instance for ${model}`);
 
     const { apiKey } = this.getProviderBaseUrlAndKey({
       apiKeys,
@@ -143,14 +151,14 @@ export default class GithubProvider extends BaseProvider {
       throw new Error(`Missing API key for ${this.name} provider`);
     }
 
-    console.log(`GitHub: Using API key (first 8 chars): ${apiKey.substring(0, 8)}...`);
+    githubProviderDebugLog(`GitHub: Using API key (first 8 chars): ${apiKey.substring(0, 8)}...`);
 
     const openai = createOpenAI({
       baseURL: 'https://models.github.ai/inference',
       apiKey,
     });
 
-    console.log(`GitHub: Created OpenAI client, requesting model: ${model}`);
+    githubProviderDebugLog(`GitHub: Created OpenAI client, requesting model: ${model}`);
 
     return openai(model);
   }

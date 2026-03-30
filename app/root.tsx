@@ -13,6 +13,7 @@ import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
 import xtermStyles from '@xterm/xterm/css/xterm.css?url';
 import { PluginManager } from './lib/services/pluginManager';
+import { CursorGlow } from './components/ui/CursorGlow';
 
 import 'virtual:uno.css';
 
@@ -88,6 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <ClientOnly>{() => <CursorGlow />}</ClientOnly>
       {children}
       <ToastContainer
         closeButton={({ closeToast }) => {
@@ -133,23 +135,28 @@ export default function App() {
       timestamp: new Date().toISOString(),
     });
 
-    // Initialize debug logging with improved error handling
-    import('./utils/debugLogger')
-      .then(({ debugLogger }) => {
-        /*
-         * The debug logger initializes itself and starts disabled by default
-         * It will only start capturing when enableDebugMode() is called
-         */
-        const status = debugLogger.getStatus();
-        logStore.logSystem('Debug logging ready', {
-          initialized: status.initialized,
-          capturing: status.capturing,
-          enabled: status.enabled,
+    const shouldInitializeDebugLogger = (() => {
+      try {
+        return window.localStorage.getItem('isDeveloperMode') === 'true';
+      } catch {
+        return false;
+      }
+    })();
+
+    if (shouldInitializeDebugLogger) {
+      import('./utils/debugLogger')
+        .then(({ debugLogger }) => {
+          const status = debugLogger.getStatus();
+          logStore.logSystem('Debug logging ready', {
+            initialized: status.initialized,
+            capturing: status.capturing,
+            enabled: status.enabled,
+          });
+        })
+        .catch((error) => {
+          logStore.logError('Failed to initialize debug logging', error);
         });
-      })
-      .catch((error) => {
-        logStore.logError('Failed to initialize debug logging', error);
-      });
+    }
 
     PluginManager.loadInstalledPlugins().catch(() => {
       // Plugin loading is optional and should not block app startup.

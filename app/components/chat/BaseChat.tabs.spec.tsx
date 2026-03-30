@@ -83,9 +83,17 @@ describe('BaseChat surface tabs', () => {
       expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
     });
 
+    const chatTab = screen.getByRole('tab', { name: 'Chat' });
+    const workspaceTab = screen.getByRole('tab', { name: 'Workspace' });
+
+    expect(chatTab.className).toContain('text-bolt-elements-textPrimary');
+    expect(workspaceTab.className).toContain('text-bolt-elements-textSecondary');
+
     expect(screen.queryByTestId('workbench-panel')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
+    fireEvent.click(workspaceTab);
+    expect(workspaceTab.className).toContain('text-bolt-elements-textPrimary');
+    expect(chatTab.className).toContain('text-bolt-elements-textSecondary');
     expect(await screen.findByTestId('workbench-panel')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close Workspace tab' }));

@@ -335,10 +335,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       });
     }, [chatStarted, data, isStreaming, progressAnnotations.length]);
     useEffect(() => {
-      console.log(transcript);
-    }, [transcript]);
-
-    useEffect(() => {
       const storedLayout = readStoredSurfaceLayout();
 
       if (storedLayout) {
@@ -866,7 +862,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       aria-controls={panelId}
                       className={classNames(
                         'flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5',
-                        isActive && styles.SurfaceTabLabelActive,
+                        isActive
+                          ? 'text-bolt-elements-textPrimary'
+                          : 'text-bolt-elements-textSecondary group-hover:text-bolt-elements-textPrimary',
                       )}
                       onClick={() => openSurface(tab.id)}
                       title={tab.description}
