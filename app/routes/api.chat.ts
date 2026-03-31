@@ -900,6 +900,12 @@ Next: I will recover and continue from the latest stable point.`,
             }
 
             const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
+
+            if (!lastUserMessage) {
+              logger.warn('No user message found when finalizing chat');
+              return;
+            }
+
             const extractedLastUser = extractPropertiesFromMessage(lastUserMessage);
             const { model, provider } = extractedLastUser;
             const lastUserContent =
