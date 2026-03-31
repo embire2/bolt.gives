@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
 import type { HeadersFunction, LinksFunction } from '@remix-run/cloudflare';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import { ClientOnly } from 'remix-utils/client-only';
 import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from './lib/stores/theme';
 import { stripIndents } from './utils/stripIndent';

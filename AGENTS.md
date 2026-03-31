@@ -60,6 +60,8 @@ Never force-push shared branches unless explicitly approved.
 ### In progress / remaining (`v3.0.4`)
 
 - Finish browser-weight reduction on remaining vendor/editor payloads
+- Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`
+- Keep commentary task-specific and avoid generic keep-alive filler
 - Full managed Cloudflare spawn/update control plane
 - Production-safe tenant/account/RBAC hardening
 - First-party template packs + CI smoke coverage

@@ -73,19 +73,60 @@ function hashTenantSecret(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+function createDefaultTenantAdmin() {
+  return {
+    username: 'admin',
+    passwordHash: hashTenantSecret('admin'),
+    mustChangePassword: true,
+    updatedAt: new Date().toISOString(),
+    lastLoginAt: null,
+  };
+}
+
+export function normalizeTenantRegistry(input) {
+  const now = new Date().toISOString();
+  const admin = input?.admin || {};
+  const tenants = Array.isArray(input?.tenants) ? input.tenants : [];
+
+  return {
+    admin: {
+      username: typeof admin.username === 'string' && admin.username.trim() ? admin.username.trim() : 'admin',
+      passwordHash:
+        typeof admin.passwordHash === 'string' && admin.passwordHash.trim()
+          ? admin.passwordHash.trim()
+          : hashTenantSecret('admin'),
+      mustChangePassword: admin.mustChangePassword !== false,
+      updatedAt: typeof admin.updatedAt === 'string' && admin.updatedAt ? admin.updatedAt : now,
+      lastLoginAt: typeof admin.lastLoginAt === 'string' ? admin.lastLoginAt : null,
+    },
+    tenants: tenants.map((tenant) => ({
+      id: String(tenant.id || Date.now()),
+      name: String(tenant.name || 'Untitled Tenant'),
+      email: String(tenant.email || '')
+        .trim()
+        .toLowerCase(),
+      passwordHash: typeof tenant.passwordHash === 'string' ? tenant.passwordHash : hashTenantSecret('changeme'),
+      createdAt: typeof tenant.createdAt === 'string' && tenant.createdAt ? tenant.createdAt : now,
+      updatedAt: typeof tenant.updatedAt === 'string' && tenant.updatedAt ? tenant.updatedAt : now,
+      status: tenant.status === 'disabled' ? 'disabled' : 'active',
+      lastLoginAt: typeof tenant.lastLoginAt === 'string' ? tenant.lastLoginAt : null,
+      mustChangePassword: tenant.mustChangePassword !== false,
+    })),
+  };
+}
+
 async function ensureTenantRegistry() {
   try {
     const raw = await fs.readFile(TENANT_REGISTRY_PATH, 'utf8');
-    return JSON.parse(raw);
+    const registry = normalizeTenantRegistry(JSON.parse(raw));
+    await writeTenantRegistry(registry);
+    return registry;
   } catch {
     await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
-    const registry = {
-      admin: {
-        username: 'admin',
-        passwordHash: hashTenantSecret('admin'),
-      },
+    const registry = normalizeTenantRegistry({
+      admin: createDefaultTenantAdmin(),
       tenants: [],
-    };
+    });
     await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
     return registry;
   }
@@ -1440,7 +1481,13 @@ export function createRuntimeServer() {
         sendJson(res, 200, {
           supported: true,
           tenants: registry.tenants || [],
-          defaultAdmin: { username: 'admin' },
+          defaultAdmin: { username: registry.admin?.username || 'admin' },
+          admin: {
+            username: registry.admin?.username || 'admin',
+            mustChangePassword: registry.admin?.mustChangePassword !== false,
+            updatedAt: registry.admin?.updatedAt || null,
+            lastLoginAt: registry.admin?.lastLoginAt || null,
+          },
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect tenant registry');
@@ -1459,6 +1506,12 @@ export function createRuntimeServer() {
           sendText(res, 401, 'Invalid tenant admin credentials.');
           return;
         }
+
+        registry.admin = {
+          ...registry.admin,
+          lastLoginAt: new Date().toISOString(),
+        };
+        await writeTenantRegistry(registry);
 
         sendJson(res, 200, { ok: true });
       } catch (error) {
@@ -1492,12 +1545,74 @@ export function createRuntimeServer() {
           email,
           passwordHash: hashTenantSecret(password),
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: 'active',
+          lastLoginAt: null,
+          mustChangePassword: true,
         });
 
         await writeTenantRegistry(registry);
         sendJson(res, 200, { ok: true });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to create tenant');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/admin/password') {
+      try {
+        const body = await readJsonBody(req);
+        const currentPassword = String(body.currentPassword || '');
+        const nextPassword = String(body.nextPassword || '').trim();
+        const registry = await ensureTenantRegistry();
+
+        if (hashTenantSecret(currentPassword) !== registry.admin?.passwordHash) {
+          sendText(res, 401, 'Current admin password is incorrect.');
+          return;
+        }
+
+        if (nextPassword.length < 8) {
+          sendText(res, 400, 'Admin password must be at least 8 characters long.');
+          return;
+        }
+
+        registry.admin = {
+          ...registry.admin,
+          passwordHash: hashTenantSecret(nextPassword),
+          mustChangePassword: false,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to update admin password.');
+      }
+      return;
+    }
+
+    const tenantStatusMatch = pathname.match(/^\/runtime\/tenant-admin\/tenants\/([^/]+)\/status$/);
+
+    if (req.method === 'POST' && tenantStatusMatch) {
+      try {
+        const body = await readJsonBody(req);
+        const nextStatus = body.status === 'disabled' ? 'disabled' : 'active';
+        const tenantId = decodeURIComponent(tenantStatusMatch[1] || '');
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        tenant.status = nextStatus;
+        tenant.updatedAt = new Date().toISOString();
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true, status: nextStatus });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to update tenant status.');
       }
       return;
     }

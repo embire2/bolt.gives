@@ -35,7 +35,6 @@ import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
-import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
 import { relayHostedFreeRequest, resolveHostedFreeRelayOrigin } from '~/lib/.server/llm/hosted-free-relay';
@@ -336,6 +335,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           message: string,
           status: AgentCommentaryAnnotation['status'] = 'in-progress',
           detail?: string,
+          options?: {
+            usePool?: boolean;
+          },
         ) => {
           if (firstCommentaryAt === null) {
             firstCommentaryAt = Date.now();
@@ -345,10 +347,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           const order = progressCounter++;
           const fallbackMessage = message || 'I am still working and will post another update shortly.';
-          const effectiveMessage =
-            status === 'in-progress'
-              ? getCommentaryPoolMessage(phase, requestStartedAt + order, fallbackMessage)
-              : fallbackMessage;
+          const effectiveMessage = options?.usePool === true ? fallbackMessage : fallbackMessage;
 
           const contracted = enforceCommentaryContract({
             phase,
@@ -378,7 +377,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
           commentaryHeartbeat = setInterval(() => {
             const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase);
-            writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail);
+            writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, { usePool: true });
           }, COMMENTARY_HEARTBEAT_INTERVAL_MS);
         };
 
@@ -1025,22 +1024,35 @@ Next: I am sending the final result now.`,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
             });
             const shouldContinueForRunIntent = runContinuationDecision.shouldContinue;
+            const shouldContinueForUnverifiedPreview =
+              effectiveChatMode === 'build' &&
+              !previewCheckpointObserved &&
+              !hasExecutionFailures &&
+              runContinuationAttempts < MAX_RUN_CONTINUATION_ATTEMPTS;
 
-            if (shouldContinueForRunIntent) {
+            if (shouldContinueForRunIntent || shouldContinueForUnverifiedPreview) {
               runContinuationAttempts += 1;
 
               const continuationAttemptLabel = `${runContinuationAttempts}/${MAX_RUN_CONTINUATION_ATTEMPTS}`;
+              const continuationReason = shouldContinueForRunIntent
+                ? runContinuationDecision.reason
+                : 'preview-not-verified';
               writeCommentary(
                 'recovery',
-                'I detected that setup finished but the app did not start yet. I will continue automatically.',
+                shouldContinueForRunIntent
+                  ? 'I detected that setup finished but the requested app is not ready yet. I will continue automatically.'
+                  : 'The run finished without a preview-ready checkpoint. I will keep going until the app is verifiably running.',
                 'warning',
-                `Key changes: Continuation triggered (${runContinuationDecision.reason}, attempt ${continuationAttemptLabel}). I detected a starter/bootstrap-only response.
-Next: I will continue from the existing project state, implement the requested app, and run it.`,
+                shouldContinueForRunIntent
+                  ? `Key changes: Continuation triggered (${continuationReason}, attempt ${continuationAttemptLabel}). I detected a starter/bootstrap-only response.
+Next: I will continue from the existing project state, implement the requested app, and run it.`
+                  : `Key changes: Continuation triggered (${continuationReason}, attempt ${continuationAttemptLabel}). The run ended without any preview-ready checkpoint.
+Next: I will keep working from the existing project state until the app is running and the preview is verified.`,
               );
               logger.info(
                 `run continuation triggered ${JSON.stringify({
                   runId,
-                  reason: runContinuationDecision.reason,
+                  reason: continuationReason,
                   provider,
                   model,
                   attempt: runContinuationAttempts,
@@ -1054,7 +1066,8 @@ Next: I will continue from the existing project state, implement the requested a
               processedMessages.push({
                 id: generateId(),
                 role: 'user',
-                content: `[Model: ${model}]
+                content: shouldContinueForRunIntent
+                  ? `[Model: ${model}]
 
 [Provider: ${provider}]
 
@@ -1069,6 +1082,22 @@ Continue now and do ALL of the following:
 6) your response must start with executable <boltAction> steps (no plan-only prose).
 7) if preview still shows the starter, replace src/App.tsx (or equivalent entry UI file) with the requested implementation.
 8) keep the final response concise and execution-focused.
+`
+                  : `[Model: ${model}]
+
+[Provider: ${provider}]
+
+The previous run ended without a preview-ready checkpoint.
+Continue from the current project state right now and do ALL of the following:
+1) do not re-scaffold the project if package.json or app files already exist.
+2) implement the original user request fully:
+   ${lastUserContent}
+3) run whatever install or fix steps are still required.
+4) emit executable <boltAction> steps immediately.
+5) launch the dev server and do not finish until a preview-ready checkpoint is produced.
+6) if preview still shows the fallback starter, replace the entry UI with the requested app.
+7) if a command fails, self-heal and retry with the corrected command.
+8) finish with a concise summary only after the requested app is actually running in preview.
 `,
               });
 

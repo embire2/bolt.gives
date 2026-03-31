@@ -54,14 +54,19 @@ describe('CursorGlow', () => {
   });
 
   it('updates glow position when the cursor moves', async () => {
-    const { container } = render(<CursorGlow />);
-    const glow = container.querySelector('.bolt-cursor-glow') as HTMLDivElement;
+    render(<CursorGlow />);
+
+    await waitFor(() => {
+      expect(document.querySelector('.bolt-cursor-glow')).not.toBeNull();
+    });
 
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 120, clientY: 180 }));
 
     await waitFor(() => {
-      expect(glow.style.transform).toBe('translate3d(-120px, -60px, 0)');
-      expect(glow.style.opacity).toBe('1');
+      const glow = document.querySelector('.bolt-cursor-glow') as HTMLDivElement | null;
+      expect(glow).not.toBeNull();
+      expect(glow?.style.transform).toBe('translate3d(-120px, -60px, 0)');
+      expect(glow?.style.opacity).toBe('1');
     });
   });
 });

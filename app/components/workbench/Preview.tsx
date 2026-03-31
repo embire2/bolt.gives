@@ -63,8 +63,9 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: 'Desktop', width: 1920, height: 1080, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
-const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 12000;
-const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 4000;
+const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 20000;
+const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 12000;
+const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
 
 function normalizePreviewPath(value: string) {
   const trimmed = value.trim();
@@ -134,6 +135,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const lastHostedPreviewReloadKeyRef = useRef<string | null>(null);
   const lastAppliedHostedRecoveryTokenRef = useRef<number | null>(null);
   const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
+  const lastHostedPreviewEventAtRef = useRef<number>(0);
   const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
   const inspectHostedPreviewIframe = useCallback(
@@ -183,6 +185,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         allowLogFallback?: boolean;
       } = {},
     ) => {
+      lastHostedPreviewEventAtRef.current = Date.now();
+
       const previewSessionId =
         extractHostedRuntimeSessionIdFromPreviewBaseUrl(status.preview?.baseUrl || activePreview?.baseUrl) ||
         workbenchStore.hostedRuntimeSessionId;
@@ -396,6 +400,10 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       });
 
       const interval = window.setInterval(() => {
+        if (Date.now() - lastHostedPreviewEventAtRef.current < HOSTED_PREVIEW_RECONCILE_GRACE_MS) {
+          return;
+        }
+
         void inspectHostedPreview();
       }, HOSTED_PREVIEW_RECONCILE_INTERVAL_MS);
 

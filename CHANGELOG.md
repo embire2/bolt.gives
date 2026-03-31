@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased (`v3.0.4` in progress)
+
+### Added
+
+- `Workspace` now includes a dedicated bottom `Workspace Activity` section with:
+  - live commentary
+  - execution transparency
+  - technical timeline
+  - explicit working/ready/standing-by status
+- Tenant admin hardening now includes:
+  - admin password rotation
+  - tenant enable/disable controls
+  - tenant/admin timestamps (`createdAt`, `updatedAt`, `lastLoginAt`)
+  - password-reset / must-change-password state
+
+### Changed
+
+- The app no longer force-switches users into `Workspace` the moment a run opens files or preview. `Chat` stays active by default so users can keep following commentary while work starts.
+- Commentary heartbeat text is now phase-specific and less repetitive, with clearer `Key changes:` and `Next:` messaging instead of generic keep-alive filler.
+- Remaining browser-weight hot spots were reduced further:
+  - CodeMirror split more aggressively into core/theme/language buckets
+  - chart/PDF settings surfaces now lazy-load through narrower action paths
+  - workbench/editor/collaboration imports were untangled further from shared startup paths
+- Hosted preview reconciliation now waits longer between fallback polls and trusts recent server-pushed state first, reducing browser churn.
+
+### Fixed
+
+- The `Workspace` surface now shows what the system is doing while preview/build work is still in progress, instead of leaving users on a silent file/preview area with no clear status.
+- Tenant registry data is now normalized on load so older server-local tenant state gets upgraded safely instead of drifting across runtime versions.
+
 ## v3.0.3 (2026-03-30)
 
 ### Added

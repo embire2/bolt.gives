@@ -1,12 +1,13 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
-import { Suspense, lazy, memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
 import { diffLines, type Change } from 'diff';
 import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
 import type { FileHistory } from '~/types/actions';
+import type { JSONValue } from 'ai';
 import {
   type OnChangeCallback as OnEditorChange,
   type OnScrollCallback as OnEditorScroll,
@@ -17,7 +18,6 @@ import { workbenchStore, type WorkbenchViewType } from '~/lib/stores/workbench';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { renderLogger } from '~/utils/logger';
-import { EditorPanel } from './EditorPanel';
 import useViewport from '~/lib/hooks';
 
 import { usePreviewStore } from '~/lib/stores/previews';
@@ -27,11 +27,26 @@ import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportCh
 import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import type { AgentRunMetricsDataEvent, UsageDataEvent } from '~/types/context';
+import type { ProviderInfo } from '~/types/model';
+import type { AutonomyMode } from '~/lib/runtime/autonomy';
 
 const LazyDiffView = lazy(() => import('./DiffView').then((module) => ({ default: module.DiffView })));
 const LazyPreview = lazy(() => import('./Preview').then((module) => ({ default: module.Preview })));
 const LazyPerformanceMonitor = lazy(() =>
   import('./PerformanceMonitor').then((module) => ({ default: module.PerformanceMonitor })),
+);
+const LazyEditorPanel = lazy(() => import('./EditorPanel').then((module) => ({ default: module.EditorPanel })));
+const LazyCommentaryFeed = lazy(() =>
+  import('~/components/chat/CommentaryFeed').then((module) => ({ default: module.CommentaryFeed })),
+);
+const LazyStepRunnerFeed = lazy(() =>
+  import('~/components/chat/StepRunnerFeed').then((module) => ({ default: module.StepRunnerFeed })),
+);
+const LazyExecutionTransparencyPanel = lazy(() =>
+  import('~/components/chat/ExecutionTransparencyPanel').then((module) => ({
+    default: module.ExecutionTransparencyPanel,
+  })),
 );
 
 function WorkbenchPanelFallback({ label }: { label: string }) {
@@ -56,6 +71,12 @@ interface WorkspaceProps {
   };
   updateChatMestaData?: (metadata: any) => void;
   setSelectedElement?: (element: ElementInfo | null) => void;
+  data?: JSONValue[] | undefined;
+  model?: string;
+  provider?: ProviderInfo;
+  autonomyMode?: AutonomyMode;
+  latestRunMetrics?: AgentRunMetricsDataEvent | null;
+  latestUsage?: UsageDataEvent | null;
 }
 
 const viewTransition = { ease: cubicEasingFn };
@@ -308,6 +329,12 @@ export const Workbench = memo(
     metadata: _metadata,
     updateChatMestaData: _updateChatMestaData,
     setSelectedElement,
+    data,
+    model,
+    provider,
+    autonomyMode,
+    latestRunMetrics,
+    latestUsage,
   }: WorkspaceProps) => {
     renderLogger.trace('Workbench');
 
@@ -332,6 +359,7 @@ export const Workbench = memo(
     const [isSyncing, setIsSyncing] = useState(false);
     const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
+    const workspaceCommentaryRef = useRef<HTMLDivElement | null>(null);
     const hasWorkspaceContent =
       hasPreview ||
       Boolean(selectedFile) ||
@@ -363,6 +391,19 @@ export const Workbench = memo(
         return next;
       });
     }, [selectedView]);
+
+    useEffect(() => {
+      const commentaryElement = workspaceCommentaryRef.current;
+
+      if (!commentaryElement || !chatStarted || !isStreaming) {
+        return;
+      }
+
+      commentaryElement.scrollTo({
+        top: commentaryElement.scrollHeight,
+        behavior: 'auto',
+      });
+    }, [chatStarted, data, isStreaming]);
 
     useEffect(() => {
       workbenchStore.setDocuments(files);
@@ -564,19 +605,21 @@ export const Workbench = memo(
             {hasWorkspaceContent ? (
               <>
                 <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
-                  <EditorPanel
-                    editorDocument={currentDocument}
-                    isStreaming={isStreaming}
-                    selectedFile={selectedFile}
-                    files={files}
-                    unsavedFiles={unsavedFiles}
-                    fileHistory={fileHistory}
-                    onFileSelect={onFileSelect}
-                    onEditorScroll={onEditorScroll}
-                    onEditorChange={onEditorChange}
-                    onFileSave={onFileSave}
-                    onFileReset={onFileReset}
-                  />
+                  <Suspense fallback={<WorkbenchPanelFallback label="Loading code editor" />}>
+                    <LazyEditorPanel
+                      editorDocument={currentDocument}
+                      isStreaming={isStreaming}
+                      selectedFile={selectedFile}
+                      files={files}
+                      unsavedFiles={unsavedFiles}
+                      fileHistory={fileHistory}
+                      onFileSelect={onFileSelect}
+                      onEditorScroll={onEditorScroll}
+                      onEditorChange={onEditorChange}
+                      onFileSave={onFileSave}
+                      onFileReset={onFileReset}
+                    />
+                  </Suspense>
                 </View>
                 {loadedViews.has('diff') ? (
                   <View
@@ -607,6 +650,46 @@ export const Workbench = memo(
               </div>
             )}
           </div>
+          {chatStarted ? (
+            <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-3 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+                    Workspace Activity
+                  </div>
+                  <div className="text-xs text-bolt-elements-textTertiary">
+                    Live progress stays visible here while files and preview update above.
+                  </div>
+                </div>
+                <div className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                  {isStreaming ? 'Working…' : hasWorkspaceContent ? 'Ready' : 'Standing by'}
+                </div>
+              </div>
+              <div className="grid min-h-0 gap-3 xl:grid-cols-[0.95fr_1.05fr]">
+                <div ref={workspaceCommentaryRef}>
+                  <Suspense fallback={<WorkbenchPanelFallback label="Loading live commentary" />}>
+                    <LazyCommentaryFeed data={data} scrollRef={workspaceCommentaryRef} />
+                  </Suspense>
+                </div>
+                <div className="space-y-3">
+                  <Suspense fallback={<WorkbenchPanelFallback label="Loading execution status" />}>
+                    <LazyExecutionTransparencyPanel
+                      data={data}
+                      model={model}
+                      provider={provider}
+                      isStreaming={isStreaming}
+                      autonomyMode={autonomyMode}
+                      latestRunMetrics={latestRunMetrics}
+                      latestUsage={latestUsage}
+                    />
+                  </Suspense>
+                  <Suspense fallback={<WorkbenchPanelFallback label="Loading workspace timeline" />}>
+                    <LazyStepRunnerFeed data={data} includeCommentary={false} title="Workspace Timeline" />
+                  </Suspense>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     );

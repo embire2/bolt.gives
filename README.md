@@ -59,6 +59,14 @@ Next release targets:
 
 - `v3.0.4`: managed Cloudflare control plane, tenant hardening, and the next browser-weight reduction pass.
 
+Current `v3.0.4` work in progress on top of the stable line:
+
+- `Chat` now stays visible while the workspace spins up so users can keep following commentary instead of being pushed into files/preview immediately.
+- `Workspace` now carries a bottom `Workspace Activity` panel with live commentary, execution status, and technical progress so long runs are no longer silent.
+- Commentary heartbeat text is being tightened so updates stay more task-specific and less repetitive.
+- Tenant admin hardening is underway with password rotation, tenant status controls, and lifecycle metadata.
+- Preview/log reconciliation is moving further toward compact server-pushed state instead of chatty browser polling.
+
 Current `v3.0.3` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
@@ -79,9 +87,12 @@ Current `v3.0.3` release line:
 - Hosted preview updates now use compact server summaries plus SSE instead of relying on tight browser polling loops for state churn.
 - Hosted preview health is now verified on the server after workspace mutations, so self-heal can restore the last known good snapshot even if the browser never catches the transient failure overlay.
 - The main shell is now split into top-level `Chat` and `Workspace` tabs, so prompt/live commentary is isolated from files/preview/terminal and future surfaces can be opened or closed without crushing the prompt area.
+- `Chat` now stays active by default while `Workspace` opens, so early run progress stays visible instead of being hidden behind files/preview immediately.
+- `Workspace` now includes a bottom `Workspace Activity` area with commentary, execution transparency, and technical timeline information.
 - Provider/model visibility is restored directly above the prompt box so users can always see what AI path is active.
 - Sidebar access is explicit again through the header button plus a wider hover target.
 - A bootstrap `Tenant Admin` dashboard is now available on server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
+- Tenant admin now includes bootstrap password rotation, tenant enable/disable controls, and lifecycle/login metadata on the server-hosted baseline.
 - This repo now includes the operator blueprint and tenancy schema for an experimental **one-client / one-instance Cloudflare managed service**, with:
   - a free experimental shared-runtime path
   - a future Pro path for dedicated `6 GiB` Node containers
@@ -142,6 +153,7 @@ What still remains after `v3.0.3`:
 - The validated OpenAI core path is now working.
 - The heaviest hosted install/build/preview work is now off the browser, but the client bundle and long-run UI rendering are still heavier than they should be.
 - `ROADMAP.md` now tracks the current stable `v3.0.3` baseline and the next major delivery bucket `v3.0.4`.
+- `v3.0.4` is focused on making the generated-app experience feel continuous and trustworthy: clearer execution status in both `Chat` and `Workspace`, stronger preview/self-heal behavior, tighter tenant lifecycle controls, and more browser-weight reduction.
 
 ## Screenshots
 
@@ -182,6 +194,8 @@ Current roadmap split:
 - Server-side post-mutation preview health verification so self-heal can detect and restore broken generated apps without waiting for the browser to parse an iframe error state.
 - Cloudflare Pages / preview deployments can now reuse the hosted FREE route through the managed runtime when the preview deployment does not hold the managed secret itself.
 - Top-level `Chat` / `Workspace` tabs with closable workspace persistence so prompt/commentary and files/preview can be focused independently.
+- `Chat` stays active by default while the workspace opens, so users can keep reading progress instead of being forced into the workbench immediately.
+- `Workspace` includes a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline visibility.
 - Harder lazy-loading of `Workbench`, `Preview`, `DiffView`, provider/settings/deploy surfaces, and execution/commentary panels to reduce default browser load.
 - Deeper lazy-loading of markdown/code/thought/artifact rendering so message-heavy language tooling is deferred until it is actually used.
 - **Functional Runtime Scanner**: Active error monitoring in the Workbench that intercepts dev server/preview failures and automatically queues AI auto-fixes.
@@ -201,6 +215,7 @@ Current roadmap split:
 - Safer autonomy modes (`read-only`, `review-required`, `auto-apply-safe`, `full-auto`).
 - Architect self-heal knowledgebase for common scaffold/build/runtime failures.
 - Preview runtime errors can now be queued directly into Architect auto-repair instead of relying only on a manual `Ask Bolt` action.
+- Tenant admin supports bootstrap password rotation, tenant enable/disable actions, and lifecycle/login metadata on server-hosted instances.
 - Multi-provider model support and model/provider/API-key persistence.
 - Web browsing tools (`web_search`, `web_browse`) with Playwright-backed extraction (or Firecrawl when configured).
 - Real-time collaboration support (Yjs + websocket server).

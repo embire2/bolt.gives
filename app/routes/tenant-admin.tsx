@@ -17,6 +17,17 @@ type TenantRecord = {
   email: string;
   passwordHash: string;
   createdAt: string;
+  updatedAt?: string;
+  status?: 'active' | 'disabled';
+  lastLoginAt?: string | null;
+  mustChangePassword?: boolean;
+};
+
+type TenantAdminRecord = {
+  username: string;
+  mustChangePassword: boolean;
+  updatedAt: string | null;
+  lastLoginAt: string | null;
 };
 
 const adminSessionCookie = createCookie('bolt_tenant_admin', {
@@ -54,12 +65,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const authenticated = session === '1';
 
   try {
-    const status = await fetchRuntimeJson<{ supported: boolean; tenants: TenantRecord[] }>('/tenant-admin/status');
+    const status = await fetchRuntimeJson<{
+      supported: boolean;
+      tenants: TenantRecord[];
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
 
     return json({
       supported: status.supported,
       authenticated,
       defaultAdmin: DEFAULT_ADMIN,
+      admin: status.admin || {
+        username: DEFAULT_ADMIN.username,
+        mustChangePassword: true,
+        updatedAt: null,
+        lastLoginAt: null,
+      },
       tenants: authenticated ? status.tenants : [],
     });
   } catch {
@@ -67,6 +88,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
       supported: false,
       authenticated: false,
       defaultAdmin: DEFAULT_ADMIN,
+      admin: {
+        username: DEFAULT_ADMIN.username,
+        mustChangePassword: true,
+        updatedAt: null,
+        lastLoginAt: null,
+      } as TenantAdminRecord,
       tenants: [] as TenantRecord[],
     });
   }
@@ -138,11 +165,67 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect('/tenant-admin');
   }
 
+  if (intent === 'change-admin-password') {
+    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+
+    if (session !== '1') {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const currentPassword = String(formData.get('currentPassword') || '');
+    const nextPassword = String(formData.get('nextPassword') || '').trim();
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>('/tenant-admin/admin/password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ currentPassword, nextPassword }),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to update the admin password right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
+  if (intent === 'toggle-tenant-status') {
+    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+
+    if (session !== '1') {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const tenantId = String(formData.get('tenantId') || '').trim();
+    const status = String(formData.get('status') || '').trim() === 'disabled' ? 'disabled' : 'active';
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>(`/tenant-admin/tenants/${encodeURIComponent(tenantId)}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to update tenant status right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
   return json({ error: 'Unknown action.' }, { status: 400 });
 }
 
 export default function TenantAdminPage() {
-  const { supported, authenticated, tenants, defaultAdmin } = useLoaderData<typeof loader>();
+  const { supported, authenticated, tenants, defaultAdmin, admin } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -159,6 +242,11 @@ export default function TenantAdminPage() {
                   Manage self-hosted tenant accounts for this server instance. Default bootstrap login:{' '}
                   <span className="font-mono">admin / admin</span>.
                 </p>
+                {admin.mustChangePassword ? (
+                  <p className="mt-2 text-sm text-amber-300">
+                    The bootstrap admin password is still active. Rotate it before onboarding production tenants.
+                  </p>
+                ) : null}
               </div>
               {authenticated ? (
                 <Form method="post">
@@ -220,8 +308,8 @@ export default function TenantAdminPage() {
                 <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">What this dashboard controls</h2>
                 <ul className="mt-4 space-y-2 text-sm text-bolt-elements-textSecondary">
                   <li>One server-local tenant registry for this instance.</li>
-                  <li>Bootstrap admin account with default credentials that should be changed after first sign-in.</li>
-                  <li>Tenant creation for isolated customer workspaces.</li>
+                  <li>Bootstrap admin account with required password rotation after first sign-in.</li>
+                  <li>Tenant creation plus enable/disable lifecycle controls for isolated customer workspaces.</li>
                 </ul>
               </div>
             </div>
@@ -229,41 +317,82 @@ export default function TenantAdminPage() {
 
           {supported && authenticated ? (
             <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-              <Form
-                method="post"
-                className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
-              >
-                <input type="hidden" name="intent" value="create-tenant" />
-                <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Create Tenant</h2>
-                <div className="mt-4 grid gap-4">
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Tenant name
-                    <input
-                      name="name"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Admin email
-                    <input
-                      name="email"
-                      type="email"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Admin password
-                    <input
-                      name="password"
-                      type="password"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                </div>
-                <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
-                  Create tenant
-                </button>
-              </Form>
+              <div className="space-y-6">
+                <Form
+                  method="post"
+                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                >
+                  <input type="hidden" name="intent" value="create-tenant" />
+                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Create Tenant</h2>
+                  <div className="mt-4 grid gap-4">
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Tenant name
+                      <input
+                        name="name"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Admin email
+                      <input
+                        name="email"
+                        type="email"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Admin password
+                      <input
+                        name="password"
+                        type="password"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                  </div>
+                  <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                    Create tenant
+                  </button>
+                </Form>
+
+                <Form
+                  method="post"
+                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                >
+                  <input type="hidden" name="intent" value="change-admin-password" />
+                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Rotate Admin Password</h2>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    Current admin: <span className="font-mono">{admin.username}</span>
+                    {admin.lastLoginAt ? (
+                      <>
+                        {' '}
+                        · Last sign-in <span className="font-mono">{admin.lastLoginAt}</span>
+                      </>
+                    ) : null}
+                  </p>
+                  <div className="mt-4 grid gap-4">
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Current password
+                      <input
+                        name="currentPassword"
+                        type="password"
+                        defaultValue={admin.mustChangePassword ? defaultAdmin.password : ''}
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      New password
+                      <input
+                        name="nextPassword"
+                        type="password"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                  </div>
+                  <button className="mt-5 rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
+                    Update admin password
+                  </button>
+                </Form>
+              </div>
 
               <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -283,10 +412,48 @@ export default function TenantAdminPage() {
                         key={tenant.id}
                         className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
                       >
-                        <div className="font-medium text-bolt-elements-textPrimary">{tenant.name}</div>
-                        <div className="mt-1 text-sm text-bolt-elements-textSecondary">{tenant.email}</div>
-                        <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                          Created {new Date(tenant.createdAt).toLocaleString()}
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="font-medium text-bolt-elements-textPrimary">{tenant.name}</div>
+                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{tenant.email}</div>
+                            <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                              Created {new Date(tenant.createdAt).toLocaleString()}
+                              {tenant.updatedAt ? ` · Updated ${new Date(tenant.updatedAt).toLocaleString()}` : ''}
+                            </div>
+                            {tenant.lastLoginAt ? (
+                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                Last tenant login {new Date(tenant.lastLoginAt).toLocaleString()}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                tenant.status === 'disabled'
+                                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                              }`}
+                            >
+                              {tenant.status === 'disabled' ? 'disabled' : 'active'}
+                            </span>
+                            {tenant.mustChangePassword ? (
+                              <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                password reset pending
+                              </span>
+                            ) : null}
+                            <Form method="post">
+                              <input type="hidden" name="intent" value="toggle-tenant-status" />
+                              <input type="hidden" name="tenantId" value={tenant.id} />
+                              <input
+                                type="hidden"
+                                name="status"
+                                value={tenant.status === 'disabled' ? 'active' : 'disabled'}
+                              />
+                              <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
+                              </button>
+                            </Form>
+                          </div>
                         </div>
                       </div>
                     ))

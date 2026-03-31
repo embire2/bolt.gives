@@ -11,7 +11,8 @@ describe('buildCommentaryHeartbeat', () => {
     expect(heartbeat.message).toBe(expected);
     expect(heartbeat.detail).toContain('Key changes:');
     expect(heartbeat.detail).toContain('Next:');
-    expect(heartbeat.detail).toContain('within 60 seconds');
+    expect(heartbeat.detail).toContain('2 minutes');
+    expect(heartbeat.detail).toContain('current step');
   });
 
   it('preserves recovery phase when the previous phase was recovery', () => {

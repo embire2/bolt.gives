@@ -1,10 +1,10 @@
 import type { LinksFunction, MetaFunction } from '@remix-run/cloudflare';
-import ideStylesUrl from '../styles/ide.scss?url';
+import ideStylesUrl from '~/styles/ide.scss?url';
 
-export const meta: MetaFunction = () => ({
-  title: 'Bolt.gives IDE',
-  description: 'Run the VS Code–style Colab web IDE inside bolt.gives.',
-});
+export const meta: MetaFunction = () => [
+  { title: 'Bolt.gives IDE' },
+  { name: 'description', content: 'Run the VS Code–style Colab web IDE inside bolt.gives.' },
+];
 
 export const links: LinksFunction = () => [
   {
@@ -15,7 +15,7 @@ export const links: LinksFunction = () => [
 
 const COLAB_URL = 'https://blackboard.sh/colab/';
 
-export default function ExternalIDERoute() {
+export default function ExternalIdeRoute() {
   return (
     <main className="ide-panel">
       <section className="ide-panel__header">
@@ -23,9 +23,8 @@ export default function ExternalIDERoute() {
           <p className="ide-panel__eyebrow">bolt.gives · external IDE</p>
           <h1 className="ide-panel__title">IVDE-powered workspace</h1>
           <p className="ide-panel__description">
-            The open-source Colab renderer (Solid + Monaco) powers this VS Code–style environment. It lives in a
-            secure iframe so you keep working inside bolt.gives while the hybrid browser/editor experience runs in
-            parallel.
+            The open-source Colab renderer (Solid + Monaco) powers this VS Code–style environment. It lives in a secure
+            iframe so you keep working inside bolt.gives while the hybrid browser/editor experience runs in parallel.
           </p>
         </div>
       </section>

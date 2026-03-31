@@ -9,6 +9,7 @@ import {
   mergeWorkspaceFileMap,
   normalizeSessionId,
   normalizeIncomingPreviewAlert,
+  normalizeTenantRegistry,
   probeSessionPreviewHealth,
   resolveRuntimeWorkspaceRoot,
   restoreSessionLastKnownGoodWorkspace,
@@ -169,6 +170,34 @@ describe('runtime server workspace isolation', () => {
         updatedAt: '2026-03-29T12:00:01.000Z',
       },
     });
+  });
+
+  it('normalizes tenant registry records with lifecycle metadata', () => {
+    const normalized = normalizeTenantRegistry({
+      admin: {
+        username: 'admin',
+        passwordHash: 'hash',
+      },
+      tenants: [
+        {
+          id: 'tenant-1',
+          name: 'Clinic A',
+          email: 'OWNER@EXAMPLE.COM',
+          passwordHash: 'tenant-hash',
+          createdAt: '2026-03-31T08:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(normalized.admin.mustChangePassword).toBe(true);
+    expect(normalized.tenants[0]).toEqual(
+      expect.objectContaining({
+        id: 'tenant-1',
+        email: 'owner@example.com',
+        status: 'active',
+        mustChangePassword: true,
+      }),
+    );
   });
 
   it('normalizes browser-reported preview alerts before scheduling recovery', () => {

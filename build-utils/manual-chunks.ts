@@ -56,8 +56,27 @@ export function getManualChunkName(id: string): string | undefined {
     return 'framework-vendor';
   }
 
-  if (matchPackage(id, ['@codemirror', '@uiw/codemirror-theme-vscode', '@lezer'])) {
-    return 'editor-codemirror';
+  if (matchPackage(id, ['@uiw/codemirror-theme-vscode'])) {
+    return 'editor-codemirror-theme';
+  }
+
+  if (matchPackage(id, ['@lezer'])) {
+    return 'editor-codemirror-lang';
+  }
+
+  if (matchPackage(id, ['@codemirror/lang-'])) {
+    return 'editor-codemirror-lang';
+  }
+
+  if (
+    matchPackage(id, [
+      '@codemirror',
+      '@uiw/react-codemirror',
+      '@uiw/codemirror-extensions-events',
+      '@uiw/codemirror-extensions-basic-setup',
+    ])
+  ) {
+    return 'editor-codemirror-core';
   }
 
   if (matchPackage(id, ['@xterm', 'xterm'])) {
@@ -72,8 +91,12 @@ export function getManualChunkName(id: string): string | undefined {
     return 'git-export';
   }
 
-  if (matchPackage(id, ['chart.js', 'react-chartjs-2', 'jspdf'])) {
-    return 'charts-pdf';
+  if (matchPackage(id, ['chart.js', 'react-chartjs-2'])) {
+    return 'charts-vendor';
+  }
+
+  if (matchPackage(id, ['jspdf'])) {
+    return 'pdf-export';
   }
 
   if (matchPackage(id, ['@radix-ui', '@headlessui', 'framer-motion', 'lucide-react', 'react-toastify'])) {

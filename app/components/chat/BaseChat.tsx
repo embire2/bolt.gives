@@ -210,6 +210,64 @@ interface BaseChatProps {
   }) => void;
 }
 
+interface TechnicalFeedContentProps {
+  data?: JSONValue[] | undefined;
+  progressAnnotations: ProgressAnnotation[];
+  model?: string;
+  provider?: ProviderInfo;
+  isStreaming?: boolean;
+  autonomyMode?: AutonomyMode;
+  latestRunMetrics?: AgentRunMetricsDataEvent | null;
+  latestUsage?: UsageDataEvent | null;
+  technicalFeedRef?: React.Ref<HTMLDivElement>;
+}
+
+function TechnicalFeedContent({
+  data,
+  progressAnnotations,
+  model,
+  provider,
+  isStreaming,
+  autonomyMode,
+  latestRunMetrics,
+  latestUsage,
+  technicalFeedRef,
+}: TechnicalFeedContentProps) {
+  return (
+    <div
+      ref={technicalFeedRef}
+      className="modern-scrollbar min-h-[160px] max-h-[32vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2 sm:min-h-[190px] sm:max-h-[38vh] md:min-h-[220px] md:max-h-[44vh]"
+    >
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+        Technical Feed
+      </div>
+      <div className="space-y-2">
+        {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+        <Suspense fallback={<LazyPanelFallback title="Execution Transparency" />}>
+          <LazyExecutionTransparencyPanel
+            data={data}
+            model={model}
+            provider={provider}
+            isStreaming={isStreaming}
+            autonomyMode={autonomyMode}
+            latestRunMetrics={latestRunMetrics}
+            latestUsage={latestUsage}
+          />
+        </Suspense>
+        <Suspense fallback={<LazyPanelFallback title="Technical Timeline" />}>
+          <LazyStepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
+        </Suspense>
+        <Suspense fallback={<LazyPanelFallback title="Execution Status" />}>
+          <LazyExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <LazyUpdateBanner />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
     {
@@ -280,7 +338,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [isModelSettingsCollapsed, setIsModelSettingsCollapsed] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
-    const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
@@ -369,7 +426,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setOpenSurfaces((currentTabs) =>
         currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
       );
-      setActiveSurface('workspace');
     }, [showWorkbench]);
 
     useEffect(() => {
@@ -388,8 +444,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             .map((result) => result[0])
             .map((result) => result.transcript)
             .join('');
-
-          setTranscript(transcript);
 
           if (handleInputChange) {
             const syntheticEvent = {
@@ -490,7 +544,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
         if (recognition) {
           recognition.abort(); // Stop current recognition
-          setTranscript(''); // Clear transcript
           setIsListening(false);
 
           // Clear the input by triggering handleInputChange with empty value
@@ -680,42 +733,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
                   <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
                 </Suspense>
-                <div
-                  ref={technicalFeedRef}
-                  className="modern-scrollbar min-h-[160px] max-h-[32vh] overflow-x-hidden overflow-y-auto rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2 sm:min-h-[190px] sm:max-h-[38vh] md:min-h-[220px] md:max-h-[44vh]"
-                >
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
-                    Technical Feed
-                  </div>
-                  <div className="space-y-2">
-                    {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
-                    <Suspense fallback={<LazyPanelFallback title="Execution Transparency" />}>
-                      <LazyExecutionTransparencyPanel
-                        data={data}
-                        model={model}
-                        provider={provider}
-                        isStreaming={isStreaming}
-                        autonomyMode={autonomyMode}
-                        latestRunMetrics={latestRunMetrics}
-                        latestUsage={latestUsage}
-                      />
-                    </Suspense>
-                    <Suspense fallback={<LazyPanelFallback title="Technical Timeline" />}>
-                      <LazyStepRunnerFeed data={data} includeCommentary={false} title="Technical Timeline" />
-                    </Suspense>
-                    <Suspense fallback={<LazyPanelFallback title="Execution Status" />}>
-                      <LazyExecutionStickyFooter
-                        data={data}
-                        model={model}
-                        provider={provider}
-                        isStreaming={isStreaming}
-                      />
-                    </Suspense>
-                    <Suspense fallback={null}>
-                      <LazyUpdateBanner />
-                    </Suspense>
-                  </div>
-                </div>
+                <TechnicalFeedContent
+                  data={data}
+                  progressAnnotations={progressAnnotations}
+                  model={model}
+                  provider={provider}
+                  isStreaming={isStreaming}
+                  autonomyMode={autonomyMode}
+                  latestRunMetrics={latestRunMetrics}
+                  latestUsage={latestUsage}
+                  technicalFeedRef={technicalFeedRef}
+                />
               </div>
             ) : null}
             <div className={classNames('flex flex-col gap-2', { 'sticky bottom-2 z-10': chatStarted })}>
@@ -945,6 +973,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         chatStarted={chatStarted}
                         isStreaming={isStreaming}
                         setSelectedElement={setSelectedElement}
+                        data={data}
+                        model={model}
+                        provider={provider}
+                        autonomyMode={autonomyMode}
+                        latestRunMetrics={latestRunMetrics}
+                        latestUsage={latestUsage}
                         onRequestClose={() => closeSurface('workspace')}
                       />
                     </Suspense>

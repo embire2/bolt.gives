@@ -61,25 +61,31 @@ Release theme: finish the server-first architecture, remove remaining browser-we
 
 ### P0
 
+0. Execution UX clarity
+- [~] Keep `Chat` active by default while the workspace spins up so users can still follow commentary.
+- [~] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
+- [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
+- [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
+
 1. Vendor and editor payload reduction
 - [ ] Split the remaining oversized `vendor` domain into finer runtime buckets.
-- [ ] Move more CodeMirror language/theme payloads behind language-use boundaries.
-- [ ] Remove any remaining editor/collab/chart heavy imports from shared startup paths.
+- [~] Move more CodeMirror language/theme payloads behind language-use boundaries.
+- [~] Remove any remaining editor/collab/chart heavy imports from shared startup paths.
 
 2. Full server-first execution closure
 - [ ] Eliminate remaining hosted dependence on browser WebContainer for normal coding paths.
 - [ ] Keep browser terminal/status surfaces thin and server-backed only.
-- [ ] Push more preview/log reconciliation state entirely to the server.
+- [~] Push more preview/log reconciliation state entirely to the server.
 
 3. Self-heal hardening
 - [ ] Expand Architect preview/runtime diagnostics beyond restore-only recovery.
 - [ ] Add confidence-based fix loops with bounded retries.
-- [ ] Add regression E2E that breaks generated apps in multiple ways and proves recovery.
+- [~] Add regression E2E that breaks generated apps in multiple ways and proves recovery.
 
 4. Tenant and account hardening
 - [ ] Replace bootstrap tenant registry with a proper production-safe tenant/account model.
-- [ ] Add password change flow for bootstrap admin.
-- [ ] Add tenant roles, audit trail, and basic session management.
+- [~] Add password change flow for bootstrap admin.
+- [~] Add tenant roles, audit trail, and basic session management.
 - [ ] Enforce one-client / one-instance rules for managed deployments in runtime, not only docs.
 
 5. Cloudflare managed control plane
@@ -103,9 +109,9 @@ Release theme: finish the server-first architecture, remove remaining browser-we
 - [ ] Add runtime telemetry dashboards for memory, stalls, and recovery rate.
 
 ### v3.0.4 Release Metrics
-- [ ] Initial hosted chat shell materially lighter than `v3.0.3`.
+- [~] Initial hosted chat shell materially lighter than `v3.0.3`.
 - [ ] No shared startup chunk above agreed budget.
 - [ ] Hosted scaffold-to-preview success rate >= 90%.
 - [ ] Architect known-failure recovery success >= 75%.
-- [ ] Tenant admin flows work end-to-end on server-hosted instances.
+- [~] Tenant admin flows work end-to-end on server-hosted instances.
 - [ ] Managed instance rollout/update path is health-checked and reversible.

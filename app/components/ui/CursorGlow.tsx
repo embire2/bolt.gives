@@ -9,14 +9,14 @@ export function CursorGlow() {
     const glowElement = glowRef.current;
 
     if (!glowElement) {
-      return;
+      return undefined;
     }
 
     const mediaQuery = window.matchMedia('(pointer: fine)');
 
     if (!mediaQuery.matches) {
       glowElement.style.opacity = '0';
-      return;
+      return undefined;
     }
 
     let rafId = 0;
@@ -68,7 +68,7 @@ export function CursorGlow() {
       window.removeEventListener('mouseenter', handleMouseEnter);
       window.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, []);
+  }, [hostElement]);
 
   useEffect(() => {
     const container = document.createElement('div');

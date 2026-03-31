@@ -3,6 +3,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 vi.mock('remix-utils/client-only', () => {
   return {
@@ -64,6 +65,7 @@ describe('BaseChat surface tabs', () => {
   afterEach(() => {
     cleanup();
     window.localStorage?.removeItem?.('bolt_surface_layout');
+    workbenchStore.showWorkbench.set(false);
     vi.unstubAllGlobals();
   });
 
@@ -102,5 +104,31 @@ describe('BaseChat surface tabs', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Open Workspace/i }));
     expect(await screen.findByTestId('workbench-panel')).toBeTruthy();
+  });
+
+  it('keeps chat active when the workspace becomes available automatically', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+    });
+
+    workbenchStore.showWorkbench.set(true);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(screen.queryByTestId('workbench-panel')).toBeNull();
   });
 });

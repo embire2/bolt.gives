@@ -1,9 +1,5 @@
-import React, { useMemo } from 'react';
-import { Bar, Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CommitHeatmapData, AuthorStats } from '~/lib/services/githubApiService';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
 interface GitInsightsProps {
   heatmapData: CommitHeatmapData[];
@@ -24,6 +20,39 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
   onCompare,
   isLoading = false,
 }) => {
+  const [chartComponents, setChartComponents] = useState<{
+    Bar?: React.ComponentType<any>;
+    Doughnut?: React.ComponentType<any>;
+  }>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCharts = async () => {
+      const [{ Bar, Doughnut }, chartJs] = await Promise.all([import('react-chartjs-2'), import('chart.js')]);
+
+      chartJs.Chart.register(
+        chartJs.CategoryScale,
+        chartJs.LinearScale,
+        chartJs.BarElement,
+        chartJs.Title,
+        chartJs.Tooltip,
+        chartJs.Legend,
+        chartJs.ArcElement,
+      );
+
+      if (!cancelled) {
+        setChartComponents({ Bar, Doughnut });
+      }
+    };
+
+    void loadCharts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Generate weeks for heatmap display
   const weeks = useMemo(() => {
     const result: CommitHeatmapData[][] = [];
@@ -132,6 +161,9 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
     );
   }
 
+  const BarChart = chartComponents.Bar;
+  const DoughnutChart = chartComponents.Doughnut;
+
   return (
     <div className="p-4 space-y-6">
       {/* Header */}
@@ -238,7 +270,13 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
           <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-4">Top Contributors</h3>
           <div className="h-64">
             {contributors.length > 0 ? (
-              <Bar data={contributorChartData} options={chartOptions} />
+              BarChart ? (
+                <BarChart data={contributorChartData} options={chartOptions} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-bolt-elements-textTertiary">
+                  Loading chart…
+                </div>
+              )
             ) : (
               <div className="flex items-center justify-center h-full text-bolt-elements-textTertiary">
                 No contributor data available
@@ -252,22 +290,28 @@ export const GitInsights: React.FC<GitInsightsProps> = ({
           <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-4">Contributor Distribution</h3>
           <div className="h-64 flex items-center justify-center">
             {contributors.length > 0 ? (
-              <Doughnut
-                data={languageChartData}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'right',
-                      labels: {
-                        color: '#A3A3A3',
-                        padding: 10,
+              DoughnutChart ? (
+                <DoughnutChart
+                  data={languageChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'right',
+                        labels: {
+                          color: '#A3A3A3',
+                          padding: 10,
+                        },
                       },
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-bolt-elements-textTertiary">
+                  Loading chart…
+                </div>
+              )
             ) : (
               <div className="flex items-center justify-center h-full text-bolt-elements-textTertiary">
                 No contributor data available
