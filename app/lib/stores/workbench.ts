@@ -4,7 +4,6 @@ import type { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
-import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
 import { PreviewsStore } from './previews';
@@ -32,6 +31,8 @@ const DEFAULT_ACTION_STREAM_SAMPLE_INTERVAL_MS = 100;
 const MAX_INTERACTIVE_STEP_EVENTS = 140;
 const INTERACTIVE_EVENTS_FLUSH_MS = 220;
 const MAX_INTERACTIVE_EVENT_OUTPUT_CHARS = 1200;
+const ARTIFACT_READY_WAIT_TIMEOUT_MS = 5_000;
+const ARTIFACT_READY_POLL_INTERVAL_MS = 50;
 
 function resolveActionStreamSampleIntervalMs(): number {
   const rawValue = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
@@ -265,6 +266,28 @@ export class WorkbenchStore {
     }
 
     this.#flushInteractiveEvents();
+  }
+
+  async #waitForArtifact(id: string, timeoutMs: number = ARTIFACT_READY_WAIT_TIMEOUT_MS) {
+    const existingArtifact = this.#getArtifact(id);
+
+    if (existingArtifact) {
+      return existingArtifact;
+    }
+
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, ARTIFACT_READY_POLL_INTERVAL_MS));
+
+      const artifact = this.#getArtifact(id);
+
+      if (artifact) {
+        return artifact;
+      }
+    }
+
+    return undefined;
   }
 
   get previews() {
@@ -914,13 +937,22 @@ export class WorkbenchStore {
   async _addAction(data: ActionCallbackData) {
     const { artifactId } = data;
 
-    const artifact = this.#getArtifact(artifactId);
+    const artifact = await this.#waitForArtifact(artifactId);
 
     if (!artifact) {
-      unreachable('Artifact not found');
+      const error = `Workspace artifact "${artifactId}" was not ready before action registration.`;
+      logger.warn(error, { artifactId, actionId: data.actionId, actionType: data.action.type });
+      this.#appendInteractiveStepEvent({
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        description: 'Workspace initialization is still catching up',
+        error,
+      });
+
+      return;
     }
 
-    return artifact.runner.addAction(data);
+    await artifact.runner.addAction(data);
   }
 
   runAction(data: ActionCallbackData, isStreaming: boolean = false) {
@@ -933,10 +965,19 @@ export class WorkbenchStore {
   async _runAction(data: ActionCallbackData, isStreaming: boolean = false) {
     const { artifactId } = data;
 
-    const artifact = this.#getArtifact(artifactId);
+    const artifact = await this.#waitForArtifact(artifactId);
 
     if (!artifact) {
-      unreachable('Artifact not found');
+      const error = `Workspace artifact "${artifactId}" was not ready before action execution.`;
+      logger.warn(error, { artifactId, actionId: data.actionId, actionType: data.action.type });
+      this.#appendInteractiveStepEvent({
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        description: 'Workspace initialization is still catching up',
+        error,
+      });
+
+      return;
     }
 
     const action = artifact.runner.actions.get()[data.actionId];

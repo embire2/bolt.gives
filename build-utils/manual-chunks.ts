@@ -56,27 +56,18 @@ export function getManualChunkName(id: string): string | undefined {
     return 'framework-vendor';
   }
 
-  if (matchPackage(id, ['@uiw/codemirror-theme-vscode'])) {
-    return 'editor-codemirror-theme';
-  }
-
-  if (matchPackage(id, ['@lezer'])) {
-    return 'editor-codemirror-lang';
-  }
-
-  if (matchPackage(id, ['@codemirror/lang-'])) {
-    return 'editor-codemirror-lang';
-  }
-
   if (
     matchPackage(id, [
+      '@uiw/codemirror-theme-vscode',
+      '@lezer',
+      '@codemirror/lang-',
       '@codemirror',
       '@uiw/react-codemirror',
       '@uiw/codemirror-extensions-events',
       '@uiw/codemirror-extensions-basic-setup',
     ])
   ) {
-    return 'editor-codemirror-core';
+    return 'editor-codemirror';
   }
 
   if (matchPackage(id, ['@xterm', 'xterm'])) {

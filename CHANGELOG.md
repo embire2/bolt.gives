@@ -27,6 +27,9 @@
 
 ### Fixed
 
+- Generated-app Workspace loads no longer crash on live hosted instances due to a browser-side CodeMirror chunk initialization failure; the editor payload now ships as one stable runtime chunk again.
+- Artifact/action hydration is now resilient when workspace actions arrive slightly before the artifact store finishes registering, preventing early run races from collapsing the Workspace surface.
+- Hosted doctor-scheduling generation on `https://alpha1.bolt.gives` now reaches a usable React appointment scheduling preview instead of dying on the starter-to-editor handoff.
 - The `Workspace` surface now shows what the system is doing while preview/build work is still in progress, instead of leaving users on a silent file/preview area with no clear status.
 - Tenant registry data is now normalized on load so older server-local tenant state gets upgraded safely instead of drifting across runtime versions.
 

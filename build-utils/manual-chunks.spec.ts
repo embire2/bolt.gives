@@ -10,8 +10,12 @@ describe('getManualChunkName', () => {
   });
 
   it('groups editor and terminal dependencies separately', () => {
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe(
-      'editor-codemirror-core',
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-codemirror');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/lang-javascript/dist/index.js')).toBe(
+      'editor-codemirror',
+    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@uiw/codemirror-theme-vscode/index.js')).toBe(
+      'editor-codemirror',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@xterm/xterm/lib/xterm.js')).toBe('terminal-xterm');
   });

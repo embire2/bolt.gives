@@ -26,6 +26,7 @@ describe('workbenchStore file actions', () => {
   beforeEach(async () => {
     vi.resetModules();
     ({ workbenchStore } = await import('./workbench'));
+    workbenchStore.setAutonomyMode('full-auto');
     workbenchStore.artifacts.set({});
     workbenchStore.setSelectedFile(undefined);
     workbenchStore.currentView.set('preview');
@@ -36,6 +37,7 @@ describe('workbenchStore file actions', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     workbenchStore.artifacts.set({});
+    workbenchStore.setAutonomyMode('auto-apply-safe');
     workbenchStore.setSelectedFile(undefined);
     workbenchStore.currentView.set('code');
     workbenchStore.unsavedFiles.set(new Set());
@@ -130,5 +132,53 @@ describe('workbenchStore file actions', () => {
     expect(writeFile).toHaveBeenCalledWith('/home/project/src/App.tsx', data.action.content);
     expect(workbenchStore.currentView.get()).toBe('preview');
     expect(runAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for artifact registration before executing queued actions', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const runAction = vi.fn().mockResolvedValue(undefined);
+      const actionId = 'shell-action-1';
+      const data: ActionCallbackData = {
+        artifactId: 'artifact-delayed',
+        messageId: 'message-1',
+        actionId,
+        action: {
+          type: 'shell',
+          content: 'pnpm install',
+        } as any,
+      };
+
+      const executionPromise = workbenchStore._runAction(data, false);
+
+      setTimeout(() => {
+        workbenchStore.artifacts.set({
+          'artifact-delayed': {
+            id: 'artifact-delayed',
+            title: 'Delayed artifact',
+            closed: false,
+            runner: {
+              actions: {
+                get: () => ({
+                  [actionId]: {
+                    executed: false,
+                  },
+                }),
+              },
+              runAction,
+            } as any,
+          },
+        });
+      }, 100);
+
+      await vi.advanceTimersByTimeAsync(200);
+      await executionPromise;
+
+      expect(runAction).toHaveBeenCalledTimes(1);
+      expect(runAction).toHaveBeenCalledWith(data);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -63,6 +63,7 @@ Current `v3.0.4` work in progress on top of the stable line:
 
 - `Chat` now stays visible while the workspace spins up so users can keep following commentary instead of being pushed into files/preview immediately.
 - `Workspace` now carries a bottom `Workspace Activity` panel with live commentary, execution status, and technical progress so long runs are no longer silent.
+- The hosted doctor-scheduling flow has been revalidated on `alpha1`: the Workspace now survives the starter-to-editor handoff and reaches a usable appointment-scheduling preview instead of crashing inside the editor bundle.
 - Commentary heartbeat text is being tightened so updates stay more task-specific and less repetitive.
 - Tenant admin hardening is underway with password rotation, tenant status controls, and lifecycle metadata.
 - Preview/log reconciliation is moving further toward compact server-pushed state instead of chatty browser polling.

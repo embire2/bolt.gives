@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-03-30
+Last updated: 2026-03-31
 
 Status legend:
 - `[x]` complete
@@ -63,7 +63,7 @@ Release theme: finish the server-first architecture, remove remaining browser-we
 
 0. Execution UX clarity
 - [~] Keep `Chat` active by default while the workspace spins up so users can still follow commentary.
-- [~] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
+- [x] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
 - [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 
@@ -81,6 +81,7 @@ Release theme: finish the server-first architecture, remove remaining browser-we
 - [ ] Expand Architect preview/runtime diagnostics beyond restore-only recovery.
 - [ ] Add confidence-based fix loops with bounded retries.
 - [~] Add regression E2E that breaks generated apps in multiple ways and proves recovery.
+- [~] Cover starter-to-editor/workspace hydration races so generated apps do not fail during the first live editing pass.
 
 4. Tenant and account hardening
 - [ ] Replace bootstrap tenant registry with a proper production-safe tenant/account model.
