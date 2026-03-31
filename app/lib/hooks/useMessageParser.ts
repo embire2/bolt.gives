@@ -49,10 +49,14 @@ const messageParser = new EnhancedStreamingMessageParser({
     },
   },
 });
-const extractTextContent = (message: Message) =>
-  Array.isArray(message.content)
+const extractTextContent = (message: Message) => {
+  if (!message?.content) {
+    return '';
+  }
+  return Array.isArray(message.content)
     ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
     : message.content;
+};
 
 export function useMessageParser() {
   const [parsedMessages, setParsedMessages] = useState<{ [key: number]: string }>({});

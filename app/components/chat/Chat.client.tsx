@@ -2640,7 +2640,7 @@ Requirements:
 
             return {
               ...message,
-              content: parsedMessages[i] || '',
+              content: parsedMessages?.[i] ?? '',
             };
           })}
           enhancePrompt={() => {
