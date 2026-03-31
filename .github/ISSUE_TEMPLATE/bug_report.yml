@@ -1,74 +1,102 @@
-name: 'Bug report'
-description: Create a report to help us improve
+name: '🐛 Bug Report'
+description: Create a structured report to help us improve bolt.gives
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting an issue :pray:.
+        ### Thank you for reporting an issue! 🙏
+        This issue tracker is specifically for bugs found within [bolt.gives](https://bolt.gives).
+        
+        **Important:** If your issue is related to the underlying WebContainer technology, please file it in the [official StackBlitz repo](https://github.com/stackblitz/webcontainer-core).
 
-        This issue tracker is for bugs and issues found with [bolt.gives](https://bolt.gives).
-        If you experience issues related to WebContainer, please file an issue in the official [StackBlitz WebContainer repo](https://github.com/stackblitz/webcontainer-core).
-
-        The more information you fill in, the better we can help you.
   - type: textarea
     id: description
     attributes:
-      label: Describe the bug
-      description: Provide a clear and concise description of what you're running into.
+      label: ⚡ Describe the bug
+      description: A clear and concise description of the error or unexpected behavior.
+      placeholder: e.g., The agent gets stuck in a loop when trying to install 'lucide-react'...
     validations:
       required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: 🔄 Agent Phase
+      description: At what point in the "Agentic Coding" workflow did the failure occur?
+      options:
+        - Planning (Thinking about the task)
+        - Doing (Writing code / Running commands)
+        - Verifying (Testing the output / Linting)
+        - Next Steps (Recommending follow-ups)
+        - UI/General (Not related to the agent)
+    validations:
+      required: true
+
   - type: input
     id: link
     attributes:
-      label: Link to the Bolt URL that caused the error
-      description: Please do not delete it after reporting!
+      label: 🔗 Bolt URL
+      description: Provide the URL of the Bolt project where this occurred. (Please do not delete the project!)
     validations:
       required: true
+
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
-      description: Describe the steps we have to take to reproduce the behavior.
+      label: 📑 Steps to reproduce
+      description: How can we make this happen again?
       placeholder: |
-        1. Go to '...'
-        2. Click on '....'
-        3. Scroll down to '....'
-        4. See error
+        1. Open bolt.gives
+        2. Prompt for '...'
+        3. Click the '...' button
+        4. See error in terminal/console
     validations:
       required: true
-  - type: textarea
-    id: expected
+
+  - type: input
+    id: provider_model
     attributes:
-      label: Expected behavior
-      description: Provide a clear and concise description of what you expected to happen.
+      label: 🤖 AI Provider & Model
+      description: e.g., Anthropic (Claude 3.5 Sonnet) or Ollama (Qwen2.5-Coder)
+      placeholder: Anthropic / Claude 3.5 Sonnet
     validations:
       required: true
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Screen Recording / Screenshot
-      description: If applicable, **please include a screen recording** (preferably) or screenshot showcasing the issue. This will assist us in resolving your issue <u>quickly</u>.
+
   - type: textarea
     id: platform
     attributes:
-      label: Platform
+      label: 💻 Platform & Environment
       value: |
-        - Client OS (your computer): [e.g. Windows/macOS/Linux]
-        - If self-hosting: Server OS (must be Ubuntu 18.04+): [e.g. Ubuntu 22.04]
-        - Browser: [e.g. Chrome, Safari, Firefox]
-        - Version: [e.g. 91.1]
-  - type: input
-    id: provider
+        - **Browser:** [e.g. Chrome, Brave, Safari]
+        - **Client OS:** [e.g. macOS Sonoma, Windows 11]
+        - **Self-Hosted?** [Yes/No]
+        - **Node Version (if self-hosted):** [e.g. v20.x]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
     attributes:
-      label: Provider Used
-      description: Tell us the provider you are using.
-  - type: input
-    id: model
+      label: 📂 Terminal / Console Logs
+      description: Please paste any relevant error logs or the "Agent Commentary" stream here.
+      render: shell
+
+  - type: textarea
+    id: screenshots
     attributes:
-      label: Model Used
-      description: Tell us the model you are using.
+      label: 🖼️ Screen Recording / Screenshot
+      description: Drag and drop your media here. Recordings are highly preferred for agent loops!
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 🔒 Privacy Check
+      options:
+        - label: I have scrubbed all API Keys, Secrets, and sensitive paths from my logs.
+          required: true
+
   - type: textarea
     id: additional
     attributes:
-      label: Additional context
-      description: Add any other context about the problem here.
+      label: 📝 Additional context
+      description: Anything else we should know?
