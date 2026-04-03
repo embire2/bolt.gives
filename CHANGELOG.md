@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- The locked hosted `FREE` model now renders directly as `DeepSeek V3.2` in the model selector even before async model metadata finishes loading, instead of briefly showing `Select model`.
 - The committed live release smoke now targets the active generated app entry discovered from `index.html` and the module entry path, so preview break/recovery validation no longer mutates an unused fallback starter file.
 - Live managed instances now always land back on the `Chat` surface on first load, even if a prior browser session last focused `Workspace`.
 - Workspace activity no longer steals focus away from `Chat` as soon as files/preview events begin, so users can keep following commentary while a run starts.
@@ -17,6 +18,7 @@
 - Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
 - Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
 - Build the managed Cloudflare spawn/update control plane and rollback verification.
+- Ship a real operator-funded Cloudflare trial-instance API with one-client/one-instance enforcement, chosen subdomains, automatic updates from `main`, and a 15-day expiry model.
 
 ## v3.0.6 (2026-04-03)
 

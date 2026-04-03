@@ -84,6 +84,7 @@ Release theme: finish the execution UX, harden tenant/accounts for production, a
 - [x] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
 - [x] Default live loads back into `Chat` instead of restoring a stale `Workspace` focus from prior browser state.
 - [x] Prevent stale terminal panel state from crashing the workspace surface on live hosted instances.
+- [x] Keep the locked hosted FREE model visible as `DeepSeek V3.2` in the selector instead of a misleading placeholder during async provider/model bootstrap.
 - [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 
@@ -111,6 +112,9 @@ Release theme: finish the execution UX, harden tenant/accounts for production, a
 
 5. Cloudflare managed control plane
 - [ ] Build the actual spawn/provision/update control plane described in docs.
+- [ ] Let a signed-in client request one experimental managed trial instance for 15 days, backed by operator-funded Cloudflare capacity rather than manual setup.
+- [ ] Enforce one-client / one-instance allocation with a clear reclaim/expiry path.
+- [ ] Let each client choose a subdomain during provisioning.
 - [ ] Implement automatic rollout from `main` to managed instances.
 - [ ] Add health-verified rollback on failed updates.
 

@@ -94,12 +94,16 @@ NODE_OPTIONS=--max-old-space-size=6142 pnpm run build
 
 If you deploy this repo via Cloudflare Pages:
 
+- Framework preset: `None`
+- Root directory: `/`
+- Build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
 - Build output directory: `build/client`
-- If your build fails with out-of-memory: set `NODE_OPTIONS=--max-old-space-size=6142` in the Pages build environment
+- If you want the built-in hosted FREE coder on your own deployment, set `FREE_OPENROUTER_API_KEY` in the Pages environment settings
+- If your build fails with out-of-memory, confirm `NODE_OPTIONS=--max-old-space-size=6142` is set in the Pages build environment
+- For the full step-by-step setup guide, use the `Deploying To Cloudflare Pages` section in `README.md`
 
 ## Additional Docs
 
 - Fresh install checklist: `docs/fresh-install-checklist.md`
 - Contributing: `CONTRIBUTING.md`
 - Changelog: `CHANGELOG.md`
-

@@ -281,6 +281,19 @@ export const ModelSelector = ({
       });
   }, [modelList, provider?.name, showFreeModelsOnly, debouncedModelSearchQuery]);
 
+  const selectedModelLabel = useMemo(() => {
+    if (!provider) {
+      return 'Select model';
+    }
+
+    const selectedModel =
+      modelList.find((entry) => entry.name === model && entry.provider === provider.name) ||
+      provider.staticModels.find((entry) => entry.name === model) ||
+      (provider.name === 'FREE' ? provider.staticModels[0] : undefined);
+
+    return selectedModel?.label || 'Select model';
+  }, [model, modelList, provider]);
+
   const filteredProviders = useMemo(() => {
     if (!debouncedProviderSearchQuery) {
       return providerList;
@@ -713,7 +726,7 @@ export const ModelSelector = ({
           tabIndex={0}
         >
           <div className="flex items-center justify-between">
-            <div className="truncate">{modelList.find((m) => m.name === model)?.label || 'Select model'}</div>
+            <div className="truncate">{selectedModelLabel}</div>
             <div
               className={classNames(
                 'i-ph:caret-down w-4 h-4 text-bolt-elements-textSecondary opacity-75',

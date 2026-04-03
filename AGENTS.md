@@ -60,6 +60,7 @@ Never force-push shared branches unless explicitly approved.
 - Lightweight client-side provider catalog so server/provider SDK code stays off the browser startup path
 - Tenant user portal with sign-in and password rotation
 - Committed live smoke path for generated-app success plus preview break/recovery
+- Locked FREE model label now renders consistently as `DeepSeek V3.2` during selector bootstrap instead of falling back to a generic placeholder
 
 ### In progress / remaining (`v3.0.7`)
 
@@ -67,6 +68,7 @@ Never force-push shared branches unless explicitly approved.
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`
 - Keep commentary task-specific and derived directly from runtime events only
 - Full managed Cloudflare spawn/update control plane
+- Operator-funded Cloudflare trial-instance flow with one-client/one-instance enforcement, chosen subdomains, and timed expiry
 - Production-safe tenant/account/RBAC hardening
 - Tenant approval/invite lifecycle beyond the server-local registry baseline
 - First-party template packs + CI smoke coverage

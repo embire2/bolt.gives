@@ -189,6 +189,7 @@ Current roadmap split:
 
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
 - FREE now exposes exactly one shipped model option so new installs can start coding immediately without choosing or configuring a model first.
+- The locked FREE model now renders directly as `DeepSeek V3.2` in the model selector instead of a misleading `Select model` placeholder while async model metadata is still loading.
 - Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
 - Lightweight provider metadata catalog in the browser so provider SDK implementations stay on the server and user-managed provider/API-key flows still work.
 - Managed hosted runtime on live instances for installs, builds, tests, dev servers, preview hosting, and file sync, with browser-side WebContainer retained only as the fallback path.
@@ -354,18 +355,186 @@ NODE_OPTIONS=--max-old-space-size=4096 pnpm run start
 The repo still contains heavier maintainer scripts used for large local test/build workflows.  
 The installer and manual self-host path above are the validated open-source install path and run with a **4 GB** Node heap.
 
-## Deploying To Cloudflare Pages
+## Deploying To Cloudflare Pages (Verbose, Step By Step)
 
-This repo is configured for Cloudflare Pages via `wrangler.toml`:
+This is the **supported self-service Cloudflare path that works today**.
 
-- Build output: `build/client`
+What this gives the user right now:
+
+- their own isolated Cloudflare Pages deployment
+- their own chosen `*.pages.dev` project name
+- optional custom domain after the first deploy
+- automatic redeploys from GitHub when they push updates
+
+What this does **not** give yet:
+
+- the future bolt.gives operator-funded **15-day managed trial instance**
+- a public bolt.gives spawn API that provisions a client instance from our own shared control plane
+
+That managed trial flow is still roadmap work under `v3.0.7`.
+
+### 1. Prerequisites
+
+Before starting, the user needs:
+
+- a Cloudflare account
+- a GitHub account
+- a fork or clone of `https://github.com/embire2/bolt.gives`
+- Node.js `22.x` and `pnpm 9.x` locally if they want to test before connecting Git
+
+### 2. Prepare the repo
+
+If the user wants to test locally first:
+
+```bash
+git clone https://github.com/embire2/bolt.gives.git
+cd bolt.gives
+pnpm install
+NODE_OPTIONS=--max-old-space-size=6142 pnpm run build
+```
+
+This repo is already configured for Cloudflare Pages in `wrangler.toml`:
+
+- build output directory: `build/client`
 - Pages Functions entry: `functions/[[path]].ts`
+- compatibility flag: `nodejs_compat`
 
-If your Pages build runs out of memory, increase Node's heap:
+### 3. Create the Pages project in Cloudflare
 
-- Set `NODE_OPTIONS=--max-old-space-size=6142` in Cloudflare Pages build environment
-- Or use a high-memory build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
-- Or run: `pnpm run build:highmem`
+In the Cloudflare dashboard:
+
+1. Open `Workers & Pages`
+2. Click `Create`
+3. Choose `Pages`
+4. Choose `Connect to Git`
+5. Select the GitHub repository the user wants to deploy
+
+The **project name** becomes the default `*.pages.dev` subdomain.
+
+Example:
+
+- project name: `my-bolt-gives`
+- default URL: `https://my-bolt-gives.pages.dev`
+
+If the user wants a different public URL later, they can attach a custom domain after the first successful deploy.
+
+### 4. Use these exact Cloudflare build settings
+
+Use the following values in the Cloudflare Pages setup form:
+
+- Framework preset: `None`
+- Root directory: `/`
+- Build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
+- Build output directory: `build/client`
+
+Do **not** point Pages at another output folder. This project expects `build/client`.
+
+### 5. Set the required environment variables in Pages
+
+In Cloudflare Pages, open:
+
+- `Settings`
+- `Environment variables`
+
+Set at least:
+
+- `NODE_OPTIONS=--max-old-space-size=6142`
+
+Optional, depending on how they want the AI runtime to behave:
+
+- `FREE_OPENROUTER_API_KEY=...`
+  - Use this only if they want the built-in hosted `FREE` provider to work on **their** deployment.
+  - This stays server-side in Cloudflare. It is **not** exposed to browser users.
+  - The shipped FREE path is locked to `deepseek/deepseek-v3.2`.
+- `OPENAI_API_KEY=...`
+  - Optional if they want OpenAI available server-side by default on their own instance.
+- `OPEN_ROUTER_API_KEY=...`
+  - Optional for their own OpenRouter-backed server-side use cases.
+  - Leave this unset if they want OpenRouter to remain entirely user-supplied in the UI.
+
+Important:
+
+- The open-source app does **not** expose `FREE_OPENROUTER_API_KEY` to end users.
+- If a user wants their deployment to ship with a working FREE coder immediately after install, they need to set `FREE_OPENROUTER_API_KEY` in Cloudflare for their own project.
+
+### 6. First deploy
+
+Once the Git repo and build settings are connected:
+
+1. Click `Save and Deploy`
+2. Wait for the build to complete
+3. Open the generated `*.pages.dev` URL
+
+On first load, the expected default UX is:
+
+- land on `Chat`
+- provider already set to `FREE`
+- model label already showing `DeepSeek V3.2`
+
+### 7. Give the user their own subdomain
+
+Users have two options:
+
+1. Use their Cloudflare Pages project name as the default subdomain
+   - example: `clinic-bolt.pages.dev`
+2. Attach a custom domain in:
+   - `Workers & Pages`
+   - selected project
+   - `Custom domains`
+
+That means users can already choose their own public address today without waiting for the future managed trial control plane.
+
+### 8. Automatic updates from GitHub
+
+If the project is connected through Cloudflare Pages Git integration:
+
+- every push to the configured branch triggers a new deployment automatically
+- this is the easiest way to keep the instance updated from GitHub
+
+If they want the production instance to track stable releases only:
+
+- connect Pages to `main`
+
+If they want a soak-test instance:
+
+- connect a separate Pages project to `alpha`
+
+### 9. Troubleshooting memory or build failures
+
+If the build runs out of memory:
+
+- confirm `NODE_OPTIONS=--max-old-space-size=6142` is set in Pages
+- confirm the build command is exactly:
+  - `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
+
+If the UI loads but the FREE provider does not work:
+
+- confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
+- redeploy the project after saving env changes
+
+If the deploy succeeds but the URL still shows an older release:
+
+- open the latest deployment in Pages
+- confirm the connected Git branch and latest commit SHA
+- trigger a redeploy from the newest commit
+
+### 10. About the future managed 15-day trial
+
+The product direction is still:
+
+- free experimental shared runtime while capacity lasts
+- future Pro from `$12/month` with more tools and higher limits
+
+The **future** flow we still need to build is:
+
+- user signs into bolt.gives
+- user requests a managed Cloudflare instance
+- bolt.gives provisions one isolated instance per client
+- user chooses a subdomain
+- the managed instance stays active for 15 days
+- updates roll out automatically from the stable Git branch
+
+That operator-funded spawn/update control plane is **not shipped yet**. It remains an explicit `v3.0.7` roadmap item.
 
 Fresh install checklist:
 
