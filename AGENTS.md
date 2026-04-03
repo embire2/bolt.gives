@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 
-- Stable: `v3.0.5`
-- In progress: `v3.0.6`
+- Stable: `v3.0.6`
+- In progress: `v3.0.7`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -38,7 +38,7 @@ Never force-push shared branches unless explicitly approved.
 
 ---
 
-## v3.0.5 Baseline / v3.0.6 Priority Stack
+## v3.0.6 Baseline / v3.0.7 Priority Stack
 
 ### Completed baseline
 
@@ -61,13 +61,14 @@ Never force-push shared branches unless explicitly approved.
 - Tenant user portal with sign-in and password rotation
 - Committed live smoke path for generated-app success plus preview break/recovery
 
-### In progress / remaining (`v3.0.6`)
+### In progress / remaining (`v3.0.7`)
 
-- Finish browser-weight reduction on remaining vendor/editor payloads
+- Finish browser-weight reduction on the remaining editor/PDF/git/terminal payloads
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`
-- Keep commentary task-specific and avoid generic keep-alive filler
+- Keep commentary task-specific and derived directly from runtime events only
 - Full managed Cloudflare spawn/update control plane
 - Production-safe tenant/account/RBAC hardening
+- Tenant approval/invite lifecycle beyond the server-local registry baseline
 - First-party template packs + CI smoke coverage
 - Teams add-on and collaboration audit trail
 - Update-channel rollback verification and operator tooling

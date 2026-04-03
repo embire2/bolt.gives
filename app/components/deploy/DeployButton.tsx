@@ -6,15 +6,20 @@ import { isGitLabConnected } from '~/lib/stores/gitlabConnection';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { streamingState } from '~/lib/stores/streaming';
 import { classNames } from '~/utils/classNames';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { NetlifyDeploymentLink } from '~/components/chat/NetlifyDeploymentLink.client';
 import { VercelDeploymentLink } from '~/components/chat/VercelDeploymentLink.client';
 import { useVercelDeploy } from '~/components/deploy/VercelDeploy.client';
 import { useNetlifyDeploy } from '~/components/deploy/NetlifyDeploy.client';
 import { useGitHubDeploy } from '~/components/deploy/GitHubDeploy.client';
 import { useGitLabDeploy } from '~/components/deploy/GitLabDeploy.client';
-import { GitHubDeploymentDialog } from '~/components/deploy/GitHubDeploymentDialog';
-import { GitLabDeploymentDialog } from '~/components/deploy/GitLabDeploymentDialog';
+
+const LazyGitHubDeploymentDialog = lazy(() =>
+  import('~/components/deploy/GitHubDeploymentDialog').then((module) => ({ default: module.GitHubDeploymentDialog })),
+);
+const LazyGitLabDeploymentDialog = lazy(() =>
+  import('~/components/deploy/GitLabDeploymentDialog').then((module) => ({ default: module.GitLabDeploymentDialog })),
+);
 
 interface DeployButtonProps {
   onVercelDeploy?: () => Promise<void>;
@@ -254,24 +259,28 @@ export const DeployButton = ({
       </div>
 
       {/* GitHub Deployment Dialog */}
-      {showGitHubDeploymentDialog && githubDeploymentFiles && (
-        <GitHubDeploymentDialog
-          isOpen={showGitHubDeploymentDialog}
-          onClose={() => setShowGitHubDeploymentDialog(false)}
-          projectName={githubProjectName}
-          files={githubDeploymentFiles}
-        />
-      )}
+      {showGitHubDeploymentDialog && githubDeploymentFiles ? (
+        <Suspense fallback={null}>
+          <LazyGitHubDeploymentDialog
+            isOpen={showGitHubDeploymentDialog}
+            onClose={() => setShowGitHubDeploymentDialog(false)}
+            projectName={githubProjectName}
+            files={githubDeploymentFiles}
+          />
+        </Suspense>
+      ) : null}
 
       {/* GitLab Deployment Dialog */}
-      {showGitLabDeploymentDialog && gitlabDeploymentFiles && (
-        <GitLabDeploymentDialog
-          isOpen={showGitLabDeploymentDialog}
-          onClose={() => setShowGitLabDeploymentDialog(false)}
-          projectName={gitlabProjectName}
-          files={gitlabDeploymentFiles}
-        />
-      )}
+      {showGitLabDeploymentDialog && gitlabDeploymentFiles ? (
+        <Suspense fallback={null}>
+          <LazyGitLabDeploymentDialog
+            isOpen={showGitLabDeploymentDialog}
+            onClose={() => setShowGitLabDeploymentDialog(false)}
+            projectName={gitlabProjectName}
+            files={gitlabDeploymentFiles}
+          />
+        </Suspense>
+      ) : null}
     </>
   );
 };

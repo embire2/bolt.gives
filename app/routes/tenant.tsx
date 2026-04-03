@@ -20,9 +20,11 @@ type TenantAccount = {
   createdAt: string;
   updatedAt?: string;
   passwordUpdatedAt?: string;
-  status?: 'active' | 'disabled';
+  status?: 'pending' | 'active' | 'disabled';
   lastLoginAt?: string | null;
   mustChangePassword?: boolean;
+  inviteExpiresAt?: string | null;
+  invitePurpose?: 'onboarding' | 'password-reset' | null;
 };
 
 type TenantSession = {
@@ -71,11 +73,28 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const inviteToken = new URL(request.url).searchParams.get('invite')?.trim() || '';
   const tenantCookie = createTenantCookie();
   const session = (await tenantCookie.parse(request.headers.get('Cookie'))) as TenantSession | undefined;
+  let invite: {
+    token: string;
+    tenant: Pick<TenantAccount, 'name' | 'email' | 'status' | 'inviteExpiresAt' | 'invitePurpose'>;
+  } | null = null;
+
+  if (inviteToken) {
+    try {
+      const payload = await fetchRuntimeJson<{
+        ok: boolean;
+        tenant: Pick<TenantAccount, 'name' | 'email' | 'status' | 'inviteExpiresAt' | 'invitePurpose'>;
+      }>(`/tenant-auth/invite?token=${encodeURIComponent(inviteToken)}`);
+      invite = { token: inviteToken, tenant: payload.tenant };
+    } catch {
+      invite = null;
+    }
+  }
 
   if (!session?.tenantId) {
-    return json({ authenticated: false, tenant: null as TenantAccount | null });
+    return json({ authenticated: false, tenant: null as TenantAccount | null, invite });
   }
 
   try {
@@ -85,15 +104,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (payload.tenant.email !== session.email) {
       return json(
-        { authenticated: false, tenant: null as TenantAccount | null },
+        { authenticated: false, tenant: null as TenantAccount | null, invite },
         { headers: { 'Set-Cookie': await tenantCookie.serialize('', { maxAge: 0 }) } },
       );
     }
 
-    return json({ authenticated: true, tenant: payload.tenant });
+    return json({ authenticated: true, tenant: payload.tenant, invite });
   } catch {
     return json(
-      { authenticated: false, tenant: null as TenantAccount | null },
+      { authenticated: false, tenant: null as TenantAccount | null, invite },
       { headers: { 'Set-Cookie': await tenantCookie.serialize('', { maxAge: 0 }) } },
     );
   }
@@ -163,11 +182,39 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect('/tenant');
   }
 
+  if (intent === 'accept-invite') {
+    const token = String(formData.get('token') || '').trim();
+    const nextPassword = String(formData.get('nextPassword') || '').trim();
+
+    try {
+      const payload = await fetchRuntimeJson<{ ok: boolean; tenant: TenantAccount }>('/tenant-auth/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, nextPassword }),
+      });
+
+      return redirect('/tenant', {
+        headers: {
+          'Set-Cookie': await tenantCookie.serialize({
+            tenantId: payload.tenant.id,
+            email: payload.tenant.email,
+            issuedAt: new Date().toISOString(),
+          } satisfies TenantSession),
+        },
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to accept the invite right now.' },
+        { status: 400 },
+      );
+    }
+  }
+
   return json({ error: 'Unknown action.' }, { status: 400 });
 }
 
 export default function TenantPortalPage() {
-  const { authenticated, tenant } = useLoaderData<typeof loader>();
+  const { authenticated, tenant, invite } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -197,45 +244,87 @@ export default function TenantPortalPage() {
         {!authenticated || !tenant ? (
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-lg backdrop-blur">
-              <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Tenant sign in</h2>
-              <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                Use the tenant email and password issued by your server operator.
-              </p>
-              <Form method="post" className="mt-5 space-y-4">
-                <input type="hidden" name="intent" value="login" />
-                <label className="block text-sm text-bolt-elements-textSecondary">
-                  Email
-                  <input
-                    name="email"
-                    type="email"
-                    autoComplete="username"
-                    required
-                    className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                  />
-                </label>
-                <label className="block text-sm text-bolt-elements-textSecondary">
-                  Password
-                  <input
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-bolt-elements-item-backgroundAccent px-4 py-2 text-sm font-medium text-bolt-elements-item-contentAccent"
-                >
-                  Sign in
-                </button>
-              </Form>
+              {invite ? (
+                <>
+                  <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Accept tenant invite</h2>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    {invite.tenant.invitePurpose === 'password-reset'
+                      ? 'Set a new password to complete the forced reset for this tenant account.'
+                      : 'Set the first password for this tenant account to complete onboarding.'}
+                  </p>
+                  <div className="mt-4 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-sm text-bolt-elements-textSecondary">
+                    <div className="font-medium text-bolt-elements-textPrimary">{invite.tenant.name}</div>
+                    <div className="mt-1">{invite.tenant.email}</div>
+                    <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                      Invite valid until {invite.tenant.inviteExpiresAt || 'unknown'}
+                    </div>
+                  </div>
+                  <Form method="post" className="mt-5 space-y-4">
+                    <input type="hidden" name="intent" value="accept-invite" />
+                    <input type="hidden" name="token" value={invite.token} />
+                    <label className="block text-sm text-bolt-elements-textSecondary">
+                      New password
+                      <input
+                        name="nextPassword"
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={10}
+                        required
+                        className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-bolt-elements-item-backgroundAccent px-4 py-2 text-sm font-medium text-bolt-elements-item-contentAccent"
+                    >
+                      Accept invite
+                    </button>
+                  </Form>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Tenant sign in</h2>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    Use the tenant email and password issued by your server operator.
+                  </p>
+                  <Form method="post" className="mt-5 space-y-4">
+                    <input type="hidden" name="intent" value="login" />
+                    <label className="block text-sm text-bolt-elements-textSecondary">
+                      Email
+                      <input
+                        name="email"
+                        type="email"
+                        autoComplete="username"
+                        required
+                        className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="block text-sm text-bolt-elements-textSecondary">
+                      Password
+                      <input
+                        name="password"
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        className="mt-1 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-bolt-elements-item-backgroundAccent px-4 py-2 text-sm font-medium text-bolt-elements-item-contentAccent"
+                    >
+                      Sign in
+                    </button>
+                  </Form>
+                </>
+              )}
             </div>
 
             <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/80 p-6 shadow-lg backdrop-blur">
               <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">How this is used</h2>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-bolt-elements-textSecondary">
-                <li>Bootstrap tenant passwords can be rotated on first sign-in.</li>
+                <li>New tenant accounts move through pending, approved, and disabled lifecycle states.</li>
+                <li>Onboarding and forced password resets now use time-limited invite links.</li>
                 <li>Each tenant keeps its own isolated workspace directory.</li>
                 <li>Tenant lifecycle events are written into the shared audit trail.</li>
               </ul>

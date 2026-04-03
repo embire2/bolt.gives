@@ -19,6 +19,14 @@ function matchPackage(id: string, packages: string[]) {
   return packages.some((pkg) => id.includes(`/${pkg}/`) || id.includes(`/${pkg}`));
 }
 
+function toSafeChunkSuffix(value: string) {
+  return value
+    .replace(/^@/, '')
+    .replace(/[\/]/g, '-')
+    .replace(/[^a-zA-Z0-9-_]/g, '')
+    .replace(/^codemirror-lang-/, '');
+}
+
 export function getManualChunkName(id: string): string | undefined {
   if (!id.includes('node_modules')) {
     return undefined;
@@ -68,8 +76,8 @@ export function getManualChunkName(id: string): string | undefined {
     return 'cloudflare-runtime';
   }
 
-  if (matchPackage(id, ['@codemirror/lang-'])) {
-    return 'editor-languages';
+  if (packageName?.startsWith('@codemirror/lang-')) {
+    return `editor-lang-${toSafeChunkSuffix(packageName)}`;
   }
 
   if (matchPackage(id, ['@codemirror/autocomplete'])) {
@@ -122,8 +130,20 @@ export function getManualChunkName(id: string): string | undefined {
     return 'collaboration-yjs';
   }
 
-  if (matchPackage(id, ['@octokit', 'isomorphic-git', 'jszip', 'file-saver'])) {
-    return 'git-export';
+  if (matchPackage(id, ['@octokit'])) {
+    return 'git-export-octokit';
+  }
+
+  if (matchPackage(id, ['isomorphic-git'])) {
+    return 'git-export-core';
+  }
+
+  if (matchPackage(id, ['jszip'])) {
+    return 'archive-export';
+  }
+
+  if (matchPackage(id, ['file-saver'])) {
+    return 'browser-downloads';
   }
 
   if (matchPackage(id, ['chart.js'])) {

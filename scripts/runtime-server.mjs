@@ -68,6 +68,7 @@ const PREVIEW_ERROR_PATTERNS = [
 ];
 const TENANT_REGISTRY_PATH =
   process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
+const TENANT_INVITE_TTL_MS = Number(process.env.RUNTIME_TENANT_INVITE_TTL_MS || `${72 * 60 * 60 * 1000}`);
 
 const sessions = new Map();
 
@@ -79,6 +80,18 @@ const LEGACY_TAILWIND_DIRECTIVE_RE =
 
 function hashTenantSecret(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function createTenantInviteToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+function createRandomTenantPassword() {
+  return crypto.randomBytes(18).toString('hex');
+}
+
+function createTenantInviteExpiry() {
+  return new Date(Date.now() + TENANT_INVITE_TTL_MS).toISOString();
 }
 
 function createWorkspaceDependencyFingerprint(packageJsonRaw, lockfileRaw = '') {
@@ -144,6 +157,13 @@ function sanitizeTenantForClient(tenant) {
     status: tenant.status,
     lastLoginAt: tenant.lastLoginAt,
     mustChangePassword: tenant.mustChangePassword !== false,
+    inviteExpiresAt: tenant.inviteExpiresAt || null,
+    inviteIssuedAt: tenant.inviteIssuedAt || null,
+    invitePurpose: tenant.invitePurpose || null,
+    approvedAt: tenant.approvedAt || null,
+    approvedBy: tenant.approvedBy || null,
+    disabledAt: tenant.disabledAt || null,
+    disabledBy: tenant.disabledBy || null,
   };
 }
 
@@ -199,13 +219,36 @@ export function normalizeTenantRegistry(input) {
         updatedAt: typeof tenant.updatedAt === 'string' && tenant.updatedAt ? tenant.updatedAt : now,
         passwordUpdatedAt:
           typeof tenant.passwordUpdatedAt === 'string' && tenant.passwordUpdatedAt ? tenant.passwordUpdatedAt : now,
-        status: tenant.status === 'disabled' ? 'disabled' : 'active',
+        status: ['pending', 'disabled', 'active'].includes(tenant.status) ? tenant.status : 'active',
         lastLoginAt: typeof tenant.lastLoginAt === 'string' ? tenant.lastLoginAt : null,
         mustChangePassword: tenant.mustChangePassword !== false,
+        inviteToken: typeof tenant.inviteToken === 'string' && tenant.inviteToken ? tenant.inviteToken : null,
+        inviteExpiresAt:
+          typeof tenant.inviteExpiresAt === 'string' && tenant.inviteExpiresAt ? tenant.inviteExpiresAt : null,
+        inviteIssuedAt:
+          typeof tenant.inviteIssuedAt === 'string' && tenant.inviteIssuedAt ? tenant.inviteIssuedAt : null,
+        invitePurpose:
+          tenant.invitePurpose === 'password-reset' || tenant.invitePurpose === 'onboarding'
+            ? tenant.invitePurpose
+            : null,
+        approvedAt: typeof tenant.approvedAt === 'string' && tenant.approvedAt ? tenant.approvedAt : null,
+        approvedBy: typeof tenant.approvedBy === 'string' && tenant.approvedBy ? tenant.approvedBy : null,
+        disabledAt: typeof tenant.disabledAt === 'string' && tenant.disabledAt ? tenant.disabledAt : null,
+        disabledBy: typeof tenant.disabledBy === 'string' && tenant.disabledBy ? tenant.disabledBy : null,
       };
     }),
     auditTrail: Array.isArray(input?.auditTrail) ? input.auditTrail.slice(-200) : [],
   };
+}
+
+function findTenantByInviteToken(registry, token) {
+  const normalized = String(token || '').trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return registry.tenants.find((tenant) => tenant.inviteToken === normalized) || null;
 }
 
 async function ensureTenantRegistry() {
@@ -2164,20 +2207,14 @@ export function createRuntimeServer() {
         const email = String(body.email || '')
           .trim()
           .toLowerCase();
-        const password = String(body.password || '').trim();
 
-        if (!name || !email || !password) {
-          sendText(res, 400, 'Name, email, and password are required.');
+        if (!name || !email) {
+          sendText(res, 400, 'Name and email are required.');
           return;
         }
 
         if (!isLikelyValidEmail(email)) {
           sendText(res, 400, 'Tenant admin email must be a valid email address.');
-          return;
-        }
-
-        if (password.length < 10) {
-          sendText(res, 400, 'Tenant admin password must be at least 10 characters long.');
           return;
         }
 
@@ -2200,17 +2237,25 @@ export function createRuntimeServer() {
           email,
           slug,
           workspaceDir: buildTenantWorkspaceDir(slug),
-          passwordHash: hashTenantSecret(password),
+          passwordHash: hashTenantSecret(createRandomTenantPassword()),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          passwordUpdatedAt: new Date().toISOString(),
-          status: 'active',
+          passwordUpdatedAt: null,
+          status: 'pending',
           lastLoginAt: null,
           mustChangePassword: true,
+          inviteToken: null,
+          inviteExpiresAt: null,
+          inviteIssuedAt: null,
+          invitePurpose: null,
+          approvedAt: null,
+          approvedBy: null,
+          disabledAt: null,
+          disabledBy: null,
         });
         appendTenantAuditEvent(registry, {
           actor: registry.admin?.username || 'admin',
-          action: 'tenant.create',
+          action: 'tenant.create.pending',
           target: email,
           details: { slug },
         });
@@ -2220,6 +2265,40 @@ export function createRuntimeServer() {
         sendJson(res, 200, { ok: true });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to create tenant');
+      }
+      return;
+    }
+
+    const tenantApproveMatch = pathname.match(/^\/runtime\/tenant-admin\/tenants\/([^/]+)\/approve$/);
+
+    if (req.method === 'POST' && tenantApproveMatch) {
+      try {
+        const tenantId = decodeURIComponent(tenantApproveMatch[1] || '');
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        tenant.status = 'active';
+        tenant.updatedAt = new Date().toISOString();
+        tenant.approvedAt = new Date().toISOString();
+        tenant.approvedBy = registry.admin?.username || 'admin';
+        tenant.disabledAt = null;
+        tenant.disabledBy = null;
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'tenant.approve',
+          target: tenant.email,
+          details: { slug: tenant.slug || '' },
+        });
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true, status: tenant.status });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to approve tenant.');
       }
       return;
     }
@@ -2279,6 +2358,8 @@ export function createRuntimeServer() {
 
         tenant.status = nextStatus;
         tenant.updatedAt = new Date().toISOString();
+        tenant.disabledAt = nextStatus === 'disabled' ? new Date().toISOString() : null;
+        tenant.disabledBy = nextStatus === 'disabled' ? registry.admin?.username || 'admin' : null;
         appendTenantAuditEvent(registry, {
           actor: registry.admin?.username || 'admin',
           action: 'tenant.status.update',
@@ -2294,6 +2375,51 @@ export function createRuntimeServer() {
       return;
     }
 
+    const tenantInviteMatch = pathname.match(/^\/runtime\/tenant-admin\/tenants\/([^/]+)\/invite$/);
+
+    if (req.method === 'POST' && tenantInviteMatch) {
+      try {
+        const body = await readJsonBody(req);
+        const purpose = body.purpose === 'password-reset' ? 'password-reset' : 'onboarding';
+        const tenantId = decodeURIComponent(tenantInviteMatch[1] || '');
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        if (tenant.status !== 'active') {
+          sendText(res, 400, 'Tenant must be approved and active before issuing an invite.');
+          return;
+        }
+
+        tenant.inviteToken = createTenantInviteToken();
+        tenant.inviteIssuedAt = new Date().toISOString();
+        tenant.inviteExpiresAt = createTenantInviteExpiry();
+        tenant.invitePurpose = purpose;
+        tenant.mustChangePassword = true;
+        tenant.updatedAt = new Date().toISOString();
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: purpose === 'password-reset' ? 'tenant.password.force-reset' : 'tenant.invite.issue',
+          target: tenant.email,
+          details: { expiresAt: tenant.inviteExpiresAt },
+        });
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, {
+          ok: true,
+          inviteUrl: `/tenant?invite=${tenant.inviteToken}`,
+          inviteExpiresAt: tenant.inviteExpiresAt,
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to issue tenant invite.');
+      }
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/runtime/tenant-auth/login') {
       try {
         const body = await readJsonBody(req);
@@ -2304,7 +2430,7 @@ export function createRuntimeServer() {
         const registry = await ensureTenantRegistry();
         const tenant = registry.tenants.find((entry) => entry.email === email);
 
-        if (!tenant || tenant.status === 'disabled') {
+        if (!tenant || tenant.status !== 'active') {
           sendText(res, 401, 'Invalid tenant credentials.');
           return;
         }
@@ -2326,6 +2452,34 @@ export function createRuntimeServer() {
         sendJson(res, 200, { ok: true, tenant: sanitizeTenantForClient(tenant) });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to verify tenant credentials.');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/tenant-auth/invite') {
+      try {
+        const inviteToken = String(searchParams.get('token') || '').trim();
+        const registry = await ensureTenantRegistry();
+        const tenant = findTenantByInviteToken(registry, inviteToken);
+
+        if (!tenant || !tenant.inviteExpiresAt || Date.parse(tenant.inviteExpiresAt) <= Date.now()) {
+          sendText(res, 404, 'Invite token is invalid or expired.');
+          return;
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          tenant: {
+            id: tenant.id,
+            name: tenant.name,
+            email: tenant.email,
+            status: tenant.status,
+            inviteExpiresAt: tenant.inviteExpiresAt,
+            invitePurpose: tenant.invitePurpose || 'onboarding',
+          },
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect tenant invite.');
       }
       return;
     }
@@ -2390,6 +2544,50 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/runtime/tenant-auth/invite/accept') {
+      try {
+        const body = await readJsonBody(req);
+        const token = String(body.token || '').trim();
+        const nextPassword = String(body.nextPassword || '').trim();
+
+        if (nextPassword.length < 10) {
+          sendText(res, 400, 'Tenant password must be at least 10 characters long.');
+          return;
+        }
+
+        const registry = await ensureTenantRegistry();
+        const tenant = findTenantByInviteToken(registry, token);
+
+        if (!tenant || !tenant.inviteExpiresAt || Date.parse(tenant.inviteExpiresAt) <= Date.now()) {
+          sendText(res, 404, 'Invite token is invalid or expired.');
+          return;
+        }
+
+        if (tenant.status !== 'active') {
+          sendText(res, 400, 'Tenant is not approved for access yet.');
+          return;
+        }
+
+        tenant.passwordHash = hashTenantSecret(nextPassword);
+        tenant.mustChangePassword = false;
+        tenant.updatedAt = new Date().toISOString();
+        tenant.passwordUpdatedAt = new Date().toISOString();
+        tenant.inviteToken = null;
+        tenant.inviteExpiresAt = null;
+        appendTenantAuditEvent(registry, {
+          actor: tenant.email,
+          action: tenant.invitePurpose === 'password-reset' ? 'tenant.password.reset.accepted' : 'tenant.invite.accepted',
+          target: tenant.email,
+        });
+        tenant.invitePurpose = null;
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true, tenant: sanitizeTenantForClient(tenant) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to accept tenant invite.');
+      }
+      return;
+    }
+
     const tenantPasswordMatch = pathname.match(/^\/runtime\/tenant-admin\/tenants\/([^/]+)\/password$/);
 
     if (req.method === 'POST' && tenantPasswordMatch) {
@@ -2415,6 +2613,10 @@ export function createRuntimeServer() {
         tenant.mustChangePassword = true;
         tenant.updatedAt = new Date().toISOString();
         tenant.passwordUpdatedAt = new Date().toISOString();
+        tenant.inviteToken = createTenantInviteToken();
+        tenant.inviteIssuedAt = new Date().toISOString();
+        tenant.inviteExpiresAt = createTenantInviteExpiry();
+        tenant.invitePurpose = 'password-reset';
         appendTenantAuditEvent(registry, {
           actor: registry.admin?.username || 'admin',
           action: 'tenant.password.reset',

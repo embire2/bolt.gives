@@ -2,11 +2,11 @@ import type { AgentCommentaryPhase } from '~/types/context';
 export const COMMENTARY_HEARTBEAT_INTERVAL_MS = 60_000;
 
 const NEXT_STEP_BY_PHASE: Record<AgentCommentaryPhase, string> = {
-  plan: 'I am narrowing the plan down to the next concrete action.',
-  action: 'I am still executing the current step and will post the next visible result shortly.',
-  verification: 'I am checking the latest output before I move on.',
-  'next-step': 'I am packaging the next visible result for you now.',
-  recovery: 'I am recovering from the latest issue and will confirm the outcome next.',
+  plan: 'I will keep following the next planning event that the runtime emits.',
+  action: 'I will keep following the next command or file event that the runtime emits.',
+  verification: 'I will keep following the next verification event that the runtime emits.',
+  'next-step': 'I will keep following the next completion event that the runtime emits.',
+  recovery: 'I will keep following the next recovery event that the runtime emits.',
 };
 
 function formatElapsed(elapsedMs: number): string {
@@ -26,82 +26,6 @@ function summarizeGoal(goal: string | undefined): string | null {
   }
 
   return normalized.length > 96 ? `${normalized.slice(0, 93).trimEnd()}...` : normalized;
-}
-
-function buildContextualHeartbeatMessage(options: {
-  goal: string | null;
-  currentStep: string;
-  phase: AgentCommentaryPhase;
-  heartbeatIndex: number;
-}): string | null {
-  const { goal, currentStep, phase, heartbeatIndex } = options;
-  const currentStepSummary = currentStep || (goal ? `moving ${goal} forward` : '');
-
-  if (!goal && !currentStepSummary) {
-    return null;
-  }
-
-  const variantsByPhase: Record<AgentCommentaryPhase, string[]> = {
-    plan: [
-      goal
-        ? `I am mapping ${goal} into concrete implementation steps.`
-        : 'I am mapping the request into concrete implementation steps.',
-      currentStepSummary
-        ? `I am focusing the plan around ${currentStepSummary}.`
-        : goal
-          ? `I am choosing the safest sequence for ${goal}.`
-          : 'I am choosing the safest execution sequence.',
-      goal
-        ? `I am tightening the plan for ${goal} so the next action is unambiguous.`
-        : 'I am tightening the plan so the next action is unambiguous.',
-    ],
-    action: [
-      currentStepSummary
-        ? `I am executing ${currentStepSummary} now and checking the output as it arrives.`
-        : goal
-          ? `I am implementing ${goal} now and checking the output as it arrives.`
-          : 'I am implementing the current step now and checking the output as it arrives.',
-      currentStepSummary
-        ? `I am still working through ${currentStepSummary}; I will post the next visible result as soon as it lands.`
-        : goal
-          ? `I am still working through ${goal}; I will post the next visible result as soon as it lands.`
-          : 'I am still working through the current step; I will post the next visible result as soon as it lands.',
-      currentStepSummary
-        ? `I am keeping ${currentStepSummary} moving and validating each change before I advance.`
-        : goal
-          ? `I am keeping ${goal} moving and validating each change before I advance.`
-          : 'I am keeping the current task moving and validating each change before I advance.',
-    ],
-    verification: [
-      currentStepSummary
-        ? `I am verifying ${currentStepSummary} against the current output.`
-        : 'I am verifying the latest output before I move on.',
-      goal
-        ? `I am checking that the latest result still matches ${goal}.`
-        : 'I am checking that the latest result still matches the request.',
-      'I am running a verification pass before I move to the next step.',
-    ],
-    'next-step': [
-      goal ? `I am packaging the latest result for ${goal}.` : 'I am packaging the latest result now.',
-      currentStepSummary
-        ? `I am wrapping up ${currentStepSummary} and preparing the next visible step.`
-        : 'I am wrapping up the current step and preparing the next visible step.',
-      'I am preparing the next visible update now.',
-    ],
-    recovery: [
-      currentStepSummary
-        ? `I am recovering ${currentStepSummary} after the last issue.`
-        : 'I am recovering from the last issue.',
-      goal
-        ? `I am restoring forward progress on ${goal} after the latest failure.`
-        : 'I am restoring forward progress after the latest failure.',
-      'I am applying a recovery step and will confirm the outcome next.',
-    ],
-  };
-
-  const variants = variantsByPhase[phase] || variantsByPhase.action;
-
-  return variants[(heartbeatIndex - 1) % variants.length] || variants[0];
 }
 
 function summarizeCommandStep(currentStep: string): string | null {
@@ -130,6 +54,18 @@ function summarizeCommandStep(currentStep: string): string | null {
   }
 
   return null;
+}
+
+function summarizeCurrentStep(currentStep: string, phase: AgentCommentaryPhase): string | null {
+  const normalized = currentStep.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return phase === 'recovery'
+    ? `I am processing the recovery step: ${normalized}.`
+    : `I am processing the current runtime step: ${normalized}.`;
 }
 
 function summarizeLastVisibleResult(lastVisibleResult: string): string | null {
@@ -164,7 +100,6 @@ export function buildCommentaryHeartbeat(
 } {
   const phase = lastPhase === 'recovery' ? 'recovery' : 'action';
   const elapsed = formatElapsed(elapsedMs);
-  const heartbeatIndex = Math.max(1, Math.floor(elapsedMs / COMMENTARY_HEARTBEAT_INTERVAL_MS));
   const goal = summarizeGoal(context?.goal);
   const currentStep = String(context?.currentStep || '')
     .replace(/\s+/g, ' ')
@@ -172,21 +107,22 @@ export function buildCommentaryHeartbeat(
   const lastVisibleResult = String(context?.lastVisibleResult || '')
     .replace(/\s+/g, ' ')
     .trim();
+  const summarizedLastVisibleResult = summarizeLastVisibleResult(lastVisibleResult);
   const message =
     summarizeCommandStep(currentStep) ||
-    buildContextualHeartbeatMessage({
-      goal,
-      currentStep,
-      phase,
-      heartbeatIndex,
-    }) ||
-    (goal
-      ? `I am still moving ${goal} forward and checking each visible result as it lands.`
-      : 'I am still moving the request forward and checking each visible result as it lands.');
+    summarizeCurrentStep(currentStep, phase) ||
+    (summarizedLastVisibleResult
+      ? `The latest runtime output is: ${summarizedLastVisibleResult}.`
+      : goal
+        ? `No new runtime event has landed yet while I work on ${goal}.`
+        : 'No new runtime event has landed yet; I am waiting for the next visible step.');
   const keyChanges = currentStep
-    ? `Work is still in progress after ${elapsed}. Current focus: ${currentStep}.`
-    : `Work is still in progress after ${elapsed}.`;
-  const summarizedLastVisibleResult = summarizeLastVisibleResult(lastVisibleResult);
+    ? `Runtime is still active after ${elapsed}. Current step: ${currentStep}.`
+    : summarizedLastVisibleResult
+      ? `Runtime is still active after ${elapsed}. Latest visible result: ${summarizedLastVisibleResult}.`
+      : goal
+        ? `Runtime is still active after ${elapsed}. Current goal: ${goal}.`
+        : `Runtime is still active after ${elapsed}. No new command or file event has landed yet.`;
   const nextStep = summarizedLastVisibleResult
     ? `${NEXT_STEP_BY_PHASE[phase]} Latest visible result: ${summarizedLastVisibleResult}.`
     : NEXT_STEP_BY_PHASE[phase];

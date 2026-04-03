@@ -266,6 +266,11 @@ describe('runtime server workspace isolation', () => {
           email: 'OWNER@EXAMPLE.COM',
           passwordHash: 'tenant-hash',
           createdAt: '2026-03-31T08:00:00.000Z',
+          status: 'pending',
+          inviteToken: 'invite-token',
+          inviteIssuedAt: '2026-03-31T08:05:00.000Z',
+          inviteExpiresAt: '2026-03-31T09:05:00.000Z',
+          invitePurpose: 'onboarding',
         },
       ],
     });
@@ -275,8 +280,12 @@ describe('runtime server workspace isolation', () => {
       expect.objectContaining({
         id: 'tenant-1',
         email: 'owner@example.com',
-        status: 'active',
+        status: 'pending',
         mustChangePassword: true,
+        inviteToken: 'invite-token',
+        inviteIssuedAt: '2026-03-31T08:05:00.000Z',
+        inviteExpiresAt: '2026-03-31T09:05:00.000Z',
+        invitePurpose: 'onboarding',
       }),
     );
   });

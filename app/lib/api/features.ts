@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.6',
+    name: 'v3.0.6 narrower browser shell, tenant approval flow, release smoke gate',
+    description:
+      'CodeMirror languages now split more aggressively, terminal and GitHub deploy tooling stay off the startup path until explicitly opened, commentary heartbeats use runtime command/file events, tenant onboarding now includes approval plus invite-based password setup, and the live preview recovery smoke now runs inside the release workflow.',
+    releaseDate: '2026-04-03',
+  },
+  {
     id: 'release-v3.0.5',
     name: 'v3.0.5 thinner client, smarter commentary, stronger tenants',
     description:

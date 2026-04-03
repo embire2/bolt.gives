@@ -1,13 +1,40 @@
 # Changelog
 
-## Unreleased (`v3.0.6` in progress)
+## Unreleased (`v3.0.7` in progress)
 
 ### Planned
 
-- Push the remaining editor language/theme payloads behind file-type and editor-open boundaries.
-- Keep trimming the home/chat shell until the remaining startup chunks fit explicit CI budgets.
-- Expand tenant lifecycle from local runtime registry into production-safe accounts, roles, audit, and managed-instance enforcement.
-- Promote the committed live smoke into the main release gate so generated-app success and self-heal are always proven before release.
+- Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.
+- Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
+- Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
+- Build the managed Cloudflare spawn/update control plane and rollback verification.
+
+## v3.0.6 (2026-04-03)
+
+### Added
+
+- Tenant lifecycle now includes:
+  - pending tenant creation
+  - explicit tenant approval
+  - invite-based onboarding
+  - forced password reset via invite
+  - disable/re-enable lifecycle metadata
+- The release gate now boots the local runtime stack and runs the real live smoke path before release completion.
+- The feature feed now surfaces the `v3.0.6` release to users after upgrade.
+
+### Changed
+
+- CodeMirror language packages now split into narrower per-language browser chunks instead of one broad `editor-language-core` payload.
+- Terminal code now loads only when the terminal is actually opened inside the workspace instead of on every workspace boot.
+- GitHub and GitLab deploy dialogs now load lazily, keeping export/deploy SDK weight off the startup path until users explicitly open those actions.
+- Commentary heartbeats now derive from real runtime command, file, and latest-result events instead of generic keep-alive phrasing.
+- Versioning/docs/runtime metadata now align on `v3.0.6`, with `v3.0.7` opened as the next roadmap target.
+
+### Fixed
+
+- Tenant user access now blocks pending and disabled tenants correctly on the runtime auth path.
+- Tenant onboarding/reset flows now expose time-limited invite acceptance instead of relying only on direct password setting from the admin surface.
+- Release validation now fails earlier if the local Pages/runtime stack cannot execute the committed doctor-app preview/recovery smoke path.
 
 ## v3.0.5 (2026-04-03)
 

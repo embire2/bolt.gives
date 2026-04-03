@@ -21,9 +21,17 @@ type TenantRecord = {
   createdAt: string;
   updatedAt?: string;
   passwordUpdatedAt?: string;
-  status?: 'active' | 'disabled';
+  status?: 'pending' | 'active' | 'disabled';
   lastLoginAt?: string | null;
   mustChangePassword?: boolean;
+  inviteToken?: string | null;
+  inviteExpiresAt?: string | null;
+  inviteIssuedAt?: string | null;
+  invitePurpose?: 'onboarding' | 'password-reset' | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  disabledAt?: string | null;
+  disabledBy?: string | null;
 };
 
 type TenantAdminRecord = {
@@ -196,10 +204,9 @@ export async function action({ request }: ActionFunctionArgs) {
     const email = String(formData.get('email') || '')
       .trim()
       .toLowerCase();
-    const password = String(formData.get('password') || '').trim();
 
-    if (!name || !email || !password) {
-      return json({ error: 'Name, email, and password are required.' }, { status: 400 });
+    if (!name || !email) {
+      return json({ error: 'Name and email are required.' }, { status: 400 });
     }
 
     try {
@@ -208,7 +215,7 @@ export async function action({ request }: ActionFunctionArgs) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email }),
       });
     } catch (error) {
       return json(
@@ -277,6 +284,69 @@ export async function action({ request }: ActionFunctionArgs) {
     } catch (error) {
       return json(
         { error: error instanceof Error ? error.message : 'Unable to update tenant status right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
+  if (intent === 'approve-tenant') {
+    const statusPayload = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const tenantId = String(formData.get('tenantId') || '').trim();
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>(`/tenant-admin/tenants/${encodeURIComponent(tenantId)}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to approve the tenant right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
+  if (intent === 'issue-tenant-invite') {
+    const statusPayload = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const tenantId = String(formData.get('tenantId') || '').trim();
+    const purpose = String(formData.get('purpose') || '').trim() === 'password-reset' ? 'password-reset' : 'onboarding';
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>(`/tenant-admin/tenants/${encodeURIComponent(tenantId)}/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ purpose }),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to issue the tenant invite right now.' },
         { status: 400 },
       );
     }
@@ -432,6 +502,7 @@ export default function TenantAdminPage() {
                     <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{tenants.length}</div>
                     <div className="mt-1 text-xs text-bolt-elements-textSecondary">
                       {tenants.filter((tenant) => tenant.status === 'active').length} active ·{' '}
+                      {tenants.filter((tenant) => tenant.status === 'pending').length} pending ·{' '}
                       {tenants.filter((tenant) => tenant.status === 'disabled').length} disabled
                     </div>
                   </div>
@@ -466,18 +537,10 @@ export default function TenantAdminPage() {
                         className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                       />
                     </label>
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Admin password
-                      <input
-                        name="password"
-                        type="password"
-                        minLength={10}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
                   </div>
                   <p className="mt-3 text-xs text-bolt-elements-textTertiary">
-                    Each tenant gets a dedicated workspace directory and a server-side lifecycle record.
+                    Each tenant starts in <span className="font-medium">pending</span>. Approve the tenant, then issue
+                    an onboarding invite so the tenant admin can set a password and access the isolated workspace.
                   </p>
                   {admin.mustChangePassword ? (
                     <p className="mt-4 text-sm text-amber-300">
@@ -584,46 +647,86 @@ export default function TenantAdminPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span
                               className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                                tenant.status === 'disabled'
-                                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-                                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                tenant.status === 'pending'
+                                  ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                                  : tenant.status === 'disabled'
+                                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                    : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
                               }`}
                             >
-                              {tenant.status === 'disabled' ? 'disabled' : 'active'}
+                              {tenant.status === 'pending'
+                                ? 'pending'
+                                : tenant.status === 'disabled'
+                                  ? 'disabled'
+                                  : 'active'}
                             </span>
                             {tenant.mustChangePassword ? (
                               <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                                password reset pending
+                                password action required
                               </span>
                             ) : null}
-                            <Form method="post">
-                              <input type="hidden" name="intent" value="toggle-tenant-status" />
-                              <input type="hidden" name="tenantId" value={tenant.id} />
-                              <input
-                                type="hidden"
-                                name="status"
-                                value={tenant.status === 'disabled' ? 'active' : 'disabled'}
-                              />
-                              <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
-                              </button>
-                            </Form>
-                            <Form method="post" className="flex items-center gap-2">
-                              <input type="hidden" name="intent" value="reset-tenant-password" />
-                              <input type="hidden" name="tenantId" value={tenant.id} />
-                              <input
-                                name="password"
-                                type="password"
-                                minLength={10}
-                                placeholder="New tenant password"
-                                className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-1.5 text-xs text-bolt-elements-textPrimary"
-                              />
-                              <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                Reset password
-                              </button>
-                            </Form>
+                            {tenant.inviteExpiresAt ? (
+                              <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                invite live until {new Date(tenant.inviteExpiresAt).toLocaleString()}
+                              </span>
+                            ) : null}
+                            {tenant.status === 'pending' ? (
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="approve-tenant" />
+                                <input type="hidden" name="tenantId" value={tenant.id} />
+                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                  Approve tenant
+                                </button>
+                              </Form>
+                            ) : null}
+                            {tenant.status !== 'pending' ? (
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="toggle-tenant-status" />
+                                <input type="hidden" name="tenantId" value={tenant.id} />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value={tenant.status === 'disabled' ? 'active' : 'disabled'}
+                                />
+                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                  {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
+                                </button>
+                              </Form>
+                            ) : null}
+                            {tenant.status === 'active' ? (
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="issue-tenant-invite" />
+                                <input type="hidden" name="tenantId" value={tenant.id} />
+                                <input
+                                  type="hidden"
+                                  name="purpose"
+                                  value={tenant.lastLoginAt ? 'password-reset' : 'onboarding'}
+                                />
+                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                  {tenant.lastLoginAt ? 'Force reset via invite' : 'Issue onboarding invite'}
+                                </button>
+                              </Form>
+                            ) : null}
                           </div>
                         </div>
+                        {tenant.inviteToken ? (
+                          <div className="mt-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                            Invite URL{' '}
+                            <span className="font-mono text-bolt-elements-textPrimary">{`/tenant?invite=${tenant.inviteToken}`}</span>
+                          </div>
+                        ) : null}
+                        {tenant.approvedAt ? (
+                          <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                            Approved {new Date(tenant.approvedAt).toLocaleString()}
+                            {tenant.approvedBy ? ` by ${tenant.approvedBy}` : ''}
+                          </div>
+                        ) : null}
+                        {tenant.disabledAt ? (
+                          <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                            Disabled {new Date(tenant.disabledAt).toLocaleString()}
+                            {tenant.disabledBy ? ` by ${tenant.disabledBy}` : ''}
+                          </div>
+                        ) : null}
                       </div>
                     ))
                   )}

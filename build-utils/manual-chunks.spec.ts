@@ -18,7 +18,10 @@ describe('getManualChunkName', () => {
       'editor-commands',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/lang-javascript/dist/index.js')).toBe(
-      'editor-languages',
+      'editor-lang-javascript',
+    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/lang-python/dist/index.js')).toBe(
+      'editor-lang-python',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@uiw/codemirror-theme-vscode/index.js')).toBe(
       'editor-themes',
@@ -34,8 +37,14 @@ describe('getManualChunkName', () => {
 
   it('isolates collaboration and export tooling', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/yjs/dist/yjs.mjs')).toBe('collaboration-yjs');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@octokit/rest/dist/index.js')).toBe('git-export');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/jszip/lib/index.js')).toBe('git-export');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@octokit/rest/dist/index.js')).toBe(
+      'git-export-octokit',
+    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/isomorphic-git/index.js')).toBe('git-export-core');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/jszip/lib/index.js')).toBe('archive-export');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/file-saver/dist/FileSaver.min.js')).toBe(
+      'browser-downloads',
+    );
   });
 
   it('extracts framework, ui, and diagram dependencies from the generic vendor chunk', () => {

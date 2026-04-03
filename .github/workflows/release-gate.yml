@@ -9,7 +9,9 @@ on:
 jobs:
   release-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Checkout
@@ -31,3 +33,51 @@ jobs:
 
       - name: Run release gate
         run: pnpm run gate:release
+
+      - name: Require live smoke secret
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY secret is required for the live release smoke."
+            exit 1
+          fi
+
+      - name: Start local runtime stack
+        run: |
+          pnpm run prepare:devvars
+          node scripts/runtime-server.mjs > /tmp/bolt-runtime.log 2>&1 &
+          echo $! > /tmp/bolt-runtime.pid
+          node scripts/collaboration-server.mjs > /tmp/bolt-collab.log 2>&1 &
+          echo $! > /tmp/bolt-collab.pid
+          pnpm exec wrangler pages dev ./build/client --ip 127.0.0.1 --port 8788 --no-show-interactive-dev-session > /tmp/bolt-pages.log 2>&1 &
+          echo $! > /tmp/bolt-pages.pid
+
+      - name: Wait for local release smoke target
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8788/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Local Pages target never became ready."
+          exit 1
+
+      - name: Run live release smoke against local release target
+        run: BASE_URL=http://127.0.0.1:8788 E2E_PROVIDER=OpenAI E2E_MODEL=gpt-5.4 pnpm run smoke:live
+
+      - name: Dump local runtime logs on failure
+        if: failure()
+        run: |
+          echo "--- runtime ---"
+          cat /tmp/bolt-runtime.log || true
+          echo "--- collab ---"
+          cat /tmp/bolt-collab.log || true
+          echo "--- pages ---"
+          cat /tmp/bolt-pages.log || true
+
+      - name: Stop local runtime stack
+        if: always()
+        run: |
+          kill $(cat /tmp/bolt-runtime.pid) 2>/dev/null || true
+          kill $(cat /tmp/bolt-collab.pid) 2>/dev/null || true
+          kill $(cat /tmp/bolt-pages.pid) 2>/dev/null || true
