@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (`v3.0.4` in progress)
+## Unreleased (`v3.0.5` in progress)
 
 ### Added
 
@@ -32,6 +32,22 @@
 - Hosted doctor-scheduling generation on `https://alpha1.bolt.gives` now reaches a usable React appointment scheduling preview instead of dying on the starter-to-editor handoff.
 - The `Workspace` surface now shows what the system is doing while preview/build work is still in progress, instead of leaving users on a silent file/preview area with no clear status.
 - Tenant registry data is now normalized on load so older server-local tenant state gets upgraded safely instead of drifting across runtime versions.
+
+## v3.0.4 (2026-04-03)
+
+### Added
+
+- FREE now ships with one protected hosted OpenRouter route locked to `deepseek/deepseek-v3.2`, so fresh installs can start coding immediately without asking users to configure a key first.
+
+### Changed
+
+- The visible default hosted provider/model remains `FREE` + `DeepSeek V3.2`, and `FREE` now exposes only that single model option.
+- The managed OpenRouter token path for FREE stays server-side only and is no longer paired with any hidden client-facing fallback route.
+- Versioning/docs/runtime metadata now align on `v3.0.4`, with `v3.0.5` opened as the next roadmap target.
+
+### Fixed
+
+- Hosted FREE preflight no longer probes or silently routes to `qwen/qwen3-coder`; the app now behaves exactly like the UI suggests and fails explicitly if the protected DeepSeek route is unavailable.
 
 ## v3.0.3 (2026-03-30)
 
@@ -162,13 +178,12 @@
 
 ### Added
 
-- Hosted `FREE` now includes an internal OpenRouter fallback chain. If `deepseek/deepseek-v3.2` is unavailable upstream, bolt.gives silently retries with `qwen/qwen3-coder` without changing the visible client model selection.
+- Hosted `FREE` moved to a managed OpenRouter route for `deepseek/deepseek-v3.2`.
 
 ### Changed
 
 - The desktop chat rail is wider so the left-side prompt and progress column has more usable room during long runs.
 - The visible default hosted provider/model remains `FREE` + `DeepSeek V3.2`.
-- The hidden fallback model is not exposed in the provider/model picker and is only used by the managed server path.
 
 ### Verified
 

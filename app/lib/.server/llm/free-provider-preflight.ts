@@ -1,9 +1,7 @@
 import {
-  FREE_FALLBACK_MODEL,
   FREE_HOSTED_MODEL,
   FREE_PROVIDER_NAME,
   clearHostedFreeModelResolution,
-  rememberHostedFreeModelResolution,
 } from '~/lib/modules/llm/providers/free';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 
@@ -11,7 +9,6 @@ type FreeProviderPreflightResult = {
   ok: boolean;
   expiresAt: number;
   fingerprint: string;
-  resolvedModelName?: string;
   message?: string;
 };
 
@@ -110,38 +107,23 @@ export async function ensureFreeProviderAvailability(options: {
       throw new Error(cachedResult.message || 'FREE_PROVIDER_RATE_LIMITED');
     }
 
-    const resolvedModelName = cachedResult.resolvedModelName || FREE_HOSTED_MODEL;
-
-    rememberHostedFreeModelResolution({
-      apiKey,
-      resolvedModelName,
-      ttlMs: Math.max(cachedResult.expiresAt - now, 1),
-    });
-
     return {
-      resolvedModelName,
-      usedFallback: resolvedModelName === FREE_FALLBACK_MODEL,
+      resolvedModelName: FREE_HOSTED_MODEL,
+      usedFallback: false,
     };
   }
 
-  const primaryProbe = await probeHostedModel({
+  const hostedProbe = await probeHostedModel({
     apiKey,
     modelName: FREE_HOSTED_MODEL,
   });
 
-  if (primaryProbe.ok) {
+  if (hostedProbe.ok) {
     cachedResult = {
       ok: true,
       expiresAt: now + SUCCESS_TTL_MS,
       fingerprint,
-      resolvedModelName: FREE_HOSTED_MODEL,
     };
-
-    rememberHostedFreeModelResolution({
-      apiKey,
-      resolvedModelName: FREE_HOSTED_MODEL,
-      ttlMs: SUCCESS_TTL_MS,
-    });
 
     return {
       resolvedModelName: FREE_HOSTED_MODEL,
@@ -149,39 +131,12 @@ export async function ensureFreeProviderAvailability(options: {
     };
   }
 
-  const fallbackProbe = await probeHostedModel({
-    apiKey,
-    modelName: FREE_FALLBACK_MODEL,
-  });
-
-  if (fallbackProbe.ok) {
-    cachedResult = {
-      ok: true,
-      expiresAt: now + SUCCESS_TTL_MS,
-      fingerprint,
-      resolvedModelName: FREE_FALLBACK_MODEL,
-    };
-
-    rememberHostedFreeModelResolution({
-      apiKey,
-      resolvedModelName: FREE_FALLBACK_MODEL,
-      ttlMs: SUCCESS_TTL_MS,
-    });
-
-    return {
-      resolvedModelName: FREE_FALLBACK_MODEL,
-      usedFallback: true,
-    };
-  }
-
   clearHostedFreeModelResolution();
 
-  const upstreamRateLimited =
-    isRateLimited(primaryProbe.status, primaryProbe.message) ||
-    isRateLimited(fallbackProbe.status, fallbackProbe.message);
+  const upstreamRateLimited = isRateLimited(hostedProbe.status, hostedProbe.message);
   const errorMessage = upstreamRateLimited
-    ? `FREE_PROVIDER_RATE_LIMITED: primary(${primaryProbe.message}); fallback(${fallbackProbe.message})`
-    : `FREE_PROVIDER_UNAVAILABLE: primary(${primaryProbe.message}); fallback(${fallbackProbe.message})`;
+    ? `FREE_PROVIDER_RATE_LIMITED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
+    : `FREE_PROVIDER_UNAVAILABLE: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`;
 
   cachedResult = {
     ok: false,

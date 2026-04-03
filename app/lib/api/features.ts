@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.4',
+    name: 'v3.0.4 locked FREE deepseek default',
+    description:
+      'FREE now ships as one protected hosted OpenRouter route locked to DeepSeek V3.2, so new installs can start coding immediately without exposing the managed token or a hidden fallback model.',
+    releaseDate: '2026-04-03',
+  },
+  {
     id: 'release-v3.0.3',
     name: 'v3.0.3 server-first runtime and tenant admin baseline',
     description:
@@ -29,7 +36,7 @@ const FEATURE_FEED: FeatureDefinition[] = [
     id: 'release-v3.0.1',
     name: 'v3.0.1 hosted free-model fallback',
     description:
-      'Hosted FREE now keeps DeepSeek V3.2 as the visible default while silently failing over to qwen/qwen3-coder, alongside a wider prompt rail and refreshed release docs.',
+      'Hosted FREE moved to a managed DeepSeek V3.2 route as the visible default, alongside a wider prompt rail and refreshed release docs.',
     releaseDate: '2026-03-25',
   },
   {

@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 
-- Stable: `v3.0.3`
-- In progress: `v3.0.4`
+- Stable: `v3.0.4`
+- In progress: `v3.0.5`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -38,7 +38,7 @@ Never force-push shared branches unless explicitly approved.
 
 ---
 
-## v3.0.3 Baseline / v3.0.4 Priority Stack
+## v3.0.4 Baseline / v3.0.5 Priority Stack
 
 ### Completed baseline
 
@@ -49,15 +49,16 @@ Never force-push shared branches unless explicitly approved.
 - Architect self-heal v1 foundations
 - Provider/model/API-key persistence and cost estimation normalization
 - Installer-first self-host baseline
-- Hosted FREE provider with managed-token routing and silent fallback
+- Hosted FREE provider with a protected managed-token route pinned to `deepseek/deepseek-v3.2`
 - Cloudflare managed-instance architecture docs
 - Server-first hosted runtime default path
 - Preview auto-recovery via server-side health checks
 - Top-level Chat / Workspace tabs
 - Harder client chunking and deferred heavy surfaces
 - Bootstrap Tenant Admin route with default `admin / admin` on server-hosted instances
+- Hosted FREE provider locked to one protected OpenRouter model (`deepseek/deepseek-v3.2`) with no client-visible fallback path
 
-### In progress / remaining (`v3.0.4`)
+### In progress / remaining (`v3.0.5`)
 
 - Finish browser-weight reduction on remaining vendor/editor payloads
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`

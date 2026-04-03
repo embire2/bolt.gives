@@ -6,7 +6,7 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "author": {
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"
@@ -17,8 +17,8 @@
   ],
   "scripts": {
     "deploy": "npm run build && wrangler pages deploy",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=18432 remix vite:build",
-    "build:highmem": "cross-env NODE_OPTIONS=--max-old-space-size=18432 remix vite:build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=18432 remix vite:build && node scripts/postbuild-fixes.mjs",
+    "build:highmem": "cross-env NODE_OPTIONS=--max-old-space-size=18432 remix vite:build && node scripts/postbuild-fixes.mjs",
     "dev": "cross-env-shell NODE_OPTIONS=--max-old-space-size=18432 \"node pre-start.cjs && concurrently \\\"pnpm run collab:server\\\" \\\"pnpm run webbrowse:server\\\" \\\"remix vite:dev\\\" --names collab,webbrowse,app --kill-others-on-fail\"",
     "collab:server": "node scripts/collaboration-server.mjs",
     "webbrowse:server": "node scripts/web-browse-server.mjs",

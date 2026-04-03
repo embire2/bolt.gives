@@ -21,7 +21,7 @@
 
 ## Experimental Cloudflare Instance Spawn
 
-`v3.0.3` keeps the implementation blueprint for an **experimental managed Cloudflare instance service** for bolt.gives and adds the first server-hosted tenant-admin baseline.
+`v3.0.4` keeps the implementation blueprint for an **experimental managed Cloudflare instance service** for bolt.gives and adds a stricter install-ready hosted FREE default.
 
 What is technically possible at **no cost from Cloudflare** today:
 
@@ -49,17 +49,17 @@ Important:
 - This is a **real implementation plan and operator blueprint**, not a claim that a fully public self-service spawn API is already live.
 - The free experimental path is designed around Cloudflare's free-tier products.
 - The dedicated `6 GiB` Node instance is intentionally moved to the future Pro path, because Cloudflare Containers do not provide that tier at zero cost.
-- The public, automated spawn control plane is tracked in `ROADMAP.md` under `v3.0.4`.
+- The public, automated spawn control plane is tracked in `ROADMAP.md` under `v3.0.5`.
 
 ## App Overview
 
-Current version: **v3.0.3**
+Current version: **v3.0.4**
 
 Next release targets:
 
-- `v3.0.4`: managed Cloudflare control plane, tenant hardening, and the next browser-weight reduction pass.
+- `v3.0.5`: managed Cloudflare control plane, tenant hardening, and the next browser-weight reduction pass.
 
-Current `v3.0.4` work in progress on top of the stable line:
+Current `v3.0.5` work in progress on top of the stable line:
 
 - `Chat` now stays visible while the workspace spins up so users can keep following commentary instead of being pushed into files/preview immediately.
 - `Workspace` now carries a bottom `Workspace Activity` panel with live commentary, execution status, and technical progress so long runs are no longer silent.
@@ -68,7 +68,7 @@ Current `v3.0.4` work in progress on top of the stable line:
 - Tenant admin hardening is underway with password rotation, tenant status controls, and lifecycle metadata.
 - Preview/log reconciliation is moving further toward compact server-pushed state instead of chatty browser polling.
 
-Current `v3.0.3` release line:
+Current `v3.0.4` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
 - Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
@@ -80,7 +80,7 @@ Current `v3.0.3` release line:
 - Long technical feeds now virtualize large event windows instead of keeping the full timeline mounted in the browser.
 - Hosted instances still default to a built-in `FREE` provider backed by `DeepSeek V3.2`.
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
-- Hosted FREE still silently falls back to `qwen/qwen3-coder` if `DeepSeek V3.2` is unavailable, without exposing the fallback model in the client UI.
+- Hosted FREE now exposes only `DeepSeek V3.2`, so the installed product behaves exactly as the UI advertises.
 - Cloudflare Pages / preview deployments now resolve hosted FREE credentials more reliably, including relay support when the preview runtime does not have the managed FREE secret locally configured.
 - Cloudflare Pages coding sessions now route collaboration/event websocket traffic to the managed collaboration backend instead of self-targeting nonexistent `/collab` endpoints, which previously left long runs stuck behind heartbeat commentary with no stable preview.
 - Hosted preview health/error detection now reads server-side preview diagnostics instead of depending on browser iframe scraping, which gives Architect a cleaner signal for self-heal on runtime failures.
@@ -119,7 +119,7 @@ Release verdict for `v3.0.1`:
 - Live smoke passed on `https://alpha1.bolt.gives`
 - Live smoke passed on `https://ahmad.bolt.gives`
 
-Release verdict for `v3.0.3`:
+Release verdict for `v3.0.4`:
 
 - Local gates passed: `typecheck`, `lint`, `test`, `build`
 - Cloudflare Pages FREE-provider path now passes live verification
@@ -128,7 +128,7 @@ Release verdict for `v3.0.3`:
 - Live hosted-runtime browser E2E passed on `https://alpha1.bolt.gives` with OpenAI `gpt-5.4`, including server-side sync replacing the fallback starter inside preview without a manual reload.
 - Live hosted-runtime auto-recovery E2E now passes on `https://alpha1.bolt.gives` by generating a hosted app, intentionally breaking it, and verifying that the managed runtime restores the last known good snapshot and returns preview to healthy.
 
-What `v3.0.3` specifically changes:
+What `v3.0.4` specifically changes:
 
 - Hosted instances now prefer the managed server-side runtime for installs, builds, preview hosting, and file sync, with WebContainer reduced to the fallback path instead of the default.
 - Hosted preview iframes now refresh when new server-side file sync revisions land, so generated apps replace the starter automatically.
@@ -147,14 +147,14 @@ What `v3.0.3` specifically changes:
   - free experimental shared-runtime path at no platform cost
   - future Pro path for dedicated Cloudflare Containers `standard-2` (`6 GiB`)
   - automatic rollout design from `main`
-- Release/versioning/docs are now aligned on the `v3.0.3` line.
+- Release/versioning/docs are now aligned on the `v3.0.4` line.
 
-What still remains after `v3.0.3`:
+What still remains after `v3.0.4`:
 
 - The validated OpenAI core path is now working.
 - The heaviest hosted install/build/preview work is now off the browser, but the client bundle and long-run UI rendering are still heavier than they should be.
-- `ROADMAP.md` now tracks the current stable `v3.0.3` baseline and the next major delivery bucket `v3.0.4`.
-- `v3.0.4` is focused on making the generated-app experience feel continuous and trustworthy: clearer execution status in both `Chat` and `Workspace`, stronger preview/self-heal behavior, tighter tenant lifecycle controls, and more browser-weight reduction.
+- `ROADMAP.md` now tracks the current stable `v3.0.4` baseline and the next major delivery bucket `v3.0.5`.
+- `v3.0.5` is focused on making the generated-app experience feel continuous and trustworthy: clearer execution status in both `Chat` and `Workspace`, stronger preview/self-heal behavior, tighter tenant lifecycle controls, and more browser-weight reduction.
 
 ## Screenshots
 
@@ -173,7 +173,7 @@ System in action:
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)
 
-## Roadmap (Post-3.0.3)
+## Roadmap (Post-3.0.4)
 
 Roadmap files:
 
@@ -181,13 +181,13 @@ Roadmap files:
 
 Current roadmap split:
 
-- `v3.0.3`: shipped baseline for server-first hosted execution, prompt/sidebar usability recovery, and the tenant-admin bootstrap.
-- `v3.0.4`: managed Cloudflare control plane, tenant hardening, remaining browser-weight reduction, and operator/rollback tooling.
+- `v3.0.4`: shipped baseline for server-first hosted execution, protected FREE defaults, prompt/sidebar usability recovery, and the tenant-admin bootstrap.
+- `v3.0.5`: managed Cloudflare control plane, tenant hardening, remaining browser-weight reduction, and operator/rollback tooling.
 
-## Current Features (v3.0.3)
+## Current Features (v3.0.4)
 
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
-- Silent internal hosted-model fallback from `DeepSeek V3.2` to `qwen/qwen3-coder` when the primary upstream route is unavailable.
+- FREE now exposes exactly one shipped model option so new installs can start coding immediately without choosing or configuring a model first.
 - Default provider selection now prefers the hosted `FREE` coder on managed instances, while preserving the full user-configurable `OpenRouter` provider separately.
 - Managed hosted runtime on live instances for installs, builds, tests, dev servers, preview hosting, and file sync, with browser-side WebContainer retained only as the fallback path.
 - Server-side preview diagnostics and status polling so preview failures can be detected and routed into self-heal without relying on browser-side iframe inspection.
@@ -296,9 +296,9 @@ No database setup is required for the bolt.gives core runtime.
 
 Hosted-instance note:
 
-- If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked free coder without exposing the token to users.
+- If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked hosted coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
-- The hosted `FREE` coder keeps `deepseek/deepseek-v3.2` as the visible primary route and silently falls back to `qwen/qwen3-coder` if the primary route is unavailable. If both hosted routes fail, the UI surfaces a clear retry/switch-provider error instead of stalling.
+- The hosted `FREE` coder is pinned to `deepseek/deepseek-v3.2`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
 
 ### 3. Verify the install
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-03-31
+Last updated: 2026-04-03
 
 Status legend:
 - `[x]` complete
@@ -8,16 +8,16 @@ Status legend:
 - `[ ]` not started
 
 Current stable release:
-- [x] `v3.0.3`
+- [x] `v3.0.4`
 
 Next release target:
-- [~] `v3.0.4`
+- [~] `v3.0.5`
 
-## v3.0.3 - Shipped Baseline
+## v3.0.4 - Shipped Baseline
 
-Release theme: move the hosted product to a server-first runtime, reduce browser load, and restore critical operator/user controls.
+Release theme: ship a protected install-ready FREE default, keep hosted execution server-first, and make the run state more understandable.
 
-### Shipped in v3.0.3
+### Shipped in v3.0.4
 
 1. Hosted runtime and browser offload
 - [x] Hosted instances now prefer the managed server runtime for install/build/dev/test/preview flows.
@@ -42,11 +42,16 @@ Release theme: move the hosted product to a server-first runtime, reduce browser
 - [x] Default bootstrap credentials are `admin / admin`.
 - [~] Current tenant registry is a simple server-local baseline and still needs full RBAC, audit, and production-hardening work.
 
-5. Release communication
-- [x] Versioning aligned to `v3.0.3` across app/runtime/docs.
+5. Protected default FREE provider
+- [x] FREE now ships as a single locked hosted model: `deepseek/deepseek-v3.2`.
+- [x] FREE exposes no user API-key entry path and no client-visible fallback model.
+- [x] Managed OpenRouter token remains server-side only so fresh installs can start coding immediately without leaking the token.
+
+6. Release communication
+- [x] Versioning aligned to `v3.0.4` across app/runtime/docs.
 - [x] Changelog and feature feed updated for the release.
 
-### Validation expectations for v3.0.3
+### Validation expectations for v3.0.4
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
@@ -55,9 +60,9 @@ Release theme: move the hosted product to a server-first runtime, reduce browser
 - live smoke on `https://ahmad.bolt.gives`
 - live smoke on `https://bolt-gives.pages.dev`
 
-## v3.0.4 - Next Priority Stack
+## v3.0.5 - Next Priority Stack
 
-Release theme: finish the server-first architecture, remove remaining browser-weight hot spots, and harden multi-tenant/server operations.
+Release theme: finish the execution UX, harden tenant lifecycle, and continue reducing browser weight on the remaining heavy surfaces.
 
 ### P0
 
@@ -109,8 +114,8 @@ Release theme: finish the server-first architecture, remove remaining browser-we
 - [ ] Add bundle budgets to CI so startup weight cannot silently regress.
 - [ ] Add runtime telemetry dashboards for memory, stalls, and recovery rate.
 
-### v3.0.4 Release Metrics
-- [~] Initial hosted chat shell materially lighter than `v3.0.3`.
+### v3.0.5 Release Metrics
+- [~] Initial hosted chat shell materially lighter than `v3.0.4`.
 - [ ] No shared startup chunk above agreed budget.
 - [ ] Hosted scaffold-to-preview success rate >= 90%.
 - [ ] Architect known-failure recovery success >= 75%.
