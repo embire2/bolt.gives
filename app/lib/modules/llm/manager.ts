@@ -87,7 +87,7 @@ export class LLMManager {
     let enabledProviders = Array.from(this._providers.values()).map((p) => p.name);
 
     if (providerSettings && Object.keys(providerSettings).length > 0) {
-      enabledProviders = enabledProviders.filter((p) => providerSettings[p].enabled);
+      enabledProviders = enabledProviders.filter((p) => providerSettings[p]?.enabled !== false);
     }
 
     // Get dynamic models from all providers that support them
@@ -121,7 +121,9 @@ export class LLMManager {
           return dynamicModels;
         }),
     );
-    const staticModels = Array.from(this._providers.values()).flatMap((p) => p.staticModels || []);
+    const staticModels = Array.from(this._providers.values())
+      .filter((provider) => enabledProviders.includes(provider.name))
+      .flatMap((provider) => provider.staticModels || []);
     const dynamicModelsFlat = dynamicModels.flat();
     const dynamicModelKeys = dynamicModelsFlat.map((d) => `${d.name}-${d.provider}`);
     const filteredStaticModels = staticModels.filter((m) => !dynamicModelKeys.includes(`${m.name}-${m.provider}`));

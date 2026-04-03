@@ -9,6 +9,7 @@
 - Workspace activity no longer steals focus away from `Chat` as soon as files/preview events begin, so users can keep following commentary while a run starts.
 - Sidebar navigation/history no longer depends on edge-hover behavior; the header icon and explicit opener button now open it directly and reliably.
 - The terminal/workspace surface no longer crashes on stale `react-resizable-panels` state when terminal visibility changes.
+- Provider/model bootstrap no longer throws when a browser only has partial saved provider settings; missing providers now stay enabled by default instead of breaking `/api/models`.
 
 ### Planned
 

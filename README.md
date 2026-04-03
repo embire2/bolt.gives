@@ -84,6 +84,7 @@ Current `v3.0.6` release line:
 - Live managed instances now always land on `Chat` first, with `FREE` + `DeepSeek V3.2` preselected so users can start prompting immediately.
 - `Workspace` now includes a bottom `Workspace Activity` area with commentary, execution transparency, and technical timeline information.
 - Provider/model visibility is restored directly above the prompt box so users can always see what AI path is active.
+- Saved provider preferences now tolerate partial browser state without breaking the live model list on startup.
 - Sidebar access is explicit again through the header button and left-edge opener; it no longer relies on accidental hover to expose chat history.
 - Terminal visibility changes no longer crash the `Workspace` surface on stale panel-layout state.
 - A bootstrap `Tenant Admin` dashboard is now available on server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
