@@ -2,6 +2,10 @@
 
 ## Unreleased (`v3.0.7` in progress)
 
+### Fixed
+
+- The committed live release smoke now targets the active generated app entry discovered from `index.html` and the module entry path, so preview break/recovery validation no longer mutates an unused fallback starter file.
+
 ### Planned
 
 - Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.

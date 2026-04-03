@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { selectBreakTarget } from './live-release-smoke-utils.mjs';
 
 const baseUrl = process.env.BASE_URL || 'https://alpha1.bolt.gives';
 const providerName = process.env.E2E_PROVIDER || 'OpenAI';
@@ -37,26 +38,6 @@ function extractSessionDetailsFromPreviewUrl(previewUrl) {
     sessionId: match[1],
     port: Number(match[2]),
   };
-}
-
-function selectBreakTarget(files) {
-  const preferredPatterns = [
-    /(^|\/)src\/App\.(tsx|jsx|js|ts)$/i,
-    /(^|\/)app\/page\.(tsx|jsx|js|ts)$/i,
-    /(^|\/)src\/main\.(tsx|jsx|js|ts)$/i,
-  ];
-
-  for (const pattern of preferredPatterns) {
-    const match = Object.entries(files).find(([filePath, dirent]) => {
-      return dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath);
-    });
-
-    if (match) {
-      return match;
-    }
-  }
-
-  throw new Error('Could not find a generated application entry file to corrupt for recovery testing.');
 }
 
 async function waitForPromptSurface(page) {
