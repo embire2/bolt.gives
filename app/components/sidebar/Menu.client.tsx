@@ -279,31 +279,6 @@ export const Menu = () => {
   }, [open, selectionMode]);
 
   useEffect(() => {
-    const enterThreshold = 48;
-    const exitThreshold = 20;
-
-    function onMouseMove(event: MouseEvent) {
-      if (isSettingsOpen) {
-        return;
-      }
-
-      if (event.pageX < enterThreshold) {
-        setOpen(true);
-      }
-
-      if (menuRef.current && event.clientX > menuRef.current.getBoundingClientRect().right + exitThreshold) {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener('mousemove', onMouseMove);
-
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-    };
-  }, [isSettingsOpen]);
-
-  useEffect(() => {
     const onToggle = () => {
       setOpen((current) => !current);
     };
@@ -344,7 +319,6 @@ export const Menu = () => {
       <button
         type="button"
         aria-label="Open sidebar"
-        onMouseEnter={() => setOpen(true)}
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
         className="fixed left-0 top-[72px] z-sidebar flex h-24 w-5 items-center justify-center rounded-r-xl border border-l-0 border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/95 text-bolt-elements-textSecondary shadow-sm transition-colors hover:text-bolt-elements-textPrimary"

@@ -5,6 +5,21 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { workbenchStore } from '~/lib/stores/workbench';
 
+const localStorageState = new Map<string, string>();
+
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageState.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageState.set(key, value);
+  }),
+  removeItem: vi.fn((key: string) => {
+    localStorageState.delete(key);
+  }),
+  clear: vi.fn(() => {
+    localStorageState.clear();
+  }),
+};
+
 vi.mock('remix-utils/client-only', () => {
   return {
     ClientOnly: ({ children }: { children: any }) => <>{typeof children === 'function' ? children() : children}</>,
@@ -64,8 +79,9 @@ describe('BaseChat surface tabs', () => {
 
   afterEach(() => {
     cleanup();
-    window.localStorage?.removeItem?.('bolt_surface_layout');
+    localStorageMock.clear();
     workbenchStore.showWorkbench.set(false);
+    workbenchStore.stepRunnerEvents.set([]);
     vi.unstubAllGlobals();
   });
 
@@ -157,9 +173,42 @@ describe('BaseChat surface tabs', () => {
     ]);
 
     await waitFor(() => {
-      expect(screen.getByTestId('workbench-panel')).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
     });
 
-    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.queryByTestId('workbench-panel')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+  });
+
+  it('boots into chat even if workspace was the last persisted active surface', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    vi.stubGlobal('localStorage', localStorageMock);
+
+    localStorageMock.setItem(
+      'bolt_surface_layout',
+      JSON.stringify({
+        openTabs: ['chat', 'workspace'],
+        activeTab: 'workspace',
+      }),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('workbench-panel')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
   });
 });

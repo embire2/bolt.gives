@@ -5,6 +5,9 @@
 ### Fixed
 
 - The committed live release smoke now targets the active generated app entry discovered from `index.html` and the module entry path, so preview break/recovery validation no longer mutates an unused fallback starter file.
+- Live managed instances now always land back on the `Chat` surface on first load, even if a prior browser session last focused `Workspace`.
+- Workspace activity no longer steals focus away from `Chat` as soon as files/preview events begin, so users can keep following commentary while a run starts.
+- Sidebar navigation/history no longer depends on edge-hover behavior; the header icon and explicit opener button now open it directly and reliably.
 
 ### Planned
 

@@ -111,7 +111,6 @@ function readStoredSurfaceLayout(): { openTabs: SurfaceTabId[]; activeTab: Surfa
     const openTabs = Array.isArray(parsed.openTabs)
       ? parsed.openTabs.filter((tab): tab is SurfaceTabId => tab === 'chat' || tab === 'workspace')
       : [];
-    const activeTab = parsed.activeTab === 'workspace' ? 'workspace' : 'chat';
 
     if (!openTabs.includes('chat')) {
       openTabs.unshift('chat');
@@ -119,7 +118,7 @@ function readStoredSurfaceLayout(): { openTabs: SurfaceTabId[]; activeTab: Surfa
 
     return {
       openTabs,
-      activeTab: openTabs.includes(activeTab) ? activeTab : 'chat',
+      activeTab: 'chat',
     };
   } catch {
     return null;
@@ -447,7 +446,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
       );
       workbenchStore.showWorkbench.set(true);
-      setActiveSurface('workspace');
     }, [stepRunnerEvents]);
 
     useEffect(() => {
