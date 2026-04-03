@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Panel, type ImperativePanelHandle } from 'react-resizable-panels';
+import { Panel } from 'react-resizable-panels';
 import { IconButton } from '~/components/ui/IconButton';
 import { shortcutEventEmitter } from '~/lib/hooks';
 import { themeStore } from '~/lib/stores/theme';
@@ -20,7 +20,6 @@ export const TerminalTabs = memo(() => {
   const theme = useStore(themeStore);
 
   const terminalRefs = useRef<Map<number, TerminalRef>>(new Map());
-  const terminalPanelRef = useRef<ImperativePanelHandle>(null);
   const terminalToggledByShortcut = useRef(false);
 
   const [activeTerminal, setActiveTerminal] = useState(0);
@@ -79,20 +78,6 @@ export const TerminalTabs = memo(() => {
   }, []);
 
   useEffect(() => {
-    const { current: terminal } = terminalPanelRef;
-
-    if (!terminal) {
-      return;
-    }
-
-    const isCollapsed = terminal.isCollapsed();
-
-    if (!showTerminal && !isCollapsed) {
-      terminal.collapse();
-    } else if (showTerminal && isCollapsed) {
-      terminal.resize(DEFAULT_TERMINAL_SIZE);
-    }
-
     terminalToggledByShortcut.current = false;
   }, [showTerminal]);
 
@@ -115,7 +100,6 @@ export const TerminalTabs = memo(() => {
 
   return (
     <Panel
-      ref={terminalPanelRef}
       defaultSize={showTerminal ? DEFAULT_TERMINAL_SIZE : 0}
       minSize={10}
       collapsible

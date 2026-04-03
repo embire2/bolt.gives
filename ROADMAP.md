@@ -83,6 +83,7 @@ Release theme: finish the execution UX, harden tenant/accounts for production, a
 - [x] Keep `Chat` active by default while the workspace spins up so users can still follow commentary.
 - [x] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
 - [x] Default live loads back into `Chat` instead of restoring a stale `Workspace` focus from prior browser state.
+- [x] Prevent stale terminal panel state from crashing the workspace surface on live hosted instances.
 - [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 

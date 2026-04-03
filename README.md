@@ -85,6 +85,7 @@ Current `v3.0.6` release line:
 - `Workspace` now includes a bottom `Workspace Activity` area with commentary, execution transparency, and technical timeline information.
 - Provider/model visibility is restored directly above the prompt box so users can always see what AI path is active.
 - Sidebar access is explicit again through the header button and left-edge opener; it no longer relies on accidental hover to expose chat history.
+- Terminal visibility changes no longer crash the `Workspace` surface on stale panel-layout state.
 - A bootstrap `Tenant Admin` dashboard is now available on server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
 - Tenant admin now includes bootstrap password rotation, pending approval, tenant enable/disable controls, lifecycle/login metadata, and invite-based onboarding/reset flows on the server-hosted baseline.
 - Tenant users now also have a dedicated `/tenant` sign-in, invite acceptance, and password-rotation portal.
