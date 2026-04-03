@@ -15,6 +15,14 @@ import {
   parsePreviewProxyRequestTarget,
   rewritePreviewAssetUrls,
 } from './runtime-preview.mjs';
+import {
+  appendManagedInstanceEvent,
+  claimManagedInstanceTrial,
+  getManagedInstanceBySessionSecret,
+  normalizeManagedInstanceRegistry,
+  sanitizeManagedInstanceForClient,
+  slugifyManagedInstanceSubdomain,
+} from './managed-instances.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -69,8 +77,20 @@ const PREVIEW_ERROR_PATTERNS = [
 const TENANT_REGISTRY_PATH =
   process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
 const TENANT_INVITE_TTL_MS = Number(process.env.RUNTIME_TENANT_INVITE_TTL_MS || `${72 * 60 * 60 * 1000}`);
+const MANAGED_INSTANCE_REGISTRY_PATH =
+  process.env.RUNTIME_MANAGED_INSTANCE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'managed-instance-registry.json');
+const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '15');
+const MANAGED_INSTANCE_ROOT_DOMAIN = process.env.RUNTIME_MANAGED_INSTANCE_ROOT_DOMAIN || 'pages.dev';
+const MANAGED_INSTANCE_SOURCE_BRANCH = process.env.RUNTIME_MANAGED_INSTANCE_SOURCE_BRANCH || 'main';
+const MANAGED_INSTANCE_DEPLOY_DIR =
+  process.env.RUNTIME_MANAGED_INSTANCE_DEPLOY_DIR || path.join(REPO_ROOT, 'build', 'client');
+const MANAGED_INSTANCE_SYNC_INTERVAL_MS = Number(process.env.RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS || '600000');
+const MANAGED_INSTANCE_DELETE_ON_SUSPEND = process.env.RUNTIME_MANAGED_INSTANCE_DELETE_ON_SUSPEND === '1';
+const MANAGED_INSTANCE_PUBLIC_ENABLED = process.env.RUNTIME_MANAGED_INSTANCE_ENABLED !== 'false';
 
 const sessions = new Map();
+const managedInstanceLocks = new Map();
+let managedInstanceSyncTimer = null;
 
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
 const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cts']);
@@ -271,6 +291,418 @@ async function ensureTenantRegistry() {
 async function writeTenantRegistry(registry) {
   await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
   await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+}
+
+function getManagedInstanceCloudflareConfig() {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim() || '';
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || '';
+
+  return {
+    enabled: MANAGED_INSTANCE_PUBLIC_ENABLED && Boolean(apiToken && accountId),
+    apiToken,
+    accountId,
+    rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+    sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+  };
+}
+
+function buildManagedInstanceSupportState() {
+  const config = getManagedInstanceCloudflareConfig();
+
+  if (!MANAGED_INSTANCE_PUBLIC_ENABLED) {
+    return {
+      supported: false,
+      reason: 'Managed Cloudflare trial instances are disabled on this deployment.',
+      trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+      rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+    };
+  }
+
+  if (!config.enabled) {
+    return {
+      supported: false,
+      reason:
+        'Cloudflare managed trial instances are not configured yet. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID on the runtime service.',
+      trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+      rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+    };
+  }
+
+  return {
+    supported: true,
+    reason: null,
+    trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+    rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+    sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+  };
+}
+
+async function ensureManagedInstanceRegistry() {
+  try {
+    const raw = await fs.readFile(MANAGED_INSTANCE_REGISTRY_PATH, 'utf8');
+    const registry = normalizeManagedInstanceRegistry(JSON.parse(raw), { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN });
+    await writeManagedInstanceRegistry(registry);
+    return registry;
+  } catch {
+    await fs.mkdir(path.dirname(MANAGED_INSTANCE_REGISTRY_PATH), { recursive: true });
+    const registry = normalizeManagedInstanceRegistry(
+      {
+        rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+        instances: [],
+        events: [],
+      },
+      { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
+    );
+    await fs.writeFile(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+    return registry;
+  }
+}
+
+async function writeManagedInstanceRegistry(registry) {
+  await fs.mkdir(path.dirname(MANAGED_INSTANCE_REGISTRY_PATH), { recursive: true });
+  await fs.writeFile(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+}
+
+async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {} } = {}) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        NODE_OPTIONS,
+        ...env,
+      },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({
+        code: Number(code || 0),
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
+let cachedManagedGitSha = {
+  value: null,
+  expiresAt: 0,
+};
+
+async function resolveCurrentGitSha() {
+  const now = Date.now();
+
+  if (cachedManagedGitSha.value && cachedManagedGitSha.expiresAt > now) {
+    return cachedManagedGitSha.value;
+  }
+
+  const envSha =
+    process.env.CF_PAGES_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || process.env.BOLT_RELEASE_SHA?.trim();
+
+  if (envSha) {
+    cachedManagedGitSha = {
+      value: envSha,
+      expiresAt: now + 30000,
+    };
+    return envSha;
+  }
+
+  const result = await runManagedInstanceProcess('git', ['rev-parse', 'HEAD']);
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || 'Unable to resolve current git SHA.');
+  }
+
+  cachedManagedGitSha = {
+    value: result.stdout.trim(),
+    expiresAt: now + 30000,
+  };
+
+  return cachedManagedGitSha.value;
+}
+
+async function fetchCloudflarePagesProject(projectName) {
+  const config = getManagedInstanceCloudflareConfig();
+
+  if (!config.enabled) {
+    throw new Error('Cloudflare managed instances are not configured on this runtime.');
+  }
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/pages/projects/${encodeURIComponent(projectName)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${config.apiToken}`,
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const payload = await response.json();
+
+  if (!response.ok || payload?.success === false) {
+    const apiError = Array.isArray(payload?.errors) && payload.errors[0]?.message ? payload.errors[0].message : null;
+    throw new Error(apiError || `Cloudflare project lookup failed with status ${response.status}.`);
+  }
+
+  return payload?.result || null;
+}
+
+async function ensureManagedInstanceProjectExists(instance) {
+  const existingProject = await fetchCloudflarePagesProject(instance.projectName);
+
+  if (existingProject) {
+    return existingProject;
+  }
+
+  const config = getManagedInstanceCloudflareConfig();
+  const result = await runManagedInstanceProcess(
+    'pnpm',
+    ['exec', 'wrangler', 'pages', 'project', 'create', instance.projectName, '--production-branch', config.sourceBranch],
+    {
+      env: {
+        CLOUDFLARE_API_TOKEN: config.apiToken,
+        CLOUDFLARE_ACCOUNT_ID: config.accountId,
+      },
+    },
+  );
+
+  if (result.code !== 0) {
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+
+    if (!/already exists/i.test(combinedOutput)) {
+      throw new Error(combinedOutput.trim() || `Failed to create Cloudflare Pages project "${instance.projectName}".`);
+    }
+  }
+
+  return await fetchCloudflarePagesProject(instance.projectName);
+}
+
+async function deployManagedInstanceProject(instance, reason = 'manual-refresh') {
+  const config = getManagedInstanceCloudflareConfig();
+  const gitSha = await resolveCurrentGitSha();
+
+  await fs.access(MANAGED_INSTANCE_DEPLOY_DIR, fsConstants.R_OK);
+  await ensureManagedInstanceProjectExists(instance);
+
+  const result = await runManagedInstanceProcess(
+    'pnpm',
+    [
+      'exec',
+      'wrangler',
+      'pages',
+      'deploy',
+      MANAGED_INSTANCE_DEPLOY_DIR,
+      '--project-name',
+      instance.projectName,
+      '--branch',
+      config.sourceBranch,
+      '--commit-hash',
+      gitSha,
+      '--commit-message',
+      `[managed-instance] ${reason}: ${instance.projectName}`,
+    ],
+    {
+      env: {
+        CLOUDFLARE_API_TOKEN: config.apiToken,
+        CLOUDFLARE_ACCOUNT_ID: config.accountId,
+      },
+    },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || 'Cloudflare deployment failed.');
+  }
+
+  const deploymentUrlMatch = `${result.stdout}\n${result.stderr}`.match(/https:\/\/[a-z0-9.-]+\.pages\.dev/gi);
+
+  return {
+    gitSha,
+    deploymentUrl: deploymentUrlMatch?.at(-1) || `https://${instance.routeHostname}`,
+  };
+}
+
+function getManagedInstanceLockKey(instance) {
+  return instance?.projectName || instance?.clientKeyHash || 'managed-instance';
+}
+
+async function runManagedInstanceOperation(lockKey, operation) {
+  const previous = managedInstanceLocks.get(lockKey) || Promise.resolve();
+  let release;
+  const next = new Promise((resolve) => {
+    release = resolve;
+  });
+  managedInstanceLocks.set(lockKey, previous.finally(() => next));
+
+  await previous;
+
+  try {
+    return await operation();
+  } finally {
+    release();
+
+    if (managedInstanceLocks.get(lockKey) === next) {
+      managedInstanceLocks.delete(lockKey);
+    }
+  }
+}
+
+async function expireManagedInstanceIfRequired(registry, instance, { actor = 'system' } = {}) {
+  if (!instance?.trialEndsAt || !['active', 'failed', 'provisioning', 'updating'].includes(instance.status)) {
+    return false;
+  }
+
+  if (Date.parse(instance.trialEndsAt) > Date.now()) {
+    return false;
+  }
+
+  instance.status = 'expired';
+  instance.updatedAt = new Date().toISOString();
+  instance.expiredAt = new Date().toISOString();
+  instance.lastError = 'The 15-day experimental managed instance trial has expired.';
+  appendManagedInstanceEvent(registry, {
+    actor,
+    action: 'managed-instance.expired',
+    target: instance.routeHostname,
+  });
+
+  if (MANAGED_INSTANCE_DELETE_ON_SUSPEND && getManagedInstanceCloudflareConfig().enabled) {
+    try {
+      const config = getManagedInstanceCloudflareConfig();
+      await runManagedInstanceProcess(
+        'pnpm',
+        ['exec', 'wrangler', 'pages', 'project', 'delete', instance.projectName, '--yes'],
+        {
+          env: {
+            CLOUDFLARE_API_TOKEN: config.apiToken,
+            CLOUDFLARE_ACCOUNT_ID: config.accountId,
+          },
+        },
+      );
+    } catch {}
+  }
+
+  return true;
+}
+
+async function maybeExpireManagedInstances(registry, { actor = 'system' } = {}) {
+  let changed = false;
+
+  for (const instance of registry.instances) {
+    const didExpire = await expireManagedInstanceIfRequired(registry, instance, { actor });
+
+    if (didExpire) {
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeManagedInstanceRegistry(registry);
+  }
+
+  return changed;
+}
+
+async function refreshManagedInstanceFromCurrentBuild(registry, instance, { actor = 'system', reason = 'refresh' } = {}) {
+  return await runManagedInstanceOperation(getManagedInstanceLockKey(instance), async () => {
+    instance.status = instance.currentGitSha ? 'updating' : 'provisioning';
+    instance.updatedAt = new Date().toISOString();
+    instance.lastError = null;
+    await writeManagedInstanceRegistry(registry);
+
+    try {
+      const deployment = await deployManagedInstanceProject(instance, reason);
+
+      instance.previousGitSha = instance.currentGitSha || null;
+      instance.currentGitSha = deployment.gitSha;
+      instance.lastRolloutAt = new Date().toISOString();
+      instance.updatedAt = new Date().toISOString();
+      instance.lastDeploymentUrl = deployment.deploymentUrl;
+      instance.lastError = null;
+      instance.status = 'active';
+      appendManagedInstanceEvent(registry, {
+        actor,
+        action: instance.previousGitSha ? 'managed-instance.rollout' : 'managed-instance.provisioned',
+        target: instance.routeHostname,
+        details: {
+          gitSha: deployment.gitSha,
+        },
+      });
+      await writeManagedInstanceRegistry(registry);
+      return instance;
+    } catch (error) {
+      instance.status = 'failed';
+      instance.updatedAt = new Date().toISOString();
+      instance.lastError = error instanceof Error ? error.message : 'Cloudflare deployment failed.';
+      appendManagedInstanceEvent(registry, {
+        actor,
+        action: 'managed-instance.failed',
+        target: instance.routeHostname,
+        details: {
+          error: instance.lastError,
+        },
+      });
+      await writeManagedInstanceRegistry(registry);
+      throw error;
+    }
+  });
+}
+
+async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', actor = 'system' } = {}) {
+  const support = buildManagedInstanceSupportState();
+
+  if (!support.supported) {
+    return;
+  }
+
+  const registry = await ensureManagedInstanceRegistry();
+  await maybeExpireManagedInstances(registry, { actor });
+  const gitSha = await resolveCurrentGitSha();
+
+  for (const instance of registry.instances) {
+    if (instance.status === 'expired' || instance.status === 'suspended') {
+      continue;
+    }
+
+    if (instance.currentGitSha === gitSha && instance.status === 'active') {
+      continue;
+    }
+
+    await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
+  }
+}
+
+function findManagedInstanceBySlug(registry, slug) {
+  const normalizedSlug = slugifyManagedInstanceSubdomain(slug);
+
+  return registry.instances.find((instance) => instance.projectName === normalizedSlug) || null;
+}
+
+function managedInstanceSessionMatches(instance, sessionSecret) {
+  const normalizedSecret = String(sessionSecret || '').trim();
+
+  if (!instance || !normalizedSecret || !instance.clientSessionSecretHash) {
+    return false;
+  }
+
+  return hashManagedInstanceValue(normalizedSecret) === instance.clientSessionSecretHash;
 }
 
 function sendJson(res, status, payload, extraHeaders = {}) {
@@ -2126,6 +2558,7 @@ export function createRuntimeServer() {
 
     const url = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
     const pathname = url.pathname;
+    const searchParams = url.searchParams;
 
     if (pathname === '/health') {
       sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
@@ -2139,6 +2572,224 @@ export function createRuntimeServer() {
 
     if (pathname.startsWith('/runtime/preview/')) {
       proxyPreviewRequest(req, res, pathname);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/managed-instances/config') {
+      try {
+        const support = buildManagedInstanceSupportState();
+        sendJson(res, 200, support);
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect managed instance support');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/managed-instances/session') {
+      try {
+        const sessionToken = String(searchParams.get('sessionToken') || '').trim();
+        const registry = await ensureManagedInstanceRegistry();
+        await maybeExpireManagedInstances(registry, { actor: 'system' });
+        const instance = getManagedInstanceBySessionSecret(registry, sessionToken);
+
+        if (!instance) {
+          sendText(res, 404, 'Managed instance session not found.');
+          return;
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          instance: sanitizeManagedInstanceForClient(instance),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect managed instance session');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/managed-instances/spawn') {
+      try {
+        const support = buildManagedInstanceSupportState();
+
+        if (!support.supported) {
+          sendText(res, 503, support.reason || 'Managed trial instances are unavailable on this deployment.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const name = String(body.name || '').trim();
+        const email = String(body.email || '')
+          .trim()
+          .toLowerCase();
+        const requestedSubdomain = slugifyManagedInstanceSubdomain(body.subdomain);
+        const sessionToken = String(body.sessionToken || '').trim();
+
+        if (name.length < 2) {
+          sendText(res, 400, 'Display name must be at least 2 characters long.');
+          return;
+        }
+
+        if (!isLikelyValidEmail(email)) {
+          sendText(res, 400, 'A valid email address is required to request a managed trial instance.');
+          return;
+        }
+
+        if (!requestedSubdomain || requestedSubdomain.length < 3) {
+          sendText(res, 400, 'Choose a subdomain with at least 3 letters or numbers.');
+          return;
+        }
+
+        const registry = await ensureManagedInstanceRegistry();
+        await maybeExpireManagedInstances(registry, { actor: email });
+
+        const existingCloudflareProject = await fetchCloudflarePagesProject(requestedSubdomain);
+
+        if (
+          existingCloudflareProject &&
+          !registry.instances.some((instance) => instance.projectName === requestedSubdomain)
+        ) {
+          sendText(res, 409, 'That subdomain is already in use. Choose another subdomain.');
+          return;
+        }
+
+        const claim = claimManagedInstanceTrial(registry, {
+          name,
+          email,
+          requestedSubdomain,
+          rootDomain: support.rootDomain,
+          trialDays: support.trialDays,
+          sessionSecret: sessionToken || undefined,
+        });
+
+        if (claim.kind === 'conflict') {
+          if (claim.code === 'subdomain-unavailable') {
+            sendText(res, 409, 'That subdomain is already assigned to another trial instance.');
+            return;
+          }
+
+          sendText(
+            res,
+            409,
+            'This client already has a managed trial instance. Reuse the original browser session to manage it.',
+          );
+          return;
+        }
+
+        await writeManagedInstanceRegistry(registry);
+        const instance = await refreshManagedInstanceFromCurrentBuild(registry, claim.instance, {
+          actor: email,
+          reason: claim.kind === 'created' ? 'initial-trial-spawn' : 'resume-existing-trial',
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          existing: claim.kind === 'existing',
+          sessionToken: claim.sessionSecret,
+          instance: sanitizeManagedInstanceForClient(instance),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to provision the managed trial instance.');
+      }
+      return;
+    }
+
+    const managedInstanceRefreshMatch = pathname.match(/^\/runtime\/managed-instances\/([^/]+)\/refresh$/);
+
+    if (req.method === 'POST' && managedInstanceRefreshMatch) {
+      try {
+        const slug = decodeURIComponent(managedInstanceRefreshMatch[1] || '');
+        const body = await readJsonBody(req);
+        const sessionToken = String(body.sessionToken || '').trim();
+        const registry = await ensureManagedInstanceRegistry();
+        await maybeExpireManagedInstances(registry, { actor: 'system' });
+        const instance = findManagedInstanceBySlug(registry, slug);
+
+        if (!instance) {
+          sendText(res, 404, 'Managed instance not found.');
+          return;
+        }
+
+        if (!managedInstanceSessionMatches(instance, sessionToken)) {
+          sendText(res, 401, 'Managed instance session is invalid.');
+          return;
+        }
+
+        if (instance.status === 'expired' || instance.status === 'suspended') {
+          sendText(res, 400, 'This managed trial instance can no longer be refreshed.');
+          return;
+        }
+
+        const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
+          actor: instance.email,
+          reason: 'manual-trial-refresh',
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          instance: sanitizeManagedInstanceForClient(refreshed),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to refresh the managed instance.');
+      }
+      return;
+    }
+
+    const managedInstanceSuspendMatch = pathname.match(/^\/runtime\/managed-instances\/([^/]+)\/suspend$/);
+
+    if (req.method === 'POST' && managedInstanceSuspendMatch) {
+      try {
+        const slug = decodeURIComponent(managedInstanceSuspendMatch[1] || '');
+        const body = await readJsonBody(req);
+        const sessionToken = String(body.sessionToken || '').trim();
+        const registry = await ensureManagedInstanceRegistry();
+        const instance = findManagedInstanceBySlug(registry, slug);
+
+        if (!instance) {
+          sendText(res, 404, 'Managed instance not found.');
+          return;
+        }
+
+        if (!managedInstanceSessionMatches(instance, sessionToken)) {
+          sendText(res, 401, 'Managed instance session is invalid.');
+          return;
+        }
+
+        instance.status = 'suspended';
+        instance.updatedAt = new Date().toISOString();
+        instance.suspendedAt = new Date().toISOString();
+        instance.lastError = 'Managed trial instance suspended by the client.';
+        appendManagedInstanceEvent(registry, {
+          actor: instance.email,
+          action: 'managed-instance.suspended',
+          target: instance.routeHostname,
+        });
+
+        if (MANAGED_INSTANCE_DELETE_ON_SUSPEND && getManagedInstanceCloudflareConfig().enabled) {
+          const config = getManagedInstanceCloudflareConfig();
+          const deletion = await runManagedInstanceProcess(
+            'pnpm',
+            ['exec', 'wrangler', 'pages', 'project', 'delete', instance.projectName, '--yes'],
+            {
+              env: {
+                CLOUDFLARE_API_TOKEN: config.apiToken,
+                CLOUDFLARE_ACCOUNT_ID: config.accountId,
+              },
+            },
+          );
+
+          if (deletion.code !== 0 && !/does not exist/i.test(`${deletion.stdout}\n${deletion.stderr}`)) {
+            throw new Error(deletion.stderr.trim() || deletion.stdout.trim() || 'Failed to delete the Pages project.');
+          }
+        }
+
+        await writeManagedInstanceRegistry(registry);
+        sendJson(res, 200, {
+          ok: true,
+          instance: sanitizeManagedInstanceForClient(instance),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');
+      }
       return;
     }
 
@@ -2808,6 +3459,18 @@ function startServer() {
   server.listen(PORT, HOST, () => {
     console.log(`[runtime] listening on http://${HOST}:${PORT}`);
     console.log(`[runtime] workspace dir: ${PERSIST_ROOT}`);
+
+    void rolloutManagedInstancesToCurrentBuild({ reason: 'startup-sync', actor: 'system' }).catch((error) => {
+      console.error('[runtime] managed instance startup sync failed:', error);
+    });
+
+    if (!managedInstanceSyncTimer && MANAGED_INSTANCE_SYNC_INTERVAL_MS > 0) {
+      managedInstanceSyncTimer = setInterval(() => {
+        void rolloutManagedInstancesToCurrentBuild({ reason: 'interval-sync', actor: 'system' }).catch((error) => {
+          console.error('[runtime] managed instance interval sync failed:', error);
+        });
+      }, MANAGED_INSTANCE_SYNC_INTERVAL_MS);
+    }
   });
 }
 

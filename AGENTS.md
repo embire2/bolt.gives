@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 
-- Stable: `v3.0.6`
-- In progress: `v3.0.7`
+- Stable: `v3.0.7`
+- In progress: `v3.0.8`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -38,7 +38,7 @@ Never force-push shared branches unless explicitly approved.
 
 ---
 
-## v3.0.6 Baseline / v3.0.7 Priority Stack
+## v3.0.7 Baseline / v3.0.8 Priority Stack
 
 ### Completed baseline
 
@@ -61,14 +61,17 @@ Never force-push shared branches unless explicitly approved.
 - Tenant user portal with sign-in and password rotation
 - Committed live smoke path for generated-app success plus preview break/recovery
 - Locked FREE model label now renders consistently as `DeepSeek V3.2` during selector bootstrap instead of falling back to a generic placeholder
+- Managed Cloudflare trial-instance control plane route/API surface at `/managed-instances`
+- One-client / one-instance runtime enforcement based on claimed email identity and browser session ownership
+- Browser regression coverage for `FREE` + `DeepSeek V3.2` label rendering on startup
 
-### In progress / remaining (`v3.0.7`)
+### In progress / remaining (`v3.0.8`)
 
 - Finish browser-weight reduction on the remaining editor/PDF/git/terminal payloads
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`
 - Keep commentary task-specific and derived directly from runtime events only
-- Full managed Cloudflare spawn/update control plane
-- Operator-funded Cloudflare trial-instance flow with one-client/one-instance enforcement, chosen subdomains, and timed expiry
+- Live-enable the managed Cloudflare spawn/update control plane wherever operator credentials are configured
+- Add operator rollout/rollback observability for managed Cloudflare instances
 - Production-safe tenant/account/RBAC hardening
 - Tenant approval/invite lifecycle beyond the server-local registry baseline
 - First-party template packs + CI smoke coverage

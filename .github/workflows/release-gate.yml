@@ -62,6 +62,9 @@ jobs:
           echo "Local Pages target never became ready."
           exit 1
 
+      - name: Verify FREE provider startup label on local release target
+        run: BASE_URL=http://127.0.0.1:8788 pnpm run e2e:free-startup
+
       - name: Run live release smoke against local release target
         run: BASE_URL=http://127.0.0.1:8788 E2E_PROVIDER=OpenAI E2E_MODEL=gpt-5.4 pnpm run smoke:live
 

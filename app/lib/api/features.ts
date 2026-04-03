@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.7',
+    name: 'v3.0.7 managed Cloudflare trials and locked FREE startup regression',
+    description:
+      'bolt.gives now ships the managed Cloudflare trial-instance control plane, enforces one-client/one-instance in runtime via email plus browser session ownership, and includes a browser release regression that verifies startup lands on the locked FREE DeepSeek V3.2 path.',
+    releaseDate: '2026-04-03',
+  },
+  {
     id: 'release-v3.0.6',
     name: 'v3.0.6 narrower browser shell, tenant approval flow, release smoke gate',
     description:

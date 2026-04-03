@@ -1,6 +1,38 @@
 # Changelog
 
-## Unreleased (`v3.0.7` in progress)
+## Unreleased (`v3.0.8` in progress)
+
+### Planned
+
+- Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.
+- Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
+- Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
+- Live-enable the managed Cloudflare spawn/update control plane everywhere operator credentials exist and add rollback verification.
+
+## v3.0.7 (2026-04-03)
+
+### Added
+
+- bolt.gives now ships a real managed Cloudflare trial-instance surface at `/managed-instances`.
+- The runtime now exposes managed-instance control endpoints for:
+  - support/config
+  - session lookup
+  - spawn
+  - refresh
+  - suspend
+- Managed trial instances now track:
+  - chosen subdomain
+  - 15-day expiry
+  - rollout metadata
+  - deployment errors
+  - runtime event history
+- The release gate now includes a browser regression that verifies startup lands on the locked `FREE` provider with the `DeepSeek V3.2` model label already visible.
+
+### Changed
+
+- Managed trial-instance claims are now enforced in runtime instead of only in docs.
+- One claimed client identity now maps to one managed instance, and the original browser session token now reuses that same instance instead of allowing a second hidden claim under a different email.
+- The current release line is now `v3.0.7`, with `v3.0.8` opened as the next roadmap target.
 
 ### Fixed
 
@@ -11,14 +43,6 @@
 - Sidebar navigation/history no longer depends on edge-hover behavior; the header icon and explicit opener button now open it directly and reliably.
 - The terminal/workspace surface no longer crashes on stale `react-resizable-panels` state when terminal visibility changes.
 - Provider/model bootstrap no longer throws when a browser only has partial saved provider settings; missing providers now stay enabled by default instead of breaking `/api/models`.
-
-### Planned
-
-- Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.
-- Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
-- Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
-- Build the managed Cloudflare spawn/update control plane and rollback verification.
-- Ship a real operator-funded Cloudflare trial-instance API with one-client/one-instance enforcement, chosen subdomains, automatic updates from `main`, and a 15-day expiry model.
 
 ## v3.0.6 (2026-04-03)
 

@@ -21,7 +21,7 @@
 
 ## Experimental Cloudflare Instance Spawn
 
-`v3.0.6` keeps the implementation blueprint for an **experimental managed Cloudflare instance service** for bolt.gives and adds a lighter browser startup path, stronger tenant approval/invite lifecycle controls, and a release gate that now executes the live smoke path before shipping.
+`v3.0.7` ships the **managed Cloudflare trial-instance control plane** inside bolt.gives itself. The product now includes a real `/managed-instances` surface, runtime control endpoints for spawn/session/refresh/suspend, one-client / one-instance enforcement, chosen subdomains, and a 15-day expiry model.
 
 What is technically possible at **no cost from Cloudflare** today:
 
@@ -43,23 +43,27 @@ Implementation files in this repo:
 
 - `docs/cloudflare-managed-instances.md`
 - `docs/cloudflare-managed-instances.sql`
+- `app/routes/managed-instances.tsx`
+- `scripts/managed-instances.mjs`
+- `scripts/runtime-server.mjs`
 
 Important:
 
-- This is a **real implementation plan and operator blueprint**, not a claim that a fully public self-service spawn API is already live.
+- This is now a **real implementation**, not just a design blueprint.
 - The free experimental path is designed around Cloudflare's free-tier products.
 - The dedicated `6 GiB` Node instance is intentionally moved to the future Pro path, because Cloudflare Containers do not provide that tier at zero cost.
-- The public, automated spawn control plane is tracked in `ROADMAP.md` under `v3.0.7`.
+- Live production provisioning still requires the operator to configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` on the runtime service.
+- The next roadmap bucket is now `v3.0.8`, which focuses on operator hardening, rollback verification, and deeper browser/runtime reduction.
 
 ## App Overview
 
-Current version: **v3.0.6**
+Current version: **v3.0.7**
 
 Next release targets:
 
-- `v3.0.7`: managed Cloudflare control plane, explicit preview lifecycle states, continued browser-weight reduction, and production tenant hardening.
+- `v3.0.8`: live operator enablement for managed Cloudflare provisioning, explicit preview lifecycle states, continued browser-weight reduction, and production tenant hardening.
 
-Current `v3.0.6` release line:
+Current `v3.0.7` release line:
 
 - Hosted `alpha1`, `ahmad`, and similar managed instances now run install/build/dev-server/preview workloads through a managed server-side runtime by default.
 - Browser-side WebContainer remains available as the fallback path, but it is no longer the default execution mode on hosted instances.
@@ -90,6 +94,11 @@ Current `v3.0.6` release line:
 - A bootstrap `Tenant Admin` dashboard is now available on server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
 - Tenant admin now includes bootstrap password rotation, pending approval, tenant enable/disable controls, lifecycle/login metadata, and invite-based onboarding/reset flows on the server-hosted baseline.
 - Tenant users now also have a dedicated `/tenant` sign-in, invite acceptance, and password-rotation portal.
+- The product now includes a real `/managed-instances` trial surface backed by runtime control endpoints for support/config, session lookup, spawn, refresh, and suspend.
+- Managed trial claims now enforce one-client / one-instance by claimed email identity and by the original browser session token, so the same session cannot mint a second instance under a different email.
+- Users can request a preferred Cloudflare Pages subdomain during trial provisioning.
+- Managed trial instances now track rollout state and a 15-day expiry window in the runtime registry.
+- The release gate now includes a browser regression for the locked `FREE` + `DeepSeek V3.2` startup label.
 - The repo now includes a committed live smoke script at `scripts/live-release-smoke.mjs` exposed via `pnpm run smoke:live`, and the release workflow now boots the local runtime stack and executes that smoke before release completion.
 - This repo now includes the operator blueprint and tenancy schema for an experimental **one-client / one-instance Cloudflare managed service**, with:
   - a free experimental shared-runtime path
@@ -116,9 +125,10 @@ Release verdict for `v3.0.1`:
 - Live smoke passed on `https://alpha1.bolt.gives`
 - Live smoke passed on `https://ahmad.bolt.gives`
 
-Release verdict for `v3.0.6`:
+Release verdict for `v3.0.7`:
 
 - Local gates passed: `typecheck`, `lint`, `test`, `build`
+- FREE startup browser regression passed
 - Cloudflare Pages FREE-provider path now passes live verification
 - Live smoke still passes on `https://alpha1.bolt.gives`
 - Live smoke still passes on `https://ahmad.bolt.gives`
@@ -126,7 +136,7 @@ Release verdict for `v3.0.6`:
 - Live hosted-runtime auto-recovery E2E now passes on `https://alpha1.bolt.gives` by generating a hosted app, intentionally breaking it, and verifying that the managed runtime restores the last known good snapshot and returns preview to healthy.
 - `pnpm run smoke:live` is now the committed combined smoke path for generated-app success plus preview break/recovery.
 
-What `v3.0.6` specifically changes:
+What `v3.0.7` specifically changes:
 
 - Hosted instances now prefer the managed server-side runtime for installs, builds, preview hosting, and file sync, with WebContainer reduced to the fallback path instead of the default.
 - Hosted preview iframes now refresh when new server-side file sync revisions land, so generated apps replace the starter automatically.
@@ -141,6 +151,9 @@ What `v3.0.6` specifically changes:
 - Provider metadata no longer depends on the full browser-side `LLMManager` graph, which keeps provider SDK resolution on the server and reduces client startup weight.
 - Commentary heartbeats now derive from the active file/command/step state instead of generic keep-alive phrasing.
 - Tenant users now have a dedicated account portal and server-backed password rotation flow instead of relying only on the bootstrap admin surface.
+- The managed Cloudflare trial-instance control plane is now implemented in the runtime and exposed in the app, rather than existing only as documentation.
+- Trial-instance enforcement is now runtime-backed: one claimed client identity gets one instance, and the original browser session token is bound to that same instance for reuse instead of silent duplication.
+- The release workflow now includes a browser regression that verifies live startup lands on the locked `FREE` provider with the `DeepSeek V3.2` label already visible.
 - Cloudflare Pages / preview deployments now resolve hosted FREE-provider credentials correctly across both Pages-style and Worker-style runtime contexts.
 - If a public Pages runtime does not have a local hosted FREE secret, it can now relay hosted FREE requests back to the managed runtime instead of failing with a token error.
 - Public Pages deployments now automatically discard unsafe/stale collaboration socket settings and reconnect to the managed collaboration backend, preventing coding runs from pausing on repeated `/collab` websocket `404` failures.
@@ -148,14 +161,14 @@ What `v3.0.6` specifically changes:
   - free experimental shared-runtime path at no platform cost
   - future Pro path for dedicated Cloudflare Containers `standard-2` (`6 GiB`)
   - automatic rollout design from `main`
-- Release/versioning/docs are now aligned on the `v3.0.6` line.
+- Release/versioning/docs are now aligned on the `v3.0.7` line.
 
-What still remains after `v3.0.6`:
+What still remains after `v3.0.7`:
 
 - The validated OpenAI core path is now working.
 - The heaviest hosted install/build/preview work is now off the browser, but the client bundle and long-run UI rendering are still heavier than they should be.
-- `ROADMAP.md` now tracks the current stable `v3.0.6` baseline and the next major delivery bucket `v3.0.7`.
-- `v3.0.7` is focused on completing the managed-instance control plane, explicit preview lifecycle states, full production tenant/RBAC hardening, and pushing the remaining heavy editor/runtime payloads deeper behind on-demand boundaries.
+- `ROADMAP.md` now tracks the current stable `v3.0.7` baseline and the next major delivery bucket `v3.0.8`.
+- `v3.0.8` is focused on live operator enablement for managed-instance provisioning, explicit preview lifecycle states, full production tenant/RBAC hardening, and pushing the remaining heavy editor/runtime payloads deeper behind on-demand boundaries.
 
 ## Screenshots
 
@@ -182,10 +195,10 @@ Roadmap files:
 
 Current roadmap split:
 
-- `v3.0.6`: shipped baseline for a thinner client shell, tenant approval/invite lifecycle, runtime-event-driven commentary, and release-gated live smoke coverage.
-- `v3.0.7`: managed Cloudflare control plane, production tenant hardening, remaining browser-weight reduction, and operator/rollback tooling.
+- `v3.0.7`: shipped baseline for the managed Cloudflare control plane, one-client / one-instance runtime enforcement, the locked FREE startup regression, and the thinner hosted browser shell.
+- `v3.0.8`: live operator enablement for provisioning, production tenant hardening, remaining browser-weight reduction, and operator/rollback tooling.
 
-## Current Features (v3.0.6)
+## Current Features (v3.0.7)
 
 - Built-in hosted `FREE` provider support with a locked server-side OpenRouter path for `DeepSeek V3.2`.
 - FREE now exposes exactly one shipped model option so new installs can start coding immediately without choosing or configuring a model first.
@@ -212,6 +225,15 @@ Current roadmap split:
 - Lightweight default code/tool/artifact/diff rendering that removes client-side Shiki from the normal runtime path.
 - Lazy workbench integrations for export, repository push, and test/security scan flows so heavy libraries only load when the user actually opens those actions.
 - Experimental managed Cloudflare instance architecture documented in-repo, including one-client / one-instance enforcement, a no-cost shared-runtime path, a future `standard-2` (`6 GiB`) Pro tier, and automatic rollout design from `main`.
+- Real managed Cloudflare trial-instance app/runtime surface at `/managed-instances`, with:
+  - support/config detection
+  - claimed-session lookup
+  - spawn
+  - refresh
+  - suspend
+  - 15-day expiry tracking
+  - chosen subdomain support
+  - one-client / one-instance runtime enforcement
 - Commentary-first coding workflow (`Plan -> Doing -> Verifying -> Next`) with visible execution progress.
 - Dedicated `Live Commentary` feed separated from the technical timeline so plain-English updates stay visible during long runs.
 - Anti-stall detection and auto-recovery events in timeline.
@@ -368,10 +390,9 @@ What this gives the user right now:
 
 What this does **not** give yet:
 
-- the future bolt.gives operator-funded **15-day managed trial instance**
-- a public bolt.gives spawn API that provisions a client instance from our own shared control plane
+- live managed trial provisioning on a runtime that does not have `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` configured
 
-That managed trial flow is still roadmap work under `v3.0.7`.
+The managed trial control plane is now part of the product under `/managed-instances`. It becomes operational on a given deployment only when the runtime has the required Cloudflare credentials configured.
 
 ### 1. Prerequisites
 
@@ -518,23 +539,27 @@ If the deploy succeeds but the URL still shows an older release:
 - confirm the connected Git branch and latest commit SHA
 - trigger a redeploy from the newest commit
 
-### 10. About the future managed 15-day trial
+### 10. About the managed 15-day trial
 
-The product direction is still:
+The shipped control-plane model is:
 
 - free experimental shared runtime while capacity lasts
 - future Pro from `$12/month` with more tools and higher limits
 
-The **future** flow we still need to build is:
+The shipped control plane now covers:
 
 - user signs into bolt.gives
 - user requests a managed Cloudflare instance
-- bolt.gives provisions one isolated instance per client
+- bolt.gives enforces one-client / one-instance ownership
 - user chooses a subdomain
 - the managed instance stays active for 15 days
-- updates roll out automatically from the stable Git branch
+- updates can roll forward from the current stable build through the runtime sync path
 
-That operator-funded spawn/update control plane is **not shipped yet**. It remains an explicit `v3.0.7` roadmap item.
+What still remains:
+
+- live operator credential enablement on every managed runtime
+- rollback verification on failed managed-instance updates
+- deeper operator observability for managed-instance rollout state
 
 Fresh install checklist:
 

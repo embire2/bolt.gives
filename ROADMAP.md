@@ -8,16 +8,16 @@ Status legend:
 - `[ ]` not started
 
 Current stable release:
-- [x] `v3.0.6`
+- [x] `v3.0.7`
 
 Next release target:
-- [~] `v3.0.7`
+- [~] `v3.0.8`
 
-## v3.0.6 - Shipped Baseline
+## v3.0.7 - Shipped Baseline
 
-Release theme: trim more browser weight off the startup path, make commentary more runtime-specific, and move tenant lifecycle past the bootstrap-only baseline.
+Release theme: ship the managed Cloudflare trial control plane, enforce real trial ownership rules at runtime, and keep the locked FREE startup path covered by browser regression.
 
-### Shipped in v3.0.6
+### Shipped in v3.0.7
 
 1. Hosted runtime and browser offload
 - [x] Hosted instances now prefer the managed server runtime for install/build/dev/test/preview flows.
@@ -58,24 +58,35 @@ Release theme: trim more browser weight off the startup path, make commentary mo
 - [x] FREE exposes no user API-key entry path and no client-visible fallback model.
 - [x] Managed OpenRouter token remains server-side only so fresh installs can start coding immediately without leaking the token.
 
-6. Release communication
-- [x] Versioning aligned to `v3.0.6` across app/runtime/docs.
-- [x] Changelog and feature feed updated for the release.
-- [x] Release gate now boots the local runtime stack and runs `pnpm run smoke:live`.
+6. Managed Cloudflare trial control plane
+- [x] A real managed-instance route now exists at `/managed-instances`.
+- [x] Runtime control endpoints now handle support/config, session lookup, spawn, refresh, and suspend flows.
+- [x] Trial instances now carry a 15-day expiry window plus event history in the runtime registry.
+- [x] Runtime enforcement now prevents a second trial from being minted for the same claimed client identity.
+- [x] Runtime enforcement also binds the active browser session to the already-issued instance so the same browser cannot quietly mint a second one under a different email.
+- [x] Users can request a preferred subdomain during provisioning.
+- [x] Managed trial instances are designed to roll forward from the current stable build via the runtime sync loop.
+- [~] Live provisioning still requires operator-side `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` on the runtime service.
 
-### Validation expectations for v3.0.6
+7. Release communication
+- [x] Versioning aligned to `v3.0.7` across app/runtime/docs.
+- [x] Changelog and feature feed updated for the release.
+- [x] Release gate now boots the local runtime stack, verifies the locked `FREE` + `DeepSeek V3.2` startup label, and runs `pnpm run smoke:live`.
+
+### Validation expectations for v3.0.7
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 - `pnpm run build`
+- `pnpm run e2e:free-startup`
 - live browser E2E on `https://alpha1.bolt.gives`
 - live smoke on `https://ahmad.bolt.gives`
 - live smoke on `https://bolt-gives.pages.dev`
 - `pnpm run smoke:live`
 
-## v3.0.7 - Next Priority Stack
+## v3.0.8 - Next Priority Stack
 
-Release theme: finish the execution UX, harden tenant/accounts for production, and continue reducing browser weight on the remaining heavy surfaces.
+Release theme: live-enable the managed-instance operator path, harden tenant/accounts for production, and keep pushing the remaining heavy client/runtime surfaces deeper behind server-backed boundaries.
 
 ### P0
 
@@ -108,15 +119,16 @@ Release theme: finish the execution UX, harden tenant/accounts for production, a
 - [ ] Replace bootstrap tenant registry with a proper production-safe tenant/account model.
 - [~] Add password change flow for bootstrap admin.
 - [~] Add tenant roles, audit trail, approval history, and basic session management.
-- [ ] Enforce one-client / one-instance rules for managed deployments in runtime, not only docs.
+- [x] Enforce one-client / one-instance rules for managed deployments in runtime, not only docs.
 
 5. Cloudflare managed control plane
-- [ ] Build the actual spawn/provision/update control plane described in docs.
-- [ ] Let a signed-in client request one experimental managed trial instance for 15 days, backed by operator-funded Cloudflare capacity rather than manual setup.
-- [ ] Enforce one-client / one-instance allocation with a clear reclaim/expiry path.
-- [ ] Let each client choose a subdomain during provisioning.
-- [ ] Implement automatic rollout from `main` to managed instances.
+- [x] Build the actual spawn/provision/update control plane described in docs.
+- [x] Let a signed-in client request one experimental managed trial instance for 15 days through the managed control-plane surface.
+- [x] Enforce one-client / one-instance allocation with a clear reclaim/expiry path.
+- [x] Let each client choose a subdomain during provisioning.
+- [~] Implement automatic rollout from the current stable build to managed instances.
 - [ ] Add health-verified rollback on failed updates.
+- [ ] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
 
 ### P1
 
@@ -133,8 +145,8 @@ Release theme: finish the execution UX, harden tenant/accounts for production, a
 - [ ] Add bundle budgets to CI so startup weight cannot silently regress.
 - [ ] Add runtime telemetry dashboards for memory, stalls, and recovery rate.
 
-### v3.0.7 Release Metrics
-- [~] Initial hosted chat shell materially lighter than `v3.0.6`.
+### v3.0.8 Release Metrics
+- [~] Initial hosted chat shell materially lighter than `v3.0.7`.
 - [ ] No shared startup chunk above agreed budget.
 - [ ] Hosted scaffold-to-preview success rate >= 90%.
 - [ ] Architect known-failure recovery success >= 75%.

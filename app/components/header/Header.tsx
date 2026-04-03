@@ -59,6 +59,12 @@ export function Header() {
           Tenant Portal
         </a>
         <a
+          href="/managed-instances"
+          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+        >
+          Cloudflare Trials
+        </a>
+        <a
           href="/tenant-admin"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >

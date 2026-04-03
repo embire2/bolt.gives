@@ -1,6 +1,6 @@
 # Cloudflare Managed Instances (Experimental Blueprint)
 
-Status: planned control plane for `v3.0.3`, documented in the `v3.0.2` release line.
+Status: the app/runtime control plane is now implemented in the `v3.0.7` release line. Live production provisioning still requires operator-side Cloudflare credentials (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) on the runtime service.
 
 This document describes the **real implementation path** for an experimental bolt.gives managed-instance service on Cloudflare.
 
@@ -81,14 +81,23 @@ That means:
 
 ## Proposed architecture
 
-### 1. Spawn API Worker
+### 1. Spawn API / Runtime control plane
 
-Public endpoints:
+Shipped public/product surfaces:
 
+- `/managed-instances`
 - `POST /api/managed-instances/spawn`
-- `GET /api/managed-instances/:slug`
+- `GET /api/managed-instances/session`
 - `POST /api/managed-instances/:slug/refresh`
 - `POST /api/managed-instances/:slug/suspend`
+
+Runtime control endpoints:
+
+- `GET /runtime/managed-instances/config`
+- `GET /runtime/managed-instances/session`
+- `POST /runtime/managed-instances/spawn`
+- `POST /runtime/managed-instances/:slug/refresh`
+- `POST /runtime/managed-instances/:slug/suspend`
 
 Responsibilities:
 
@@ -98,6 +107,8 @@ Responsibilities:
 - enqueue new provisioning if the client has no instance yet
 
 ### 2. D1 tenancy registry
+
+Future hardened path:
 
 Use D1 as the authoritative registry for:
 
@@ -198,15 +209,22 @@ This pricing is a product intention, not a billing implementation yet.
 - keep `main` as the update source of truth
 - separate the free experimental shared-runtime path from the future dedicated `6 GiB` Pro path
 
-### v3.0.3
+### v3.0.7
 
-- implement the spawn API Worker
-- implement D1 tenancy registry
-- implement Durable Object lock
+- implement the spawn API / runtime control plane
+- implement server-local managed-instance registry and event history
+- enforce one-client / one-instance on claimed identity plus browser session ownership
 - implement the free experimental shared-runtime control plane first
-- implement container provisioning and routing for the Pro / dedicated path
-- implement git-driven rollout controller
+- implement 15-day expiry metadata
+- implement chosen subdomain handling
+- implement current-build rollout synchronization logic
+
+### v3.0.8+
+
+- replace the server-local registry with D1 / durable locking for production scale
+- live-enable Cloudflare provisioning everywhere operator credentials exist
 - add operator dashboards and health checks
+- add health-verified rollback and stronger rollout observability
 
 ## Risks to solve before public launch
 
