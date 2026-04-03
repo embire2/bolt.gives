@@ -1,6 +1,4 @@
 import type { AgentCommentaryPhase } from '~/types/context';
-import { getCommentaryPoolMessage } from '~/lib/runtime/commentary-pool.generated';
-
 export const COMMENTARY_HEARTBEAT_INTERVAL_MS = 60_000;
 
 const NEXT_STEP_BY_PHASE: Record<AgentCommentaryPhase, string> = {
@@ -106,6 +104,51 @@ function buildContextualHeartbeatMessage(options: {
   return variants[(heartbeatIndex - 1) % variants.length] || variants[0];
 }
 
+function summarizeCommandStep(currentStep: string): string | null {
+  const normalized = currentStep.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const quotedCommand =
+    normalized.match(/(?:Run|Running|Command|Executing)\s+(?:shell\s+command:\s+)?(.+)$/i)?.[1]?.trim() ||
+    normalized.match(/(?:pnpm|npm|vite|npx|node|yarn)\s+.+$/i)?.[0]?.trim() ||
+    null;
+
+  if (quotedCommand) {
+    return `I am still running ${quotedCommand} and watching for the next visible output.`;
+  }
+
+  const fileMatch =
+    normalized.match(/(?:writing|updating|editing|patching|saving)\s+([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/i)?.[1] ||
+    normalized.match(/\b(src\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+|app\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)\b/)?.[1] ||
+    null;
+
+  if (fileMatch) {
+    return `I am updating ${fileMatch} now and checking the result before I move on.`;
+  }
+
+  return null;
+}
+
+function summarizeLastVisibleResult(lastVisibleResult: string): string | null {
+  const normalized = lastVisibleResult.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const commandResult =
+    normalized.match(/(?:pnpm|npm|vite|npx|node|yarn)\s+.+?(?:exit\s+\d+|done|ready|failed)/i)?.[0] || null;
+
+  if (commandResult) {
+    return commandResult;
+  }
+
+  return normalized.length > 120 ? `${normalized.slice(0, 117).trimEnd()}...` : normalized;
+}
+
 export function buildCommentaryHeartbeat(
   elapsedMs: number,
   lastPhase: AgentCommentaryPhase,
@@ -129,21 +172,23 @@ export function buildCommentaryHeartbeat(
   const lastVisibleResult = String(context?.lastVisibleResult || '')
     .replace(/\s+/g, ' ')
     .trim();
-  const defaultMessage = goal
-    ? `I am still working on ${goal} and checking each result as it lands.`
-    : 'I am still working on your request and checking each result as it lands.';
   const message =
+    summarizeCommandStep(currentStep) ||
     buildContextualHeartbeatMessage({
       goal,
       currentStep,
       phase,
       heartbeatIndex,
-    }) || getCommentaryPoolMessage(phase, heartbeatIndex, defaultMessage);
+    }) ||
+    (goal
+      ? `I am still moving ${goal} forward and checking each visible result as it lands.`
+      : 'I am still moving the request forward and checking each visible result as it lands.');
   const keyChanges = currentStep
     ? `Work is still in progress after ${elapsed}. Current focus: ${currentStep}.`
     : `Work is still in progress after ${elapsed}.`;
-  const nextStep = lastVisibleResult
-    ? `${NEXT_STEP_BY_PHASE[phase]} Latest visible result: ${lastVisibleResult}.`
+  const summarizedLastVisibleResult = summarizeLastVisibleResult(lastVisibleResult);
+  const nextStep = summarizedLastVisibleResult
+    ? `${NEXT_STEP_BY_PHASE[phase]} Latest visible result: ${summarizedLastVisibleResult}.`
     : NEXT_STEP_BY_PHASE[phase];
 
   return {

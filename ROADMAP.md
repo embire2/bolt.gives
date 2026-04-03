@@ -8,21 +8,22 @@ Status legend:
 - `[ ]` not started
 
 Current stable release:
-- [x] `v3.0.4`
+- [x] `v3.0.5`
 
 Next release target:
-- [~] `v3.0.5`
+- [~] `v3.0.6`
 
-## v3.0.4 - Shipped Baseline
+## v3.0.5 - Shipped Baseline
 
-Release theme: ship a protected install-ready FREE default, keep hosted execution server-first, and make the run state more understandable.
+Release theme: thin the browser client further, keep hosted execution server-first, make commentary/state more truthful, and move tenant lifecycle off the bootstrap-only baseline.
 
-### Shipped in v3.0.4
+### Shipped in v3.0.5
 
 1. Hosted runtime and browser offload
 - [x] Hosted instances now prefer the managed server runtime for install/build/dev/test/preview flows.
 - [x] Hosted preview state now comes from server-side status/SSE instead of tight browser polling.
 - [x] Preview breakage now routes into server-side self-heal and last-known-good restore.
+- [x] A committed live release smoke path now verifies generated app success, intentional preview breakage, self-heal, and preview restoration.
 
 2. Browser load reduction
 - [x] Explicit manual chunking now separates framework/editor/terminal/collaboration/markdown/chart/git domains.
@@ -30,17 +31,22 @@ Release theme: ship a protected install-ready FREE default, keep hosted executio
 - [x] Editor loading is deferred harder: the editor shell and vscode theme payload now load on demand.
 - [x] Settings surfaces with chart/PDF dependencies now lazy-load only when opened.
 - [x] Long technical feeds remain virtualized.
+- [x] Provider metadata is now served from a lightweight client catalog instead of pulling full provider implementations/SDKs into the browser startup path.
+- [x] Framework/runtime/LLM/editor chunking was split further into smaller dedicated buckets (`react-core`, `remix-runtime`, `router-runtime`, `llm-core`, `llm-react`, `llm-openrouter`, `editor-state`, `editor-view`, `editor-language-core`, `editor-autocomplete`, `editor-commands`, `editor-search`).
 
 3. Prompt and navigation usability
 - [x] Provider/model summary is visible again directly above the prompt box.
 - [x] User-supplied provider API key flows remain available for supported providers.
 - [x] Sidebar now has an explicit click target plus a wider hover-open threshold.
+- [x] Commentary heartbeat text now derives from active file/command/step state instead of generic keep-alive filler.
 
 4. Tenant management baseline
 - [x] Tenant management entry points are now visible in the main shell and header.
 - [x] Bootstrap `Tenant Admin` dashboard added for server-hosted instances.
 - [x] Default bootstrap credentials are `admin / admin`.
-- [~] Current tenant registry is a simple server-local baseline and still needs full RBAC, audit, and production-hardening work.
+- [x] Tenant users now have a dedicated `/tenant` sign-in surface.
+- [x] Tenant password rotation is now available through server-backed auth endpoints instead of only bootstrap admin flows.
+- [~] Current tenant registry is still a server-local baseline and still needs full RBAC, audit, and production-hardening work.
 
 5. Protected default FREE provider
 - [x] FREE now ships as a single locked hosted model: `deepseek/deepseek-v3.2`.
@@ -48,10 +54,10 @@ Release theme: ship a protected install-ready FREE default, keep hosted executio
 - [x] Managed OpenRouter token remains server-side only so fresh installs can start coding immediately without leaking the token.
 
 6. Release communication
-- [x] Versioning aligned to `v3.0.4` across app/runtime/docs.
+- [x] Versioning aligned to `v3.0.5` across app/runtime/docs.
 - [x] Changelog and feature feed updated for the release.
 
-### Validation expectations for v3.0.4
+### Validation expectations for v3.0.5
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
@@ -59,8 +65,9 @@ Release theme: ship a protected install-ready FREE default, keep hosted executio
 - live browser E2E on `https://alpha1.bolt.gives`
 - live smoke on `https://ahmad.bolt.gives`
 - live smoke on `https://bolt-gives.pages.dev`
+- `pnpm run smoke:live`
 
-## v3.0.5 - Next Priority Stack
+## v3.0.6 - Next Priority Stack
 
 Release theme: finish the execution UX, harden tenant lifecycle, and continue reducing browser weight on the remaining heavy surfaces.
 
@@ -114,8 +121,8 @@ Release theme: finish the execution UX, harden tenant lifecycle, and continue re
 - [ ] Add bundle budgets to CI so startup weight cannot silently regress.
 - [ ] Add runtime telemetry dashboards for memory, stalls, and recovery rate.
 
-### v3.0.5 Release Metrics
-- [~] Initial hosted chat shell materially lighter than `v3.0.4`.
+### v3.0.6 Release Metrics
+- [~] Initial hosted chat shell materially lighter than `v3.0.5`.
 - [ ] No shared startup chunk above agreed budget.
 - [ ] Hosted scaffold-to-preview success rate >= 90%.
 - [ ] Architect known-failure recovery success >= 75%.

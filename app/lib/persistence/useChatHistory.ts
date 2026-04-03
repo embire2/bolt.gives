@@ -1,7 +1,7 @@
 import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
 import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
-import { generateId, type JSONValue, type Message } from 'ai';
+import type { JSONValue, Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
@@ -17,6 +17,7 @@ import {
   setSnapshot,
   type IChatMetadata,
 } from './db';
+import { generateId } from '~/utils/fileUtils';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { detectProjectCommands } from '~/utils/projectCommands';

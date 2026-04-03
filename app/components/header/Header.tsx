@@ -53,6 +53,12 @@ export function Header() {
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <a
+          href="/tenant"
+          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+        >
+          Tenant Portal
+        </a>
+        <a
           href="/tenant-admin"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >

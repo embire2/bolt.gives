@@ -2,7 +2,7 @@ import { generateText, type CoreTool, type GenerateTextResult, type Message } fr
 import ignore from 'ignore';
 import type { IProviderSetting } from '~/types/model';
 import { IGNORE_PATTERNS, type FileMap } from './constants';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROVIDER_LIST } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '~/utils/constants';
 import { createFilesContext, extractCurrentContext, extractPropertiesFromMessage, simplifyBoltActions } from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { LLMManager } from '~/lib/modules/llm/manager';
@@ -47,14 +47,20 @@ export async function selectContext(props: {
     return message;
   });
 
-  const provider = PROVIDER_LIST.find((p) => p.name === currentProvider) || DEFAULT_PROVIDER;
-  const staticModels = LLMManager.getInstance().getStaticModelListFromProvider(provider);
+  const llmManager = LLMManager.getInstance(serverEnv as any);
+  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
+
+  if (!provider) {
+    throw new Error(`Provider ${currentProvider} not found`);
+  }
+
+  const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === currentModel);
 
   if (!modelDetails) {
     const modelsList = [
       ...(provider.staticModels || []),
-      ...(await LLMManager.getInstance().getModelListFromProvider(provider, {
+      ...(await llmManager.getModelListFromProvider(provider, {
         apiKeys,
         providerSettings,
         serverEnv: serverEnv as any,

@@ -53,11 +53,47 @@ export function getManualChunkName(id: string): string | undefined {
   }
 
   if (packageName && ['react', 'react-dom', 'scheduler'].includes(packageName)) {
-    return 'framework-vendor';
+    return 'react-core';
+  }
+
+  if (matchPackage(id, ['@remix-run', '@remix'])) {
+    return 'remix-runtime';
+  }
+
+  if (matchPackage(id, ['react-router'])) {
+    return 'router-runtime';
+  }
+
+  if (matchPackage(id, ['@cloudflare'])) {
+    return 'cloudflare-runtime';
   }
 
   if (matchPackage(id, ['@codemirror/lang-'])) {
     return 'editor-languages';
+  }
+
+  if (matchPackage(id, ['@codemirror/autocomplete'])) {
+    return 'editor-autocomplete';
+  }
+
+  if (matchPackage(id, ['@codemirror/search'])) {
+    return 'editor-search';
+  }
+
+  if (matchPackage(id, ['@codemirror/commands'])) {
+    return 'editor-commands';
+  }
+
+  if (matchPackage(id, ['@codemirror/view'])) {
+    return 'editor-view';
+  }
+
+  if (matchPackage(id, ['@codemirror/state'])) {
+    return 'editor-state';
+  }
+
+  if (matchPackage(id, ['@codemirror/language', '@lezer'])) {
+    return 'editor-language-core';
   }
 
   if (matchPackage(id, ['@uiw/codemirror-theme-vscode'])) {
@@ -107,15 +143,23 @@ export function getManualChunkName(id: string): string | undefined {
   }
 
   if (matchPackage(id, ['@ai-sdk', 'ai', '@openrouter', 'ollama-ai-provider', 'zod'])) {
-    return 'llm-vendor';
+    if (matchPackage(id, ['@ai-sdk/react'])) {
+      return 'llm-react';
+    }
+
+    if (matchPackage(id, ['@openrouter'])) {
+      return 'llm-openrouter';
+    }
+
+    if (matchPackage(id, ['zod'])) {
+      return 'schema-vendor';
+    }
+
+    return 'llm-core';
   }
 
   if (matchPackage(id, ['mermaid'])) {
     return 'diagram-vendor';
-  }
-
-  if (matchPackage(id, ['@remix-run', '@remix', 'react-router', '@cloudflare'])) {
-    return 'framework-vendor';
   }
 
   if (matchPackage(id, ['@phosphor-icons', '@heroicons', '@iconify'])) {

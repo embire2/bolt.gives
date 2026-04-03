@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased (`v3.0.5` in progress)
+## Unreleased (`v3.0.6` in progress)
+
+### Planned
+
+- Push the remaining editor language/theme payloads behind file-type and editor-open boundaries.
+- Keep trimming the home/chat shell until the remaining startup chunks fit explicit CI budgets.
+- Expand tenant lifecycle from local runtime registry into production-safe accounts, roles, audit, and managed-instance enforcement.
+- Promote the committed live smoke into the main release gate so generated-app success and self-heal are always proven before release.
+
+## v3.0.5 (2026-04-03)
 
 ### Added
 
@@ -14,6 +23,11 @@
   - tenant enable/disable controls
   - tenant/admin timestamps (`createdAt`, `updatedAt`, `lastLoginAt`)
   - password-reset / must-change-password state
+- Tenant users now have a dedicated `/tenant` portal with:
+  - sign-in
+  - current account visibility
+  - password rotation
+- A committed live release smoke script now exists at `scripts/live-release-smoke.mjs` and is exposed via `pnpm run smoke:live`.
 
 ### Changed
 
@@ -23,6 +37,8 @@
   - CodeMirror split more aggressively into core/theme/language buckets
   - chart/PDF settings surfaces now lazy-load through narrower action paths
   - workbench/editor/collaboration imports were untangled further from shared startup paths
+- Client provider metadata is now sourced from a lightweight catalog instead of loading the full provider manager/provider SDK graph into the browser shell.
+- Manual chunking now splits framework/runtime/LLM/editor domains into smaller buckets, reducing the shared startup burden on hosted users.
 - Hosted preview reconciliation now waits longer between fallback polls and trusts recent server-pushed state first, reducing browser churn.
 
 ### Fixed
@@ -32,6 +48,8 @@
 - Hosted doctor-scheduling generation on `https://alpha1.bolt.gives` now reaches a usable React appointment scheduling preview instead of dying on the starter-to-editor handoff.
 - The `Workspace` surface now shows what the system is doing while preview/build work is still in progress, instead of leaving users on a silent file/preview area with no clear status.
 - Tenant registry data is now normalized on load so older server-local tenant state gets upgraded safely instead of drifting across runtime versions.
+- Server LLM execution paths (`stream-text`, summary generation, context selection, and `/api/llmcall`) now use the real provider implementations on the server while the client stays on lightweight metadata only.
+- User-managed provider/API-key flows remain intact even after the client/provider-catalog split.
 
 ## v3.0.4 (2026-04-03)
 

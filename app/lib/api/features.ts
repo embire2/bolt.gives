@@ -12,10 +12,10 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
-    id: 'release-v3.0.4',
-    name: 'v3.0.4 locked FREE deepseek default',
+    id: 'release-v3.0.5',
+    name: 'v3.0.5 thinner client, smarter commentary, stronger tenants',
     description:
-      'FREE now ships as one protected hosted OpenRouter route locked to DeepSeek V3.2, so new installs can start coding immediately without exposing the managed token or a hidden fallback model.',
+      'The client now uses a metadata-only provider catalog, server LLM execution keeps heavy provider SDKs out of the browser, commentary heartbeats derive from real file/command state, tenant users can sign in and rotate passwords, and a committed live smoke flow now verifies generated app success plus preview auto-recovery.',
     releaseDate: '2026-04-03',
   },
   {

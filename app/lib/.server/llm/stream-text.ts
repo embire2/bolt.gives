@@ -1,7 +1,7 @@
 import { convertToCoreMessages, streamText as _streamText, type Message, type ToolSet } from 'ai';
 import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel, type FileMap } from './constants';
 import { getSystemPrompt } from '~/lib/common/prompts/prompts';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, PROVIDER_LIST, WORK_DIR } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, WORK_DIR } from '~/utils/constants';
 import type { IProviderSetting } from '~/types/model';
 import { PromptLibrary } from '~/lib/common/prompt-library';
 import { allowedHTMLElements } from '~/utils/markdown';
@@ -204,14 +204,20 @@ export async function streamText(props: {
     return newMessage;
   });
 
-  const provider = PROVIDER_LIST.find((p) => p.name === currentProvider) || DEFAULT_PROVIDER;
-  const staticModels = LLMManager.getInstance().getStaticModelListFromProvider(provider);
+  const llmManager = LLMManager.getInstance(serverEnv as any);
+  const provider = llmManager.getProvider(currentProvider) || llmManager.getProvider(DEFAULT_PROVIDER.name);
+
+  if (!provider) {
+    throw new Error(`Provider ${currentProvider} not found`);
+  }
+
+  const staticModels = llmManager.getStaticModelListFromProvider(provider);
   let modelDetails = staticModels.find((m) => m.name === currentModel);
 
   if (!modelDetails) {
     const modelsList = [
       ...(provider.staticModels || []),
-      ...(await LLMManager.getInstance().getModelListFromProvider(provider, {
+      ...(await llmManager.getModelListFromProvider(provider, {
         apiKeys,
         providerSettings,
         serverEnv: serverEnv as any,

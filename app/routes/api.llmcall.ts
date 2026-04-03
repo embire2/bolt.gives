@@ -209,8 +209,9 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       }
 
       const providerInfo = PROVIDER_LIST.find((p) => p.name === provider.name);
+      const providerImpl = llmManager.getProvider(provider.name);
 
-      if (!providerInfo) {
+      if (!providerInfo || !providerImpl) {
         throw new Error('Provider not found');
       }
 
@@ -240,7 +241,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             content: `${message}`,
           },
         ],
-        model: providerInfo.getModelInstance({
+        model: providerImpl.getModelInstance({
           model: modelDetails.name,
           serverEnv: runtimeEnv as any,
           apiKeys,

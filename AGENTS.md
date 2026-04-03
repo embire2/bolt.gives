@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 
-- Stable: `v3.0.4`
-- In progress: `v3.0.5`
+- Stable: `v3.0.5`
+- In progress: `v3.0.6`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -38,7 +38,7 @@ Never force-push shared branches unless explicitly approved.
 
 ---
 
-## v3.0.4 Baseline / v3.0.5 Priority Stack
+## v3.0.5 Baseline / v3.0.6 Priority Stack
 
 ### Completed baseline
 
@@ -57,8 +57,11 @@ Never force-push shared branches unless explicitly approved.
 - Harder client chunking and deferred heavy surfaces
 - Bootstrap Tenant Admin route with default `admin / admin` on server-hosted instances
 - Hosted FREE provider locked to one protected OpenRouter model (`deepseek/deepseek-v3.2`) with no client-visible fallback path
+- Lightweight client-side provider catalog so server/provider SDK code stays off the browser startup path
+- Tenant user portal with sign-in and password rotation
+- Committed live smoke path for generated-app success plus preview break/recovery
 
-### In progress / remaining (`v3.0.5`)
+### In progress / remaining (`v3.0.6`)
 
 - Finish browser-weight reduction on remaining vendor/editor payloads
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`

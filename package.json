@@ -6,7 +6,7 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "author": {
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"
@@ -40,6 +40,7 @@
     "gate:release": "node scripts/release-gate.mjs",
     "gate:release:live": "RELEASE_GATE_DOMAINS=https://alpha1.bolt.gives,https://ahmad.bolt.gives node scripts/release-gate.mjs",
     "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
+    "smoke:live": "node scripts/live-release-smoke.mjs",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
     "postinstall": "node scripts/install-playwright.mjs",

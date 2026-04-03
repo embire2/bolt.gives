@@ -131,6 +131,22 @@ function appendTenantAuditEvent(registry, event) {
   registry.auditTrail = nextEvents;
 }
 
+function sanitizeTenantForClient(tenant) {
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    email: tenant.email,
+    slug: tenant.slug,
+    workspaceDir: tenant.workspaceDir,
+    createdAt: tenant.createdAt,
+    updatedAt: tenant.updatedAt,
+    passwordUpdatedAt: tenant.passwordUpdatedAt,
+    status: tenant.status,
+    lastLoginAt: tenant.lastLoginAt,
+    mustChangePassword: tenant.mustChangePassword !== false,
+  };
+}
+
 function createDefaultTenantAdmin() {
   return {
     username: 'admin',
@@ -2274,6 +2290,102 @@ export function createRuntimeServer() {
         sendJson(res, 200, { ok: true, status: nextStatus });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to update tenant status.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-auth/login') {
+      try {
+        const body = await readJsonBody(req);
+        const email = String(body.email || '')
+          .trim()
+          .toLowerCase();
+        const password = String(body.password || '');
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.email === email);
+
+        if (!tenant || tenant.status === 'disabled') {
+          sendText(res, 401, 'Invalid tenant credentials.');
+          return;
+        }
+
+        if (tenant.passwordHash !== hashTenantSecret(password)) {
+          sendText(res, 401, 'Invalid tenant credentials.');
+          return;
+        }
+
+        tenant.lastLoginAt = new Date().toISOString();
+        tenant.updatedAt = new Date().toISOString();
+        appendTenantAuditEvent(registry, {
+          actor: tenant.email,
+          action: 'tenant.login',
+          target: tenant.email,
+          details: { slug: tenant.slug || '' },
+        });
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true, tenant: sanitizeTenantForClient(tenant) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to verify tenant credentials.');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/tenant-auth/me') {
+      try {
+        const tenantId = String(searchParams.get('tenantId') || '').trim();
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        sendJson(res, 200, { ok: true, tenant: sanitizeTenantForClient(tenant) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect tenant account.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-auth/password') {
+      try {
+        const body = await readJsonBody(req);
+        const tenantId = String(body.tenantId || '').trim();
+        const currentPassword = String(body.currentPassword || '');
+        const nextPassword = String(body.nextPassword || '').trim();
+
+        if (nextPassword.length < 10) {
+          sendText(res, 400, 'Tenant password must be at least 10 characters long.');
+          return;
+        }
+
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        if (tenant.passwordHash !== hashTenantSecret(currentPassword)) {
+          sendText(res, 401, 'Current tenant password is incorrect.');
+          return;
+        }
+
+        tenant.passwordHash = hashTenantSecret(nextPassword);
+        tenant.mustChangePassword = false;
+        tenant.updatedAt = new Date().toISOString();
+        tenant.passwordUpdatedAt = new Date().toISOString();
+        appendTenantAuditEvent(registry, {
+          actor: tenant.email,
+          action: 'tenant.password.rotate',
+          target: tenant.email,
+        });
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true, tenant: sanitizeTenantForClient(tenant) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to update tenant password.');
       }
       return;
     }

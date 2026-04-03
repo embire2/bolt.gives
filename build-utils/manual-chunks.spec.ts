@@ -10,7 +10,13 @@ describe('getManualChunkName', () => {
   });
 
   it('groups editor and terminal dependencies separately', () => {
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-core');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-view');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/state/dist/index.js')).toBe(
+      'editor-state',
+    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/commands/dist/index.js')).toBe(
+      'editor-commands',
+    );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/lang-javascript/dist/index.js')).toBe(
       'editor-languages',
     );
@@ -33,7 +39,9 @@ describe('getManualChunkName', () => {
   });
 
   it('extracts framework, ui, and diagram dependencies from the generic vendor chunk', () => {
-    expect(getManualChunkName('/root/bolt.gives/node_modules/react/index.js')).toBe('framework-vendor');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/react/index.js')).toBe('react-core');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@remix-run/react/dist/index.js')).toBe('remix-runtime');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/react-router/dist/index.js')).toBe('router-runtime');
     expect(getManualChunkName('/root/bolt.gives/node_modules/lucide-react/dist/esm/lucide-react.js')).toBe(
       'ui-vendor',
     );
@@ -44,5 +52,14 @@ describe('getManualChunkName', () => {
 
   it('returns undefined for application files', () => {
     expect(getManualChunkName('/root/bolt.gives/app/components/chat/BaseChat.tsx')).toBeUndefined();
+  });
+
+  it('splits llm and schema tooling by responsibility', () => {
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@ai-sdk/react/dist/index.js')).toBe('llm-react');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/ai/dist/index.js')).toBe('llm-core');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@openrouter/ai-sdk-provider/dist/index.js')).toBe(
+      'llm-openrouter',
+    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/zod/lib/index.js')).toBe('schema-vendor');
   });
 });

@@ -1,5 +1,5 @@
 import { useSearchParams } from '@remix-run/react';
-import { generateId, type Message } from 'ai';
+import type { Message } from 'ai';
 import ignore from 'ignore';
 import { useEffect, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
@@ -8,6 +8,7 @@ import { Chat } from '~/components/chat/Chat.client';
 import { useGit } from '~/lib/hooks/useGit';
 import { useChatHistory } from '~/lib/persistence';
 import { createCommandsMessage, detectProjectCommands, escapeBoltTags } from '~/utils/projectCommands';
+import { generateId } from '~/utils/fileUtils';
 import { LoadingOverlay } from '~/components/ui/LoadingOverlay';
 import { toast } from 'react-toastify';
 
