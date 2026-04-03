@@ -27,7 +27,7 @@ import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
 import { recordAgentRunMetrics } from '~/lib/.server/llm/run-metrics';
 import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~/lib/.server/llm/project-memory';
-import { analyzeRunContinuation } from '~/lib/.server/llm/run-continuation';
+import { analyzeRunContinuation, synthesizeRunHandoff } from '~/lib/.server/llm/run-continuation';
 import { SubAgentManager, type SubAgentConfig, type SubAgentState } from '~/lib/.server/llm/sub-agent';
 import { createPlannerExecutor } from '~/lib/.server/llm/sub-agent/planner-executor';
 import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
@@ -80,6 +80,22 @@ function extractLatestUserGoal(messages: Messages): string {
   const { content } = extractPropertiesFromMessage(lastUser);
 
   return content || lastUser.content || '';
+}
+
+function summarizeGoalForCommentary(goal: string | undefined): string {
+  const normalized = String(goal || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return 'your request';
+  }
+
+  return normalized.length > 96 ? `${normalized.slice(0, 93).trimEnd()}...` : normalized;
+}
+
+function withGoal(message: string, goal: string | undefined): string {
+  return message.replace(/\{goal\}/g, summarizeGoalForCommentary(goal));
 }
 
 function detectManualIntervention(messages: Messages): boolean {
@@ -311,6 +327,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let hasExecutionFailures = false;
         let latestExecutionFailure: ReturnType<typeof extractExecutionFailure> = null;
         let previewCheckpointObserved = false;
+        let lastVisibleResultForHeartbeat = '';
+        let lastProgressMessageForHeartbeat = '';
         const effectiveChatMode = chatMode || 'build';
 
         const stopCommentaryHeartbeat = () => {
@@ -354,6 +372,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             message: effectiveMessage,
             detail,
           });
+          const keyChanges = contracted.detail.match(/Key changes:\s*([\s\S]*?)(?=\nNext:|$)/i)?.[1]?.trim();
+          const nextStep = contracted.detail.match(/Next:\s*([\s\S]*?)$/i)?.[1]?.trim();
 
           const payload: AgentCommentaryAnnotation = {
             type: 'agent-commentary',
@@ -364,6 +384,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             timestamp: new Date().toISOString(),
             detail: contracted.detail,
           };
+
+          if (keyChanges) {
+            lastVisibleResultForHeartbeat = keyChanges;
+          } else {
+            lastVisibleResultForHeartbeat = contracted.message;
+          }
+
+          if (nextStep) {
+            lastProgressMessageForHeartbeat = nextStep;
+          }
 
           dataStream.writeData({
             ...payload,
@@ -376,7 +406,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           }
 
           commentaryHeartbeat = setInterval(() => {
-            const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase);
+            const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase, {
+              goal: latestUserGoal,
+              currentStep: lastProgressMessageForHeartbeat,
+              lastVisibleResult: lastVisibleResultForHeartbeat,
+            });
             writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, { usePool: true });
           }, COMMENTARY_HEARTBEAT_INTERVAL_MS);
         };
@@ -565,7 +599,10 @@ Next: Check the preview/start output before treating this run as complete.`,
         let forceFinalizeAttempted = false;
         let runContinuationAttempts = 0;
 
-        writeCommentary('plan', 'I am reviewing your request and mapping out the first steps.');
+        writeCommentary(
+          'plan',
+          withGoal('I am reviewing {goal} and mapping out the first concrete steps.', latestUserGoal),
+        );
         startCommentaryHeartbeat();
 
         if (processedMessages.length > 3) {
@@ -574,7 +611,13 @@ Next: Check the preview/start output before treating this run as complete.`,
 
         if (filePaths.length > 0 && contextOptimization) {
           logger.debug('Generating Chat Summary');
-          writeCommentary('plan', 'I am quickly summarizing recent context so I can stay on track.');
+          writeCommentary(
+            'plan',
+            withGoal(
+              'I am quickly summarizing the recent context for {goal} so the implementation stays on track.',
+              latestUserGoal,
+            ),
+          );
           dataStream.writeData({
             type: 'progress',
             label: 'summary',
@@ -582,6 +625,7 @@ Next: Check the preview/start output before treating this run as complete.`,
             order: progressCounter++,
             message: 'Analysing Request',
           } satisfies ProgressAnnotation);
+          lastProgressMessageForHeartbeat = 'Summarising the recent context and existing files.';
 
           // Create a summary of the chat
           console.log(`Messages count: ${processedMessages.length}`);
@@ -607,6 +651,7 @@ Next: Check the preview/start output before treating this run as complete.`,
             order: progressCounter++,
             message: 'Analysis Complete',
           } satisfies ProgressAnnotation);
+          lastVisibleResultForHeartbeat = 'Context summary completed successfully.';
 
           dataStream.writeMessageAnnotation({
             type: 'chatSummary',
@@ -616,7 +661,7 @@ Next: Check the preview/start output before treating this run as complete.`,
 
           // Update context buffer
           logger.debug('Updating Context Buffer');
-          writeCommentary('plan', 'I am selecting the files that matter for this task.');
+          writeCommentary('plan', withGoal('I am selecting the files that matter for {goal}.', latestUserGoal));
           dataStream.writeData({
             type: 'progress',
             label: 'context',
@@ -624,6 +669,7 @@ Next: Check the preview/start output before treating this run as complete.`,
             order: progressCounter++,
             message: 'Determining Files to Read',
           } satisfies ProgressAnnotation);
+          lastProgressMessageForHeartbeat = 'Selecting the files and folders that matter for this task.';
 
           // Select context files
           console.log(`Messages count: ${processedMessages.length}`);
@@ -668,6 +714,7 @@ Next: Check the preview/start output before treating this run as complete.`,
             order: progressCounter++,
             message: 'Code Files Selected',
           } satisfies ProgressAnnotation);
+          lastVisibleResultForHeartbeat = 'Relevant files were selected for execution.';
 
           // logger.debug('Code Files Selected');
         }
@@ -676,7 +723,10 @@ Next: Check the preview/start output before treating this run as complete.`,
         let plannerAgentId: string | undefined = undefined;
 
         if (effectiveChatMode === 'build') {
-          writeCommentary('plan', 'I am drafting a clear step-by-step plan before coding.');
+          writeCommentary(
+            'plan',
+            withGoal('I am drafting a clear build plan for {goal} before I touch the code.', latestUserGoal),
+          );
 
           const latestPlannerSourceMessage = [...processedMessages]
             .reverse()
@@ -696,13 +746,20 @@ Next: Check the preview/start output before treating this run as complete.`,
             false,
           );
           const effectivePlannerModel = plannerModel || selectedModel || '';
+          const effectivePlannerProvider = plannerProvider || selectedProvider || '';
           const isLongThinkModel = LONG_THINK_MODEL_RE.test(effectivePlannerModel);
-          const shouldRunPlanner = plannerFeatureEnabled && (plannerAllowedForLongThink || !isLongThinkModel);
+          const shouldSkipPlannerForHostedFree = effectivePlannerProvider === 'FREE';
+          const shouldRunPlanner =
+            plannerFeatureEnabled &&
+            !shouldSkipPlannerForHostedFree &&
+            (plannerAllowedForLongThink || !isLongThinkModel);
 
           if (!shouldRunPlanner) {
             const reason = !plannerFeatureEnabled
               ? 'disabled by configuration'
-              : `skipped for ${effectivePlannerModel || 'current model'} to reduce stall risk`;
+              : shouldSkipPlannerForHostedFree
+                ? 'skipped for the hosted FREE provider to reduce stall risk and start coding immediately'
+                : `skipped for ${effectivePlannerModel || 'current model'} to reduce stall risk`;
             writeCommentary(
               'plan',
               'I am skipping the planning helper and moving directly into executable steps.',
@@ -745,9 +802,12 @@ Next: I will execute actions directly for faster progress.`,
 
               const onProgress = (state: SubAgentState, _output: string) => {
                 if (state === 'planning') {
-                  writeCommentary('plan', 'I am breaking your request into practical steps.');
+                  writeCommentary('plan', withGoal('I am breaking {goal} into practical build steps.', latestUserGoal));
                 } else if (state === 'executing') {
-                  writeCommentary('plan', 'I am finalizing the plan and preparing to execute.');
+                  writeCommentary(
+                    'plan',
+                    withGoal('I am finalizing the plan for {goal} and preparing to execute it.', latestUserGoal),
+                  );
                 }
               };
 
@@ -778,7 +838,7 @@ Next: I will execute actions directly for faster progress.`,
 
                 writeCommentary(
                   'plan',
-                  'Planning is complete. I am moving into execution now.',
+                  withGoal('Planning is complete. I am moving into execution for {goal} now.', latestUserGoal),
                   'complete',
                   subAgentPlan.slice(0, 260),
                 );
@@ -820,7 +880,9 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
               const toolNames = toolCalls.map((call) => call.toolName).join(', ');
               writeCommentary(
                 'verification',
-                'I finished a step and I am checking the result before continuing.',
+                toolNames
+                  ? `I finished ${toolNames} and I am checking the result before continuing.`
+                  : 'I finished a step and I am checking the result before continuing.',
                 'in-progress',
                 toolNames
                   ? `Key changes: Finished actions (${toolNames}) and collected ${(toolResults?.length ?? 0).toString()} updates.
@@ -930,8 +992,8 @@ Next: I will continue automatically right after this pause.`,
               writeCommentary(
                 'next-step',
                 pendingRecoveryReason
-                  ? 'Recovery is complete. I am preparing your final answer now.'
-                  : 'Execution is complete. I am preparing your final answer now.',
+                  ? withGoal('Recovery is complete. I am preparing the final result for {goal} now.', latestUserGoal)
+                  : withGoal('Execution is complete. I am preparing the final result for {goal} now.', latestUserGoal),
                 pendingRecoveryReason ? 'recovered' : 'in-progress',
               );
 
@@ -1031,12 +1093,59 @@ Next: I am sending the final result now.`,
               runContinuationAttempts < MAX_RUN_CONTINUATION_ATTEMPTS;
 
             if (shouldContinueForRunIntent || shouldContinueForUnverifiedPreview) {
-              runContinuationAttempts += 1;
-
-              const continuationAttemptLabel = `${runContinuationAttempts}/${MAX_RUN_CONTINUATION_ATTEMPTS}`;
               const continuationReason = shouldContinueForRunIntent
                 ? runContinuationDecision.reason
                 : 'preview-not-verified';
+              const synthesizedRunHandoff = await synthesizeRunHandoff({
+                assistantContent: content,
+              });
+
+              if (
+                synthesizedRunHandoff &&
+                (continuationReason === 'run-intent-without-start' ||
+                  continuationReason === 'preview-not-verified' ||
+                  continuationReason === 'bootstrap-only-shell-actions')
+              ) {
+                writeCommentary(
+                  'action',
+                  synthesizedRunHandoff.followupMessage,
+                  'in-progress',
+                  `Key changes: The server inferred the missing runtime commands (${synthesizedRunHandoff.startCommand}) from the generated project files.
+Next: I am handing those commands to the workspace runner so preview can start without waiting for another model response.`,
+                );
+                dataStream.writeData({
+                  type: 'synthetic-run-handoff',
+                  handoffId: `${runId}-handoff-${runContinuationAttempts + 1}`,
+                  messageId: generateId(),
+                  reason: continuationReason,
+                  startCommand: synthesizedRunHandoff.startCommand,
+                  assistantContent: synthesizedRunHandoff.assistantContent,
+                  timestamp: new Date().toISOString(),
+                  ...(synthesizedRunHandoff.setupCommand ? { setupCommand: synthesizedRunHandoff.setupCommand } : {}),
+                });
+                logger.info(
+                  `run continuation synthesized ${JSON.stringify({
+                    runId,
+                    reason: continuationReason,
+                    provider,
+                    model,
+                    startCommand: synthesizedRunHandoff.startCommand,
+                    setupCommand: synthesizedRunHandoff.setupCommand || null,
+                  })}`,
+                );
+
+                emitFinalNextStepCommentary();
+
+                stopRunMonitors();
+                emitRunCompletionEvents(content, model, provider);
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                return;
+              }
+
+              runContinuationAttempts += 1;
+
+              const continuationAttemptLabel = `${runContinuationAttempts}/${MAX_RUN_CONTINUATION_ATTEMPTS}`;
               writeCommentary(
                 'recovery',
                 shouldContinueForRunIntent
@@ -1216,7 +1325,11 @@ Next: I am sending the final result now.`,
           order: progressCounter++,
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
-        writeCommentary('action', 'I am now executing the plan and streaming progress as I go.');
+        writeCommentary(
+          'action',
+          withGoal('I am now implementing {goal} and streaming each visible step as I go.', latestUserGoal),
+        );
+        lastProgressMessageForHeartbeat = 'Writing files, running commands, and verifying the preview.';
 
         beginRunMonitors();
 

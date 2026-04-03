@@ -7,6 +7,7 @@ import {
   makeInstallCommandsProjectAware,
   makeScaffoldCommandsProjectAware,
   normalizeShellCommandSurface,
+  rewriteAllPackageManagersToPnpm,
   unwrapCommandJsonEnvelope,
 } from './shell-command-utils';
 
@@ -153,7 +154,7 @@ describe('makeInstallCommandsLowNoise', () => {
     const res = makeInstallCommandsLowNoise(input);
 
     expect(res.shouldModify).toBe(true);
-    expect(res.modifiedCommand).toBe('pnpm install --reporter=append-only && pnpm run dev');
+    expect(res.modifiedCommand).toBe('pnpm install --reporter=append-only --no-frozen-lockfile && pnpm run dev');
   });
 
   it('adds quiet flags for npm install commands', () => {
@@ -165,7 +166,7 @@ describe('makeInstallCommandsLowNoise', () => {
   });
 
   it('does not modify install commands that are already low-noise', () => {
-    const input = 'pnpm install --reporter=append-only && pnpm run dev';
+    const input = 'pnpm install --reporter=append-only --no-frozen-lockfile && pnpm run dev';
     const res = makeInstallCommandsLowNoise(input);
 
     expect(res.shouldModify).toBe(false);
@@ -194,5 +195,23 @@ describe('makeScaffoldCommandsProjectAware', () => {
 
     expect(res.shouldModify).toBe(true);
     expect(res.modifiedCommand).toContain('Skipping scaffold command');
+  });
+});
+
+describe('rewriteAllPackageManagersToPnpm', () => {
+  it('rewrites bare npm install with npm-only quiet flags to pnpm install', () => {
+    const input = 'npm install --no-progress --silent && npm run dev';
+    const res = rewriteAllPackageManagersToPnpm(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install && pnpm run dev');
+  });
+
+  it('rewrites npm install with package args to pnpm add while stripping npm-only quiet flags', () => {
+    const input = 'npm install --save-dev --no-progress --silent vite';
+    const res = rewriteAllPackageManagersToPnpm(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm add --save-dev vite');
   });
 });

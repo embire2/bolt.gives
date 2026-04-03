@@ -1,20 +1,26 @@
 import type { Extension } from '@codemirror/state';
-import { yCollab } from 'y-codemirror.next';
-import { WebsocketProvider } from 'y-websocket';
-import * as Y from 'yjs';
+import type { WebsocketProvider as YWebsocketProvider } from 'y-websocket';
+import type { Doc as YDoc, Text as YText, UndoManager as YUndoManager } from 'yjs';
 import { logStore } from '~/lib/stores/logs';
 import { getCollaborationServerUrl } from './config';
+
+type CollaborationRuntime = {
+  yCollab: typeof import('y-codemirror.next').yCollab;
+  WebsocketProvider: typeof import('y-websocket').WebsocketProvider;
+  Y: typeof import('yjs');
+};
 
 interface CollaborationBinding {
   filePath: string;
   roomName: string;
-  doc: Y.Doc;
-  yText: Y.Text;
-  provider: WebsocketProvider;
-  undoManager: Y.UndoManager;
+  doc: YDoc;
+  yText: YText;
+  provider: YWebsocketProvider;
+  undoManager: YUndoManager;
 }
 
 const bindings = new Map<string, CollaborationBinding>();
+let collaborationRuntimePromise: Promise<CollaborationRuntime> | null = null;
 
 const userPalette = [
   { color: '#30bced', light: '#30bced33' },
@@ -24,6 +30,20 @@ const userPalette = [
   { color: '#9ac2c9', light: '#9ac2c933' },
   { color: '#8acb88', light: '#8acb8833' },
 ];
+
+function loadCollaborationRuntime() {
+  if (!collaborationRuntimePromise) {
+    collaborationRuntimePromise = Promise.all([import('y-codemirror.next'), import('y-websocket'), import('yjs')]).then(
+      ([codemirrorModule, websocketModule, yjsModule]) => ({
+        yCollab: codemirrorModule.yCollab,
+        WebsocketProvider: websocketModule.WebsocketProvider,
+        Y: yjsModule,
+      }),
+    );
+  }
+
+  return collaborationRuntimePromise;
+}
 
 function getRandomColor() {
   return userPalette[Math.floor(Math.random() * userPalette.length)];
@@ -49,12 +69,13 @@ function toRoomName(filePath: string) {
   return encodeURIComponent(filePath);
 }
 
-function createBinding(filePath: string, initialContent: string): CollaborationBinding {
+async function createBinding(filePath: string, initialContent: string): Promise<CollaborationBinding> {
+  const { WebsocketProvider: websocketProviderClass, Y } = await loadCollaborationRuntime();
   const doc = new Y.Doc();
   const roomName = toRoomName(filePath);
   const yText = doc.getText('content');
   const undoManager = new Y.UndoManager(yText);
-  const provider = new WebsocketProvider(getCollaborationServerUrl(), roomName, doc, {
+  const provider = new websocketProviderClass(getCollaborationServerUrl(), roomName, doc, {
     connect: true,
     params: {
       path: filePath,
@@ -92,11 +113,11 @@ function createBinding(filePath: string, initialContent: string): CollaborationB
   };
 }
 
-function getBinding(filePath: string, initialContent: string) {
+async function getBinding(filePath: string, initialContent: string): Promise<CollaborationBinding> {
   let binding = bindings.get(filePath);
 
   if (!binding) {
-    binding = createBinding(filePath, initialContent);
+    binding = await createBinding(filePath, initialContent);
     bindings.set(filePath, binding);
   } else if (binding.yText.length === 0 && initialContent) {
     binding.yText.insert(0, initialContent);
@@ -105,8 +126,8 @@ function getBinding(filePath: string, initialContent: string) {
   return binding;
 }
 
-export function getCollaborationExtension(filePath: string, initialContent: string): Extension {
-  const binding = getBinding(filePath, initialContent);
+export async function getCollaborationExtension(filePath: string, initialContent: string): Promise<Extension> {
+  const [{ yCollab }, binding] = await Promise.all([loadCollaborationRuntime(), getBinding(filePath, initialContent)]);
   return yCollab(binding.yText, binding.provider.awareness, { undoManager: binding.undoManager });
 }
 

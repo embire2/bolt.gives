@@ -56,18 +56,26 @@ export function getManualChunkName(id: string): string | undefined {
     return 'framework-vendor';
   }
 
+  if (matchPackage(id, ['@codemirror/lang-'])) {
+    return 'editor-languages';
+  }
+
+  if (matchPackage(id, ['@uiw/codemirror-theme-vscode'])) {
+    return 'editor-themes';
+  }
+
   if (
     matchPackage(id, [
-      '@uiw/codemirror-theme-vscode',
-      '@lezer',
-      '@codemirror/lang-',
-      '@codemirror',
       '@uiw/react-codemirror',
       '@uiw/codemirror-extensions-events',
       '@uiw/codemirror-extensions-basic-setup',
     ])
   ) {
-    return 'editor-codemirror';
+    return 'editor-shell';
+  }
+
+  if (matchPackage(id, ['@codemirror', '@lezer'])) {
+    return 'editor-core';
   }
 
   if (matchPackage(id, ['@xterm', 'xterm'])) {
@@ -82,8 +90,12 @@ export function getManualChunkName(id: string): string | undefined {
     return 'git-export';
   }
 
-  if (matchPackage(id, ['chart.js', 'react-chartjs-2'])) {
-    return 'charts-vendor';
+  if (matchPackage(id, ['chart.js'])) {
+    return 'charts-core';
+  }
+
+  if (matchPackage(id, ['react-chartjs-2'])) {
+    return 'charts-react';
   }
 
   if (matchPackage(id, ['jspdf'])) {
@@ -110,7 +122,15 @@ export function getManualChunkName(id: string): string | undefined {
     return 'icons-vendor';
   }
 
-  if (matchPackage(id, ['crypto-browserify', 'stream-browserify', 'path-browserify', 'rollup-plugin-node-polyfills', 'vite-plugin-node-polyfills'])) {
+  if (
+    matchPackage(id, [
+      'crypto-browserify',
+      'stream-browserify',
+      'path-browserify',
+      'rollup-plugin-node-polyfills',
+      'vite-plugin-node-polyfills',
+    ])
+  ) {
     return 'polyfills-vendor';
   }
 
@@ -126,6 +146,9 @@ export function getManualChunkName(id: string): string | undefined {
     return 'vendor-misc';
   }
 
-  const sanitized = packageName.replace(/^@/, '').replace(/[\/]/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
+  const sanitized = packageName
+    .replace(/^@/, '')
+    .replace(/[\/]/g, '-')
+    .replace(/[^a-zA-Z0-9-_]/g, '');
   return `vendor-${sanitized}`;
 }

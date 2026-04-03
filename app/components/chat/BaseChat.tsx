@@ -341,8 +341,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
+    const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
     const commentaryFeedRef = useRef<HTMLDivElement | null>(null);
     const technicalFeedRef = useRef<HTMLDivElement | null>(null);
+    const workspaceAutoSurfaceRef = useRef(false);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [openSurfaces, setOpenSurfaces] = useState<SurfaceTabId[]>(['chat', 'workspace']);
@@ -427,6 +429,26 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
       );
     }, [showWorkbench]);
+
+    useEffect(() => {
+      const hasMeaningfulWorkspaceActivity = stepRunnerEvents.some((event) => event.type !== 'telemetry');
+
+      if (!hasMeaningfulWorkspaceActivity) {
+        workspaceAutoSurfaceRef.current = false;
+        return;
+      }
+
+      if (workspaceAutoSurfaceRef.current) {
+        return;
+      }
+
+      workspaceAutoSurfaceRef.current = true;
+      setOpenSurfaces((currentTabs) =>
+        currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
+      );
+      workbenchStore.showWorkbench.set(true);
+      setActiveSurface('workspace');
+    }, [stepRunnerEvents]);
 
     useEffect(() => {
       onStreamingChange?.(isStreaming);

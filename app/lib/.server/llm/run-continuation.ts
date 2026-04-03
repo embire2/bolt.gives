@@ -1,3 +1,5 @@
+import { detectProjectCommands } from '~/utils/projectCommands';
+
 export interface RunContinuationOptions {
   chatMode: 'build' | 'discuss';
   lastUserContent: string;
@@ -20,6 +22,19 @@ export interface RunContinuationDecision {
     | 'continuation-not-required';
 }
 
+export interface SynthesizedRunHandoff {
+  assistantContent: string;
+  followupMessage: string;
+  reason: 'inferred-project-commands';
+  setupCommand?: string;
+  startCommand: string;
+}
+
+interface ExtractedFileAction {
+  content: string;
+  path: string;
+}
+
 const RUN_INTENT_RE =
   /\b(run|start|preview|launch|serve)\b|dev server|localhost|0\.0\.0\.0|--host|--port|vite\s+\+\s+react/i;
 const BUILD_INTENT_RE =
@@ -32,6 +47,8 @@ const START_ACTION_RE = /<boltAction[^>]*type="start"/i;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type="file"/i;
 const FILE_PATH_RE = /<boltAction[^>]*type="file"[^>]*filePath=(["'])([^"']+)\1[^>]*>/gi;
+const FILE_ACTION_WITH_CONTENT_RE =
+  /<boltAction[^>]*type="file"[^>]*filePath=(["'])([^"']+)\1[^>]*>([\s\S]*?)<\/boltAction>/gi;
 const SHELL_ACTION_RE = /<boltAction[^>]*type="shell"[^>]*>([\s\S]*?)<\/boltAction>/gi;
 
 const INSPECTION_COMMAND_RE =
@@ -78,6 +95,43 @@ function extractFilePaths(assistantContent: string): string[] {
   }
 
   return filePaths;
+}
+
+function normalizeGeneratedFileContent(filePath: string, content: string): string {
+  let normalized = content.trim();
+
+  if (!filePath.endsWith('.md')) {
+    const codeBlockMatch = normalized.match(/^\s*```[\w-]*\n([\s\S]*?)\n?```\s*$/);
+
+    if (codeBlockMatch) {
+      normalized = codeBlockMatch[1];
+    }
+
+    normalized = normalized.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  }
+
+  return normalized.endsWith('\n') ? normalized : `${normalized}\n`;
+}
+
+function extractFileActions(assistantContent: string): ExtractedFileAction[] {
+  const files: ExtractedFileAction[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = FILE_ACTION_WITH_CONTENT_RE.exec(assistantContent)) !== null) {
+    const filePath = match[2]?.trim();
+    const rawContent = match[3] ?? '';
+
+    if (!filePath) {
+      continue;
+    }
+
+    files.push({
+      path: filePath,
+      content: normalizeGeneratedFileContent(filePath, rawContent),
+    });
+  }
+
+  return files;
 }
 
 function normalizeFilePath(filePath: string): string {
@@ -152,6 +206,61 @@ function hasOnlyBootstrapShellCommands(commands: string[]): boolean {
   }
 
   return foundBootstrapSignal;
+}
+
+export async function synthesizeRunHandoff(options: {
+  assistantContent: string;
+}): Promise<SynthesizedRunHandoff | null> {
+  const { assistantContent } = options;
+
+  if (START_ACTION_RE.test(assistantContent)) {
+    return null;
+  }
+
+  const shellCommands = extractShellCommands(assistantContent);
+
+  if (
+    shellCommands.some((command) => splitCommandSegments(command).some((segment) => START_COMMAND_RE.test(segment)))
+  ) {
+    return null;
+  }
+
+  const fileActions = extractFileActions(assistantContent);
+  const filePaths = fileActions.map((file) => file.path);
+
+  if (!hasImplementationFileAction(filePaths)) {
+    return null;
+  }
+
+  const commands = await detectProjectCommands(fileActions);
+
+  if (!commands.startCommand) {
+    return null;
+  }
+
+  const installAlreadyPresent = shellCommands.some((command) =>
+    splitCommandSegments(command).some((segment) => INSTALL_COMMAND_RE.test(segment)),
+  );
+  const setupCommand = installAlreadyPresent ? undefined : commands.setupCommand;
+  const actionBlocks = [
+    setupCommand ? `<boltAction type="shell">${setupCommand}</boltAction>` : null,
+    `<boltAction type="start">${commands.startCommand}</boltAction>`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    reason: 'inferred-project-commands',
+    setupCommand,
+    startCommand: commands.startCommand,
+    followupMessage:
+      'I inferred the missing runtime commands from the generated project files and I am launching the preview now.',
+    assistantContent: `I inferred the missing runtime commands from the generated project files and I am launching the preview now.
+
+<boltArtifact id="runtime-handoff" title="Runtime Handoff">
+${actionBlocks}
+</boltArtifact>`,
+  };
 }
 
 export function analyzeRunContinuation(options: RunContinuationOptions): RunContinuationDecision {

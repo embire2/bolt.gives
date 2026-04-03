@@ -68,6 +68,19 @@ describe('extractPreviewAlertFromText', () => {
     expect(alert?.content).toContain('Expected identifier but found end of file');
   });
 
+  it('prefers actionable compile lines over stack-trace noise', () => {
+    const alert = extractPreviewAlertFromText(
+      [
+        'at failureErrorWithLog (/home/project/node_modules/esbuild/lib/main.js:1467:15)',
+        '[plugin:vite:react-babel] /home/project/src/components/ReminderFlow.jsx: Unexpected token (49:0)',
+        'Pre-transform error: Transform failed with 1 error:',
+      ].join('\n'),
+    );
+
+    expect(alert?.description).toContain('[plugin:vite:react-babel]');
+    expect(alert?.description).not.toContain('failureErrorWithLog');
+  });
+
   it('returns a preview alert for preview process lifecycle failures', () => {
     const alert = extractPreviewAlertFromText(' ELIFECYCLE  Command failed.\nerror when starting dev server');
 

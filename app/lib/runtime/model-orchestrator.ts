@@ -184,10 +184,11 @@ export function buildModelSelectionEnvelope(options: {
   providerName: string;
   content: string;
   selectionReason?: string;
+  includeSelectionReason?: boolean;
 }) {
   const lines = [`[Model: ${options.model}]`, `[Provider: ${options.providerName}]`];
 
-  if (options.selectionReason) {
+  if (options.includeSelectionReason === true && options.selectionReason) {
     lines.push(`[Model Selection: ${options.selectionReason}]`);
   }
 

@@ -54,6 +54,7 @@ import {
   type ArchitectDiagnosis,
   buildArchitectAutoHealPrompt,
   decideArchitectAutoHeal,
+  decideStarterContinuationPrecedence,
   diagnoseArchitectIssue,
 } from '~/lib/runtime/architect';
 import {
@@ -75,7 +76,12 @@ import {
 } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
-import type { AgentRunMetricsDataEvent, ProjectMemoryDataEvent, UsageDataEvent } from '~/types/context';
+import type {
+  AgentRunMetricsDataEvent,
+  ProjectMemoryDataEvent,
+  SyntheticRunHandoffDataEvent,
+  UsageDataEvent,
+} from '~/types/context';
 import { requestLikelyNeedsMutatingActions } from '~/lib/runtime/mutating-intent';
 
 const logger = createScopedLogger('Chat');
@@ -86,6 +92,8 @@ const MAX_CHAT_DATA_EVENTS = 140;
 const MAX_STEP_RUNNER_EVENTS = 96;
 const TELEMETRY_SAMPLE_MS = 10000;
 const TELEMETRY_EMIT_INTERVAL_MS = 60000;
+const HOSTED_TELEMETRY_SAMPLE_MS = 30000;
+const HOSTED_TELEMETRY_EMIT_INTERVAL_MS = 120000;
 const STEP_EVENT_FLUSH_MS = 250;
 const TELEMETRY_OUTPUT_MAX_CHARS = 1600;
 const TELEMETRY_MERGE_WINDOW_MS = 20000;
@@ -140,6 +148,15 @@ function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean 
 
     return /(^|\/)(package\.json|src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?))$/i.test(filePath);
   });
+}
+
+function isSyntheticRunHandoffEvent(value: unknown): value is SyntheticRunHandoffDataEvent {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as any).type === 'synthetic-run-handoff'
+  );
 }
 
 function loadStoredProjectMemory(): StoredProjectMemory {
@@ -463,6 +480,7 @@ export const ChatImpl = memo(
     const [latestUsage, setLatestUsage] = useState<UsageDataEvent | null>(null);
     const [pendingArchitectAutoHeal, setPendingArchitectAutoHeal] = useState<PendingArchitectAutoHeal | null>(null);
     const [architectAutoHealStatus, setArchitectAutoHealStatus] = useState<'queued' | 'running' | null>(null);
+    const hostedRuntimeEnabled = useMemo(() => isHostedRuntimeEnabled(), []);
     const selectionBootstrapRef = useRef(false);
     const architectAttemptCountsRef = useRef<Record<string, number>>({});
     const architectInFlightRef = useRef(false);
@@ -595,6 +613,8 @@ export const ChatImpl = memo(
     const autoContinuationCountRef = useRef(0);
     const isLoadingRef = useRef(isLoading);
     const fakeLoadingRef = useRef(fakeLoading);
+    const messagesRef = useRef(messages);
+    const appliedSyntheticRunHandoffsRef = useRef(new Set<string>());
 
     useEffect(() => {
       isLoadingRef.current = isLoading;
@@ -603,6 +623,10 @@ export const ChatImpl = memo(
     useEffect(() => {
       fakeLoadingRef.current = fakeLoading;
     }, [fakeLoading]);
+
+    useEffect(() => {
+      messagesRef.current = messages;
+    }, [messages]);
 
     useEffect(() => {
       if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
@@ -742,6 +766,7 @@ export const ChatImpl = memo(
             reason === 'stream-stalled'
               ? 'Starter bootstrap stalled. Continuing with the user request.'
               : 'Starter bootstrap completed. Continuing with the user request.',
+          includeSelectionReason: true,
           content: `Starter bootstrap is complete, but the fallback placeholder is still present.
 Continue implementing the original request now and do not stop at scaffold/install/start.
 
@@ -855,8 +880,55 @@ Requirements:
     }, [boundedChatData]);
 
     useEffect(() => {
+      const syntheticRunHandoff = [...boundedChatData]
+        .reverse()
+        .find((item): item is SyntheticRunHandoffDataEvent => isSyntheticRunHandoffEvent(item));
+
+      if (!syntheticRunHandoff || isLoading || fakeLoading) {
+        return;
+      }
+
+      if (appliedSyntheticRunHandoffsRef.current.has(syntheticRunHandoff.handoffId)) {
+        return;
+      }
+
+      appliedSyntheticRunHandoffsRef.current.add(syntheticRunHandoff.handoffId);
+
+      const currentMessages = messagesRef.current;
+
+      if (currentMessages.some((message) => message.id === syntheticRunHandoff.messageId)) {
+        return;
+      }
+
+      appendStepRunnerEvent({
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Workspace runtime handoff queued',
+        output: `start=${syntheticRunHandoff.startCommand}${syntheticRunHandoff.setupCommand ? ` | setup=${syntheticRunHandoff.setupCommand}` : ''}`,
+      });
+
+      workbenchStore.showWorkbench.set(true);
+      workbenchStore.currentView.set('preview');
+
+      setMessages([
+        ...currentMessages,
+        {
+          id: syntheticRunHandoff.messageId,
+          role: 'assistant',
+          content: syntheticRunHandoff.assistantContent,
+        },
+      ]);
+
+      toast.info('Workspace runtime handoff: launching the preview from inferred project commands.');
+    }, [boundedChatData, fakeLoading, isLoading, setMessages]);
+
+    useEffect(() => {
       const streaming = isLoading || fakeLoading;
       let interval: number | undefined;
+      const telemetrySampleMs = hostedRuntimeEnabled ? HOSTED_TELEMETRY_SAMPLE_MS : TELEMETRY_SAMPLE_MS;
+      const telemetryEmitIntervalMs = hostedRuntimeEnabled
+        ? HOSTED_TELEMETRY_EMIT_INTERVAL_MS
+        : TELEMETRY_EMIT_INTERVAL_MS;
 
       if (!streaming) {
         stallReportedRef.current = false;
@@ -864,6 +936,10 @@ Requirements:
         lastTelemetryEmitAtRef.current = 0;
       } else {
         interval = window.setInterval(() => {
+          if (typeof document !== 'undefined' && document.hidden && hostedRuntimeEnabled) {
+            return;
+          }
+
           const stallPolicy = resolveStallPolicy(runContextRef.current.model);
           const performanceRecord = performance as Performance & {
             memory?: {
@@ -891,11 +967,13 @@ Requirements:
           );
           const meaningfulStallMs = Date.now() - lastMeaningfulTimestamp;
           const meaningfulStallSeconds = Math.round(meaningfulStallMs / 1000);
-          const telemetryMessage = `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
+          const telemetryMessage = hostedRuntimeEnabled
+            ? `server-hosted | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`
+            : `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
 
           const now = Date.now();
 
-          if (now - lastTelemetryEmitAtRef.current >= TELEMETRY_EMIT_INTERVAL_MS) {
+          if (now - lastTelemetryEmitAtRef.current >= telemetryEmitIntervalMs) {
             appendStepRunnerEvent({
               type: 'telemetry',
               timestamp: new Date().toISOString(),
@@ -972,6 +1050,7 @@ Requirements:
                 model: activeRunContext.model,
                 providerName: activeRunContext.providerName,
                 selectionReason: 'Auto-recovery resumed after stalled stream.',
+                includeSelectionReason: true,
                 content: `The previous run stalled after scaffold/install/start with no final response.
 Continue from the current project state without re-scaffolding.
 Original request:
@@ -1000,7 +1079,7 @@ Requirements:
               });
             }
           }
-        }, TELEMETRY_SAMPLE_MS);
+        }, telemetrySampleMs);
       }
 
       return () => {
@@ -1014,6 +1093,7 @@ Requirements:
       dispatchAutoContinuation,
       dispatchStarterContinuation,
       fakeLoading,
+      hostedRuntimeEnabled,
       isLoading,
       messages.length,
       stop,
@@ -1028,7 +1108,14 @@ Requirements:
         return;
       }
 
-      if (actionAlert?.source === 'preview') {
+      const previewDiagnosis = actionAlert ? diagnoseArchitectIssue(actionAlert) : null;
+      const starterContinuationDecision = decideStarterContinuationPrecedence({
+        diagnosis: previewDiagnosis,
+        hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
+        starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
+      });
+
+      if (actionAlert?.source === 'preview' && !starterContinuationDecision.shouldDispatchStarterContinuation) {
         return;
       }
 
@@ -1362,6 +1449,7 @@ Requirements:
             model: activeRunContext.model,
             providerName: activeRunContext.providerName,
             selectionReason: 'The previous run timed out before completing. Continuing from current workspace state.',
+            includeSelectionReason: true,
             content: `The previous run timed out before completing.
 Continue from the current project state without restarting from scratch.
 
@@ -2141,7 +2229,7 @@ Requirements:
             });
 
             if (temResp) {
-              const { assistantMessage, userMessage, usingLocalFallback } = temResp;
+              const { assistantMessage, usingLocalFallback } = temResp;
               const starterActionCount = (assistantMessage.match(/<boltAction\b/g) || []).length;
               logger.info('Starter template import prepared', {
                 template,
@@ -2168,12 +2256,6 @@ Requirements:
                   role: 'assistant',
                   content: assistantMessage,
                 },
-                {
-                  id: `3-${new Date().getTime()}`,
-                  role: 'user',
-                  content: buildUserMessageText(userMessage),
-                  annotations: ['hidden'],
-                },
               ];
 
               const reloadOptions = attachments ? { experimental_attachments: attachments } : undefined;
@@ -2183,6 +2265,10 @@ Requirements:
                 hasAttachments: Boolean(attachments?.length),
                 messageCount: nextMessages.length,
                 userRequestPreview: finalMessageContent.slice(0, 180),
+              });
+              logger.info('Starter continuation queued until workspace bootstrap is materialized', {
+                template,
+                placeholderExpected: true,
               });
               replaceMessagesAndReload(nextMessages, reloadOptions);
               setInput('');
@@ -2409,6 +2495,27 @@ Requirements:
         return;
       }
 
+      const starterContinuationDecision = decideStarterContinuationPrecedence({
+        diagnosis,
+        hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
+        starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
+      });
+
+      if (starterContinuationDecision.shouldDispatchStarterContinuation) {
+        appendArchitectTimelineEvent({
+          type: 'telemetry',
+          description: 'Starter continuation takes precedence over Architect auto-heal',
+          output: `${diagnosis.title} (${diagnosis.issueId})`,
+        });
+
+        if (!isLoading) {
+          starterContinuationTriggeredRef.current = false;
+          dispatchStarterContinuation('stream-finished');
+        }
+
+        return;
+      }
+
       appendArchitectTimelineEvent({
         type: 'telemetry',
         description: `${ARCHITECT_NAME} diagnosis`,
@@ -2453,7 +2560,15 @@ Requirements:
       }
 
       void dispatchArchitectAutoHeal(actionAlert, diagnosis);
-    }, [actionAlert, append, autonomyMode, dispatchArchitectAutoHeal, isLoading, pendingArchitectAutoHeal]);
+    }, [
+      actionAlert,
+      append,
+      autonomyMode,
+      dispatchArchitectAutoHeal,
+      dispatchStarterContinuation,
+      isLoading,
+      pendingArchitectAutoHeal,
+    ]);
 
     useEffect(() => {
       if (!pendingArchitectAutoHeal || isLoading || architectInFlightRef.current) {

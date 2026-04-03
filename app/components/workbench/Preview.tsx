@@ -63,8 +63,8 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: 'Desktop', width: 1920, height: 1080, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
-const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 20000;
-const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 12000;
+const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 45000;
+const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 25000;
 const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
 
 function normalizePreviewPath(value: string) {
@@ -136,6 +136,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const lastAppliedHostedRecoveryTokenRef = useRef<number | null>(null);
   const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
   const lastHostedPreviewEventAtRef = useRef<number>(0);
+  const hostedPreviewSubscriptionHealthyRef = useRef(true);
   const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
   const inspectHostedPreviewIframe = useCallback(
@@ -381,9 +382,11 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
             return;
           }
 
+          hostedPreviewSubscriptionHealthyRef.current = true;
           await applyHostedPreviewStatus(status, { allowLogFallback: true });
         } catch {
           // Ignore transient runtime status fetch failures and retry on the next reconcile interval.
+          hostedPreviewSubscriptionHealthyRef.current = false;
         }
       };
 
@@ -395,12 +398,22 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
             return;
           }
 
+          hostedPreviewSubscriptionHealthyRef.current = true;
           void applyHostedPreviewStatus(status);
+        },
+        onError: () => {
+          hostedPreviewSubscriptionHealthyRef.current = false;
         },
       });
 
       const interval = window.setInterval(() => {
-        if (Date.now() - lastHostedPreviewEventAtRef.current < HOSTED_PREVIEW_RECONCILE_GRACE_MS) {
+        if (typeof document !== 'undefined' && document.hidden && hostedPreviewSubscriptionHealthyRef.current) {
+          return;
+        }
+
+        const msSinceLastEvent = Date.now() - lastHostedPreviewEventAtRef.current;
+
+        if (hostedPreviewSubscriptionHealthyRef.current && msSinceLastEvent < HOSTED_PREVIEW_RECONCILE_GRACE_MS) {
           return;
         }
 
@@ -441,7 +454,13 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       }
     };
 
-    const interval = window.setInterval(inspectPreview, LOCAL_PREVIEW_INSPECT_INTERVAL_MS);
+    const interval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      inspectPreview();
+    }, LOCAL_PREVIEW_INSPECT_INTERVAL_MS);
     const initialProbe = window.setTimeout(inspectPreview, 250);
 
     return () => {

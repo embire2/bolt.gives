@@ -313,14 +313,20 @@ export const CodeMirrorEditor = memo(
           effects: [collaborationCompartment.reconfigure([])],
         });
       } else if (needsCollaborationBinding) {
-        void import('~/lib/collaboration/client').then(({ getCollaborationExtension }) => {
+        void import('~/lib/collaboration/client').then(async ({ getCollaborationExtension }) => {
+          if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
+            return;
+          }
+
+          const extension = await getCollaborationExtension(doc.filePath, doc.value);
+
           if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
             return;
           }
 
           activeCollaborationFileRef.current = doc.filePath;
           viewRef.current.dispatch({
-            effects: [collaborationCompartment.reconfigure([getCollaborationExtension(doc.filePath, doc.value)])],
+            effects: [collaborationCompartment.reconfigure([extension])],
           });
         });
       }

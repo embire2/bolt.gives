@@ -42,6 +42,8 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
   const hasFile = (name: string) => files.some((f) => f.path.endsWith(name));
   const hasFileContent = (name: string, content: string) =>
     files.some((f) => f.path.endsWith(name) && f.content.includes(content));
+  const hasBuiltOutput = () =>
+    files.some((f) => /(^|\/)(dist|build|out)\/index\.html$/i.test(f.path) || /(^|\/)\.next\//i.test(f.path));
 
   if (hasFile('package.json')) {
     const packageJsonFile = files.find((f) => f.path.endsWith('package.json'));
@@ -61,9 +63,13 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
         Object.keys(dependencies).some((dep) => dep.includes('shadcn')) ||
         hasFile('components.json');
 
-      // Check for preferred commands in priority order
-      const preferredCommands = ['dev', 'start', 'preview'];
-      const availableCommand = preferredCommands.find((cmd) => scripts[cmd]);
+      /*
+       * Prefer commands that produce a live application preview on first run.
+       * `preview` often points at a static port such as 4173 and is only valid after a build exists.
+       */
+      const primaryCommand = ['dev', 'start'].find((cmd) => scripts[cmd]);
+      const previewCommand = scripts.preview && hasBuiltOutput() ? 'preview' : undefined;
+      const availableCommand = primaryCommand || previewCommand;
 
       // Build setup command with non-interactive handling
       let baseSetupCommand = 'npx update-browserslist-db@latest && npm install';
@@ -80,7 +86,10 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
           type: 'Node.js',
           setupCommand,
           startCommand: `npm run ${availableCommand}`,
-          followupMessage: `Found "${availableCommand}" script in package.json. Running "npm run ${availableCommand}" after installation.`,
+          followupMessage:
+            availableCommand === 'preview'
+              ? 'Found a built preview script in package.json. Running "npm run preview" because a production build already exists.'
+              : `Found "${availableCommand}" script in package.json. Running "npm run ${availableCommand}" after installation.`,
         };
       }
 

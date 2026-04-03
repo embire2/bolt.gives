@@ -27,6 +27,11 @@ export type ArchitectAutoHealDecision = {
   maxAutoAttempts: number;
 };
 
+export type StarterContinuationPrecedenceDecision = {
+  shouldDispatchStarterContinuation: boolean;
+  reason: 'starter-placeholder' | 'no-starter-placeholder' | 'no-pending-request' | 'continuation-already-triggered';
+};
+
 const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
   {
     id: 'starter-placeholder-visible',
@@ -292,6 +297,24 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'pnpm-invalid-install-flags',
+    title: 'pnpm command received npm-only install flags',
+    source: 'terminal',
+    patterns: [
+      /Unknown option:\s*['"]progress['"]/i,
+      /Unknown option:\s*['"]no-progress['"]/i,
+      /pnpm\s+add\s+--no-progress\b/i,
+      /pnpm\s+install\s+--no-progress\b/i,
+    ],
+    maxAutoAttempts: 2,
+    guidance: [
+      'Remove npm-only flags such as `--no-progress`, `--silent`, or `--loglevel silent` before running pnpm commands.',
+      'Use `pnpm install --reporter=append-only` for dependency installs without package arguments.',
+      'Use `pnpm add <package>` (or `pnpm add -D <package>`) only when packages are explicitly being installed.',
+      'Rerun the corrected command, then continue from the existing project files instead of restarting the scaffold.',
+    ],
+  },
+  {
     id: 'python-django-unsupported',
     title: 'Python/Django not natively supported in WebContainer',
     source: 'terminal',
@@ -319,6 +342,40 @@ function buildFingerprint(input: string): string {
   }
 
   return (hash >>> 0).toString(16);
+}
+
+export function decideStarterContinuationPrecedence(options: {
+  diagnosis: ArchitectDiagnosis | null | undefined;
+  hasPendingStarterRequest: boolean;
+  starterContinuationAlreadyTriggered: boolean;
+}): StarterContinuationPrecedenceDecision {
+  const { diagnosis, hasPendingStarterRequest, starterContinuationAlreadyTriggered } = options;
+
+  if (diagnosis?.issueId !== 'starter-placeholder-visible') {
+    return {
+      shouldDispatchStarterContinuation: false,
+      reason: 'no-starter-placeholder',
+    };
+  }
+
+  if (!hasPendingStarterRequest) {
+    return {
+      shouldDispatchStarterContinuation: false,
+      reason: 'no-pending-request',
+    };
+  }
+
+  if (starterContinuationAlreadyTriggered) {
+    return {
+      shouldDispatchStarterContinuation: false,
+      reason: 'continuation-already-triggered',
+    };
+  }
+
+  return {
+    shouldDispatchStarterContinuation: true,
+    reason: 'starter-placeholder',
+  };
 }
 
 function getAlertText(alert: ActionAlert): string {

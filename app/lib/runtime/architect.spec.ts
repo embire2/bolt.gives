@@ -3,6 +3,7 @@ import {
   ARCHITECT_NAME,
   buildArchitectAutoHealPrompt,
   decideArchitectAutoHeal,
+  decideStarterContinuationPrecedence,
   diagnoseArchitectIssue,
 } from './architect';
 
@@ -144,6 +145,19 @@ describe('diagnoseArchitectIssue', () => {
     expect(diagnosis?.maxAutoAttempts).toBe(2);
   });
 
+  it('detects pnpm commands polluted with npm-only install flags', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Terminal Error',
+      description: 'Command Failed',
+      content: " ERROR  Unknown option: 'progress'",
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('pnpm-invalid-install-flags');
+    expect(diagnosis?.maxAutoAttempts).toBe(2);
+  });
+
   it('detects the fallback starter still being visible in preview', () => {
     const diagnosis = diagnoseArchitectIssue({
       type: 'warning',
@@ -223,5 +237,49 @@ describe('buildArchitectAutoHealPrompt', () => {
     expect(prompt).toContain('/home/project/src/main.jsx');
     expect(prompt).toContain('Build a doctor appointment scheduling app with reminders.');
     expect(prompt).toContain('Safety guardrails');
+  });
+});
+
+describe('decideStarterContinuationPrecedence', () => {
+  it('prefers starter continuation over Architect auto-heal for fallback placeholder runs', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'warning',
+      title: 'Starter Placeholder Still Visible',
+      description: 'The preview is still showing the built-in fallback starter instead of the requested app.',
+      content: 'Vite + React\nYour fallback starter is ready.',
+      source: 'preview',
+    });
+
+    const decision = decideStarterContinuationPrecedence({
+      diagnosis,
+      hasPendingStarterRequest: true,
+      starterContinuationAlreadyTriggered: false,
+    });
+
+    expect(decision).toEqual({
+      shouldDispatchStarterContinuation: true,
+      reason: 'starter-placeholder',
+    });
+  });
+
+  it('does not dispatch starter continuation once no pending original request remains', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'warning',
+      title: 'Starter Placeholder Still Visible',
+      description: 'The preview is still showing the built-in fallback starter instead of the requested app.',
+      content: 'Vite + React\nYour fallback starter is ready.',
+      source: 'preview',
+    });
+
+    const decision = decideStarterContinuationPrecedence({
+      diagnosis,
+      hasPendingStarterRequest: false,
+      starterContinuationAlreadyTriggered: false,
+    });
+
+    expect(decision).toEqual({
+      shouldDispatchStarterContinuation: false,
+      reason: 'no-pending-request',
+    });
   });
 });

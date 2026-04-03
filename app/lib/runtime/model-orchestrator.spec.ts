@@ -143,7 +143,7 @@ describe('model-orchestrator', () => {
     expect(decision.overridden).toBe(false);
   });
 
-  it('builds chat-visible model selection envelope with reason metadata', () => {
+  it('builds chat-visible model selection envelope without leaking internal selection metadata by default', () => {
     const envelope = buildModelSelectionEnvelope({
       model: 'gpt-4.1-mini',
       providerName: 'OpenAI',
@@ -153,8 +153,20 @@ describe('model-orchestrator', () => {
 
     expect(envelope).toContain('[Model: gpt-4.1-mini]');
     expect(envelope).toContain('[Provider: OpenAI]');
-    expect(envelope).toContain('[Model Selection: Selected cloud provider OpenAI for a high-complexity prompt');
+    expect(envelope).not.toContain('[Model Selection:');
     expect(envelope).toContain('Implement the feature.');
+  });
+
+  it('can include selection metadata for hidden continuation prompts', () => {
+    const envelope = buildModelSelectionEnvelope({
+      model: 'gpt-4.1-mini',
+      providerName: 'OpenAI',
+      selectionReason: 'Selected cloud provider OpenAI for a high-complexity prompt (~220 tokens).',
+      includeSelectionReason: true,
+      content: 'Continue from the current workspace state.',
+    });
+
+    expect(envelope).toContain('[Model Selection: Selected cloud provider OpenAI for a high-complexity prompt');
   });
 
   it('auto-corrects invalid provider/model combinations before orchestration', () => {

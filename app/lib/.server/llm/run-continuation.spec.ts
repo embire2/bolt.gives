@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRunContinuation, shouldForceRunContinuation } from './run-continuation';
+import { analyzeRunContinuation, shouldForceRunContinuation, synthesizeRunHandoff } from './run-continuation';
 
 describe('shouldForceRunContinuation', () => {
   it('continues when a build request ends with scaffold-only output', () => {
@@ -120,5 +120,70 @@ describe('shouldForceRunContinuation', () => {
 
     expect(decision.shouldContinue).toBe(false);
     expect(decision.reason).toBe('already-attempted');
+  });
+
+  it('synthesizes a runtime handoff when implementation files exist but start is missing', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="package.json">
+<boltAction type="file" filePath="package.json">{
+  "name": "doctor-scheduler",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Doctor schedule</div>;}</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'npm run dev',
+    });
+    expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
+  });
+
+  it('does not synthesize a runtime handoff for starter-only scaffolds', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="package.json">
+<boltAction type="file" filePath="package.json">{
+  "name": "starter",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="README.md"># starter</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('skips setup synthesis when install is already present', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="shell">pnpm install</boltAction>
+<boltArtifact id="artifact-1" title="package.json">
+<boltAction type="file" filePath="package.json">{
+  "name": "doctor-scheduler",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Doctor schedule</div>;}</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff?.setupCommand).toBeUndefined();
+    expect(handoff?.assistantContent).not.toContain('<boltAction type="shell">');
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
   });
 });

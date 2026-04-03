@@ -57,7 +57,11 @@ export function deriveWhyThisAction(
   return fallback;
 }
 
-export function deriveActionCount(toolCallCount: number, stepRunnerEvents: InteractiveStepRunnerEvent[]): number {
+export function deriveActionCount(
+  toolCallCount: number,
+  stepRunnerEvents: InteractiveStepRunnerEvent[],
+  artifactActionCount: number = 0,
+): number {
   const shellActionCount = stepRunnerEvents.filter((event) => event.type === 'step-start').length;
-  return toolCallCount + shellActionCount;
+  return Math.max(artifactActionCount, toolCallCount + shellActionCount);
 }

@@ -131,4 +131,35 @@ describe('BaseChat surface tabs', () => {
     expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
     expect(screen.queryByTestId('workbench-panel')).toBeNull();
   });
+
+  it('auto-switches to the workspace when execution activity starts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+    });
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: new Date().toISOString(),
+        description: 'Run shell command: pnpm install',
+        stepIndex: 1,
+      },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workbench-panel')).toBeTruthy();
+    });
+
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textPrimary');
+  });
 });

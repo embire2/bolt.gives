@@ -15,9 +15,12 @@ type TenantRecord = {
   id: string;
   name: string;
   email: string;
+  slug?: string;
+  workspaceDir?: string;
   passwordHash: string;
   createdAt: string;
   updatedAt?: string;
+  passwordUpdatedAt?: string;
   status?: 'active' | 'disabled';
   lastLoginAt?: string | null;
   mustChangePassword?: boolean;
@@ -27,20 +30,44 @@ type TenantAdminRecord = {
   username: string;
   mustChangePassword: boolean;
   updatedAt: string | null;
+  passwordUpdatedAt?: string | null;
   lastLoginAt: string | null;
 };
-
-const adminSessionCookie = createCookie('bolt_tenant_admin', {
-  httpOnly: true,
-  path: '/',
-  sameSite: 'lax',
-  secure: true,
-  maxAge: 60 * 60 * 12,
-});
 
 export const meta: MetaFunction = () => [{ title: `Tenant Admin | bolt.gives v${APP_VERSION}` }];
 
 const DEFAULT_ADMIN = { username: 'admin', password: 'admin' };
+
+function getTenantAdminCookieSecret() {
+  if (typeof process !== 'undefined' && process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) {
+    return process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET.trim();
+  }
+
+  return 'bolt-tenant-admin-dev-secret-change-me';
+}
+
+function createAdminSessionCookie() {
+  return createCookie('bolt_tenant_admin', {
+    httpOnly: true,
+    path: '/',
+    sameSite: 'lax',
+    secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
+    maxAge: 60 * 60 * 12,
+    secrets: [getTenantAdminCookieSecret()],
+  });
+}
+
+type TenantAdminSession = {
+  username: string;
+  issuedAt: string;
+};
+
+function isAuthenticatedAdminSession(
+  session: TenantAdminSession | null | undefined,
+  admin: TenantAdminRecord | undefined,
+) {
+  return Boolean(session?.username && admin?.username && session.username === admin.username);
+}
 
 function getRuntimeControlBaseUrl() {
   if (typeof process !== 'undefined' && process.env?.BOLT_RUNTIME_CONTROL_URL) {
@@ -61,15 +88,24 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
-  const authenticated = session === '1';
+  const adminSessionCookie = createAdminSessionCookie();
+  const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
   try {
     const status = await fetchRuntimeJson<{
       supported: boolean;
       tenants: TenantRecord[];
       admin?: TenantAdminRecord;
+      auditTrail?: Array<{
+        id: string;
+        timestamp: string;
+        actor: string;
+        action: string;
+        target: string;
+        details?: Record<string, string>;
+      }>;
     }>('/tenant-admin/status');
+    const authenticated = isAuthenticatedAdminSession(session, status.admin);
 
     return json({
       supported: status.supported,
@@ -82,6 +118,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         lastLoginAt: null,
       },
       tenants: authenticated ? status.tenants : [],
+      auditTrail: authenticated ? status.auditTrail || [] : [],
     });
   } catch {
     return json({
@@ -95,11 +132,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
         lastLoginAt: null,
       } as TenantAdminRecord,
       tenants: [] as TenantRecord[],
+      auditTrail: [] as Array<{
+        id: string;
+        timestamp: string;
+        actor: string;
+        action: string;
+        target: string;
+        details?: Record<string, string>;
+      }>,
     });
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const adminSessionCookie = createAdminSessionCookie();
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
 
@@ -126,14 +172,23 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     return redirect('/tenant-admin', {
-      headers: { 'Set-Cookie': await adminSessionCookie.serialize('1') },
+      headers: {
+        'Set-Cookie': await adminSessionCookie.serialize({
+          username,
+          issuedAt: new Date().toISOString(),
+        } satisfies TenantAdminSession),
+      },
     });
   }
 
   if (intent === 'create-tenant') {
-    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+    const status = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (session !== '1') {
+    if (!isAuthenticatedAdminSession(session, status.admin)) {
       return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
     }
 
@@ -166,9 +221,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'change-admin-password') {
-    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+    const status = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (session !== '1') {
+    if (!isAuthenticatedAdminSession(session, status.admin)) {
       return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
     }
 
@@ -194,9 +253,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'toggle-tenant-status') {
-    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+    const statusPayload = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (session !== '1') {
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
       return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
     }
 
@@ -221,11 +284,43 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect('/tenant-admin');
   }
 
+  if (intent === 'reset-tenant-password') {
+    const statusPayload = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const tenantId = String(formData.get('tenantId') || '').trim();
+    const password = String(formData.get('password') || '').trim();
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>(`/tenant-admin/tenants/${encodeURIComponent(tenantId)}/password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password }),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to reset the tenant password right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
   return json({ error: 'Unknown action.' }, { status: 400 });
 }
 
 export default function TenantAdminPage() {
-  const { supported, authenticated, tenants, defaultAdmin, admin } = useLoaderData<typeof loader>();
+  const { supported, authenticated, tenants, defaultAdmin, admin, auditTrail } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -318,6 +413,37 @@ export default function TenantAdminPage() {
           {supported && authenticated ? (
             <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
               <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                      Admin password
+                    </div>
+                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                      {admin.mustChangePassword ? 'Rotation required' : 'Rotated'}
+                    </div>
+                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                      {admin.passwordUpdatedAt
+                        ? `Updated ${new Date(admin.passwordUpdatedAt).toLocaleString()}`
+                        : 'Still using the bootstrap password.'}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Tenants</div>
+                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{tenants.length}</div>
+                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                      {tenants.filter((tenant) => tenant.status === 'active').length} active ·{' '}
+                      {tenants.filter((tenant) => tenant.status === 'disabled').length} disabled
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Audit trail</div>
+                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{auditTrail.length}</div>
+                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                      Latest server-side tenant lifecycle events for this instance.
+                    </div>
+                  </div>
+                </div>
+
                 <Form
                   method="post"
                   className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
@@ -345,11 +471,24 @@ export default function TenantAdminPage() {
                       <input
                         name="password"
                         type="password"
+                        minLength={10}
                         className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                       />
                     </label>
                   </div>
-                  <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                  <p className="mt-3 text-xs text-bolt-elements-textTertiary">
+                    Each tenant gets a dedicated workspace directory and a server-side lifecycle record.
+                  </p>
+                  {admin.mustChangePassword ? (
+                    <p className="mt-4 text-sm text-amber-300">
+                      Rotate the bootstrap admin password first. Tenant creation stays locked until the shared default
+                      login is replaced.
+                    </p>
+                  ) : null}
+                  <button
+                    disabled={admin.mustChangePassword}
+                    className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     Create tenant
                   </button>
                 </Form>
@@ -384,6 +523,7 @@ export default function TenantAdminPage() {
                       <input
                         name="nextPassword"
                         type="password"
+                        minLength={10}
                         className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                       />
                     </label>
@@ -416,10 +556,25 @@ export default function TenantAdminPage() {
                           <div>
                             <div className="font-medium text-bolt-elements-textPrimary">{tenant.name}</div>
                             <div className="mt-1 text-sm text-bolt-elements-textSecondary">{tenant.email}</div>
+                            {tenant.slug ? (
+                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                Slug <span className="font-mono">{tenant.slug}</span>
+                              </div>
+                            ) : null}
+                            {tenant.workspaceDir ? (
+                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                Workspace <span className="font-mono">{tenant.workspaceDir}</span>
+                              </div>
+                            ) : null}
                             <div className="mt-2 text-xs text-bolt-elements-textTertiary">
                               Created {new Date(tenant.createdAt).toLocaleString()}
                               {tenant.updatedAt ? ` · Updated ${new Date(tenant.updatedAt).toLocaleString()}` : ''}
                             </div>
+                            {tenant.passwordUpdatedAt ? (
+                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                Password updated {new Date(tenant.passwordUpdatedAt).toLocaleString()}
+                              </div>
+                            ) : null}
                             {tenant.lastLoginAt ? (
                               <div className="mt-1 text-xs text-bolt-elements-textTertiary">
                                 Last tenant login {new Date(tenant.lastLoginAt).toLocaleString()}
@@ -453,12 +608,49 @@ export default function TenantAdminPage() {
                                 {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
                               </button>
                             </Form>
+                            <Form method="post" className="flex items-center gap-2">
+                              <input type="hidden" name="intent" value="reset-tenant-password" />
+                              <input type="hidden" name="tenantId" value={tenant.id} />
+                              <input
+                                name="password"
+                                type="password"
+                                minLength={10}
+                                placeholder="New tenant password"
+                                className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-1.5 text-xs text-bolt-elements-textPrimary"
+                              />
+                              <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                Reset password
+                              </button>
+                            </Form>
                           </div>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
+                {auditTrail.length > 0 ? (
+                  <div className="mt-6 border-t border-bolt-elements-borderColor pt-4">
+                    <div className="mb-2 text-sm font-medium text-bolt-elements-textPrimary">Recent admin activity</div>
+                    <div className="space-y-2">
+                      {auditTrail
+                        .slice(-8)
+                        .reverse()
+                        .map((event) => (
+                          <div
+                            key={event.id}
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary"
+                          >
+                            <div className="font-medium text-bolt-elements-textPrimary">
+                              {event.action} · {event.target}
+                            </div>
+                            <div className="mt-1">
+                              {new Date(event.timestamp).toLocaleString()} · actor {event.actor}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

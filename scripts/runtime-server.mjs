@@ -22,7 +22,10 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const HOST = process.env.RUNTIME_HOST || '127.0.0.1';
 const PORT = Number(process.env.RUNTIME_PORT || '4321');
 const WORK_DIR = process.env.RUNTIME_WORK_DIR || '/home/project';
-export function resolveRuntimeWorkspaceRoot(env = /** @type {Record<string, string | undefined>} */ (process.env), repoRoot = REPO_ROOT) {
+export function resolveRuntimeWorkspaceRoot(
+  env = /** @type {Record<string, string | undefined>} */ (process.env),
+  repoRoot = REPO_ROOT,
+) {
   const explicitRoot = env.RUNTIME_WORKSPACE_DIR?.trim();
 
   if (explicitRoot) {
@@ -63,14 +66,69 @@ const PREVIEW_ERROR_PATTERNS = [
   /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError)/i,
   /Unhandled\s+Promise\s+Rejection/i,
 ];
-const TENANT_REGISTRY_PATH = process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
+const TENANT_REGISTRY_PATH =
+  process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
 
 const sessions = new Map();
 
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
+const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cts']);
+const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
+const LEGACY_TAILWIND_DIRECTIVE_RE =
+  /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
 
 function hashTenantSecret(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function createWorkspaceDependencyFingerprint(packageJsonRaw, lockfileRaw = '') {
+  return crypto.createHash('sha256').update(`${packageJsonRaw}\n---lockfile---\n${lockfileRaw}`).digest('hex');
+}
+
+function slugifyTenantName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+function buildTenantSlug(name, email, existingTenants = []) {
+  const base = slugifyTenantName(name) || slugifyTenantName(String(email || '').split('@')[0]) || 'tenant';
+  const existing = new Set(existingTenants.map((tenant) => tenant.slug).filter(Boolean));
+
+  if (!existing.has(base)) {
+    return base;
+  }
+
+  let suffix = 2;
+
+  while (existing.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${base}-${suffix}`;
+}
+
+function buildTenantWorkspaceDir(slug) {
+  return path.join(PERSIST_ROOT, 'tenants', slug);
+}
+
+function isLikelyValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function appendTenantAuditEvent(registry, event) {
+  const nextEvents = Array.isArray(registry.auditTrail) ? registry.auditTrail.slice(-199) : [];
+
+  nextEvents.push({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    ...event,
+  });
+
+  registry.auditTrail = nextEvents;
 }
 
 function createDefaultTenantAdmin() {
@@ -97,21 +155,40 @@ export function normalizeTenantRegistry(input) {
           : hashTenantSecret('admin'),
       mustChangePassword: admin.mustChangePassword !== false,
       updatedAt: typeof admin.updatedAt === 'string' && admin.updatedAt ? admin.updatedAt : now,
+      passwordUpdatedAt:
+        typeof admin.passwordUpdatedAt === 'string' && admin.passwordUpdatedAt ? admin.passwordUpdatedAt : now,
       lastLoginAt: typeof admin.lastLoginAt === 'string' ? admin.lastLoginAt : null,
     },
-    tenants: tenants.map((tenant) => ({
-      id: String(tenant.id || Date.now()),
-      name: String(tenant.name || 'Untitled Tenant'),
-      email: String(tenant.email || '')
+    tenants: tenants.map((tenant) => {
+      const normalizedName = String(tenant.name || 'Untitled Tenant');
+      const normalizedEmail = String(tenant.email || '')
         .trim()
-        .toLowerCase(),
-      passwordHash: typeof tenant.passwordHash === 'string' ? tenant.passwordHash : hashTenantSecret('changeme'),
-      createdAt: typeof tenant.createdAt === 'string' && tenant.createdAt ? tenant.createdAt : now,
-      updatedAt: typeof tenant.updatedAt === 'string' && tenant.updatedAt ? tenant.updatedAt : now,
-      status: tenant.status === 'disabled' ? 'disabled' : 'active',
-      lastLoginAt: typeof tenant.lastLoginAt === 'string' ? tenant.lastLoginAt : null,
-      mustChangePassword: tenant.mustChangePassword !== false,
-    })),
+        .toLowerCase();
+      const slug =
+        typeof tenant.slug === 'string' && tenant.slug.trim()
+          ? tenant.slug.trim()
+          : slugifyTenantName(normalizedName) || 'tenant';
+
+      return {
+        id: String(tenant.id || Date.now()),
+        name: normalizedName,
+        email: normalizedEmail,
+        slug,
+        workspaceDir:
+          typeof tenant.workspaceDir === 'string' && tenant.workspaceDir.trim()
+            ? tenant.workspaceDir.trim()
+            : buildTenantWorkspaceDir(slug),
+        passwordHash: typeof tenant.passwordHash === 'string' ? tenant.passwordHash : hashTenantSecret('changeme'),
+        createdAt: typeof tenant.createdAt === 'string' && tenant.createdAt ? tenant.createdAt : now,
+        updatedAt: typeof tenant.updatedAt === 'string' && tenant.updatedAt ? tenant.updatedAt : now,
+        passwordUpdatedAt:
+          typeof tenant.passwordUpdatedAt === 'string' && tenant.passwordUpdatedAt ? tenant.passwordUpdatedAt : now,
+        status: tenant.status === 'disabled' ? 'disabled' : 'active',
+        lastLoginAt: typeof tenant.lastLoginAt === 'string' ? tenant.lastLoginAt : null,
+        mustChangePassword: tenant.mustChangePassword !== false,
+      };
+    }),
+    auditTrail: Array.isArray(input?.auditTrail) ? input.auditTrail.slice(-200) : [],
   };
 }
 
@@ -198,6 +275,42 @@ function normalizePreviewText(value) {
     .trim();
 }
 
+function pickPreviewAlertDescription(combinedText) {
+  const lines = combinedText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const preferredMatchers = [
+    /\[plugin:vite:[^\]]+\].+/i,
+    /Pre-transform error.+/i,
+    /Transform failed with \d+ error/i,
+    /Failed to resolve import.+/i,
+    /Failed to scan for dependencies.+/i,
+    /Missing ["'][^"']+["'] specifier.+/i,
+    /Unexpected token.+/i,
+    /Expected .+ but found.+/i,
+    /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError).+/i,
+    /Unhandled\s+Promise\s+Rejection.+/i,
+  ];
+
+  for (const matcher of preferredMatchers) {
+    const match = lines.find((line) => matcher.test(line));
+
+    if (match) {
+      return match;
+    }
+  }
+
+  const fileLocationLine = lines.find((line) => /\/src\/.+:\d+:\d+/i.test(line) || /file:\s*\/.+:\d+:\d+/i.test(line));
+
+  if (fileLocationLine) {
+    return fileLocationLine;
+  }
+
+  return lines[0] || 'Preview failed to compile or run.';
+}
+
 function extractPreviewAlertFromText(rawText) {
   const combinedText = normalizePreviewText(rawText);
 
@@ -209,15 +322,10 @@ function extractPreviewAlertFromText(rawText) {
     return null;
   }
 
-  const [firstLine = 'Preview failed to compile or run.'] = combinedText
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
   return {
     type: 'error',
     title: 'Preview Error',
-    description: firstLine.slice(0, 220),
+    description: pickPreviewAlertDescription(combinedText).slice(0, 220),
     content: combinedText.slice(0, 5000),
     source: 'preview',
   };
@@ -339,7 +447,10 @@ function appendPreviewDiagnosticEntries(session, channel, rawText) {
 
   const nextLogs = [
     ...session.previewDiagnostics.recentLogs,
-    ...normalized.split('\n').filter(Boolean).map((line) => `[${channel}] ${line}`),
+    ...normalized
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => `[${channel}] ${line}`),
   ].slice(-MAX_PREVIEW_LOG_LINES);
 
   touchPreviewDiagnostics(session, {
@@ -363,6 +474,13 @@ function cancelPendingPreviewVerification(session) {
   }
 }
 
+function cancelPendingPreviewAutostart(session) {
+  if (session.previewAutostartTimer) {
+    clearTimeout(session.previewAutostartTimer);
+    session.previewAutostartTimer = null;
+  }
+}
+
 function buildPreviewAlertFingerprint(alert) {
   if (!alert) {
     return '';
@@ -374,6 +492,7 @@ function buildPreviewAlertFingerprint(alert) {
 function markSessionMutationStart(session) {
   cancelPendingPreviewAutoRestore(session);
   cancelPendingPreviewVerification(session);
+  cancelPendingPreviewAutostart(session);
   session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
   session.lastAutoRestoreFingerprint = null;
 
@@ -382,10 +501,16 @@ function markSessionMutationStart(session) {
   }
 
   clearPreviewRecoveryState(session);
+  touchPreviewDiagnostics(session, {
+    status: session.preview ? 'starting' : session.previewDiagnostics.status,
+    healthy: false,
+    alert: null,
+  });
 }
 
 export async function probeSessionPreviewHealth(session, requestPath = '/') {
   const port = Number(session.preview?.port || 0);
+  const existingAlert = requestPath === '/' ? session.previewDiagnostics?.alert || null : null;
 
   if (!Number.isFinite(port) || port <= 0) {
     return {
@@ -408,16 +533,20 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
     });
     const contentType = String(response.headers.get('content-type') || '');
     const shouldReadBody =
-      /text\/html|javascript|ecmascript|text\/css/.test(contentType) || requestPath === '/' || requestPath.endsWith('.html');
+      /text\/html|javascript|ecmascript|text\/css/.test(contentType) ||
+      requestPath === '/' ||
+      requestPath.endsWith('.html');
     const body = shouldReadBody ? await response.text() : '';
     const alert =
       extractPreviewAlertFromText(body) ||
+      existingAlert ||
       (response.status >= 500
         ? {
             type: 'error',
             title: 'Preview Error',
             description: `Preview request failed with status ${response.status}`,
-            content: normalizePreviewText(body) || `Preview request to ${requestPath} failed with status ${response.status}.`,
+            content:
+              normalizePreviewText(body) || `Preview request to ${requestPath} failed with status ${response.status}.`,
             source: 'preview',
           }
         : null);
@@ -479,7 +608,11 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
       try {
         await waitForPreview(Number(session.preview.port));
         clearPreviewDiagnostics(session, session.preview ? 'ready' : 'idle');
-        appendPreviewDiagnosticEntries(session, 'recovery', 'Preview is healthy again after restoring the last known working workspace snapshot.');
+        appendPreviewDiagnosticEntries(
+          session,
+          'recovery',
+          'Preview is healthy again after restoring the last known working workspace snapshot.',
+        );
         touchPreviewDiagnostics(session, {
           status: session.preview ? 'ready' : 'idle',
           healthy: true,
@@ -603,7 +736,11 @@ function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace
         }
 
         if (probe.alert) {
-          appendPreviewDiagnosticEntries(session, 'probe', `Detected preview failure after ${reason}: ${probe.alert.description}`);
+          appendPreviewDiagnosticEntries(
+            session,
+            'probe',
+            `Detected preview failure after ${reason}: ${probe.alert.description}`,
+          );
           touchPreviewDiagnostics(session, {
             status: 'error',
             healthy: false,
@@ -665,7 +802,7 @@ function recordPreviewLog(session, channel, chunk) {
   }
 }
 
-function recordPreviewResponse(session, body, statusCode, upstreamPath) {
+export function recordPreviewResponse(session, body, statusCode, upstreamPath) {
   const normalizedBody = normalizePreviewText(body);
   const detectedAlert =
     extractPreviewAlertFromText(normalizedBody) ||
@@ -679,6 +816,8 @@ function recordPreviewResponse(session, body, statusCode, upstreamPath) {
         }
       : null);
 
+  const existingAlert = session.previewDiagnostics.alert;
+
   if (detectedAlert) {
     touchPreviewDiagnostics(session, {
       status: 'error',
@@ -690,7 +829,20 @@ function recordPreviewResponse(session, body, statusCode, upstreamPath) {
     return;
   }
 
-  if (statusCode >= 200 && statusCode < 400 && (upstreamPath === '/' || upstreamPath === '/index.html' || upstreamPath.endsWith('.html'))) {
+  if (
+    statusCode >= 200 &&
+    statusCode < 400 &&
+    (upstreamPath === '/' || upstreamPath === '/index.html' || upstreamPath.endsWith('.html'))
+  ) {
+    if (existingAlert) {
+      touchPreviewDiagnostics(session, {
+        status: 'error',
+        healthy: false,
+        alert: existingAlert,
+      });
+      return;
+    }
+
     touchPreviewDiagnostics(session, {
       status: session.preview ? 'ready' : 'idle',
       healthy: true,
@@ -728,8 +880,11 @@ function getSession(sessionId) {
       workspaceMutationId: 0,
       autoRestoreTimer: null,
       previewVerificationTimer: null,
+      previewAutostartTimer: null,
       autoRestoreInFlight: false,
       lastAutoRestoreFingerprint: null,
+      lastPreparedDependencyFingerprint: null,
+      publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
     sessions.set(normalized, session);
@@ -749,6 +904,334 @@ async function exists(targetPath) {
   } catch {
     return false;
   }
+}
+
+async function readWorkspacePackageJson(session) {
+  const packageJsonPath = path.join(session.dir, 'package.json');
+
+  if (!(await exists(packageJsonPath))) {
+    return null;
+  }
+
+  const raw = await fs.readFile(packageJsonPath, 'utf8');
+  return {
+    path: packageJsonPath,
+    raw,
+    json: JSON.parse(raw),
+  };
+}
+
+async function readWorkspaceLockfile(session) {
+  const lockfilePath = path.join(session.dir, 'pnpm-lock.yaml');
+
+  if (!(await exists(lockfilePath))) {
+    return null;
+  }
+
+  const raw = await fs.readFile(lockfilePath, 'utf8');
+  return {
+    path: lockfilePath,
+    raw,
+  };
+}
+
+async function clearHostedWorkspaceDependencyCaches(session) {
+  await fs.rm(path.join(session.dir, 'node_modules', '.vite'), {
+    recursive: true,
+    force: true,
+  });
+}
+
+export function inferHostedWorkspaceStartCommand(packageJson) {
+  const scripts = packageJson?.scripts || {};
+
+  if (typeof scripts.dev === 'string' && scripts.dev.trim()) {
+    return 'pnpm run dev';
+  }
+
+  if (typeof scripts.start === 'string' && scripts.start.trim()) {
+    return 'pnpm run start';
+  }
+
+  if (typeof scripts.preview === 'string' && scripts.preview.trim()) {
+    return 'pnpm run preview';
+  }
+
+  return null;
+}
+
+export function normalizePackageImportSpecifier(specifier) {
+  const value = String(specifier || '').trim();
+
+  if (!value || value.startsWith('.') || value.startsWith('/') || value.startsWith('~') || value.startsWith('node:')) {
+    return null;
+  }
+
+  if (value.startsWith('@')) {
+    const [scope, name] = value.split('/');
+    return scope && name ? `${scope}/${name}` : null;
+  }
+
+  return value.split('/')[0] || null;
+}
+
+export function extractWorkspacePackageImports(entries) {
+  const packages = new Set();
+
+  for (const entry of entries || []) {
+    const extension = path.extname(entry.path || '').toLowerCase();
+    const content = String(entry.content || '');
+
+    if (SOURCE_IMPORT_EXTENSIONS.has(extension)) {
+      const importPattern =
+        /\bimport\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|\bexport\s+[^'"]*?\s+from\s+['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+      for (const match of content.matchAll(importPattern)) {
+        const normalized = normalizePackageImportSpecifier(match[1] || match[2] || match[3] || '');
+
+        if (normalized) {
+          packages.add(normalized);
+        }
+      }
+    }
+
+    if (STYLE_IMPORT_EXTENSIONS.has(extension)) {
+      const importPattern = /@import\s+['"]([^'"]+)['"]/g;
+
+      for (const match of content.matchAll(importPattern)) {
+        const rawSpecifier = String(match[1] || '').trim();
+
+        if (/^tailwindcss\/(?:base|components|utilities)$/i.test(rawSpecifier)) {
+          continue;
+        }
+
+        const normalized = normalizePackageImportSpecifier(rawSpecifier);
+
+        if (normalized) {
+          packages.add(normalized);
+        }
+      }
+    }
+  }
+
+  return [...packages];
+}
+
+export function collectMissingWorkspacePackages(entries, packageJson) {
+  const declared = new Set([
+    ...Object.keys(packageJson?.dependencies || {}),
+    ...Object.keys(packageJson?.devDependencies || {}),
+    ...Object.keys(packageJson?.peerDependencies || {}),
+    ...Object.keys(packageJson?.optionalDependencies || {}),
+  ]);
+
+  return extractWorkspacePackageImports(entries).filter((pkg) => !declared.has(pkg));
+}
+
+export function sanitizeLegacyTailwindCss(content) {
+  const raw = String(content || '');
+  const withoutDirectives = raw.replace(LEGACY_TAILWIND_DIRECTIVE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+
+  if (withoutDirectives === raw.trim()) {
+    return {
+      changed: false,
+      content: raw,
+    };
+  }
+
+  return {
+    changed: true,
+    content: `${withoutDirectives}\n`.replace(/^\n+/, ''),
+  };
+}
+
+async function walkWorkspaceFiles(rootDir) {
+  const results = [];
+  const queue = ['.'];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const absolute = current === '.' ? rootDir : path.join(rootDir, current);
+    const entries = await fs.readdir(absolute, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const relativePath = current === '.' ? entry.name : path.posix.join(current, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!PRESERVED_DIRS.has(entry.name)) {
+          queue.push(relativePath);
+        }
+
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const extension = path.extname(entry.name).toLowerCase();
+
+      if (!SOURCE_IMPORT_EXTENSIONS.has(extension) && !STYLE_IMPORT_EXTENSIONS.has(extension)) {
+        continue;
+      }
+
+      results.push({
+        path: relativePath,
+        absolutePath: path.join(rootDir, relativePath),
+        extension,
+        content: await fs.readFile(path.join(rootDir, relativePath), 'utf8'),
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function prepareHostedWorkspaceForStart(session, options = {}) {
+  const { writeEvent = null } = options;
+  const packageJsonRecord = await readWorkspacePackageJson(session);
+
+  if (!packageJsonRecord) {
+    return {
+      changed: false,
+      installedPackages: [],
+      sanitizedFiles: [],
+    };
+  }
+
+  const entries = await walkWorkspaceFiles(session.dir);
+  const installedPackages = [];
+  const sanitizedFiles = [];
+  const packageJson = packageJsonRecord.json;
+  const lockfileRecord = await readWorkspaceLockfile(session);
+  const dependencyFingerprint = createWorkspaceDependencyFingerprint(packageJsonRecord.raw, lockfileRecord?.raw || '');
+  const hasNodeModules = await exists(path.join(session.dir, 'node_modules'));
+  const hasTailwindDependency = Boolean(
+    packageJson.dependencies?.tailwindcss || packageJson.devDependencies?.tailwindcss,
+  );
+  const hasTailwindConfig =
+    (await exists(path.join(session.dir, 'tailwind.config.js'))) ||
+    (await exists(path.join(session.dir, 'tailwind.config.cjs'))) ||
+    (await exists(path.join(session.dir, 'tailwind.config.mjs'))) ||
+    (await exists(path.join(session.dir, 'tailwind.config.ts'))) ||
+    (await exists(path.join(session.dir, 'postcss.config.js'))) ||
+    (await exists(path.join(session.dir, 'postcss.config.cjs'))) ||
+    (await exists(path.join(session.dir, 'postcss.config.mjs')));
+
+  if (!hasTailwindDependency && !hasTailwindConfig) {
+    for (const entry of entries.filter((candidate) => STYLE_IMPORT_EXTENSIONS.has(candidate.extension))) {
+      const sanitized = sanitizeLegacyTailwindCss(entry.content);
+
+      if (!sanitized.changed) {
+        continue;
+      }
+
+      await writeWorkspaceFileAtomic(entry.absolutePath, sanitized.content || '\n');
+      sanitizedFiles.push(entry.path);
+      entry.content = sanitized.content || '\n';
+    }
+  }
+
+  const shouldInstallDependencies = !hasNodeModules || session.lastPreparedDependencyFingerprint !== dependencyFingerprint;
+
+  if (shouldInstallDependencies) {
+    writeEvent?.({
+      type: 'status',
+      message: hasNodeModules
+        ? 'Dependencies changed. Reinstalling workspace packages before starting preview'
+        : 'Installing workspace dependencies before starting preview',
+    });
+
+    await new Promise((resolve, reject) => {
+      const child = spawn('bash', ['-lc', 'pnpm install --reporter=append-only --no-frozen-lockfile'], {
+        cwd: session.dir,
+        env: {
+          ...process.env,
+          CI: '0',
+          FORCE_COLOR: '0',
+          NODE_OPTIONS,
+        },
+      });
+
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        writeEvent?.({ type: 'stdout', chunk: chunk.toString() });
+      });
+      child.stderr.on('data', (chunk) => {
+        const text = chunk.toString();
+        stderr += text;
+        writeEvent?.({ type: 'stderr', chunk: text });
+      });
+      child.on('close', (code) => {
+        if ((code ?? 1) === 0) {
+          resolve(null);
+          return;
+        }
+
+        reject(new Error(stderr.trim() || `pnpm install failed with exit ${code ?? 1}`));
+      });
+      child.on('error', reject);
+    });
+
+    await clearHostedWorkspaceDependencyCaches(session);
+    const refreshedPackageJsonRecord = await readWorkspacePackageJson(session);
+    const refreshedLockfileRecord = await readWorkspaceLockfile(session);
+    session.lastPreparedDependencyFingerprint = createWorkspaceDependencyFingerprint(
+      refreshedPackageJsonRecord?.raw || packageJsonRecord.raw,
+      refreshedLockfileRecord?.raw || '',
+    );
+  } else {
+    session.lastPreparedDependencyFingerprint = dependencyFingerprint;
+  }
+
+  const missingPackages = collectMissingWorkspacePackages(entries, packageJson).filter((pkg) => pkg !== 'tailwindcss');
+
+  if (missingPackages.length > 0) {
+    writeEvent?.({
+      type: 'status',
+      message: `Installing missing runtime packages: ${missingPackages.join(', ')}`,
+    });
+
+    await new Promise((resolve, reject) => {
+      const child = spawn('bash', ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`], {
+        cwd: session.dir,
+        env: {
+          ...process.env,
+          CI: '0',
+          FORCE_COLOR: '0',
+          NODE_OPTIONS,
+        },
+      });
+
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.stdout.on('data', (chunk) => {
+        writeEvent?.({ type: 'stdout', chunk: chunk.toString() });
+      });
+      child.stderr.on('data', (chunk) => {
+        writeEvent?.({ type: 'stderr', chunk: chunk.toString() });
+      });
+      child.on('close', (code) => {
+        if ((code ?? 1) === 0) {
+          resolve(null);
+          return;
+        }
+
+        reject(new Error(stderr.trim() || `pnpm add failed with exit ${code ?? 1}`));
+      });
+      child.on('error', reject);
+    });
+
+    installedPackages.push(...missingPackages);
+  }
+
+  return {
+    changed: sanitizedFiles.length > 0 || installedPackages.length > 0,
+    installedPackages,
+    sanitizedFiles,
+  };
 }
 
 async function writeWorkspaceFileAtomic(targetPath, content, options = {}) {
@@ -817,6 +1300,100 @@ export async function waitForProjectManifest(workspaceDir, timeoutMs = PROJECT_M
   }
 
   return workspaceHasOwnProjectManifest(workspaceDir);
+}
+
+async function inferWorkspaceStartCommand(session) {
+  const packageJsonRecord = await readWorkspacePackageJson(session);
+
+  if (!packageJsonRecord) {
+    return null;
+  }
+
+  return inferHostedWorkspaceStartCommand(packageJsonRecord.json);
+}
+
+async function startHostedPreviewForSession(session) {
+  if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
+    return false;
+  }
+
+  const command = await inferWorkspaceStartCommand(session);
+
+  if (!command) {
+    return false;
+  }
+
+  const publicOrigin = String(session.publicOrigin || '').trim();
+
+  if (!publicOrigin) {
+    return false;
+  }
+
+  const response = await fetch(`http://${HOST}:${PORT}/runtime/sessions/${session.id}/command`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-bolt-public-origin': publicOrigin,
+    },
+    body: JSON.stringify({
+      kind: 'start',
+      command,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Hosted preview autostart failed with status ${response.status}`);
+  }
+
+  return true;
+}
+
+function scheduleHostedAutoStartAfterSync(session) {
+  if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
+    return;
+  }
+
+  cancelPendingPreviewAutostart(session);
+  const mutationId = session.workspaceMutationId;
+
+  session.previewAutostartTimer = setTimeout(() => {
+    session.previewAutostartTimer = null;
+
+    void (async () => {
+      if (session.workspaceMutationId !== mutationId || session.preview || session.autoRestoreInFlight) {
+        return;
+      }
+
+      try {
+        const started = await startHostedPreviewForSession(session);
+
+        if (!started) {
+          return;
+        }
+
+        touchPreviewDiagnostics(session, {
+          status: 'starting',
+          healthy: false,
+          alert: null,
+        });
+        appendPreviewDiagnosticEntries(session, 'autostart', 'Hosted runtime started preview automatically after workspace sync.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendPreviewDiagnosticEntries(session, 'autostart', `Hosted preview autostart failed: ${message}`);
+        touchPreviewDiagnostics(session, {
+          status: 'error',
+          healthy: false,
+          alert: {
+            type: 'error',
+            title: 'Preview Error',
+            description: 'Hosted runtime could not auto-start the preview after file sync.',
+            content: message,
+            source: 'preview',
+          },
+        });
+      }
+    })();
+  }, 300);
 }
 
 async function walkWorkspace(rootDir, relativeDir = '') {
@@ -947,6 +1524,12 @@ function createEventWriter(res) {
 }
 
 function getRequestOrigin(req) {
+  const explicitOrigin = String(req.headers['x-bolt-public-origin'] || '').trim();
+
+  if (explicitOrigin) {
+    return explicitOrigin;
+  }
+
   const proto = req.headers['x-forwarded-proto'] || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || `${HOST}:${PORT}`;
   return `${proto}://${host}`;
@@ -1063,8 +1646,12 @@ async function handleRunCommand(req, res, session, body) {
   }
 
   const writeEvent = createEventWriter(res);
-  const effectiveCommand = kind === 'start' ? normalizeStartCommand(command, session.preview?.port || (await allocatePreviewPort())) : command.trim();
-  const previewPort = kind === 'start' ? Number(effectiveCommand.match(/--port\s+(\d+)/i)?.[1] || session.preview?.port || 0) : undefined;
+  const effectiveCommand =
+    kind === 'start'
+      ? normalizeStartCommand(command, session.preview?.port || (await allocatePreviewPort()))
+      : command.trim();
+  const previewPort =
+    kind === 'start' ? Number(effectiveCommand.match(/--port\s+(\d+)/i)?.[1] || session.preview?.port || 0) : undefined;
   const needsManifest = commandNeedsProjectManifest(effectiveCommand);
 
   if (needsManifest && !(await workspaceHasOwnProjectManifest(session.dir))) {
@@ -1083,6 +1670,34 @@ async function handleRunCommand(req, res, session, body) {
     writeEvent({ type: 'exit', exitCode: 1 });
     res.end();
     return;
+  }
+
+  if (kind === 'start') {
+    try {
+      const preparation = await prepareHostedWorkspaceForStart(session, { writeEvent });
+
+      if (preparation.sanitizedFiles.length > 0) {
+        writeEvent({
+          type: 'status',
+          message: `Architect removed incompatible legacy Tailwind directives from ${preparation.sanitizedFiles.join(', ')}`,
+        });
+      }
+
+      if (preparation.installedPackages.length > 0) {
+        writeEvent({
+          type: 'status',
+          message: `Architect installed missing runtime packages: ${preparation.installedPackages.join(', ')}`,
+        });
+      }
+    } catch (error) {
+      writeEvent({
+        type: 'stderr',
+        chunk: `${error instanceof Error ? error.message : String(error)}\n`,
+      });
+      writeEvent({ type: 'exit', exitCode: 1 });
+      res.end();
+      return;
+    }
   }
 
   markSessionMutationStart(session);
@@ -1190,14 +1805,13 @@ async function handleRunCommand(req, res, session, body) {
       touchPreviewDiagnostics(session, {
         status: 'error',
         healthy: false,
-        alert:
-          extractPreviewAlertFromText(output) || {
-            type: 'error',
-            title: 'Preview Error',
-            description: error instanceof Error ? error.message : String(error),
-            content: normalizePreviewText(output) || (error instanceof Error ? error.message : String(error)),
-            source: 'preview',
-          },
+        alert: extractPreviewAlertFromText(output) || {
+          type: 'error',
+          title: 'Preview Error',
+          description: error instanceof Error ? error.message : String(error),
+          content: normalizePreviewText(output) || (error instanceof Error ? error.message : String(error)),
+          source: 'preview',
+        },
       });
       writeEvent({ type: 'stderr', chunk: `${error instanceof Error ? error.message : String(error)}\n` });
       child.kill('SIGTERM');
@@ -1481,11 +2095,13 @@ export function createRuntimeServer() {
         sendJson(res, 200, {
           supported: true,
           tenants: registry.tenants || [],
+          auditTrail: registry.auditTrail || [],
           defaultAdmin: { username: registry.admin?.username || 'admin' },
           admin: {
             username: registry.admin?.username || 'admin',
             mustChangePassword: registry.admin?.mustChangePassword !== false,
             updatedAt: registry.admin?.updatedAt || null,
+            passwordUpdatedAt: registry.admin?.passwordUpdatedAt || null,
             lastLoginAt: registry.admin?.lastLoginAt || null,
           },
         });
@@ -1511,6 +2127,11 @@ export function createRuntimeServer() {
           ...registry.admin,
           lastLoginAt: new Date().toISOString(),
         };
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'admin.login',
+          target: registry.admin?.username || 'admin',
+        });
         await writeTenantRegistry(registry);
 
         sendJson(res, 200, { ok: true });
@@ -1524,7 +2145,9 @@ export function createRuntimeServer() {
       try {
         const body = await readJsonBody(req);
         const name = String(body.name || '').trim();
-        const email = String(body.email || '').trim().toLowerCase();
+        const email = String(body.email || '')
+          .trim()
+          .toLowerCase();
         const password = String(body.password || '').trim();
 
         if (!name || !email || !password) {
@@ -1532,25 +2155,51 @@ export function createRuntimeServer() {
           return;
         }
 
+        if (!isLikelyValidEmail(email)) {
+          sendText(res, 400, 'Tenant admin email must be a valid email address.');
+          return;
+        }
+
+        if (password.length < 10) {
+          sendText(res, 400, 'Tenant admin password must be at least 10 characters long.');
+          return;
+        }
+
         const registry = await ensureTenantRegistry();
+
+        if (registry.admin?.mustChangePassword !== false) {
+          sendText(res, 400, 'Rotate the bootstrap admin password before creating production tenants.');
+          return;
+        }
 
         if (registry.tenants.some((tenant) => tenant.email === email)) {
           sendText(res, 400, 'A tenant with that email already exists.');
           return;
         }
 
+        const slug = buildTenantSlug(name, email, registry.tenants);
         registry.tenants.unshift({
           id: `${Date.now()}`,
           name,
           email,
+          slug,
+          workspaceDir: buildTenantWorkspaceDir(slug),
           passwordHash: hashTenantSecret(password),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          passwordUpdatedAt: new Date().toISOString(),
           status: 'active',
           lastLoginAt: null,
           mustChangePassword: true,
         });
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'tenant.create',
+          target: email,
+          details: { slug },
+        });
 
+        await fs.mkdir(buildTenantWorkspaceDir(slug), { recursive: true });
         await writeTenantRegistry(registry);
         sendJson(res, 200, { ok: true });
       } catch (error) {
@@ -1571,8 +2220,8 @@ export function createRuntimeServer() {
           return;
         }
 
-        if (nextPassword.length < 8) {
-          sendText(res, 400, 'Admin password must be at least 8 characters long.');
+        if (nextPassword.length < 10) {
+          sendText(res, 400, 'Admin password must be at least 10 characters long.');
           return;
         }
 
@@ -1581,7 +2230,13 @@ export function createRuntimeServer() {
           passwordHash: hashTenantSecret(nextPassword),
           mustChangePassword: false,
           updatedAt: new Date().toISOString(),
+          passwordUpdatedAt: new Date().toISOString(),
         };
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'admin.password.rotate',
+          target: registry.admin?.username || 'admin',
+        });
 
         await writeTenantRegistry(registry);
         sendJson(res, 200, { ok: true });
@@ -1608,11 +2263,56 @@ export function createRuntimeServer() {
 
         tenant.status = nextStatus;
         tenant.updatedAt = new Date().toISOString();
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'tenant.status.update',
+          target: tenant.email,
+          details: { status: nextStatus },
+        });
 
         await writeTenantRegistry(registry);
         sendJson(res, 200, { ok: true, status: nextStatus });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to update tenant status.');
+      }
+      return;
+    }
+
+    const tenantPasswordMatch = pathname.match(/^\/runtime\/tenant-admin\/tenants\/([^/]+)\/password$/);
+
+    if (req.method === 'POST' && tenantPasswordMatch) {
+      try {
+        const body = await readJsonBody(req);
+        const nextPassword = String(body.password || '').trim();
+        const tenantId = decodeURIComponent(tenantPasswordMatch[1] || '');
+
+        if (nextPassword.length < 10) {
+          sendText(res, 400, 'Tenant password must be at least 10 characters long.');
+          return;
+        }
+
+        const registry = await ensureTenantRegistry();
+        const tenant = registry.tenants.find((entry) => entry.id === tenantId);
+
+        if (!tenant) {
+          sendText(res, 404, 'Tenant not found.');
+          return;
+        }
+
+        tenant.passwordHash = hashTenantSecret(nextPassword);
+        tenant.mustChangePassword = true;
+        tenant.updatedAt = new Date().toISOString();
+        tenant.passwordUpdatedAt = new Date().toISOString();
+        appendTenantAuditEvent(registry, {
+          actor: registry.admin?.username || 'admin',
+          action: 'tenant.password.reset',
+          target: tenant.email,
+        });
+
+        await writeTenantRegistry(registry);
+        sendJson(res, 200, { ok: true });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to reset tenant password.');
       }
       return;
     }
@@ -1732,9 +2432,11 @@ export function createRuntimeServer() {
         const incomingFiles = body.files || {};
         const prune = body.prune === true;
         await runSessionOperation(session, async () => {
+          session.publicOrigin = getRequestOrigin(req);
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
           session.currentFileMap = mergeWorkspaceFileMap(session.currentFileMap, incomingFiles, { prune });
+          scheduleHostedAutoStartAfterSync(session);
           schedulePreviewVerificationAfterMutation(session, 'a workspace sync');
         });
         sendJson(res, 200, {

@@ -20,6 +20,7 @@ import {
   deriveWhyThisAction,
   hasPreviewVerification,
 } from './execution-status';
+import type { ArtifactState } from '~/lib/stores/workbench';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -92,6 +93,7 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
+  const artifacts = useStore(workbenchStore.artifacts);
 
   useEffect(() => {
     if (isStreaming) {
@@ -127,9 +129,17 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
   const inlineRunMetrics = useMemo(() => data.filter(isRunMetrics).slice(-1)[0], [data]);
   const runMetrics = props.latestRunMetrics || inlineRunMetrics;
   const subAgentEvents = useMemo(() => data.filter(isSubAgentEvent), [data]);
+  const artifactActionCount = useMemo(
+    () =>
+      Object.values(artifacts as Record<string, ArtifactState>).reduce(
+        (total, artifact) => total + Object.keys(artifact.runner.actions.get()).length,
+        0,
+      ),
+    [artifacts, data.length, stepRunnerEvents.length],
+  );
   const actionCount = useMemo(
-    () => deriveActionCount(toolCalls.length, stepRunnerEvents),
-    [toolCalls.length, stepRunnerEvents],
+    () => deriveActionCount(toolCalls.length, stepRunnerEvents, artifactActionCount),
+    [artifactActionCount, toolCalls.length, stepRunnerEvents],
   );
   const costEstimate = estimateCostUSD({
     providerName: provider?.name,

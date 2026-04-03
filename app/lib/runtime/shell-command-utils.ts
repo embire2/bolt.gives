@@ -12,6 +12,7 @@ const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 const PNPM_REPORTER_FLAG_RE = /--reporter(?:=|\s+)(append-only|silent)\b/i;
+const PNPM_NO_FROZEN_LOCKFILE_RE = /--no-frozen-lockfile\b/i;
 const NPM_PROGRESS_FLAG_RE = /--no-progress\b/i;
 const NPM_SILENT_FLAG_RE = /--silent\b|--loglevel(?:=|\s+)silent\b/i;
 const YARN_SILENT_FLAG_RE = /--silent\b/i;
@@ -381,14 +382,20 @@ function rewriteInstallSegmentForLowNoise(segment: string): { segment: string; m
   }
 
   if (/^pnpm\s+/i.test(trimmed)) {
-    if (PNPM_REPORTER_FLAG_RE.test(trimmed)) {
-      return { segment: trimmed, modified: false };
+    let next = trimmed;
+    let modified = false;
+
+    if (!PNPM_REPORTER_FLAG_RE.test(next)) {
+      next = `${next} --reporter=append-only`;
+      modified = true;
     }
 
-    return {
-      segment: `${trimmed} --reporter=append-only`,
-      modified: true,
-    };
+    if (!PNPM_NO_FROZEN_LOCKFILE_RE.test(next)) {
+      next = `${next} --no-frozen-lockfile`;
+      modified = true;
+    }
+
+    return { segment: next, modified };
   }
 
   if (/^npm\s+/i.test(trimmed)) {
@@ -511,6 +518,14 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
     return { segment, modified: false };
   }
 
+  const stripKnownNpmOnlyFlags = (value: string) =>
+    value
+      .replace(/(?:^|\s)--no-progress\b/gi, ' ')
+      .replace(/(?:^|\s)--silent\b/gi, ' ')
+      .replace(/(?:^|\s)--loglevel(?:=|\s+)silent\b/gi, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
   // npm run <script> → pnpm run <script>
   if (NPM_RUN_RE.test(trimmed)) {
     return { segment: trimmed.replace(/^npm\s+run\s+/i, 'pnpm run '), modified: true };
@@ -536,14 +551,24 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
     return { segment: trimmed.replace(/^npm\s+init\s+/i, 'pnpm create '), modified: true };
   }
 
-  // npm install/add <pkg> → pnpm add <pkg>  (with specific packages)
   if (NPM_ADD_RE.test(trimmed)) {
-    return { segment: trimmed.replace(/^npm\s+(add|install|i)\s+/i, 'pnpm add '), modified: true };
-  }
+    const remainder = stripKnownNpmOnlyFlags(trimmed.replace(/^npm\s+(add|install|i)\b/i, '').trim());
+    const hasPackageArgs = remainder
+      .split(/\s+/)
+      .filter(Boolean)
+      .some((token) => !token.startsWith('-'));
 
-  // npm install (bare, no packages) → pnpm install
-  if (/^npm\s+(install|i)(\s*$|\s+--)/i.test(trimmed)) {
-    return { segment: trimmed.replace(/^npm\s+(install|i)\b/i, 'pnpm install'), modified: true };
+    if (!hasPackageArgs) {
+      return {
+        segment: remainder ? `pnpm install ${remainder}` : 'pnpm install',
+        modified: true,
+      };
+    }
+
+    return {
+      segment: remainder ? `pnpm add ${remainder}` : 'pnpm add',
+      modified: true,
+    };
   }
 
   // npx <tool> → pnpm dlx <tool>

@@ -8,7 +8,7 @@ import type {
   ProgressAnnotation,
   ToolCallDataEvent,
 } from '~/types/context';
-import { workbenchStore } from '~/lib/stores/workbench';
+import { workbenchStore, type ArtifactState } from '~/lib/stores/workbench';
 import { deriveActionCount, deriveProgressMessage, hasPreviewVerification } from './execution-status';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
@@ -83,6 +83,7 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
+  const artifacts = useStore(workbenchStore.artifacts);
 
   useEffect(() => {
     if (isStreaming) {
@@ -111,9 +112,17 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
   const progressEvents = useMemo(() => data.filter(isProgress), [data]);
   const commentaryEvents = useMemo(() => data.filter(isCommentary), [data]);
   const checkpointEvents = useMemo(() => data.filter(isCheckpoint), [data]);
+  const artifactActionCount = useMemo(
+    () =>
+      Object.values(artifacts as Record<string, ArtifactState>).reduce(
+        (total, artifact) => total + Object.keys(artifact.runner.actions.get()).length,
+        0,
+      ),
+    [artifacts, data.length, stepRunnerEvents.length],
+  );
   const actionCount = useMemo(
-    () => deriveActionCount(data.filter(isToolCall).length, stepRunnerEvents),
-    [data, stepRunnerEvents],
+    () => deriveActionCount(data.filter(isToolCall).length, stepRunnerEvents, artifactActionCount),
+    [artifactActionCount, data, stepRunnerEvents],
   );
   const lastCommentary = commentaryEvents.slice(-1)[0];
   const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);

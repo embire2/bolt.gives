@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { Suspense, lazy, useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '~/components/ui/Button';
 import { ConfirmationDialog, SelectionDialog } from '~/components/ui/Dialog';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '~/components/ui/Card';
@@ -6,9 +6,12 @@ import { motion } from 'framer-motion';
 import { useDataOperations } from '~/lib/hooks/useDataOperations';
 import { openDatabase } from '~/lib/persistence/db';
 import { getAllChats, type Chat } from '~/lib/persistence/chats';
-import { DataVisualization } from './DataVisualization';
 import { classNames } from '~/utils/classNames';
 import { toast } from 'react-toastify';
+
+const LazyDataVisualization = lazy(() =>
+  import('./DataVisualization').then((module) => ({ default: module.DataVisualization })),
+);
 
 // Create a custom hook to connect to the boltHistory database
 function useBoltHistoryDB() {
@@ -99,6 +102,7 @@ export function DataTab() {
 
   const [availableChats, setAvailableChats] = useState<ExtendedChat[]>([]);
   const [chatItems, setChatItems] = useState<ChatItem[]>([]);
+  const [showVisualization, setShowVisualization] = useState(false);
 
   // Data operations hook with boltHistory database
   const {
@@ -712,7 +716,32 @@ export function DataTab() {
         <h2 className="text-xl font-semibold mb-4 text-bolt-elements-textPrimary">Data Usage</h2>
         <Card>
           <CardContent className="p-5">
-            <DataVisualization chats={availableChats} />
+            {showVisualization ? (
+              <Suspense
+                fallback={
+                  <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 text-sm text-bolt-elements-textSecondary">
+                    Loading usage charts...
+                  </div>
+                }
+              >
+                <LazyDataVisualization chats={availableChats} />
+              </Suspense>
+            ) : (
+              <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4">
+                <div className="text-sm font-medium text-bolt-elements-textPrimary">Load usage charts on demand</div>
+                <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                  Charts and export tooling are loaded only when requested so the normal settings surface stays fast.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button onClick={() => setShowVisualization(true)} size="sm" variant="outline">
+                    Load charts
+                  </Button>
+                  <span className="text-xs text-bolt-elements-textTertiary">
+                    {availableChats.length} chat{availableChats.length === 1 ? '' : 's'} available for analysis
+                  </span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

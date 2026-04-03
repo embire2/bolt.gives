@@ -10,14 +10,20 @@ describe('getManualChunkName', () => {
   });
 
   it('groups editor and terminal dependencies separately', () => {
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-codemirror');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-core');
     expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/lang-javascript/dist/index.js')).toBe(
-      'editor-codemirror',
+      'editor-languages',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@uiw/codemirror-theme-vscode/index.js')).toBe(
-      'editor-codemirror',
+      'editor-themes',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/@xterm/xterm/lib/xterm.js')).toBe('terminal-xterm');
+  });
+
+  it('separates charting and pdf export tooling from the main client shell', () => {
+    expect(getManualChunkName('/root/bolt.gives/node_modules/chart.js/dist/chart.js')).toBe('charts-core');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/react-chartjs-2/dist/index.js')).toBe('charts-react');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/jspdf/dist/jspdf.es.min.js')).toBe('pdf-export');
   });
 
   it('isolates collaboration and export tooling', () => {

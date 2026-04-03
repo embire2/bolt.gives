@@ -117,3 +117,14 @@ export type SubAgentEvent = {
     totalTokens: number;
   };
 };
+
+export type SyntheticRunHandoffDataEvent = {
+  type: 'synthetic-run-handoff';
+  handoffId: string;
+  messageId: string;
+  reason: string;
+  setupCommand?: string;
+  startCommand: string;
+  assistantContent: string;
+  timestamp: string;
+};

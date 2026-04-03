@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import { tokenUsageStore } from '~/lib/stores/performance';
 import { classNames } from '~/utils/classNames';
 
@@ -60,9 +61,21 @@ export function PerformanceMonitor() {
   const [cpuPercent, setCpuPercent] = useState(0);
   const thresholdsRef = useRef(readThresholds());
   const previousCpuRef = useRef<{ total: number; timestamp: number } | null>(null);
+  const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
   useEffect(() => {
     let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextPoll = (delayMs: number) => {
+      if (!mounted) {
+        return;
+      }
+
+      timer = setTimeout(() => {
+        void poll();
+      }, delayMs);
+    };
 
     const poll = async () => {
       try {
@@ -71,12 +84,14 @@ export function PerformanceMonitor() {
         const response = await fetch('/api/system/performance');
 
         if (!response.ok) {
+          scheduleNextPoll(hostedRuntimeEnabled ? 60000 : 15000);
           return;
         }
 
         const nextSample = (await response.json()) as NodePerformanceSample;
 
         if (!mounted || !nextSample.available || !nextSample.cpu) {
+          scheduleNextPoll(hostedRuntimeEnabled ? 60000 : 15000);
           return;
         }
 
@@ -101,18 +116,23 @@ export function PerformanceMonitor() {
         setSample(nextSample);
       } catch {
         // Best-effort widget; keep silent if endpoint is unavailable.
+      } finally {
+        const hidden = typeof document !== 'undefined' ? document.hidden : false;
+        const nextDelayMs = hostedRuntimeEnabled ? (hidden ? 90000 : 30000) : hidden ? 30000 : 10000;
+        scheduleNextPoll(nextDelayMs);
       }
     };
 
-    poll();
-
-    const interval = setInterval(poll, 5000);
+    void poll();
 
     return () => {
       mounted = false;
-      clearInterval(interval);
+
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
-  }, []);
+  }, [hostedRuntimeEnabled]);
 
   const recommendations = useMemo(() => {
     const items: string[] = [];

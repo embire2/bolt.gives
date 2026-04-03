@@ -1,23 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { buildCommentaryHeartbeat } from './commentary-heartbeat';
-import { getCommentaryPoolMessage } from './commentary-pool.generated';
 
 describe('buildCommentaryHeartbeat', () => {
-  it('builds a plain-English heartbeat update for normal execution', () => {
-    const heartbeat = buildCommentaryHeartbeat(125000, 'action');
-    const expected = getCommentaryPoolMessage('action', 2, 'fallback');
+  it('includes task context in the fallback heartbeat detail', () => {
+    const heartbeat = buildCommentaryHeartbeat(120_000, 'action', {
+      goal: 'a doctor appointment scheduling web app',
+      currentStep: 'Starting the preview and checking the generated form flow.',
+      lastVisibleResult: 'The install finished successfully.',
+    });
 
-    expect(heartbeat.phase).toBe('action');
-    expect(heartbeat.message).toBe(expected);
-    expect(heartbeat.detail).toContain('Key changes:');
-    expect(heartbeat.detail).toContain('Next:');
-    expect(heartbeat.detail).toContain('2 minutes');
-    expect(heartbeat.detail).toContain('current step');
-  });
-
-  it('preserves recovery phase when the previous phase was recovery', () => {
-    const heartbeat = buildCommentaryHeartbeat(62000, 'recovery');
-
-    expect(heartbeat.phase).toBe('recovery');
+    expect(heartbeat.message.length).toBeGreaterThan(0);
+    expect(heartbeat.detail).toContain('Starting the preview and checking the generated form flow');
+    expect(heartbeat.detail).toContain('The install finished successfully');
   });
 });

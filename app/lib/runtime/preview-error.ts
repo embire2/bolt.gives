@@ -26,6 +26,46 @@ function normalizePreviewText(value: string | null | undefined) {
     .trim();
 }
 
+function stripAnsi(value: string) {
+  return value.replace(/\u001B\[[0-9;]*m/g, '');
+}
+
+function pickPreviewDescription(combinedText: string) {
+  const lines = stripAnsi(combinedText)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const preferredMatchers = [
+    /\[plugin:vite:[^\]]+\].+/i,
+    /Pre-transform error.+/i,
+    /Transform failed with \d+ error/i,
+    /Failed to resolve import.+/i,
+    /Failed to scan for dependencies.+/i,
+    /Missing ["'][^"']+["'] specifier.+/i,
+    /Unexpected token.+/i,
+    /Expected .+ but found.+/i,
+    /Uncaught\s+(?:Error|TypeError|ReferenceError|SyntaxError|RangeError).+/i,
+    /Unhandled\s+Promise\s+Rejection.+/i,
+  ];
+
+  for (const matcher of preferredMatchers) {
+    const match = lines.find((line) => matcher.test(line));
+
+    if (match) {
+      return match;
+    }
+  }
+
+  const fileLocationLine = lines.find((line) => /\/src\/.+:\d+:\d+/i.test(line) || /file:\s*\/.+:\d+:\d+/i.test(line));
+
+  if (fileLocationLine) {
+    return fileLocationLine;
+  }
+
+  return lines[0] || 'Preview failed to compile or run.';
+}
+
 export function extractPreviewAlertFromText(rawText: string | null | undefined): ActionAlert | null {
   const combinedText = normalizePreviewText(rawText);
 
@@ -47,15 +87,10 @@ export function extractPreviewAlertFromText(rawText: string | null | undefined):
     return null;
   }
 
-  const [firstLine = 'Preview failed to compile or run.'] = combinedText
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
   return {
     type: 'error',
     title: 'Preview Error',
-    description: firstLine.slice(0, 220),
+    description: pickPreviewDescription(combinedText).slice(0, 220),
     content: combinedText.slice(0, 5000),
     source: 'preview',
   };

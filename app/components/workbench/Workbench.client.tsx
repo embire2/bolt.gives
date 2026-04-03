@@ -27,9 +27,17 @@ import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportCh
 import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import type { AgentRunMetricsDataEvent, UsageDataEvent } from '~/types/context';
+import type {
+  AgentCommentaryAnnotation,
+  AgentRunMetricsDataEvent,
+  ProgressAnnotation,
+  UsageDataEvent,
+} from '~/types/context';
 import type { ProviderInfo } from '~/types/model';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
+import type { ActionAlert } from '~/types/actions';
+import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
+import { deriveProgressMessage } from '~/components/chat/execution-status';
 
 const LazyDiffView = lazy(() => import('./DiffView').then((module) => ({ default: module.DiffView })));
 const LazyPreview = lazy(() => import('./Preview').then((module) => ({ default: module.Preview })));
@@ -58,6 +66,121 @@ function WorkbenchPanelFallback({ label }: { label: string }) {
       </div>
     </div>
   );
+}
+
+function isAgentCommentaryAnnotation(value: JSONValue): value is AgentCommentaryAnnotation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return candidate.type === 'agent-commentary' && typeof candidate.message === 'string';
+}
+
+function isProgressAnnotation(value: JSONValue): value is ProgressAnnotation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return candidate.type === 'progress' && typeof candidate.message === 'string';
+}
+
+function normalizeWorkspaceLine(value: string | null | undefined) {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalized || null;
+}
+
+function buildWorkspaceSummary(args: {
+  data?: JSONValue[] | undefined;
+  stepRunnerEvents: InteractiveStepRunnerEvent[];
+  alert?: ActionAlert;
+  isStreaming?: boolean;
+  hasPreview?: boolean;
+}) {
+  const commentaryEvents = (args.data || []).filter(isAgentCommentaryAnnotation);
+  const progressEvents = (args.data || []).filter(isProgressAnnotation);
+  const latestCommentary = commentaryEvents.at(-1);
+  const latestProgress =
+    progressEvents.filter((event) => event.status === 'in-progress').at(-1) || progressEvents.at(-1);
+  const latestEvent = args.stepRunnerEvents.at(-1);
+  const latestStartedStep = [...args.stepRunnerEvents].reverse().find((event) => event.type === 'step-start');
+  const latestCompletedStep = [...args.stepRunnerEvents].reverse().find((event) => event.type === 'step-end');
+
+  if (args.alert) {
+    return {
+      tone: 'warning' as const,
+      stateLabel: 'Needs repair',
+      current:
+        normalizeWorkspaceLine(args.alert.description) ||
+        'The generated app hit a preview or runtime error and is being repaired.',
+      last:
+        normalizeWorkspaceLine(latestCompletedStep?.description || latestCompletedStep?.output) ||
+        'The previous action finished, but the app still failed when previewing.',
+      next: 'Architect is applying the smallest safe fix now, then the preview will be rechecked automatically.',
+    };
+  }
+
+  if (latestStartedStep || (args.isStreaming && latestEvent)) {
+    return {
+      tone: 'active' as const,
+      stateLabel: 'Working',
+      current:
+        normalizeWorkspaceLine(
+          latestStartedStep?.description ||
+            latestEvent?.description ||
+            latestCommentary?.message ||
+            latestProgress?.message,
+        ) || 'The workspace is updating files and commands right now.',
+      last:
+        normalizeWorkspaceLine(latestCompletedStep?.output || latestCompletedStep?.description) ||
+        normalizeWorkspaceLine(deriveProgressMessage(progressEvents, args.stepRunnerEvents)) ||
+        'The last completed command output will appear here.',
+      next: 'The next visible update will appear here as soon as the current command or file change finishes.',
+    };
+  }
+
+  if (args.hasPreview) {
+    return {
+      tone: 'ready' as const,
+      stateLabel: 'Preview ready',
+      current: 'The preview is available and the workspace is ready for inspection.',
+      last:
+        normalizeWorkspaceLine(latestCompletedStep?.output || latestCompletedStep?.description) ||
+        'The last visible step completed successfully.',
+      next: 'Inspect the preview, review the files, or ask Bolt for the next change.',
+    };
+  }
+
+  return {
+    tone: 'idle' as const,
+    stateLabel: 'Standing by',
+    current:
+      normalizeWorkspaceLine(latestCommentary?.message || latestProgress?.message) ||
+      'Waiting for Bolt to write files or start the preview.',
+    last:
+      normalizeWorkspaceLine(latestCompletedStep?.description || latestCompletedStep?.output) ||
+      'No completed workspace action yet.',
+    next: 'As soon as Bolt starts the app or edits files, the workspace will switch into an active state.',
+  };
+}
+
+function getWorkspaceToneClasses(tone: 'warning' | 'active' | 'ready' | 'idle') {
+  switch (tone) {
+    case 'warning':
+      return 'border-amber-500/30 bg-amber-500/10';
+    case 'active':
+      return 'border-sky-500/30 bg-sky-500/10';
+    case 'ready':
+      return 'border-emerald-500/30 bg-emerald-500/10';
+    default:
+      return 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-3';
+  }
 }
 
 interface WorkspaceProps {
@@ -358,6 +481,8 @@ export const Workbench = memo(
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
     const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
+    const actionAlert = useStore(workbenchStore.actionAlert);
+    const stepRunnerEvents = useStore(workbenchStore.interactiveStepEvents);
     const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
     const workspaceCommentaryRef = useRef<HTMLDivElement | null>(null);
     const hasWorkspaceContent =
@@ -368,6 +493,17 @@ export const Workbench = memo(
       Boolean(isStreaming);
     const shouldRenderWorkbench = embedded ? forceVisible : showWorkbench;
     const canToggleChatSidebar = !embedded && canHideChat && !isSmallViewport;
+    const workspaceSummary = useMemo(
+      () =>
+        buildWorkspaceSummary({
+          data,
+          stepRunnerEvents,
+          alert: actionAlert?.source === 'preview' ? actionAlert : undefined,
+          isStreaming,
+          hasPreview,
+        }),
+      [actionAlert, data, hasPreview, isStreaming, stepRunnerEvents],
+    );
 
     const setSelectedView = (view: WorkbenchViewType) => {
       workbenchStore.currentView.set(view);
@@ -602,6 +738,49 @@ export const Workbench = memo(
             />
           </div>
           <div className="relative flex-1 overflow-hidden">
+            {chatStarted ? (
+              <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3 py-2">
+                <div className={`rounded-lg border px-3 py-2 ${getWorkspaceToneClasses(workspaceSummary.tone)}`}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+                        Workspace Status
+                      </div>
+                      <div className="text-sm font-medium text-bolt-elements-textPrimary">
+                        {workspaceSummary.stateLabel}
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-current/25 px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                      {selectedView === 'preview'
+                        ? 'Preview view'
+                        : selectedView === 'code'
+                          ? 'Code view'
+                          : 'Diff view'}
+                    </div>
+                  </div>
+                  <div className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:grid-cols-3">
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Happening now
+                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.current}</div>
+                    </div>
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Last visible result
+                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.last}</div>
+                    </div>
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Next
+                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.next}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {hasWorkspaceContent ? (
               <>
                 <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
@@ -666,12 +845,12 @@ export const Workbench = memo(
                 </div>
               </div>
               <div className="grid min-h-0 gap-3 xl:grid-cols-[0.95fr_1.05fr]">
-                <div ref={workspaceCommentaryRef}>
+                <div ref={workspaceCommentaryRef} className="max-h-[22rem] overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading live commentary" />}>
                     <LazyCommentaryFeed data={data} scrollRef={workspaceCommentaryRef} />
                   </Suspense>
                 </div>
-                <div className="space-y-3">
+                <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading execution status" />}>
                     <LazyExecutionTransparencyPanel
                       data={data}
