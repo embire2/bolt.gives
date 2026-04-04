@@ -25,6 +25,15 @@ import {
   sanitizeManagedInstanceForOperator,
   slugifyManagedInstanceSubdomain,
 } from './managed-instances.mjs';
+import {
+  buildAdminDatabaseConfig,
+  listAdminEmailMessages,
+  listClientProfiles,
+  syncManagedInstanceAssignments,
+  upsertClientProfile,
+  upsertManagedInstanceAssignment,
+} from './admin-db.mjs';
+import { buildAdminMailSupport, sendAdminEmail } from './admin-mailer.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -89,6 +98,8 @@ const MANAGED_INSTANCE_DEPLOY_DIR =
 const MANAGED_INSTANCE_SYNC_INTERVAL_MS = Number(process.env.RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS || '600000');
 const MANAGED_INSTANCE_DELETE_ON_SUSPEND = process.env.RUNTIME_MANAGED_INSTANCE_DELETE_ON_SUSPEND === '1';
 const MANAGED_INSTANCE_PUBLIC_ENABLED = process.env.RUNTIME_MANAGED_INSTANCE_ENABLED !== 'false';
+const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
+const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
 
 const sessions = new Map();
 const managedInstanceLocks = new Map();
@@ -99,6 +110,26 @@ const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', 
 const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
+
+function buildClientRegistrationSource(hostname = '') {
+  return hostname ? `managed-instance:${String(hostname).trim().toLowerCase()}` : 'managed-instance:runtime';
+}
+
+async function syncManagedInstanceToAdminDatabase(instance) {
+  if (!ADMIN_DB_CONFIG.enabled || !instance) {
+    return;
+  }
+
+  await upsertManagedInstanceAssignment(instance);
+}
+
+async function syncManagedRegistryToAdminDatabase(registry) {
+  if (!ADMIN_DB_CONFIG.enabled || !registry?.instances) {
+    return [];
+  }
+
+  return await syncManagedInstanceAssignments(registry.instances);
+}
 
 function hashTenantSecret(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -617,6 +648,7 @@ async function maybeExpireManagedInstances(registry, { actor = 'system' } = {}) 
 
   if (changed) {
     await writeManagedInstanceRegistry(registry);
+    await syncManagedRegistryToAdminDatabase(registry);
   }
 
   return changed;
@@ -648,6 +680,7 @@ async function refreshManagedInstanceFromCurrentBuild(registry, instance, { acto
         },
       });
       await writeManagedInstanceRegistry(registry);
+      await syncManagedInstanceToAdminDatabase(instance);
       return instance;
     } catch (error) {
       instance.status = 'failed';
@@ -662,6 +695,7 @@ async function refreshManagedInstanceFromCurrentBuild(registry, instance, { acto
         },
       });
       await writeManagedInstanceRegistry(registry);
+      await syncManagedInstanceToAdminDatabase(instance);
       throw error;
     }
   });
@@ -701,6 +735,7 @@ async function suspendManagedInstanceRecord(
   }
 
   await writeManagedInstanceRegistry(registry);
+  await syncManagedInstanceToAdminDatabase(instance);
   return instance;
 }
 
@@ -2662,6 +2697,18 @@ export function createRuntimeServer() {
           .toLowerCase();
         const requestedSubdomain = slugifyManagedInstanceSubdomain(body.subdomain);
         const sessionToken = String(body.sessionToken || '').trim();
+        const sourceHost = String(body.sourceHost || '').trim().toLowerCase();
+        const clientProfile = {
+          name,
+          email,
+          company: String(body.company || '').trim(),
+          role: String(body.role || '').trim(),
+          phone: String(body.phone || '').trim(),
+          country: String(body.country || '').trim(),
+          useCase: String(body.useCase || '').trim(),
+          requestedSubdomain,
+          registrationSource: buildClientRegistrationSource(sourceHost),
+        };
 
         if (name.length < 2) {
           sendText(res, 400, 'Display name must be at least 2 characters long.');
@@ -2676,6 +2723,10 @@ export function createRuntimeServer() {
         if (!requestedSubdomain || requestedSubdomain.length < 3) {
           sendText(res, 400, 'Choose a subdomain with at least 3 letters or numbers.');
           return;
+        }
+
+        if (ADMIN_DB_CONFIG.enabled) {
+          await upsertClientProfile(clientProfile);
         }
 
         const registry = await ensureManagedInstanceRegistry();
@@ -2719,6 +2770,7 @@ export function createRuntimeServer() {
           actor: email,
           reason: claim.kind === 'created' ? 'initial-trial-spawn' : 'resume-existing-trial',
         });
+        await syncManagedInstanceToAdminDatabase(instance);
 
         sendJson(res, 200, {
           ok: true,
@@ -2818,14 +2870,23 @@ export function createRuntimeServer() {
         const registry = await ensureTenantRegistry();
         const managedSupport = buildManagedInstanceSupportState();
         let managedInstances = [];
+        let clientProfiles = [];
+        let emailMessages = [];
+        const mailSupport = buildAdminMailSupport();
 
         if (managedSupport.supported) {
           const managedRegistry = await ensureManagedInstanceRegistry();
           await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
+          await syncManagedRegistryToAdminDatabase(managedRegistry);
           managedInstances = managedRegistry.instances
             .slice()
             .sort((left, right) => Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt))
             .map((instance) => sanitizeManagedInstanceForOperator(instance));
+        }
+
+        if (ADMIN_DB_CONFIG.enabled) {
+          clientProfiles = await listClientProfiles();
+          emailMessages = await listAdminEmailMessages(100);
         }
 
         sendJson(res, 200, {
@@ -2834,6 +2895,10 @@ export function createRuntimeServer() {
           auditTrail: registry.auditTrail || [],
           managedSupport,
           managedInstances,
+          clientProfiles,
+          emailMessages,
+          mailSupport,
+          adminPanelUrl: ADMIN_PANEL_PUBLIC_URL,
           defaultAdmin: { username: registry.admin?.username || 'admin' },
           admin: {
             username: registry.admin?.username || 'admin',
@@ -2912,6 +2977,49 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/email/send') {
+      try {
+        const body = await readJsonBody(req);
+        const profileEmail = String(body.profileEmail || '')
+          .trim()
+          .toLowerCase();
+        const subject = String(body.subject || '').trim();
+        const messageBody = String(body.body || '').trim();
+        const actor = String(body.actor || 'admin').trim() || 'admin';
+
+        if (!profileEmail || !isLikelyValidEmail(profileEmail)) {
+          sendText(res, 400, 'A valid client email address is required.');
+          return;
+        }
+
+        if (!subject || !messageBody) {
+          sendText(res, 400, 'Subject and message body are required.');
+          return;
+        }
+
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Admin email requires the Postgres-backed admin database to be configured.');
+          return;
+        }
+
+        const message = await sendAdminEmail({
+          profileEmail,
+          subject,
+          body: messageBody,
+          actor,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          message,
+          mailSupport: buildAdminMailSupport(),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record the admin email message.');
       }
       return;
     }

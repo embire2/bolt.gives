@@ -6,7 +6,10 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import WebSocket, { WebSocketServer } from 'ws';
 import * as Y from 'yjs';
-import { docs, setContentInitializor, setupWSConnection } from '@y/websocket-server/utils';
+import * as syncProtocol from 'y-protocols/sync';
+import * as awarenessProtocol from 'y-protocols/awareness';
+import * as encoding from 'lib0/encoding';
+import * as decoding from 'lib0/decoding';
 
 const HOST = process.env.COLLAB_HOST || process.env.HOST || 'localhost';
 // Never default to process.env.PORT here. Many setups use PORT for the web app (e.g. 5173),
@@ -16,6 +19,9 @@ const PORT = Number(process.env.COLLAB_PORT || 1234);
 const PERSIST_DEBOUNCE_MS = Number(process.env.COLLAB_PERSIST_DEBOUNCE_MS || 750);
 const INACTIVITY_TIMEOUT_MS = Number(process.env.COLLAB_INACTIVITY_TIMEOUT_MS || 5 * 60 * 1000);
 const CLEANUP_SWEEP_MS = Number(process.env.COLLAB_CLEANUP_SWEEP_MS || 30 * 1000);
+const PING_TIMEOUT_MS = 30_000;
+const MESSAGE_SYNC = 0;
+const MESSAGE_AWARENESS = 1;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, '..');
@@ -23,10 +29,51 @@ const persistenceDir = process.env.COLLAB_PERSIST_DIR
   ? path.resolve(process.env.COLLAB_PERSIST_DIR)
   : path.join(rootDir, '.collab-docs');
 
+/** @type {Map<string, WSSharedDoc>} */
+const docs = new Map();
 /** @type {Map<string, number>} */
 const activityByDoc = new Map();
 /** @type {Map<string, NodeJS.Timeout>} */
 const persistTimers = new Map();
+/** @type {(ydoc: Y.Doc) => Promise<void>} */
+let contentInitializor = async () => {};
+
+class WSSharedDoc extends Y.Doc {
+  constructor(name) {
+    super({ gc: true });
+    this.name = name;
+    this.conns = new Map();
+    this.awareness = new awarenessProtocol.Awareness(this);
+    this.awareness.setLocalState(null);
+    this.awareness.on('update', ({ added, updated, removed }, conn) => {
+      const changedClients = added.concat(updated, removed);
+
+      if (conn !== null) {
+        const controlledIds = this.conns.get(conn);
+
+        if (controlledIds) {
+          added.forEach((clientId) => controlledIds.add(clientId));
+          removed.forEach((clientId) => controlledIds.delete(clientId));
+        }
+      }
+
+      if (changedClients.length === 0) {
+        return;
+      }
+
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
+      encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
+      const payload = encoding.toUint8Array(encoder);
+
+      this.conns.forEach((_, connection) => {
+        send(this, connection, payload);
+      });
+    });
+    this.on('update', (update, origin, doc, transaction) => updateHandler(update, origin, doc, transaction));
+    this.whenInitialized = contentInitializor(this);
+  }
+}
 
 function now() {
   return Date.now();
@@ -74,6 +121,181 @@ function schedulePersist(docName, ydoc) {
   }, PERSIST_DEBOUNCE_MS);
 
   persistTimers.set(docName, timer);
+}
+
+function setContentInitializor(initializer) {
+  contentInitializor = initializer;
+}
+
+function getYDoc(docName, gc = true) {
+  const existing = docs.get(docName);
+
+  if (existing) {
+    return existing;
+  }
+
+  const doc = new WSSharedDoc(docName);
+  doc.gc = gc;
+  docs.set(docName, doc);
+  return doc;
+}
+
+function closeConn(doc, conn) {
+  if (doc.conns.has(conn)) {
+    const controlledIds = doc.conns.get(conn) || new Set();
+    doc.conns.delete(conn);
+
+    if (controlledIds.size > 0) {
+      awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null);
+    }
+
+    markActivity(doc.name);
+    schedulePersist(doc.name, doc);
+  }
+
+  try {
+    conn.close();
+  } catch {
+    // Ignore close races.
+  }
+}
+
+function send(doc, conn, message) {
+  if (conn.readyState !== WebSocket.CONNECTING && conn.readyState !== WebSocket.OPEN) {
+    closeConn(doc, conn);
+    return;
+  }
+
+  try {
+    conn.send(message, {}, (error) => {
+      if (error != null) {
+        closeConn(doc, conn);
+      }
+    });
+  } catch {
+    closeConn(doc, conn);
+  }
+}
+
+function updateHandler(update, _origin, doc, _transaction) {
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, MESSAGE_SYNC);
+  syncProtocol.writeUpdate(encoder, update);
+  const payload = encoding.toUint8Array(encoder);
+
+  doc.conns.forEach((_, connection) => {
+    send(doc, connection, payload);
+  });
+}
+
+function messageListener(conn, doc, message) {
+  try {
+    const encoder = encoding.createEncoder();
+    const decoder = decoding.createDecoder(message);
+    const messageType = decoding.readVarUint(decoder);
+
+    switch (messageType) {
+      case MESSAGE_SYNC:
+        encoding.writeVarUint(encoder, MESSAGE_SYNC);
+        syncProtocol.readSyncMessage(decoder, encoder, doc, conn);
+
+        if (encoding.length(encoder) > 1) {
+          send(doc, conn, encoding.toUint8Array(encoder));
+        }
+        break;
+      case MESSAGE_AWARENESS:
+        awarenessProtocol.applyAwarenessUpdate(doc.awareness, decoding.readVarUint8Array(decoder), conn);
+        break;
+      default:
+        break;
+    }
+  } catch (error) {
+    console.error('Caught error while handling a Yjs update', error);
+  }
+}
+
+async function setupWSConnection(conn, request, { docName = normalizeDocName(request.url), gc = true } = {}) {
+  conn.binaryType = 'arraybuffer';
+  const doc = getYDoc(docName, gc);
+  const queuedMessages = [];
+  let initialized = false;
+
+  const handlePayload = (message) => {
+    const payload =
+      message instanceof ArrayBuffer
+        ? new Uint8Array(message)
+        : ArrayBuffer.isView(message)
+          ? new Uint8Array(message.buffer, message.byteOffset, message.byteLength)
+          : new Uint8Array(message);
+
+    if (!initialized) {
+      queuedMessages.push(payload);
+      return;
+    }
+
+    markActivity(docName);
+    messageListener(conn, doc, payload);
+  };
+
+  conn.on('message', handlePayload);
+
+  let pongReceived = true;
+  const pingInterval = setInterval(() => {
+    if (!pongReceived) {
+      if (doc.conns.has(conn)) {
+        closeConn(doc, conn);
+      }
+      clearInterval(pingInterval);
+      return;
+    }
+
+    if (doc.conns.has(conn)) {
+      pongReceived = false;
+
+      try {
+        conn.ping();
+      } catch {
+        closeConn(doc, conn);
+        clearInterval(pingInterval);
+      }
+    }
+  }, PING_TIMEOUT_MS);
+
+  conn.on('close', () => {
+    closeConn(doc, conn);
+    clearInterval(pingInterval);
+  });
+  conn.on('pong', () => {
+    pongReceived = true;
+    markActivity(docName);
+  });
+
+  await doc.whenInitialized;
+  initialized = true;
+  doc.conns.set(conn, new Set());
+  markActivity(docName);
+
+  for (const payload of queuedMessages) {
+    messageListener(conn, doc, payload);
+  }
+  queuedMessages.length = 0;
+
+  const syncEncoder = encoding.createEncoder();
+  encoding.writeVarUint(syncEncoder, MESSAGE_SYNC);
+  syncProtocol.writeSyncStep1(syncEncoder, doc);
+  send(doc, conn, encoding.toUint8Array(syncEncoder));
+
+  const awarenessStates = doc.awareness.getStates();
+
+  if (awarenessStates.size > 0) {
+    const awarenessEncoder = encoding.createEncoder();
+    encoding.writeVarUint(awarenessEncoder, MESSAGE_AWARENESS);
+    encoding.writeVarUint8Array(
+      awarenessEncoder,
+      awarenessProtocol.encodeAwarenessUpdate(doc.awareness, Array.from(awarenessStates.keys())),
+    );
+    send(doc, conn, encoding.toUint8Array(awarenessEncoder));
+  }
 }
 
 setContentInitializor(async (ydoc) => {
@@ -192,11 +414,10 @@ collabWss.on('connection', (ws, request) => {
   const docName = normalizeDocName(request.url);
   markActivity(docName);
 
-  setupWSConnection(ws, request, { docName, gc: true });
-
-  ws.on('message', () => markActivity(docName));
-  ws.on('pong', () => markActivity(docName));
-  ws.on('close', () => markActivity(docName));
+  setupWSConnection(ws, request, { docName, gc: true }).catch((error) => {
+    console.error(`[collab] failed to initialize ${docName}:`, error);
+    ws.close();
+  });
 });
 
 eventsWss.on('connection', (ws) => {

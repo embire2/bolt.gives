@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.8',
+    name: 'v3.0.8 Cloudflare trial registration and private admin control plane',
+    description:
+      'Managed Cloudflare trials now require a client registration profile, private operator records are stored in the server-backed admin panel, admin email/draft activity is tracked centrally, and admin.bolt.gives becomes the operator-facing control surface for trial assignment visibility.',
+    releaseDate: '2026-04-04',
+  },
+  {
     id: 'release-v3.0.7',
     name: 'v3.0.7 managed Cloudflare trials and locked FREE startup regression',
     description:

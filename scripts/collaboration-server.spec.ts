@@ -3,7 +3,6 @@ import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -150,14 +149,24 @@ async function stopServer(processHandle: ChildProcessWithoutNullStreams) {
 
   processHandle.kill('SIGTERM');
 
+  const waitForExit = () =>
+    new Promise<boolean>((resolve) => {
+      const child = processHandle as any;
+      const handleExit = () => {
+        child.off('exit', handleExit);
+        resolve(true);
+      };
+      child.on('exit', handleExit);
+    });
+
   const exited = await Promise.race([
-    once(processHandle, 'exit').then(() => true),
+    waitForExit(),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
   ]);
 
   if (!exited && processHandle.exitCode === null) {
     processHandle.kill('SIGKILL');
-    await Promise.race([once(processHandle, 'exit'), new Promise((resolve) => setTimeout(resolve, 5000))]);
+    await Promise.race([waitForExit(), new Promise((resolve) => setTimeout(resolve, 5000))]);
   }
 }
 

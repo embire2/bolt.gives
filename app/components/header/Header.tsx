@@ -65,10 +65,10 @@ export function Header() {
           Cloudflare Trials
         </a>
         <a
-          href="/tenant-admin"
+          href="https://admin.bolt.gives"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >
-          Tenant Admin
+          Admin Panel
         </a>
         <a
           href="/changelog"

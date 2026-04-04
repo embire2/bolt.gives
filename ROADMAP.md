@@ -8,16 +8,16 @@ Status legend:
 - `[ ]` not started
 
 Current stable release:
-- [x] `v3.0.7`
+- [x] `v3.0.8`
 
 Next release target:
-- [~] `v3.0.8`
+- [~] `v3.0.9`
 
-## v3.0.7 - Shipped Baseline
+## v3.0.8 - Shipped Baseline
 
-Release theme: ship the managed Cloudflare trial control plane, enforce real trial ownership rules at runtime, and keep the locked FREE startup path covered by browser regression.
+Release theme: turn the managed Cloudflare trial flow into a registration-first operator system, keep the public/free path honest, and stand up a private admin control plane on the live server.
 
-### Shipped in v3.0.7
+### Shipped in v3.0.8
 
 1. Hosted runtime and browser offload
 - [x] Hosted instances now prefer the managed server runtime for install/build/dev/test/preview flows.
@@ -66,14 +66,18 @@ Release theme: ship the managed Cloudflare trial control plane, enforce real tri
 - [x] Runtime enforcement also binds the active browser session to the already-issued instance so the same browser cannot quietly mint a second one under a different email.
 - [x] Users can request a preferred subdomain during provisioning.
 - [x] Managed trial instances are designed to roll forward from the current stable build via the runtime sync loop.
-- [~] Live provisioning still requires operator-side `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` on the runtime service.
+- [x] Live provisioning is enabled on the server-hosted runtime where operator-side Cloudflare credentials are configured.
+- [x] Trial provisioning is now registration-first: the public form captures a client profile before a trial instance is created.
+- [x] Trial registrations are mirrored into the private admin panel database and linked back to assigned managed instances.
+- [x] The private operator URL `https://admin.bolt.gives` is now wired to the admin control surface on this server.
+- [x] Admin can review registered client profiles, live Cloudflare assignments, and stored outbound client email activity from one dashboard.
 
 7. Release communication
-- [x] Versioning aligned to `v3.0.7` across app/runtime/docs.
+- [x] Versioning aligned to `v3.0.8` across app/runtime/docs.
 - [x] Changelog and feature feed updated for the release.
 - [x] Release gate now boots the local runtime stack, verifies the locked `FREE` + `DeepSeek V3.2` startup label, and runs `pnpm run smoke:live`.
 
-### Validation expectations for v3.0.7
+### Validation expectations for v3.0.8
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
@@ -82,11 +86,12 @@ Release theme: ship the managed Cloudflare trial control plane, enforce real tri
 - live browser E2E on `https://alpha1.bolt.gives`
 - live smoke on `https://ahmad.bolt.gives`
 - live smoke on `https://bolt-gives.pages.dev`
+- live admin/operator E2E on `https://admin.bolt.gives`
 - `pnpm run smoke:live`
 
-## v3.0.8 - Next Priority Stack
+## v3.0.9 - Next Priority Stack
 
-Release theme: live-enable the managed-instance operator path, harden tenant/accounts for production, and keep pushing the remaining heavy client/runtime surfaces deeper behind server-backed boundaries.
+Release theme: harden the operator surface into a production-safe tenant service, tighten rollout/rollback visibility, and keep shrinking the remaining browser/runtime heavy paths.
 
 ### P0
 

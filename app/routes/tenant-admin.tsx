@@ -9,6 +9,7 @@ import {
 import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
+import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
 import type { ManagedInstanceOperatorRecord, ManagedInstanceSupport } from '~/lib/managed-instances';
 import { APP_VERSION } from '~/lib/version';
 
@@ -41,6 +42,26 @@ type TenantAdminRecord = {
   updatedAt: string | null;
   passwordUpdatedAt?: string | null;
   lastLoginAt: string | null;
+};
+
+type TenantAdminStatusPayload = {
+  supported: boolean;
+  tenants: TenantRecord[];
+  managedSupport?: ManagedInstanceSupport;
+  managedInstances?: ManagedInstanceOperatorRecord[];
+  admin?: TenantAdminRecord;
+  clientProfiles?: ClientProfileRecord[];
+  emailMessages?: AdminMailMessageRecord[];
+  mailSupport?: AdminMailSupport;
+  adminPanelUrl?: string;
+  auditTrail?: Array<{
+    id: string;
+    timestamp: string;
+    actor: string;
+    action: string;
+    target: string;
+    details?: Record<string, string>;
+  }>;
 };
 
 export const meta: MetaFunction = () => [{ title: `Tenant Admin | bolt.gives v${APP_VERSION}` }];
@@ -99,26 +120,14 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
 export async function loader({ request }: LoaderFunctionArgs) {
   const adminSessionCookie = createAdminSessionCookie();
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+  const adminHost = new URL(request.url).host.toLowerCase() === 'admin.bolt.gives';
 
   try {
-    const status = await fetchRuntimeJson<{
-      supported: boolean;
-      tenants: TenantRecord[];
-      managedSupport?: ManagedInstanceSupport;
-      managedInstances?: ManagedInstanceOperatorRecord[];
-      admin?: TenantAdminRecord;
-      auditTrail?: Array<{
-        id: string;
-        timestamp: string;
-        actor: string;
-        action: string;
-        target: string;
-        details?: Record<string, string>;
-      }>;
-    }>('/tenant-admin/status');
+    const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const authenticated = isAuthenticatedAdminSession(session, status.admin);
 
     return json({
+      adminHost,
       supported: status.supported,
       authenticated,
       defaultAdmin: DEFAULT_ADMIN,
@@ -137,10 +146,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
         sourceBranch: 'main',
       },
       managedInstances: authenticated ? status.managedInstances || [] : [],
+      clientProfiles: authenticated ? status.clientProfiles || [] : [],
+      emailMessages: authenticated ? status.emailMessages || [] : [],
+      mailSupport: status.mailSupport || {
+        configured: false,
+        fromAddress: null,
+        transportLabel: null,
+        reason: 'SMTP is not configured on the runtime service yet.',
+      },
+      adminPanelUrl: status.adminPanelUrl || 'https://admin.bolt.gives',
       auditTrail: authenticated ? status.auditTrail || [] : [],
     });
   } catch {
     return json({
+      adminHost,
       supported: false,
       authenticated: false,
       defaultAdmin: DEFAULT_ADMIN,
@@ -159,6 +178,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
         sourceBranch: 'main',
       } satisfies ManagedInstanceSupport,
       managedInstances: [] as ManagedInstanceOperatorRecord[],
+      clientProfiles: [] as ClientProfileRecord[],
+      emailMessages: [] as AdminMailMessageRecord[],
+      mailSupport: {
+        configured: false,
+        fromAddress: null,
+        transportLabel: null,
+        reason: 'SMTP is not configured on the runtime service yet.',
+      } satisfies AdminMailSupport,
+      adminPanelUrl: 'https://admin.bolt.gives',
       auditTrail: [] as Array<{
         id: string;
         timestamp: string;
@@ -209,10 +237,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'create-tenant') {
-    const status = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, status.admin)) {
@@ -247,10 +272,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'change-admin-password') {
-    const status = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, status.admin)) {
@@ -279,10 +301,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'toggle-tenant-status') {
-    const statusPayload = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
@@ -311,10 +330,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'approve-tenant') {
-    const statusPayload = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
@@ -342,10 +358,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'issue-tenant-invite') {
-    const statusPayload = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
@@ -374,10 +387,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'reset-tenant-password') {
-    const statusPayload = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
@@ -406,10 +416,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === 'refresh-managed-instance' || intent === 'suspend-managed-instance') {
-    const statusPayload = await fetchRuntimeJson<{
-      supported: boolean;
-      admin?: TenantAdminRecord;
-    }>('/tenant-admin/status');
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
     if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
@@ -452,12 +459,62 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect('/tenant-admin');
   }
 
+  if (intent === 'send-client-email') {
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const profileEmail = String(formData.get('profileEmail') || '')
+      .trim()
+      .toLowerCase();
+    const subject = String(formData.get('subject') || '').trim();
+    const body = String(formData.get('body') || '').trim();
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>('/tenant-admin/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profileEmail,
+          subject,
+          body,
+          actor: session?.username || 'admin',
+        }),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to send the client email right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
   return json({ error: 'Unknown action.' }, { status: 400 });
 }
 
 export default function TenantAdminPage() {
-  const { supported, authenticated, tenants, managedSupport, managedInstances, defaultAdmin, admin, auditTrail } =
-    useLoaderData<typeof loader>();
+  const {
+    adminHost,
+    supported,
+    authenticated,
+    tenants,
+    managedSupport,
+    managedInstances,
+    clientProfiles,
+    emailMessages,
+    mailSupport,
+    adminPanelUrl,
+    defaultAdmin,
+    admin,
+    auditTrail,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -469,11 +526,15 @@ export default function TenantAdminPage() {
           <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-semibold text-bolt-elements-textPrimary">Tenant Admin</h1>
+                <h1 className="text-2xl font-semibold text-bolt-elements-textPrimary">
+                  {adminHost ? 'Admin Panel' : 'Tenant Admin'}
+                </h1>
                 <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                  Manage self-hosted tenant accounts for this server instance. Default bootstrap login:{' '}
-                  <span className="font-mono">admin / admin</span>.
+                  Manage client registrations, Cloudflare trial assignments, tenant access, and outbound mail from one
+                  server-backed admin surface. Default bootstrap login: <span className="font-mono">admin / admin</span>
+                  .
                 </p>
+                <p className="mt-2 text-xs text-bolt-elements-textTertiary">Primary operator URL: {adminPanelUrl}</p>
                 {admin.mustChangePassword ? (
                   <p className="mt-2 text-sm text-amber-300">
                     The bootstrap admin password is still active. Rotate it before onboarding production tenants.
@@ -539,9 +600,13 @@ export default function TenantAdminPage() {
               <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">What this dashboard controls</h2>
                 <ul className="mt-4 space-y-2 text-sm text-bolt-elements-textSecondary">
-                  <li>One server-local tenant registry for this instance.</li>
+                  <li>Postgres-backed client profile registrations for Cloudflare trial requests.</li>
                   <li>Bootstrap admin account with required password rotation after first sign-in.</li>
                   <li>Tenant creation plus enable/disable lifecycle controls for isolated customer workspaces.</li>
+                  <li>Managed Cloudflare trial assignments mapped to the client email that requested them.</li>
+                  <li>
+                    Outbound client email log, with SMTP sending enabled when runtime mail transport is configured.
+                  </li>
                 </ul>
               </div>
             </div>
@@ -578,6 +643,17 @@ export default function TenantAdminPage() {
                     <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{auditTrail.length}</div>
                     <div className="mt-1 text-xs text-bolt-elements-textSecondary">
                       Latest server-side tenant lifecycle events for this instance.
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                      Client profiles
+                    </div>
+                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                      {clientProfiles.length}
+                    </div>
+                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                      {clientProfiles.filter((profile) => profile.lastInstanceSlug).length} mapped to a trial instance.
                     </div>
                   </div>
                   <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
@@ -635,6 +711,83 @@ export default function TenantAdminPage() {
                     Create tenant
                   </button>
                 </Form>
+
+                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Client Profiles</h2>
+                      <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                        Every Cloudflare trial request must complete this profile before an instance can be provisioned.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                      {clientProfiles.length} registered
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {clientProfiles.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                        No client profiles have been registered yet.
+                      </div>
+                    ) : (
+                      clientProfiles.map((profile) => (
+                        <div
+                          key={profile.id}
+                          className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                        >
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <div className="font-medium text-bolt-elements-textPrimary">{profile.name}</div>
+                              <div className="mt-1 text-sm text-bolt-elements-textSecondary">{profile.email}</div>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-bolt-elements-textTertiary">
+                                {profile.company ? <span>Company {profile.company}</span> : null}
+                                {profile.role ? <span>Role {profile.role}</span> : null}
+                                {profile.country ? <span>Country {profile.country}</span> : null}
+                                {profile.requestedSubdomain ? (
+                                  <span className="font-mono">Requested {profile.requestedSubdomain}</span>
+                                ) : null}
+                              </div>
+                              {profile.useCase ? (
+                                <div className="mt-2 text-xs text-bolt-elements-textSecondary">{profile.useCase}</div>
+                              ) : null}
+                              <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                                Registered {new Date(profile.createdAt).toLocaleString()}
+                                {profile.updatedAt ? ` · Updated ${new Date(profile.updatedAt).toLocaleString()}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-start gap-2">
+                              {profile.lastInstanceSlug ? (
+                                <>
+                                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
+                                    {profile.lastInstanceStatus || 'assigned'}
+                                  </span>
+                                  <span className="font-mono text-xs text-bolt-elements-textSecondary">
+                                    {profile.lastInstanceSlug}
+                                  </span>
+                                  {profile.lastInstanceUrl ? (
+                                    <a
+                                      href={profile.lastInstanceUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs text-bolt-elements-item-contentAccent hover:underline"
+                                    >
+                                      Open instance
+                                    </a>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                  awaiting assignment
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
 
                 <Form
                   method="post"
@@ -844,8 +997,9 @@ export default function TenantAdminPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Managed Cloudflare Trials</h2>
                   <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                    Operator view of live trial instances. Actions run server-side through the managed control plane.
-                    Cloudflare credentials remain on the runtime service and are never sent to the browser.
+                    Operator view of live trial instances. Actions run server-side through the managed control plane and
+                    are matched to the registered client that requested them. Cloudflare credentials remain on the
+                    runtime service and are never sent to the browser.
                   </p>
                 </div>
                 <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
@@ -941,6 +1095,113 @@ export default function TenantAdminPage() {
                   })}
                 </div>
               )}
+            </section>
+          ) : null}
+
+          {supported && authenticated ? (
+            <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+              <Form
+                method="post"
+                className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+              >
+                <input type="hidden" name="intent" value="send-client-email" />
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
+                    <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                      Compose a message for a registered client. Messages are always logged; delivery only occurs when
+                      SMTP is configured on the runtime service.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                    {mailSupport.configured ? mailSupport.transportLabel : 'draft-only'}
+                  </span>
+                </div>
+                {!mailSupport.configured && mailSupport.reason ? (
+                  <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+                    {mailSupport.reason}
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-4">
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Client email
+                    <input
+                      name="profileEmail"
+                      type="email"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Subject
+                    <input
+                      name="subject"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Message
+                    <textarea
+                      name="body"
+                      rows={8}
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+                </div>
+                <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                  {mailSupport.configured ? 'Send email' : 'Save draft'}
+                </button>
+              </Form>
+
+              <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Recent Email Activity</h2>
+                  <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                    {emailMessages.length} logged
+                  </span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {emailMessages.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                      No admin emails have been logged yet.
+                    </div>
+                  ) : (
+                    emailMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                      >
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <div className="font-medium text-bolt-elements-textPrimary">{message.subject}</div>
+                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{message.profileEmail}</div>
+                            <div className="mt-2 whitespace-pre-wrap text-xs text-bolt-elements-textSecondary">
+                              {message.body}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-start gap-1 text-xs text-bolt-elements-textTertiary">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 ${
+                                message.status === 'sent'
+                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                  : message.status === 'failed'
+                                    ? 'border-red-400/40 bg-red-500/10 text-red-200'
+                                    : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                              }`}
+                            >
+                              {message.status}
+                            </span>
+                            <span>Actor {message.actor}</span>
+                            <span>{new Date(message.createdAt).toLocaleString()}</span>
+                            {message.sentAt ? <span>Sent {new Date(message.sentAt).toLocaleString()}</span> : null}
+                            {message.transport ? <span>{message.transport}</span> : null}
+                            {message.error ? <span className="text-red-300">{message.error}</span> : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </section>
           ) : null}
         </div>

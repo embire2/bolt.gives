@@ -3,7 +3,6 @@ import remarkGfm from 'remark-gfm';
 import type { PluggableList, Plugin } from 'unified';
 import rehypeSanitize, { defaultSchema, type Options as RehypeSanitizeOptions } from 'rehype-sanitize';
 import { SKIP, visit } from 'unist-util-visit';
-import type { UnistNode, UnistParent } from 'node_modules/unist-util-visit/lib';
 
 export const allowedHTMLElements = [
   'a',
@@ -129,7 +128,7 @@ const limitedMarkdownPlugin: Plugin = () => {
   return (tree, file) => {
     const contents = file.toString();
 
-    visit(tree, (node: UnistNode, index, parent: UnistParent) => {
+    visit(tree, (node: any, index, parent: any) => {
       if (
         index == null ||
         ['paragraph', 'text', 'inlineCode', 'code', 'strong', 'emphasis'].includes(node.type) ||
@@ -138,7 +137,14 @@ const limitedMarkdownPlugin: Plugin = () => {
         return true;
       }
 
-      let value = contents.slice(node.position.start.offset, node.position.end.offset);
+      const startOffset = node.position.start.offset;
+      const endOffset = node.position.end.offset;
+
+      if (typeof startOffset !== 'number' || typeof endOffset !== 'number') {
+        return true;
+      }
+
+      let value = contents.slice(startOffset, endOffset);
 
       if (node.type === 'heading') {
         value = `\n${value}`;

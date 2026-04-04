@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform, w
 
 Current release line:
 
-- Stable: `v3.0.7`
-- In progress: `v3.0.8`
+- Stable: `v3.0.8`
+- In progress: `v3.0.9`
 
 Do not ship hidden behavior. If the agent takes actions, users should be able to see what happened and why.
 
@@ -38,7 +38,7 @@ Never force-push shared branches unless explicitly approved.
 
 ---
 
-## v3.0.7 Baseline / v3.0.8 Priority Stack
+## v3.0.8 Baseline / v3.0.9 Priority Stack
 
 ### Completed baseline
 
@@ -66,8 +66,10 @@ Never force-push shared branches unless explicitly approved.
 - Browser regression coverage for `FREE` + `DeepSeek V3.2` label rendering on startup
 - `Tenant Admin` now includes an operator view for managed Cloudflare trials, with status/expiry visibility plus server-backed refresh and suspend actions
 - Managed Cloudflare instance metadata returned to browser surfaces is sanitized; Cloudflare operator credentials remain server-side only
+- Managed Cloudflare trials now require a registration profile before provisioning
+- Registered client profiles, assigned trial instances, and admin email activity are now stored in the private admin control plane behind `admin.bolt.gives`
 
-### In progress / remaining (`v3.0.8`)
+### In progress / remaining (`v3.0.9`)
 
 - Finish browser-weight reduction on the remaining editor/PDF/git/terminal payloads
 - Keep prompt-to-preview execution status explicit in both `Chat` and `Workspace`

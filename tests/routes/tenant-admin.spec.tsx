@@ -30,8 +30,10 @@ describe('TenantAdminPage', () => {
     (window as any).__vite_plugin_react_preamble_installed__ = true;
     remixMocks.useActionData.mockReturnValue(undefined);
     remixMocks.useLoaderData.mockReturnValue({
+      adminHost: true,
       supported: true,
       authenticated: true,
+      adminPanelUrl: 'https://admin.bolt.gives',
       defaultAdmin: {
         username: 'admin',
         password: 'admin',
@@ -44,6 +46,32 @@ describe('TenantAdminPage', () => {
         lastLoginAt: '2026-04-04T12:05:00.000Z',
       },
       tenants: [],
+      clientProfiles: [
+        {
+          id: 'profile-1',
+          name: 'Owner Example',
+          email: 'owner@example.com',
+          company: 'OpenWeb',
+          role: 'Founder',
+          phone: null,
+          country: 'South Africa',
+          useCase: 'Clinic scheduler',
+          requestedSubdomain: 'clinic-trial',
+          registrationSource: 'managed-instance:alpha1.bolt.gives',
+          createdAt: '2026-04-04T11:00:00.000Z',
+          updatedAt: '2026-04-04T11:00:00.000Z',
+          lastInstanceSlug: 'clinic-trial',
+          lastInstanceStatus: 'active',
+          lastInstanceUrl: 'https://clinic-trial.pages.dev',
+        },
+      ],
+      emailMessages: [],
+      mailSupport: {
+        configured: false,
+        fromAddress: null,
+        transportLabel: null,
+        reason: 'SMTP is not configured on the runtime service yet.',
+      },
       managedSupport: {
         supported: true,
         reason: null,
@@ -87,8 +115,12 @@ describe('TenantAdminPage', () => {
   it('renders the managed trial operator section with admin actions', () => {
     render(<TenantAdminPage />);
 
+    expect(screen.getByText('Admin Panel')).toBeTruthy();
+    expect(screen.getByText('Client Profiles')).toBeTruthy();
+    expect(screen.getByText('Owner Example')).toBeTruthy();
     expect(screen.getByText('Managed Cloudflare Trials')).toBeTruthy();
     expect(screen.getByText('Clinic Trial')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Refresh deployment' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Suspend trial' })).toBeTruthy();
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();

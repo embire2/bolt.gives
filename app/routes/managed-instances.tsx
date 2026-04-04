@@ -18,6 +18,10 @@ type ManagedInstanceSession = {
   email: string;
   projectName: string;
   issuedAt: string;
+  pagesUrl?: string;
+  status?: ManagedInstanceRecord['status'];
+  trialEndsAt?: string;
+  currentGitSha?: string | null;
 };
 
 function getManagedInstanceCookieSecret() {
@@ -76,7 +80,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
       );
       instance = payload.instance;
     } catch {
-      instance = null;
+      if (session.projectName && session.pagesUrl && session.trialEndsAt) {
+        instance = {
+          id: `session:${session.projectName}`,
+          name: session.projectName,
+          projectName: session.projectName,
+          routeHostname: new URL(session.pagesUrl).host,
+          email: session.email,
+          pagesUrl: session.pagesUrl,
+          trialEndsAt: session.trialEndsAt,
+          plan: `experimental-free-${support.trialDays}d`,
+          currentGitSha: session.currentGitSha || null,
+          previousGitSha: null,
+          lastRolloutAt: session.issuedAt,
+          lastDeploymentUrl: session.pagesUrl,
+          status: session.status || 'active',
+          createdAt: session.issuedAt,
+          updatedAt: session.issuedAt,
+          lastError: null,
+          suspendedAt: null,
+          expiredAt: null,
+          sourceBranch: support.sourceBranch,
+        } satisfies ManagedInstanceRecord;
+      } else {
+        instance = null;
+      }
     }
   }
 
@@ -104,6 +132,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const session = (await sessionCookie.parse(request.headers.get('Cookie'))) as ManagedInstanceSession | undefined;
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
+  const sourceHost = new URL(request.url).host.toLowerCase();
 
   if (intent === 'clear-session') {
     return redirect('/managed-instances', {
@@ -121,6 +150,11 @@ export async function action({ request }: ActionFunctionArgs) {
     const subdomain = String(formData.get('subdomain') || '')
       .trim()
       .toLowerCase();
+    const company = String(formData.get('company') || '').trim();
+    const role = String(formData.get('role') || '').trim();
+    const phone = String(formData.get('phone') || '').trim();
+    const country = String(formData.get('country') || '').trim();
+    const useCase = String(formData.get('useCase') || '').trim();
 
     try {
       const payload = await fetchRuntimeControlJson<{
@@ -134,6 +168,12 @@ export async function action({ request }: ActionFunctionArgs) {
           name,
           email,
           subdomain,
+          company,
+          role,
+          phone,
+          country,
+          useCase,
+          sourceHost,
           sessionToken: session?.sessionToken || undefined,
         }),
       });
@@ -145,6 +185,10 @@ export async function action({ request }: ActionFunctionArgs) {
             email: payload.instance.email,
             projectName: payload.instance.projectName,
             issuedAt: new Date().toISOString(),
+            pagesUrl: payload.instance.pagesUrl,
+            status: payload.instance.status,
+            trialEndsAt: payload.instance.trialEndsAt,
+            currentGitSha: payload.instance.currentGitSha || null,
           } satisfies ManagedInstanceSession),
         },
       });
@@ -245,30 +289,33 @@ export default function ManagedInstancesPage() {
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-4">
             <Form
+              reloadDocument
               method="post"
               className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-lg backdrop-blur"
             >
               <input type="hidden" name="intent" value="spawn" />
               <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Request your trial instance</h2>
               <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                One client can hold one managed instance. Repeating the request from the same browser session returns
-                the same instance instead of creating a second one.
+                Registration is required before a trial can be provisioned. Your profile is stored in the private admin
+                panel and linked to the Cloudflare instance assigned to you. One client can hold one managed instance.
+                Repeating the request from the same browser session returns the same instance instead of creating a
+                second one.
               </p>
 
               <div className="mt-5 grid gap-4">
                 <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                  Your name
+                  Full name
                   <input
                     name="name"
                     required
                     minLength={2}
-                    placeholder="OpenWeb Clinic"
+                    placeholder="Ada Lovelace"
                     className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                   />
                 </label>
 
                 <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                  Email
+                  Work email
                   <input
                     name="email"
                     type="email"
@@ -278,6 +325,46 @@ export default function ManagedInstancesPage() {
                     className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                   />
                 </label>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Company
+                    <input
+                      name="company"
+                      placeholder="OpenWeb"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Role
+                    <input
+                      name="role"
+                      placeholder="Founder / Engineering Lead"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Phone
+                    <input
+                      name="phone"
+                      placeholder="+27 ..."
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Country
+                    <input
+                      name="country"
+                      placeholder="South Africa"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    />
+                  </label>
+                </div>
 
                 <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
                   Preferred subdomain
@@ -295,6 +382,16 @@ export default function ManagedInstancesPage() {
                     </span>
                   </div>
                 </label>
+
+                <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                  What are you building?
+                  <textarea
+                    name="useCase"
+                    rows={4}
+                    placeholder="Describe the product, users, and what you need bolt.gives to help you build."
+                    className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                  />
+                </label>
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -309,6 +406,7 @@ export default function ManagedInstancesPage() {
             </Form>
 
             <Form
+              reloadDocument
               method="post"
               className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
             >
@@ -330,6 +428,7 @@ export default function ManagedInstancesPage() {
                 <li>Trial expires after {support.trialDays} days.</li>
                 <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
                 <li>The FREE provider still boots with DeepSeek V3.2 preselected.</li>
+                <li>Your registration profile is stored in the private admin panel for operator support.</li>
               </ul>
             </div>
 
@@ -353,13 +452,13 @@ export default function ManagedInstancesPage() {
                   >
                     Open instance
                   </a>
-                  <Form method="post">
+                  <Form reloadDocument method="post">
                     <input type="hidden" name="intent" value="refresh" />
                     <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary">
                       Refresh from current build
                     </button>
                   </Form>
-                  <Form method="post">
+                  <Form reloadDocument method="post">
                     <input type="hidden" name="intent" value="suspend" />
                     <button className="rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-200">
                       Suspend trial

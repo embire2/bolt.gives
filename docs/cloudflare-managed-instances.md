@@ -1,6 +1,6 @@
 # Cloudflare Managed Instances (Experimental Blueprint)
 
-Status: the app/runtime control plane is now implemented in the `v3.0.7` release line. Live production provisioning still requires operator-side Cloudflare credentials (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) on the runtime service.
+Status: the app/runtime control plane is implemented and live in the `v3.0.8` release line. Public trial requests now require profile registration first, and the private operator surface at `https://admin.bolt.gives` tracks registered clients, assigned instances, and operator actions. Live provisioning still requires operator-side Cloudflare credentials on the runtime service.
 
 This document describes the **real implementation path** for an experimental bolt.gives managed-instance service on Cloudflare.
 

@@ -1,22 +1,37 @@
 # Changelog
 
-## Unreleased (`v3.0.8` in progress)
-
-### Added
-
-- `Tenant Admin` now includes a managed Cloudflare operator surface that lists current trial instances, status, expiry, last deployment details, and server-backed refresh/suspend actions.
+## Unreleased (`v3.0.9` in progress)
 
 ### Changed
 
-- Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.
-- Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
-- Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
-- Live-enable the managed Cloudflare spawn/update control plane everywhere operator credentials exist and add rollback verification.
-- Managed instance metadata returned to browser surfaces is now sanitized more aggressively; internal identity hashes and Cloudflare operator credentials remain server-side only.
+- Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
+
+## v3.0.8 (2026-04-04)
+
+### Added
+
+- Managed Cloudflare trials now require a registration profile before provisioning starts.
+- Trial registration captures name, work email, company, role, phone, country, requested subdomain, and build intent from the public `/managed-instances` form.
+- A private operator surface is now available at `https://admin.bolt.gives`, routing into the server-hosted admin panel.
+- The admin panel now stores and shows:
+  - registered client profiles
+  - managed Cloudflare instance assignments mapped to client email
+  - recent admin email or draft activity
+- Admin can now compose outbound client email from the admin panel; if SMTP is not configured, the message is safely stored as a draft instead of being lost.
+
+### Changed
+
+- The managed Cloudflare trial flow is now registration-first instead of allowing anonymous provisioning attempts.
+- The admin/operator control plane now treats `admin.bolt.gives` as the canonical operator URL.
+- Managed trial metadata is mirrored into the private database-backed admin records whenever instances are provisioned, refreshed, suspended, or expired.
+- The collaboration server now uses a local protocol implementation that matches the client stack and waits for persisted document restore before initial sync, fixing restart restore races.
 
 ### Fixed
 
-- `Tenant Admin` no longer crashes in production due to a route-local Vitest spec being bundled into the live server build; the managed-instance operator surface now renders cleanly on server-hosted deployments.
+- The admin Postgres integration no longer points at a non-existent database name on the live server.
+- Collaboration persistence and restore now work reliably across server restarts instead of intermittently syncing an empty document state.
+- The managed trial page now keeps showing the newly provisioned `Current instance` card even if the follow-up runtime session lookup lags behind the initial spawn response.
+
 
 ## v3.0.7 (2026-04-03)
 

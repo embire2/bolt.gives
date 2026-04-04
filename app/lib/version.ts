@@ -1,1 +1,1 @@
-export const APP_VERSION = typeof __APP_VERSION !== 'undefined' ? __APP_VERSION : '3.0.7';
+export const APP_VERSION = typeof __APP_VERSION !== 'undefined' ? __APP_VERSION : '3.0.8';

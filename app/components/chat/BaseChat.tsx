@@ -835,11 +835,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               {ImportButtons(importChat)}
               <GitCloneButton importChat={importChat} />
               <a
-                href="/tenant-admin"
+                href="https://admin.bolt.gives"
                 className="inline-flex items-center gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
               >
                 <span className="i-ph:buildings text-base" />
-                Tenant Admin
+                Admin Panel
               </a>
             </div>
           )}
@@ -862,8 +862,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       </div>
                       <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
                       <div>
-                        4. If you self-host for a team or customers, open <code>/tenant-admin</code> to manage tenant
-                        accounts on this server.
+                        4. If you self-host for a team or customers, open <code>https://admin.bolt.gives</code> or
+                        <code>/tenant-admin</code> to manage registrations, tenant accounts, and Cloudflare trial
+                        instances on this server.
                       </div>
                       <div className="mt-2 text-xs">
                         Note: keys are stored in your browser and sent with your requests to talk to your selected

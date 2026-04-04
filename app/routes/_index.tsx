@@ -1,4 +1,4 @@
-import { json, type MetaFunction } from '@remix-run/cloudflare';
+import { json, redirect, type LoaderFunctionArgs, type MetaFunction } from '@remix-run/cloudflare';
 import { ClientOnly } from 'remix-utils/client-only';
 import { BaseChat } from '~/components/chat/BaseChat';
 import { Chat } from '~/components/chat/Chat.client';
@@ -13,7 +13,15 @@ export const meta: MetaFunction = () => {
   ];
 };
 
-export const loader = () => json({});
+export const loader = ({ request }: LoaderFunctionArgs) => {
+  const host = new URL(request.url).host.toLowerCase();
+
+  if (host === 'admin.bolt.gives') {
+    return redirect('/tenant-admin');
+  }
+
+  return json({});
+};
 
 /**
  * Landing page component for Bolt
