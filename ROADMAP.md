@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-03
+Last updated: 2026-04-04
 
 Status legend:
 - `[x]` complete
@@ -126,9 +126,11 @@ Release theme: live-enable the managed-instance operator path, harden tenant/acc
 - [x] Let a signed-in client request one experimental managed trial instance for 15 days through the managed control-plane surface.
 - [x] Enforce one-client / one-instance allocation with a clear reclaim/expiry path.
 - [x] Let each client choose a subdomain during provisioning.
+- [x] Add an operator surface inside `Tenant Admin` that lists managed trial instances, status, expiry, and server-backed refresh/suspend actions.
+- [x] Keep Cloudflare operator credentials on the runtime service only; browser/operator pages receive sanitized instance metadata only.
 - [~] Implement automatic rollout from the current stable build to managed instances.
 - [ ] Add health-verified rollback on failed updates.
-- [ ] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
+- [~] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
 
 ### P1
 

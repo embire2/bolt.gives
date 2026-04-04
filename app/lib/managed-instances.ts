@@ -4,7 +4,6 @@ export type ManagedInstanceRecord = {
   id: string;
   name: string;
   email: string;
-  clientKeyHash: string;
   projectName: string;
   routeHostname: string;
   pagesUrl: string;
@@ -22,6 +21,8 @@ export type ManagedInstanceRecord = {
   expiredAt: string | null;
   sourceBranch: string;
 };
+
+export type ManagedInstanceOperatorRecord = ManagedInstanceRecord;
 
 export type ManagedInstanceSupport = {
   supported: boolean;

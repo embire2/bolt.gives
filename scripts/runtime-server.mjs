@@ -22,6 +22,7 @@ import {
   hashManagedInstanceValue,
   normalizeManagedInstanceRegistry,
   sanitizeManagedInstanceForClient,
+  sanitizeManagedInstanceForOperator,
   slugifyManagedInstanceSubdomain,
 } from './managed-instances.mjs';
 
@@ -664,6 +665,43 @@ async function refreshManagedInstanceFromCurrentBuild(registry, instance, { acto
       throw error;
     }
   });
+}
+
+async function suspendManagedInstanceRecord(
+  registry,
+  instance,
+  { actor = 'system', reason = 'Managed trial instance suspended by the operator.' } = {},
+) {
+  instance.status = 'suspended';
+  instance.updatedAt = new Date().toISOString();
+  instance.suspendedAt = new Date().toISOString();
+  instance.lastError = reason;
+  appendManagedInstanceEvent(registry, {
+    actor,
+    action: 'managed-instance.suspended',
+    target: instance.routeHostname,
+  });
+
+  if (MANAGED_INSTANCE_DELETE_ON_SUSPEND && getManagedInstanceCloudflareConfig().enabled) {
+    const config = getManagedInstanceCloudflareConfig();
+    const deletion = await runManagedInstanceProcess(
+      'pnpm',
+      ['exec', 'wrangler', 'pages', 'project', 'delete', instance.projectName, '--yes'],
+      {
+        env: {
+          CLOUDFLARE_API_TOKEN: config.apiToken,
+          CLOUDFLARE_ACCOUNT_ID: config.accountId,
+        },
+      },
+    );
+
+    if (deletion.code !== 0 && !/does not exist/i.test(`${deletion.stdout}\n${deletion.stderr}`)) {
+      throw new Error(deletion.stderr.trim() || deletion.stdout.trim() || 'Failed to delete the Pages project.');
+    }
+  }
+
+  await writeManagedInstanceRegistry(registry);
+  return instance;
 }
 
 async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', actor = 'system' } = {}) {
@@ -2755,35 +2793,10 @@ export function createRuntimeServer() {
           return;
         }
 
-        instance.status = 'suspended';
-        instance.updatedAt = new Date().toISOString();
-        instance.suspendedAt = new Date().toISOString();
-        instance.lastError = 'Managed trial instance suspended by the client.';
-        appendManagedInstanceEvent(registry, {
+        await suspendManagedInstanceRecord(registry, instance, {
           actor: instance.email,
-          action: 'managed-instance.suspended',
-          target: instance.routeHostname,
+          reason: 'Managed trial instance suspended by the client.',
         });
-
-        if (MANAGED_INSTANCE_DELETE_ON_SUSPEND && getManagedInstanceCloudflareConfig().enabled) {
-          const config = getManagedInstanceCloudflareConfig();
-          const deletion = await runManagedInstanceProcess(
-            'pnpm',
-            ['exec', 'wrangler', 'pages', 'project', 'delete', instance.projectName, '--yes'],
-            {
-              env: {
-                CLOUDFLARE_API_TOKEN: config.apiToken,
-                CLOUDFLARE_ACCOUNT_ID: config.accountId,
-              },
-            },
-          );
-
-          if (deletion.code !== 0 && !/does not exist/i.test(`${deletion.stdout}\n${deletion.stderr}`)) {
-            throw new Error(deletion.stderr.trim() || deletion.stdout.trim() || 'Failed to delete the Pages project.');
-          }
-        }
-
-        await writeManagedInstanceRegistry(registry);
         sendJson(res, 200, {
           ok: true,
           instance: sanitizeManagedInstanceForClient(instance),
@@ -2803,10 +2816,24 @@ export function createRuntimeServer() {
     if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
       try {
         const registry = await ensureTenantRegistry();
+        const managedSupport = buildManagedInstanceSupportState();
+        let managedInstances = [];
+
+        if (managedSupport.supported) {
+          const managedRegistry = await ensureManagedInstanceRegistry();
+          await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
+          managedInstances = managedRegistry.instances
+            .slice()
+            .sort((left, right) => Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt))
+            .map((instance) => sanitizeManagedInstanceForOperator(instance));
+        }
+
         sendJson(res, 200, {
           supported: true,
           tenants: registry.tenants || [],
           auditTrail: registry.auditTrail || [],
+          managedSupport,
+          managedInstances,
           defaultAdmin: { username: registry.admin?.username || 'admin' },
           admin: {
             username: registry.admin?.username || 'admin',
@@ -2818,6 +2845,73 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect tenant registry');
+      }
+      return;
+    }
+
+    const tenantManagedInstanceRefreshMatch = pathname.match(
+      /^\/runtime\/tenant-admin\/managed-instances\/([^/]+)\/refresh$/,
+    );
+
+    if (req.method === 'POST' && tenantManagedInstanceRefreshMatch) {
+      try {
+        const slug = decodeURIComponent(tenantManagedInstanceRefreshMatch[1] || '');
+        const registry = await ensureManagedInstanceRegistry();
+        await maybeExpireManagedInstances(registry, { actor: 'admin' });
+        const instance = findManagedInstanceBySlug(registry, slug);
+
+        if (!instance) {
+          sendText(res, 404, 'Managed instance not found.');
+          return;
+        }
+
+        if (instance.status === 'expired') {
+          sendText(res, 400, 'Expired managed trial instances cannot be refreshed.');
+          return;
+        }
+
+        instance.suspendedAt = null;
+        const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
+          actor: 'admin',
+          reason: 'tenant-admin-refresh',
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          instance: sanitizeManagedInstanceForOperator(refreshed),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to refresh the managed instance.');
+      }
+      return;
+    }
+
+    const tenantManagedInstanceSuspendMatch = pathname.match(
+      /^\/runtime\/tenant-admin\/managed-instances\/([^/]+)\/suspend$/,
+    );
+
+    if (req.method === 'POST' && tenantManagedInstanceSuspendMatch) {
+      try {
+        const slug = decodeURIComponent(tenantManagedInstanceSuspendMatch[1] || '');
+        const registry = await ensureManagedInstanceRegistry();
+        const instance = findManagedInstanceBySlug(registry, slug);
+
+        if (!instance) {
+          sendText(res, 404, 'Managed instance not found.');
+          return;
+        }
+
+        await suspendManagedInstanceRecord(registry, instance, {
+          actor: 'admin',
+          reason: 'Managed trial instance suspended by the operator.',
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          instance: sanitizeManagedInstanceForOperator(instance),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');
       }
       return;
     }

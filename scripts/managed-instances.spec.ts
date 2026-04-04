@@ -6,6 +6,7 @@ import {
   getManagedInstanceBySessionSecret,
   normalizeManagedInstanceRegistry,
   sanitizeManagedInstanceForClient,
+  sanitizeManagedInstanceForOperator,
 } from './managed-instances.mjs';
 
 describe('managed instance registry helpers', () => {
@@ -147,6 +148,9 @@ describe('managed instance registry helpers', () => {
       }),
     );
     expect(sanitizeManagedInstanceForClient(registry.instances[0])).not.toHaveProperty('clientSessionSecretHash');
+    expect(sanitizeManagedInstanceForClient(registry.instances[0])).not.toHaveProperty('clientKeyHash');
+    expect(sanitizeManagedInstanceForOperator(registry.instances[0])).not.toHaveProperty('clientSessionSecretHash');
+    expect(sanitizeManagedInstanceForOperator(registry.instances[0])).not.toHaveProperty('clientKeyHash');
   });
 
   it('builds hostnames and trial expiries deterministically', () => {

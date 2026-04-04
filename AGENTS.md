@@ -64,6 +64,8 @@ Never force-push shared branches unless explicitly approved.
 - Managed Cloudflare trial-instance control plane route/API surface at `/managed-instances`
 - One-client / one-instance runtime enforcement based on claimed email identity and browser session ownership
 - Browser regression coverage for `FREE` + `DeepSeek V3.2` label rendering on startup
+- `Tenant Admin` now includes an operator view for managed Cloudflare trials, with status/expiry visibility plus server-backed refresh and suspend actions
+- Managed Cloudflare instance metadata returned to browser surfaces is sanitized; Cloudflare operator credentials remain server-side only
 
 ### In progress / remaining (`v3.0.8`)
 
@@ -72,6 +74,7 @@ Never force-push shared branches unless explicitly approved.
 - Keep commentary task-specific and derived directly from runtime events only
 - Live-enable the managed Cloudflare spawn/update control plane wherever operator credentials are configured
 - Add operator rollout/rollback observability for managed Cloudflare instances
+- Expand the operator surface with deployment history, rollback outcomes, and capacity visibility
 - Production-safe tenant/account/RBAC hardening
 - Tenant approval/invite lifecycle beyond the server-local registry baseline
 - First-party template packs + CI smoke coverage

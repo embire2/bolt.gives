@@ -2,12 +2,17 @@
 
 ## Unreleased (`v3.0.8` in progress)
 
-### Planned
+### Added
+
+- `Tenant Admin` now includes a managed Cloudflare operator surface that lists current trial instances, status, expiry, last deployment details, and server-backed refresh/suspend actions.
+
+### Changed
 
 - Keep trimming the remaining editor/PDF/git/terminal payloads until the startup path fits explicit CI budgets.
 - Make prompt-to-preview lifecycle states more explicit in both `Chat` and `Workspace`.
 - Expand tenant lifecycle from the server-local registry into production-safe accounts, roles, audit, and managed-instance enforcement.
 - Live-enable the managed Cloudflare spawn/update control plane everywhere operator credentials exist and add rollback verification.
+- Managed instance metadata returned to browser surfaces is now sanitized more aggressively; internal identity hashes and Cloudflare operator credentials remain server-side only.
 
 ## v3.0.7 (2026-04-03)
 

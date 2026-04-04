@@ -98,6 +98,8 @@ Current `v3.0.7` release line:
 - Managed trial claims now enforce one-client / one-instance by claimed email identity and by the original browser session token, so the same session cannot mint a second instance under a different email.
 - Users can request a preferred Cloudflare Pages subdomain during trial provisioning.
 - Managed trial instances now track rollout state and a 15-day expiry window in the runtime registry.
+- `Tenant Admin` now also includes a small operator surface for managed Cloudflare trials, showing live instance status, expiry, last deployment details, and refresh/suspend controls from the app UI.
+- Cloudflare operator credentials remain on the runtime service only; the browser sees sanitized managed-instance metadata and never receives the API token or account id.
 - The release gate now includes a browser regression for the locked `FREE` + `DeepSeek V3.2` startup label.
 - The repo now includes a committed live smoke script at `scripts/live-release-smoke.mjs` exposed via `pnpm run smoke:live`, and the release workflow now boots the local runtime stack and executes that smoke before release completion.
 - This repo now includes the operator blueprint and tenancy schema for an experimental **one-client / one-instance Cloudflare managed service**, with:

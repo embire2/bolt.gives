@@ -60,12 +60,11 @@ export function appendManagedInstanceEvent(registry, event) {
   registry.events = nextEvents;
 }
 
-export function sanitizeManagedInstanceForClient(instance) {
+function buildSanitizedManagedInstance(instance) {
   return {
     id: instance.id,
     name: instance.name,
     email: instance.email,
-    clientKeyHash: instance.clientKeyHash,
     projectName: instance.projectName,
     routeHostname: instance.routeHostname,
     pagesUrl: instance.pagesUrl,
@@ -83,6 +82,14 @@ export function sanitizeManagedInstanceForClient(instance) {
     expiredAt: instance.expiredAt || null,
     sourceBranch: instance.sourceBranch || 'main',
   };
+}
+
+export function sanitizeManagedInstanceForClient(instance) {
+  return buildSanitizedManagedInstance(instance);
+}
+
+export function sanitizeManagedInstanceForOperator(instance) {
+  return buildSanitizedManagedInstance(instance);
 }
 
 export function normalizeManagedInstanceRegistry(input, { defaultRootDomain = 'pages.dev' } = {}) {

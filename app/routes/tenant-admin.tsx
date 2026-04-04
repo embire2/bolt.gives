@@ -9,6 +9,7 @@ import {
 import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
+import type { ManagedInstanceOperatorRecord, ManagedInstanceSupport } from '~/lib/managed-instances';
 import { APP_VERSION } from '~/lib/version';
 
 type TenantRecord = {
@@ -103,6 +104,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const status = await fetchRuntimeJson<{
       supported: boolean;
       tenants: TenantRecord[];
+      managedSupport?: ManagedInstanceSupport;
+      managedInstances?: ManagedInstanceOperatorRecord[];
       admin?: TenantAdminRecord;
       auditTrail?: Array<{
         id: string;
@@ -126,6 +129,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
         lastLoginAt: null,
       },
       tenants: authenticated ? status.tenants : [],
+      managedSupport: status.managedSupport || {
+        supported: false,
+        reason: 'Managed Cloudflare trials are unavailable on this deployment.',
+        trialDays: 15,
+        rootDomain: 'pages.dev',
+        sourceBranch: 'main',
+      },
+      managedInstances: authenticated ? status.managedInstances || [] : [],
       auditTrail: authenticated ? status.auditTrail || [] : [],
     });
   } catch {
@@ -140,6 +151,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
         lastLoginAt: null,
       } as TenantAdminRecord,
       tenants: [] as TenantRecord[],
+      managedSupport: {
+        supported: false,
+        reason: 'Managed Cloudflare trials are unavailable on this deployment.',
+        trialDays: 15,
+        rootDomain: 'pages.dev',
+        sourceBranch: 'main',
+      } satisfies ManagedInstanceSupport,
+      managedInstances: [] as ManagedInstanceOperatorRecord[],
       auditTrail: [] as Array<{
         id: string;
         timestamp: string;
@@ -386,11 +405,59 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect('/tenant-admin');
   }
 
+  if (intent === 'refresh-managed-instance' || intent === 'suspend-managed-instance') {
+    const statusPayload = await fetchRuntimeJson<{
+      supported: boolean;
+      admin?: TenantAdminRecord;
+    }>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const slug = String(formData.get('slug') || '').trim();
+
+    if (!slug) {
+      return json({ error: 'Managed instance slug is required.' }, { status: 400 });
+    }
+
+    const pathname =
+      intent === 'refresh-managed-instance'
+        ? `/tenant-admin/managed-instances/${encodeURIComponent(slug)}/refresh`
+        : `/tenant-admin/managed-instances/${encodeURIComponent(slug)}/suspend`;
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>(pathname, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+    } catch (error) {
+      return json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : intent === 'refresh-managed-instance'
+                ? 'Unable to refresh the managed instance right now.'
+                : 'Unable to suspend the managed instance right now.',
+        },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin');
+  }
+
   return json({ error: 'Unknown action.' }, { status: 400 });
 }
 
 export default function TenantAdminPage() {
-  const { supported, authenticated, tenants, defaultAdmin, admin, auditTrail } = useLoaderData<typeof loader>();
+  const { supported, authenticated, tenants, managedSupport, managedInstances, defaultAdmin, admin, auditTrail } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
@@ -511,6 +578,19 @@ export default function TenantAdminPage() {
                     <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{auditTrail.length}</div>
                     <div className="mt-1 text-xs text-bolt-elements-textSecondary">
                       Latest server-side tenant lifecycle events for this instance.
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                      Managed trials
+                    </div>
+                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                      {managedInstances.length}
+                    </div>
+                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                      {managedSupport.supported
+                        ? `${managedInstances.filter((instance) => ['active', 'updating', 'provisioning', 'failed'].includes(instance.status)).length} currently live on ${managedSupport.rootDomain}.`
+                        : managedSupport.reason}
                     </div>
                   </div>
                 </div>
@@ -756,6 +836,112 @@ export default function TenantAdminPage() {
                 ) : null}
               </div>
             </div>
+          ) : null}
+
+          {supported && authenticated ? (
+            <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Managed Cloudflare Trials</h2>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    Operator view of live trial instances. Actions run server-side through the managed control plane.
+                    Cloudflare credentials remain on the runtime service and are never sent to the browser.
+                  </p>
+                </div>
+                <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                  {managedSupport.supported
+                    ? `${managedSupport.trialDays}-day trials on ${managedSupport.rootDomain}`
+                    : 'Trials unavailable'}
+                </span>
+              </div>
+
+              {!managedSupport.supported ? (
+                <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-bolt-elements-textPrimary">
+                  {managedSupport.reason}
+                </div>
+              ) : managedInstances.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                  No managed trial instances have been provisioned yet.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {managedInstances.map((instance) => {
+                    const isLive = ['active', 'updating', 'provisioning', 'failed'].includes(instance.status);
+
+                    return (
+                      <div
+                        key={instance.id}
+                        className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <div className="font-medium text-bolt-elements-textPrimary">{instance.name}</div>
+                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{instance.email}</div>
+                            <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                              Project <span className="font-mono">{instance.projectName}</span> · Host{' '}
+                              <span className="font-mono">{instance.routeHostname}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                              Trial ends {new Date(instance.trialEndsAt).toLocaleString()} · Updated{' '}
+                              {new Date(instance.updatedAt).toLocaleString()}
+                            </div>
+                            {instance.lastDeploymentUrl ? (
+                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                Last deploy <span className="font-mono">{instance.lastDeploymentUrl}</span>
+                              </div>
+                            ) : null}
+                            {instance.lastError ? (
+                              <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                {instance.lastError}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                instance.status === 'active'
+                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                  : instance.status === 'failed'
+                                    ? 'border-red-400/40 bg-red-500/10 text-red-200'
+                                    : instance.status === 'suspended'
+                                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                      : instance.status === 'expired'
+                                        ? 'border-slate-500/40 bg-slate-500/10 text-slate-200'
+                                        : 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                              }`}
+                            >
+                              {instance.status}
+                            </span>
+                            <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                              {instance.sourceBranch}
+                            </span>
+                            <Form method="post">
+                              <input type="hidden" name="intent" value="refresh-managed-instance" />
+                              <input type="hidden" name="slug" value={instance.projectName} />
+                              <button
+                                disabled={instance.status === 'expired'}
+                                className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Refresh deployment
+                              </button>
+                            </Form>
+                            {isLive ? (
+                              <Form method="post">
+                                <input type="hidden" name="intent" value="suspend-managed-instance" />
+                                <input type="hidden" name="slug" value={instance.projectName} />
+                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                  Suspend trial
+                                </button>
+                              </Form>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           ) : null}
         </div>
       </main>
