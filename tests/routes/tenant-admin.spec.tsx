@@ -23,7 +23,7 @@ vi.mock('~/components/ui/BackgroundRays', () => ({
   default: () => <div data-testid="background-rays" />,
 }));
 
-let TenantAdminPage: (typeof import('./tenant-admin'))['default'];
+let TenantAdminPage: (typeof import('../../app/routes/tenant-admin'))['default'];
 
 describe('TenantAdminPage', () => {
   beforeEach(async () => {
@@ -76,7 +76,7 @@ describe('TenantAdminPage', () => {
       ],
       auditTrail: [],
     });
-    TenantAdminPage = (await import('./tenant-admin')).default;
+    TenantAdminPage = (await import('../../app/routes/tenant-admin')).default;
   });
 
   afterEach(() => {

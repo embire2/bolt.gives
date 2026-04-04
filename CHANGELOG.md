@@ -14,6 +14,10 @@
 - Live-enable the managed Cloudflare spawn/update control plane everywhere operator credentials exist and add rollback verification.
 - Managed instance metadata returned to browser surfaces is now sanitized more aggressively; internal identity hashes and Cloudflare operator credentials remain server-side only.
 
+### Fixed
+
+- `Tenant Admin` no longer crashes in production due to a route-local Vitest spec being bundled into the live server build; the managed-instance operator surface now renders cleanly on server-hosted deployments.
+
 ## v3.0.7 (2026-04-03)
 
 ### Added
