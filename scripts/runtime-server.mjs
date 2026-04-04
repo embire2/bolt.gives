@@ -19,6 +19,7 @@ import {
   appendManagedInstanceEvent,
   claimManagedInstanceTrial,
   getManagedInstanceBySessionSecret,
+  hashManagedInstanceValue,
   normalizeManagedInstanceRegistry,
   sanitizeManagedInstanceForClient,
   slugifyManagedInstanceSubdomain,
