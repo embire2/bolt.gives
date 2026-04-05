@@ -21,7 +21,7 @@
 
 ## Cloudflare Trial Instance
 
-`v3.0.8` ships the **registration-first managed Cloudflare trial flow** inside bolt.gives itself. The product now includes a real `/managed-instances` surface, runtime control endpoints for spawn/session/refresh/suspend, one-client / one-instance enforcement, chosen subdomains, and a 15-day expiry model.
+`v3.0.8` ships the **registration-first managed Cloudflare trial flow** inside bolt.gives itself. The product now includes a real `/managed-instances` surface, runtime control endpoints for spawn/session/refresh/suspend, one-client / one-instance enforcement, preferred subdomain requests, and a 15-day expiry model.
 
 What the user does:
 
@@ -36,6 +36,7 @@ What the platform does:
 - Creates a private client profile record for the operator team
 - Enforces one client / one trial instance
 - Tracks which Cloudflare instance is assigned to which client email
+- Stores and shows the actual Cloudflare-assigned `*.pages.dev` hostname when the preferred slug is already taken globally
 - Lets the operator manage refresh/suspend actions from `https://admin.bolt.gives`
 - Keeps Cloudflare and OpenRouter secrets on the server only
 
@@ -127,7 +128,7 @@ Current `v3.0.8` release line:
 - Tenant users now also have a dedicated `/tenant` sign-in, invite acceptance, and password-rotation portal.
 - The product now includes a real `/managed-instances` trial surface backed by runtime control endpoints for support/config, session lookup, spawn, refresh, and suspend.
 - Managed trial claims now enforce one-client / one-instance by claimed email identity and by the original browser session token, so the same session cannot mint a second instance under a different email.
-- Users can request a preferred Cloudflare Pages subdomain during trial provisioning.
+- Users can request a preferred Cloudflare Pages subdomain during trial provisioning, and the app now persists the real Cloudflare-assigned hostname if Pages adds a suffix.
 - Trial requests now require a registration profile before provisioning begins.
 - Managed trial instances now track rollout state and a 15-day expiry window in the runtime registry.
 - `Tenant Admin` now also includes a small operator surface for managed Cloudflare trials, showing live instance status, expiry, last deployment details, and refresh/suspend controls from the app UI.
@@ -272,7 +273,7 @@ Current roadmap split:
   - refresh
   - suspend
   - 15-day expiry tracking
-  - chosen subdomain support
+  - preferred subdomain support with actual Cloudflare-assigned hostname tracking
   - required client registration profile capture
   - one-client / one-instance runtime enforcement
 - Private operator surface at `https://admin.bolt.gives`, with:

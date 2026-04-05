@@ -254,6 +254,10 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function ManagedInstancesPage() {
   const { support, instance, sessionEmail, sessionProjectName } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const preferredHostname = instance ? `${instance.projectName}.${support.rootDomain}` : '';
+  const assignedHostnameDiffers = Boolean(
+    instance && instance.routeHostname && instance.routeHostname !== preferredHostname,
+  );
 
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
@@ -270,8 +274,9 @@ export default function ManagedInstancesPage() {
             </h1>
             <p className="mt-3 max-w-3xl text-sm text-bolt-elements-textSecondary">
               This control plane provisions one Pages-hosted trial instance per client, keeps it tied to your original
-              browser session, and rolls updates forward from the current stable build. Choose the subdomain you want on{' '}
-              <span className="font-mono">{support.rootDomain}</span>.
+              browser session, and rolls updates forward from the current stable build. Choose your preferred subdomain
+              on <span className="font-mono">{support.rootDomain}</span>; the final assigned hostname follows Cloudflare
+              availability and is shown below after provisioning.
             </p>
           </section>
 
@@ -442,6 +447,13 @@ export default function ManagedInstancesPage() {
                     {instance.projectName}
                   </div>
                   <div className="mt-1 text-sm text-bolt-elements-textSecondary">{instance.pagesUrl}</div>
+                  {assignedHostnameDiffers ? (
+                    <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                      Cloudflare assigned <span className="font-mono">{instance.routeHostname}</span> because the
+                      preferred hostname <span className="font-mono">{preferredHostname}</span> was not available.
+                      Always use the assigned live URL shown above.
+                    </div>
+                  ) : null}
                   <div className="mt-4 grid gap-2 text-sm text-bolt-elements-textSecondary">
                     <div>Status: {instance.status}</div>
                     <div>Trial ends: {new Date(instance.trialEndsAt).toLocaleString()}</div>

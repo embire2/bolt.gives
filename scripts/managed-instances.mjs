@@ -37,6 +37,54 @@ export function buildManagedInstanceHostname(projectName, rootDomain = 'pages.de
   return normalizedProject && normalizedRootDomain ? `${normalizedProject}.${normalizedRootDomain}` : normalizedProject;
 }
 
+function normalizeManagedInstanceHostCandidate(value) {
+  const raw = String(value || '').trim().toLowerCase();
+
+  if (!raw) {
+    return '';
+  }
+
+  if (raw.includes('://')) {
+    try {
+      return new URL(raw).host.toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
+  return raw.replace(/^\.+|\.+$/g, '');
+}
+
+export function resolveManagedInstancePagesAddress(project, fallbackProjectName, rootDomain = 'pages.dev') {
+  const candidates = [];
+
+  if (typeof project?.subdomain === 'string') {
+    candidates.push(project.subdomain);
+  }
+
+  if (Array.isArray(project?.domains)) {
+    candidates.push(...project.domains);
+  }
+
+  for (const candidate of candidates) {
+    const host = normalizeManagedInstanceHostCandidate(candidate);
+
+    if (host) {
+      return {
+        routeHostname: host,
+        pagesUrl: `https://${host}`,
+      };
+    }
+  }
+
+  const fallbackHost = buildManagedInstanceHostname(fallbackProjectName, rootDomain);
+
+  return {
+    routeHostname: fallbackHost,
+    pagesUrl: `https://${fallbackHost}`,
+  };
+}
+
 export function createManagedInstanceSessionSecret() {
   return crypto.randomBytes(24).toString('hex');
 }

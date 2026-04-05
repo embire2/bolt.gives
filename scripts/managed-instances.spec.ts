@@ -5,6 +5,7 @@ import {
   createManagedInstanceTrialExpiry,
   getManagedInstanceBySessionSecret,
   normalizeManagedInstanceRegistry,
+  resolveManagedInstancePagesAddress,
   sanitizeManagedInstanceForClient,
   sanitizeManagedInstanceForOperator,
 } from './managed-instances.mjs';
@@ -156,5 +157,27 @@ describe('managed instance registry helpers', () => {
   it('builds hostnames and trial expiries deterministically', () => {
     expect(buildManagedInstanceHostname('Clinic Five', 'pages.dev')).toBe('clinic-five.pages.dev');
     expect(Date.parse(createManagedInstanceTrialExpiry(15))).toBeGreaterThan(Date.now());
+  });
+
+  it('prefers the actual Cloudflare-assigned subdomain when resolving the live Pages host', () => {
+    expect(
+      resolveManagedInstancePagesAddress(
+        {
+          name: 'team2',
+          subdomain: 'team2-6og.pages.dev',
+          domains: ['team2-6og.pages.dev'],
+        },
+        'team2',
+        'pages.dev',
+      ),
+    ).toEqual({
+      routeHostname: 'team2-6og.pages.dev',
+      pagesUrl: 'https://team2-6og.pages.dev',
+    });
+
+    expect(resolveManagedInstancePagesAddress(null, 'clinic-five', 'pages.dev')).toEqual({
+      routeHostname: 'clinic-five.pages.dev',
+      pagesUrl: 'https://clinic-five.pages.dev',
+    });
   });
 });

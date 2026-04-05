@@ -21,6 +21,7 @@ import {
   getManagedInstanceBySessionSecret,
   hashManagedInstanceValue,
   normalizeManagedInstanceRegistry,
+  resolveManagedInstancePagesAddress,
   sanitizeManagedInstanceForClient,
   sanitizeManagedInstanceForOperator,
   slugifyManagedInstanceSubdomain,
@@ -564,11 +565,19 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
     throw new Error(result.stderr.trim() || result.stdout.trim() || 'Cloudflare deployment failed.');
   }
 
+  const refreshedProject = await fetchCloudflarePagesProject(instance.projectName);
+  const pagesAddress = resolveManagedInstancePagesAddress(
+    refreshedProject,
+    instance.projectName,
+    MANAGED_INSTANCE_ROOT_DOMAIN,
+  );
   const deploymentUrlMatch = `${result.stdout}\n${result.stderr}`.match(/https:\/\/[a-z0-9.-]+\.pages\.dev/gi);
 
   return {
     gitSha,
-    deploymentUrl: deploymentUrlMatch?.at(-1) || `https://${instance.routeHostname}`,
+    routeHostname: pagesAddress.routeHostname,
+    pagesUrl: pagesAddress.pagesUrl,
+    deploymentUrl: deploymentUrlMatch?.at(-1) || pagesAddress.pagesUrl,
   };
 }
 
@@ -668,6 +677,8 @@ async function refreshManagedInstanceFromCurrentBuild(registry, instance, { acto
       instance.currentGitSha = deployment.gitSha;
       instance.lastRolloutAt = new Date().toISOString();
       instance.updatedAt = new Date().toISOString();
+      instance.routeHostname = deployment.routeHostname;
+      instance.pagesUrl = deployment.pagesUrl;
       instance.lastDeploymentUrl = deployment.deploymentUrl;
       instance.lastError = null;
       instance.status = 'active';
