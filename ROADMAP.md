@@ -101,6 +101,7 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [x] Default live loads back into `Chat` instead of restoring a stale `Workspace` focus from prior browser state.
 - [x] Prevent stale terminal panel state from crashing the workspace surface on live hosted instances.
 - [x] Keep the locked hosted FREE model visible as `DeepSeek V3.2` in the selector instead of a misleading placeholder during async provider/model bootstrap.
+- [x] Keep the public `/managed-instances` registration/control surface scrollable inside the locked app shell instead of relying on document-level scrolling.
 - [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 

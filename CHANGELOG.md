@@ -6,6 +6,11 @@
 
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 
+### Fixed
+
+- `https://admin.bolt.gives` now completes Let’s Encrypt issuance correctly after DNS becomes live, and the private operator panel is reachable over HTTPS on the server-hosted deployment.
+- The public `/managed-instances` page now uses the same scrollable app-shell layout as the rest of the server-hosted control plane, so long registration/operator content remains usable on live domains.
+
 ## v3.0.8 (2026-04-04)
 
 ### Added

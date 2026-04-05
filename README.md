@@ -46,7 +46,8 @@ Private operator surface:
 - Shows live Cloudflare instance assignments and expiry state
 - Lets admin refresh or suspend trials
 - Stores outbound client email activity, and sends mail when SMTP is configured
-- Requires the public `admin.bolt.gives` DNS/TLS path to be live if you want the operator panel reachable from outside this server
+- The server-hosted deployment now serves this panel over HTTPS with a live Let's Encrypt certificate
+- The public `/managed-instances` registration surface now uses its own scrollable app pane so longer registration and status content remains usable on live domains
 
 What is technically possible at **no cost from Cloudflare** today:
 
