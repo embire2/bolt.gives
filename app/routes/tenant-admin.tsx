@@ -7,6 +7,7 @@ import {
   type MetaFunction,
 } from '@remix-run/cloudflare';
 import { Form, useActionData, useLoaderData } from '@remix-run/react';
+import { useEffect } from 'react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
@@ -205,9 +206,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = String(formData.get('intent') || '');
 
   if (intent === 'logout') {
-    return redirect('/tenant-admin', {
-      headers: { 'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }) },
-    });
+    return json(
+      { ok: true, intent: 'logout', redirectTo: '/tenant-admin' },
+      {
+        headers: { 'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }) },
+      },
+    );
   }
 
   if (intent === 'login') {
@@ -226,14 +230,17 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'Invalid tenant admin credentials.' }, { status: 400 });
     }
 
-    return redirect('/tenant-admin', {
-      headers: {
-        'Set-Cookie': await adminSessionCookie.serialize({
-          username,
-          issuedAt: new Date().toISOString(),
-        } satisfies TenantAdminSession),
+    return json(
+      { ok: true, intent: 'login', redirectTo: '/tenant-admin' },
+      {
+        headers: {
+          'Set-Cookie': await adminSessionCookie.serialize({
+            username,
+            issuedAt: new Date().toISOString(),
+          } satisfies TenantAdminSession),
+        },
       },
-    });
+    );
   }
 
   if (intent === 'create-tenant') {
@@ -517,6 +524,12 @@ export default function TenantAdminPage() {
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
+  useEffect(() => {
+    if (actionData && 'ok' in actionData && actionData.ok && actionData.redirectTo && typeof window !== 'undefined') {
+      window.location.assign(actionData.redirectTo);
+    }
+  }, [actionData]);
+
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1">
       <BackgroundRays />
@@ -559,7 +572,7 @@ export default function TenantAdminPage() {
             </div>
           ) : null}
 
-          {actionData?.error ? (
+          {actionData && 'error' in actionData ? (
             <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">
               {actionData.error}
             </div>

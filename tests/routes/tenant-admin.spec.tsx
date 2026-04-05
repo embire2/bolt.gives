@@ -7,10 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const remixMocks = vi.hoisted(() => ({
   useLoaderData: vi.fn(),
   useActionData: vi.fn(),
+  formProps: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@remix-run/react', () => ({
-  Form: ({ children, ...props }: FormHTMLAttributes<HTMLFormElement>) => <form {...props}>{children}</form>,
+  Form: ({ children, reloadDocument, ...props }: FormHTMLAttributes<HTMLFormElement> & { reloadDocument?: boolean }) => {
+    remixMocks.formProps.push({ ...props, reloadDocument });
+    return <form {...props}>{children}</form>;
+  },
   useLoaderData: remixMocks.useLoaderData,
   useActionData: remixMocks.useActionData,
 }));
@@ -29,6 +33,7 @@ describe('TenantAdminPage', () => {
   beforeEach(async () => {
     (window as any).__vite_plugin_react_preamble_installed__ = true;
     remixMocks.useActionData.mockReturnValue(undefined);
+    remixMocks.formProps.length = 0;
     remixMocks.useLoaderData.mockReturnValue({
       adminHost: true,
       supported: true,
@@ -124,5 +129,49 @@ describe('TenantAdminPage', () => {
     expect(screen.getByRole('button', { name: 'Refresh deployment' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Suspend trial' })).toBeTruthy();
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
+  });
+
+  it('uses enhanced auth submits so the app can apply the admin session before navigation', () => {
+    remixMocks.formProps.length = 0;
+    remixMocks.useLoaderData.mockReturnValue({
+      adminHost: true,
+      supported: true,
+      authenticated: false,
+      adminPanelUrl: 'https://admin.bolt.gives',
+      defaultAdmin: {
+        username: 'admin',
+        password: 'admin',
+      },
+      admin: {
+        username: 'admin',
+        mustChangePassword: true,
+        updatedAt: '2026-04-04T12:00:00.000Z',
+        passwordUpdatedAt: '2026-04-04T12:00:00.000Z',
+        lastLoginAt: null,
+      },
+      tenants: [],
+      clientProfiles: [],
+      emailMessages: [],
+      mailSupport: {
+        configured: false,
+        fromAddress: null,
+        transportLabel: null,
+        reason: 'SMTP is not configured on the runtime service yet.',
+      },
+      managedSupport: {
+        supported: true,
+        reason: null,
+        trialDays: 15,
+        rootDomain: 'pages.dev',
+        sourceBranch: 'main',
+      },
+      managedInstances: [],
+      auditTrail: [],
+    });
+
+    render(<TenantAdminPage />);
+
+    const loginFormProps = remixMocks.formProps.find((props) => props.method === 'post');
+    expect(loginFormProps?.reloadDocument).not.toBe(true);
   });
 });
