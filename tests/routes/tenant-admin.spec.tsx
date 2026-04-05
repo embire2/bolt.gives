@@ -131,7 +131,7 @@ describe('TenantAdminPage', () => {
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
   });
 
-  it('uses enhanced auth submits so the app can apply the admin session before navigation', () => {
+  it('forces full document auth submits so the cookie redirect handshake runs outside the SPA', () => {
     remixMocks.formProps.length = 0;
     remixMocks.useLoaderData.mockReturnValue({
       adminHost: true,
@@ -172,6 +172,6 @@ describe('TenantAdminPage', () => {
     render(<TenantAdminPage />);
 
     const loginFormProps = remixMocks.formProps.find((props) => props.method === 'post');
-    expect(loginFormProps?.reloadDocument).not.toBe(true);
+    expect(loginFormProps?.reloadDocument).toBe(true);
   });
 });

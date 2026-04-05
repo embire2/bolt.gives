@@ -6,7 +6,7 @@ describe('tenant-admin action auth flow', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns a cookie-backed login success payload instead of an immediate redirect', async () => {
+  it('returns a cookie-backed redirect document for admin login', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
@@ -30,14 +30,11 @@ describe('tenant-admin action auth flow', () => {
     });
 
     const response = await action({ request, context: { cloudflare: {} as never }, params: {} });
-    const payload = await response.json();
+    const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(payload).toEqual({
-      ok: true,
-      intent: 'login',
-      redirectTo: '/tenant-admin',
-    });
+    expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(response.headers.get('Set-Cookie')).toContain('bolt_tenant_admin=');
+    expect(body).toContain('window.location.replace("/tenant-admin")');
   });
 });

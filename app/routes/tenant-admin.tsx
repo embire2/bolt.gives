@@ -7,7 +7,6 @@ import {
   type MetaFunction,
 } from '@remix-run/cloudflare';
 import { Form, useActionData, useLoaderData } from '@remix-run/react';
-import { useEffect } from 'react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
@@ -118,6 +117,23 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
   return (await response.json()) as T;
 }
 
+function createSessionRedirectDocument(target: string) {
+  const escapedTarget = JSON.stringify(target);
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0;url=${target}" />
+    <title>Redirecting…</title>
+  </head>
+  <body>
+    <p>Redirecting…</p>
+    <script>window.location.replace(${escapedTarget});</script>
+  </body>
+</html>`;
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const adminSessionCookie = createAdminSessionCookie();
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
@@ -206,12 +222,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = String(formData.get('intent') || '');
 
   if (intent === 'logout') {
-    return json(
-      { ok: true, intent: 'logout', redirectTo: '/tenant-admin' },
-      {
-        headers: { 'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }) },
+    return new Response(createSessionRedirectDocument('/tenant-admin'), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }),
       },
-    );
+    });
   }
 
   if (intent === 'login') {
@@ -230,17 +246,15 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'Invalid tenant admin credentials.' }, { status: 400 });
     }
 
-    return json(
-      { ok: true, intent: 'login', redirectTo: '/tenant-admin' },
-      {
-        headers: {
-          'Set-Cookie': await adminSessionCookie.serialize({
-            username,
-            issuedAt: new Date().toISOString(),
-          } satisfies TenantAdminSession),
-        },
+    return new Response(createSessionRedirectDocument('/tenant-admin'), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Set-Cookie': await adminSessionCookie.serialize({
+          username,
+          issuedAt: new Date().toISOString(),
+        } satisfies TenantAdminSession),
       },
-    );
+    });
   }
 
   if (intent === 'create-tenant') {
@@ -523,12 +537,8 @@ export default function TenantAdminPage() {
     auditTrail,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-
-  useEffect(() => {
-    if (actionData && 'ok' in actionData && actionData.ok && actionData.redirectTo && typeof window !== 'undefined') {
-      window.location.assign(actionData.redirectTo);
-    }
-  }, [actionData]);
+  const actionError =
+    actionData && typeof actionData === 'object' && 'error' in actionData ? String(actionData.error) : null;
 
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1">
@@ -555,7 +565,7 @@ export default function TenantAdminPage() {
                 ) : null}
               </div>
               {authenticated ? (
-                <Form method="post">
+                <Form reloadDocument method="post">
                   <input type="hidden" name="intent" value="logout" />
                   <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
                     Sign out
@@ -572,15 +582,16 @@ export default function TenantAdminPage() {
             </div>
           ) : null}
 
-          {actionData && 'error' in actionData ? (
+          {actionError ? (
             <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">
-              {actionData.error}
+              {actionError}
             </div>
           ) : null}
 
           {supported && !authenticated ? (
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
               <Form
+                reloadDocument
                 method="post"
                 className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
               >
