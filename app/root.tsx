@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react';
-import type { HeadersFunction, LinksFunction } from '@remix-run/cloudflare';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import { json, type HeadersFunction, type LinksFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from './lib/stores/theme';
@@ -14,6 +14,8 @@ import globalStyles from './styles/index.scss?url';
 import xtermStyles from '@xterm/xterm/css/xterm.css?url';
 import { PluginManager } from './lib/services/pluginManager';
 import { CursorGlow } from './components/ui/CursorGlow';
+import { PublicUrlConfigProvider } from './lib/public-url-context';
+import { getPublicUrlConfig } from './lib/public-urls';
 
 import 'virtual:uno.css';
 
@@ -55,6 +57,12 @@ export const links: LinksFunction = () => [
 export const headers: HeadersFunction = () => ({
   'Cache-Control': 'no-store, max-age=0, must-revalidate',
 });
+
+export const loader = ({ request: _request }: LoaderFunctionArgs) => {
+  return json({
+    publicUrls: getPublicUrlConfig(),
+  });
+};
 
 const inlineThemeCode = stripIndents`
   setTutorialKitTheme();
@@ -126,6 +134,7 @@ import { logStore } from './lib/stores/logs';
 
 export default function App() {
   const theme = useStore(themeStore);
+  const data = useLoaderData<typeof loader>();
 
   useEffect(() => {
     logStore.logSystem('Application initialized', {
@@ -164,8 +173,10 @@ export default function App() {
   }, []);
 
   return (
-    <Layout>
-      <Outlet />
-    </Layout>
+    <PublicUrlConfigProvider value={data.publicUrls}>
+      <Layout>
+        <Outlet />
+      </Layout>
+    </PublicUrlConfigProvider>
   );
 }

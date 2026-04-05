@@ -11,6 +11,7 @@ import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
 import type { ManagedInstanceOperatorRecord, ManagedInstanceSupport } from '~/lib/managed-instances';
+import { getPublicUrlConfig } from '~/lib/public-urls';
 import { APP_VERSION } from '~/lib/version';
 
 type TenantRecord = {
@@ -120,7 +121,8 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
 export async function loader({ request }: LoaderFunctionArgs) {
   const adminSessionCookie = createAdminSessionCookie();
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
-  const adminHost = new URL(request.url).host.toLowerCase() === 'admin.bolt.gives';
+  const { adminHost: configuredAdminHost, adminPanelUrl } = getPublicUrlConfig();
+  const adminHost = new URL(request.url).host.toLowerCase() === configuredAdminHost;
 
   try {
     const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
@@ -154,7 +156,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',
       },
-      adminPanelUrl: status.adminPanelUrl || 'https://admin.bolt.gives',
+      adminPanelUrl: status.adminPanelUrl || adminPanelUrl,
       auditTrail: authenticated ? status.auditTrail || [] : [],
     });
   } catch {
@@ -186,7 +188,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',
       } satisfies AdminMailSupport,
-      adminPanelUrl: 'https://admin.bolt.gives',
+      adminPanelUrl,
       auditTrail: [] as Array<{
         id: string;
         timestamp: string;

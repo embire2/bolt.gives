@@ -13,9 +13,18 @@ PNPM_VERSION="${PNPM_VERSION:-9.14.4}"
 NODE_HEAP_MB="${NODE_HEAP_MB:-4096}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/bolt.gives}"
 RUNTIME_WORKSPACE_DIR="${RUNTIME_WORKSPACE_DIR:-${INSTALL_DIR%/}-runtime-workspaces}"
+APP_DOMAIN="${APP_DOMAIN:-}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+CREATE_DOMAIN="${CREATE_DOMAIN:-}"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+POSTGRES_DB="${POSTGRES_DB:-bolt_gives_admin}"
+POSTGRES_USER="${POSTGRES_USER:-bolt_gives_admin}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 INSTALL_DEPS=1
 INSTALL_SERVICE=1
 BUILD_APP=1
+INSTALL_POSTGRES=1
+INSTALL_CADDY=1
 
 APP_SERVICE="${SERVICE_PREFIX}-app"
 COLLAB_SERVICE="${SERVICE_PREFIX}-collab"
@@ -33,6 +42,15 @@ Options:
   --install-dir PATH   Install/update the repo in PATH (default: $HOME/bolt.gives)
   --branch NAME        Git branch to install (default: main)
   --repo-url URL       Git repository URL to clone/update
+  --app-domain HOST    Public app domain (for example: code.example.com)
+  --admin-domain HOST  Public admin/operator domain (for example: admin.example.com)
+  --create-domain HOST Public trial-registration domain (for example: create.example.com)
+  --skip-postgres      Skip local PostgreSQL installation/configuration
+  --skip-caddy         Skip Caddy installation/configuration
+  --postgres-db NAME   Local PostgreSQL database name (default: bolt_gives_admin)
+  --postgres-user NAME Local PostgreSQL user name (default: bolt_gives_admin)
+  --postgres-password VALUE
+                       Local PostgreSQL password (generated if omitted)
   --skip-deps          Skip apt, Node.js, and pnpm installation
   --skip-service       Skip systemd service installation/startup
   --skip-build         Skip production build
@@ -40,12 +58,17 @@ Options:
 
 Environment overrides:
   INSTALL_DIR, BRANCH, REPO_URL, APP_PORT, COLLAB_PORT, WEBBROWSE_PORT, RUNTIME_PORT,
-  SERVICE_PREFIX, NODE_MAJOR, PNPM_VERSION, NODE_HEAP_MB, RUNTIME_WORKSPACE_DIR
+  SERVICE_PREFIX, NODE_MAJOR, PNPM_VERSION, NODE_HEAP_MB, RUNTIME_WORKSPACE_DIR,
+  APP_DOMAIN, ADMIN_DOMAIN, CREATE_DOMAIN, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD,
+  LETSENCRYPT_EMAIL
 
 Notes:
   - Supported target: Ubuntu 18.04+.
   - Run this script as a regular user with sudo access, not as root.
   - Installer-generated services use a 4 GB Node heap by default.
+  - When domains are supplied, the installer can also provision Caddy and local PostgreSQL
+    so users can self-host the full app, admin panel, and managed-instance registration flow
+    on their own VPS.
 EOF
 }
 
@@ -92,6 +115,38 @@ parse_args() {
         REPO_URL="$2"
         shift 2
         ;;
+      --app-domain)
+        APP_DOMAIN="$2"
+        shift 2
+        ;;
+      --admin-domain)
+        ADMIN_DOMAIN="$2"
+        shift 2
+        ;;
+      --create-domain)
+        CREATE_DOMAIN="$2"
+        shift 2
+        ;;
+      --skip-postgres)
+        INSTALL_POSTGRES=0
+        shift
+        ;;
+      --skip-caddy)
+        INSTALL_CADDY=0
+        shift
+        ;;
+      --postgres-db)
+        POSTGRES_DB="$2"
+        shift 2
+        ;;
+      --postgres-user)
+        POSTGRES_USER="$2"
+        shift 2
+        ;;
+      --postgres-password)
+        POSTGRES_PASSWORD="$2"
+        shift 2
+        ;;
       --skip-deps)
         INSTALL_DEPS=0
         shift
@@ -115,6 +170,44 @@ parse_args() {
   done
 }
 
+normalize_domain() {
+  local value="${1:-}"
+  value="${value#http://}"
+  value="${value#https://}"
+  value="${value%%/*}"
+  printf '%s' "${value,,}"
+}
+
+generate_secret() {
+  python3 - <<'PY'
+import secrets
+print(secrets.token_hex(24))
+PY
+}
+
+validate_sql_identifier() {
+  local value="$1"
+
+  if [[ ! "${value}" =~ ^[A-Za-z0-9_]+$ ]]; then
+    fail "Invalid PostgreSQL identifier '${value}'. Use only letters, numbers, and underscores."
+  fi
+}
+
+normalize_config_inputs() {
+  APP_DOMAIN="$(normalize_domain "${APP_DOMAIN}")"
+  ADMIN_DOMAIN="$(normalize_domain "${ADMIN_DOMAIN}")"
+  CREATE_DOMAIN="$(normalize_domain "${CREATE_DOMAIN}")"
+
+  if [[ -n "${APP_DOMAIN}" && -z "${ADMIN_DOMAIN}" ]]; then
+    fail "When --app-domain is set, --admin-domain must also be set."
+  fi
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+    validate_sql_identifier "${POSTGRES_DB}"
+    validate_sql_identifier "${POSTGRES_USER}"
+  fi
+}
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
 }
@@ -122,7 +215,17 @@ need_cmd() {
 install_apt_packages() {
   log "Installing Ubuntu base packages"
   sudo apt-get update
-  sudo apt-get install -y git curl ca-certificates build-essential
+  local packages=(git curl ca-certificates build-essential python3)
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+    packages+=(postgresql postgresql-contrib)
+  fi
+
+  if [[ "${INSTALL_CADDY}" -eq 1 ]]; then
+    packages+=(caddy)
+  fi
+
+  sudo apt-get install -y "${packages[@]}"
 }
 
 install_nodejs() {
@@ -209,6 +312,28 @@ PY
   fi
 }
 
+read_env_value() {
+  local file="$1"
+  local key="$2"
+
+  if [[ ! -f "${file}" ]]; then
+    return 0
+  fi
+
+  python3 - "${file}" "${key}" <<'PY'
+import pathlib
+import sys
+
+file_path = pathlib.Path(sys.argv[1])
+key = sys.argv[2]
+
+for line in file_path.read_text(encoding="utf-8").splitlines():
+    if line.startswith(f"{key}="):
+        print(line.split("=", 1)[1])
+        break
+PY
+}
+
 prepare_env_file() {
   local env_file="${INSTALL_DIR}/.env.local"
 
@@ -219,10 +344,61 @@ prepare_env_file() {
     log "Keeping existing .env.local"
   fi
 
+  local existing_cookie_secret
+  existing_cookie_secret="$(read_env_value "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET")"
+
+  if [[ -z "${existing_cookie_secret}" ]]; then
+    existing_cookie_secret="$(generate_secret)"
+  fi
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 && -z "${POSTGRES_PASSWORD}" ]]; then
+    POSTGRES_PASSWORD="$(read_env_value "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD")"
+
+    if [[ -z "${POSTGRES_PASSWORD}" ]]; then
+      POSTGRES_PASSWORD="$(generate_secret)"
+    fi
+  fi
+
   upsert_env_line "${env_file}" "NODE_OPTIONS" "--max-old-space-size=${NODE_HEAP_MB}"
   upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
+  upsert_env_line "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET" "${existing_cookie_secret}"
+  upsert_env_line "${env_file}" "BOLT_ADMIN_PANEL_PUBLIC_URL" "${ADMIN_DOMAIN:+https://${ADMIN_DOMAIN}}"
+  upsert_env_line "${env_file}" "BOLT_CREATE_TRIAL_PUBLIC_URL" "${CREATE_DOMAIN:+https://${CREATE_DOMAIN}}"
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_HOST" "127.0.0.1"
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_PORT" "5432"
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_NAME" "${POSTGRES_DB}"
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_USER" "${POSTGRES_USER}"
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD" "${POSTGRES_PASSWORD}"
+    upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_SSL" "disable"
+  fi
+
   mkdir -p "${RUNTIME_WORKSPACE_DIR}"
+}
+
+setup_local_postgres() {
+  if [[ "${INSTALL_POSTGRES}" -ne 1 ]]; then
+    return
+  fi
+
+  need_cmd systemctl
+  need_cmd psql
+
+  log "Configuring local PostgreSQL database '${POSTGRES_DB}'"
+  sudo systemctl enable --now postgresql
+  local postgres_password_sql="${POSTGRES_PASSWORD//\'/\'\'}"
+
+  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'" | grep -q 1; then
+    sudo -u postgres psql -c "ALTER ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
+  else
+    sudo -u postgres psql -c "CREATE ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
+  fi
+
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'" | grep -q 1; then
+    sudo -u postgres createdb -O "${POSTGRES_USER}" "${POSTGRES_DB}"
+  fi
 }
 
 install_dependencies() {
@@ -332,11 +508,112 @@ install_systemd_services() {
   log "Installing systemd services"
   write_service_unit "${COLLAB_SERVICE}" "bolt.gives collaboration server" "${INSTALL_DIR}/bin/start-collab.sh" "" "" "${COLLAB_PORT}"
   write_service_unit "${WEBBROWSE_SERVICE}" "bolt.gives web browsing server" "${INSTALL_DIR}/bin/start-webbrowse.sh" "" "" "${WEBBROWSE_PORT}"
-  write_service_unit "${RUNTIME_SERVICE}" "bolt.gives hosted runtime server" "${INSTALL_DIR}/bin/start-runtime.sh" "" "" "${RUNTIME_PORT}"
+  local runtime_after=""
+  local runtime_wants=""
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+    runtime_after="postgresql.service"
+    runtime_wants="postgresql.service"
+  fi
+
+  write_service_unit "${RUNTIME_SERVICE}" "bolt.gives hosted runtime server" "${INSTALL_DIR}/bin/start-runtime.sh" "${runtime_after}" "${runtime_wants}" "${RUNTIME_PORT}"
   write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${APP_PORT}"
 
   sudo systemctl daemon-reload
   sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"
+}
+
+ensure_caddy_import() {
+  local main_caddyfile="/etc/caddy/Caddyfile"
+
+  sudo mkdir -p /etc/caddy/Caddyfile.d
+
+  if [[ ! -f "${main_caddyfile}" ]]; then
+    if [[ -n "${LETSENCRYPT_EMAIL}" ]]; then
+      sudo tee "${main_caddyfile}" >/dev/null <<EOF
+{
+	email ${LETSENCRYPT_EMAIL}
+}
+
+import /etc/caddy/Caddyfile.d/*.caddy
+EOF
+    else
+      sudo tee "${main_caddyfile}" >/dev/null <<'EOF'
+import /etc/caddy/Caddyfile.d/*.caddy
+EOF
+    fi
+    return
+  fi
+
+  if ! sudo grep -qF 'import /etc/caddy/Caddyfile.d/*.caddy' "${main_caddyfile}"; then
+    printf '\nimport /etc/caddy/Caddyfile.d/*.caddy\n' | sudo tee -a "${main_caddyfile}" >/dev/null
+  fi
+}
+
+write_caddy_site() {
+  local host_name="$1"
+  local root_redirect="$2"
+
+  cat <<EOF
+${host_name} {
+	encode zstd gzip
+	header {
+		Cache-Control "no-store, max-age=0, must-revalidate"
+	}
+$(if [[ -n "${root_redirect}" ]]; then cat <<INNER
+	@root path /
+	redir @root ${root_redirect} 302
+INNER
+fi)
+
+	handle /runtime/* {
+		reverse_proxy 127.0.0.1:${RUNTIME_PORT}
+	}
+
+	handle_path /collab/* {
+		reverse_proxy 127.0.0.1:${COLLAB_PORT}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:${APP_PORT}
+	}
+}
+EOF
+}
+
+configure_caddy() {
+  if [[ "${INSTALL_CADDY}" -ne 1 ]]; then
+    return
+  fi
+
+  need_cmd caddy
+  need_cmd systemctl
+
+  if [[ -z "${APP_DOMAIN}" || -z "${ADMIN_DOMAIN}" ]]; then
+    log "Skipping Caddy site configuration because app/admin domains were not supplied"
+    return
+  fi
+
+  log "Configuring Caddy for ${APP_DOMAIN} and ${ADMIN_DOMAIN}"
+  ensure_caddy_import
+
+  local caddy_fragment="/etc/caddy/Caddyfile.d/${SERVICE_PREFIX}.caddy"
+  local fragment_content
+
+  fragment_content="$(write_caddy_site "${APP_DOMAIN}" "")"
+  fragment_content+=$'\n\n'
+  fragment_content+="$(write_caddy_site "${ADMIN_DOMAIN}" "/tenant-admin")"
+
+  if [[ -n "${CREATE_DOMAIN}" ]]; then
+    fragment_content+=$'\n\n'
+    fragment_content+="$(write_caddy_site "${CREATE_DOMAIN}" "/managed-instances")"
+  fi
+
+  printf '%s\n' "${fragment_content}" | sudo tee "${caddy_fragment}" >/dev/null
+  sudo caddy fmt --overwrite "${caddy_fragment}" >/dev/null
+  sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null
+  sudo systemctl enable --now caddy
+  sudo systemctl reload caddy
 }
 
 wait_for_http() {
@@ -355,6 +632,25 @@ wait_for_http() {
 }
 
 print_summary() {
+  local app_url="not configured"
+  local admin_url="not configured"
+  local trial_url="not configured"
+  local trial_note=""
+
+  if [[ -n "${APP_DOMAIN}" ]]; then
+    app_url="https://${APP_DOMAIN}"
+    trial_url="https://${APP_DOMAIN}/managed-instances"
+  fi
+
+  if [[ -n "${ADMIN_DOMAIN}" ]]; then
+    admin_url="https://${ADMIN_DOMAIN}"
+  fi
+
+  if [[ -n "${CREATE_DOMAIN}" ]]; then
+    trial_url="https://${CREATE_DOMAIN}"
+    trial_note=" (root redirects to /managed-instances)"
+  fi
+
   cat <<EOF
 
 bolt.gives install completed.
@@ -380,11 +676,23 @@ Node heap baseline:
 Hosted runtime workspace root:
   ${RUNTIME_WORKSPACE_DIR}
 
+Public URLs:
+  app        ${app_url}
+  admin      ${admin_url}
+  trials     ${trial_url}${trial_note}
+
+Local PostgreSQL:
+  enabled    $(if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then printf 'yes'; else printf 'no'; fi)
+  database   $(if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then printf '%s' "${POSTGRES_DB}"; else printf 'n/a'; fi)
+  user       $(if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then printf '%s' "${POSTGRES_USER}"; else printf 'n/a'; fi)
+
 Next steps:
-  1. Edit ${INSTALL_DIR}/.env.local and add any provider keys you want to use.
-  2. Restart services after editing secrets:
+  1. Ensure your DNS A records point the chosen app/admin/create domains at this VPS before relying on public HTTPS.
+  2. Edit ${INSTALL_DIR}/.env.local and add any provider keys you want to use.
+     Keep server-side secrets such as FREE_OPENROUTER_API_KEY private; never place them in browser code or commits.
+  3. Restart services after editing secrets:
      sudo systemctl restart ${APP_SERVICE} ${COLLAB_SERVICE} ${WEBBROWSE_SERVICE} ${RUNTIME_SERVICE}
-  3. Check service health:
+  4. Check service health:
      sudo systemctl status ${APP_SERVICE} --no-pager
 EOF
 }
@@ -393,6 +701,7 @@ main() {
   parse_args "$@"
   require_non_root
   require_ubuntu
+  normalize_config_inputs
 
   if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
     install_apt_packages
@@ -409,6 +718,7 @@ main() {
 
   clone_or_update_repo
   prepare_env_file
+  setup_local_postgres
   install_dependencies
   write_launcher_scripts
 
@@ -418,6 +728,7 @@ main() {
 
   if [[ "${INSTALL_SERVICE}" -eq 1 ]]; then
     install_systemd_services
+    configure_caddy
 
     if wait_for_http "http://127.0.0.1:${APP_PORT}" 45 2; then
       log "Application responded on http://127.0.0.1:${APP_PORT}"

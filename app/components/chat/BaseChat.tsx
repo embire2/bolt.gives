@@ -25,6 +25,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
+import { usePublicUrlConfig } from '~/lib/public-url-context';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
@@ -330,6 +331,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     },
     ref,
   ) => {
+    const { adminPanelUrl } = usePublicUrlConfig();
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 180 : 136;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
     const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
@@ -835,7 +837,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               {ImportButtons(importChat)}
               <GitCloneButton importChat={importChat} />
               <a
-                href="https://admin.bolt.gives"
+                href={adminPanelUrl}
                 className="inline-flex items-center gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
               >
                 <span className="i-ph:buildings text-base" />
@@ -862,7 +864,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       </div>
                       <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
                       <div>
-                        4. If you self-host for a team or customers, open <code>https://admin.bolt.gives</code> or
+                        4. If you self-host for a team or customers, open <code>{adminPanelUrl}</code> or{' '}
                         <code>/tenant-admin</code> to manage registrations, tenant accounts, and Cloudflare trial
                         instances on this server.
                       </div>

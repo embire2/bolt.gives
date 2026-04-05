@@ -51,6 +51,7 @@ docs/instructions/Roadmap.md
 .cursorrules
 .qodo
 .playwright-installed
+.playwright-cli/
 
 # local automation/test artifacts
 scripts/.tmp-*

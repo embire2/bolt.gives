@@ -12,4 +12,15 @@ describe('index route loader', () => {
     expect(response.status).toBe(302);
     expect(response.headers.get('Location')).toBe('/tenant-admin');
   });
+
+  it('redirects the create host to the managed instances route', () => {
+    const response = loader({
+      request: new Request('https://create.bolt.gives/'),
+      context: {},
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('/managed-instances');
+  });
 });

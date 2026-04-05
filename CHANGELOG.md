@@ -5,6 +5,8 @@
 ### Changed
 
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
+- README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
+- The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
 
 ### Fixed
 
@@ -12,6 +14,7 @@
 - Tenant Admin sign-in on `https://admin.bolt.gives` now completes with a proper cookie-backed `303` document redirect, so the authenticated operator dashboard loads immediately after login instead of leaving the browser on the bootstrap sign-in view.
 - The public `/managed-instances` page now uses the same scrollable app-shell layout as the rest of the server-hosted control plane, so long registration/operator content remains usable on live domains.
 - Managed Cloudflare trial instances now persist and display the real Cloudflare-assigned `*.pages.dev` hostname instead of assuming the requested slug is always the live public URL.
+- Self-hosted deployments no longer need to hard-code `admin.bolt.gives` in the shell; the app now respects the configured public admin/create URLs.
 
 ## v3.0.8 (2026-04-04)
 

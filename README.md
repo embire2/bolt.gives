@@ -14,6 +14,7 @@
 
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
+  <a href="https://create.bolt.gives">create a 15-day trial instance</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
   <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
@@ -23,9 +24,14 @@
 
 `v3.0.8` ships the **registration-first managed Cloudflare trial flow** inside bolt.gives itself. The product now includes a real `/managed-instances` surface, runtime control endpoints for spawn/session/refresh/suspend, one-client / one-instance enforcement, preferred subdomain requests, and a 15-day expiry model.
 
+Start here:
+
+- [Create a 15-day managed trial instance at `create.bolt.gives`](https://create.bolt.gives)
+- The `create.bolt.gives` hostname lands on the public registration flow at `/managed-instances`
+
 What the user does:
 
-- Open `/managed-instances`
+- Open [`https://create.bolt.gives`](https://create.bolt.gives)
 - Complete the registration profile form
 - Choose a preferred Cloudflare subdomain
 - Submit the request
@@ -304,13 +310,32 @@ Current roadmap split:
 
 ## Installation (Ubuntu 18.04+ Only, Verbose, Tested)
 
-This installation path is designed to run bolt.gives locally with no required database.
+This installation path is designed to let users self-host the full product on their own VPS:
+
+- public app domain
+- public admin/operator domain
+- optional public create/trial-registration domain
+- local PostgreSQL for the private admin/control-plane data
+- Caddy-managed HTTPS on the chosen domains
+
+Core coding stays open source and self-hostable. Sensitive server-side keys stay in `.env.local` and never need to be exposed to browser users.
 
 ### 0. What you need
 
 - Ubuntu `18.04+` (recommended `22.04+`)
 - A user account with `sudo` access
 - Internet access for package installation and GitHub clone
+- Public DNS A records for the domains the user wants to use, all pointing at the VPS IP
+
+Recommended self-host domain layout:
+
+- app: `code.example.com`
+- admin: `admin.example.com`
+- create: `create.example.com`
+
+The `create` domain is optional. If it is omitted, the registration flow still works at:
+
+- `https://<app-domain>/managed-instances`
 
 Windows/macOS note:
 
@@ -324,21 +349,52 @@ Download the installer from GitHub, inspect it, then run it:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-./install-bolt-gives.sh
+./install-bolt-gives.sh \
+  --app-domain code.example.com \
+  --admin-domain admin.example.com \
+  --create-domain create.example.com
 ```
 
 The installer will:
 
 - install `git`, `curl`, `ca-certificates`, and `build-essential`
+- install `python3`
 - install Node.js `22.x`
 - install a compatible `pnpm 9.x` release (repo-pinned to `9.14.4`)
+- install local `PostgreSQL` and create a dedicated local admin/control-plane database
+- install `Caddy` and configure HTTPS reverse-proxy blocks for the chosen public domains
 - clone or update `https://github.com/embire2/bolt.gives`
 - create `.env.local` from `.env.example` if it does not exist
+- write self-host public URLs into `.env.local` for:
+  - `BOLT_ADMIN_PANEL_PUBLIC_URL`
+  - `BOLT_CREATE_TRIAL_PUBLIC_URL`
+- write local PostgreSQL connection settings into `.env.local` for:
+  - `BOLT_ADMIN_DATABASE_HOST`
+  - `BOLT_ADMIN_DATABASE_PORT`
+  - `BOLT_ADMIN_DATABASE_NAME`
+  - `BOLT_ADMIN_DATABASE_USER`
+  - `BOLT_ADMIN_DATABASE_PASSWORD`
+  - `BOLT_ADMIN_DATABASE_SSL=disable`
+- generate a private `BOLT_TENANT_ADMIN_COOKIE_SECRET`
 - build the app with a **4 GB** Node heap (`NODE_OPTIONS=--max-old-space-size=4096`)
 - install and start these systemd services:
   - `bolt-gives-app`
   - `bolt-gives-collab`
   - `bolt-gives-webbrowse`
+  - `bolt-gives-runtime`
+
+Recommended real-world installer command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh -o install-bolt-gives.sh
+chmod +x install-bolt-gives.sh
+./install-bolt-gives.sh \
+  --app-domain code.example.com \
+  --admin-domain admin.example.com \
+  --create-domain create.example.com \
+  --postgres-db bolt_gives_admin \
+  --postgres-user bolt_gives_admin
+```
 
 Optional overrides:
 
@@ -351,6 +407,9 @@ After the installer finishes:
 - app: `http://127.0.0.1:5173`
 - collaboration server: `ws://127.0.0.1:1234`
 - web browsing service: `http://127.0.0.1:4179`
+- runtime control plane: `http://127.0.0.1:4321`
+- admin panel: `https://admin.example.com` (or whatever `--admin-domain` was set to)
+- trial registration: `https://create.example.com` (or `https://<app-domain>/managed-instances` if `--create-domain` was omitted)
 
 ### 2. Add your provider keys
 
@@ -364,10 +423,20 @@ nano .env.local
 Then restart the services:
 
 ```bash
-sudo systemctl restart bolt-gives-app bolt-gives-collab bolt-gives-webbrowse
+sudo systemctl restart bolt-gives-app bolt-gives-collab bolt-gives-webbrowse bolt-gives-runtime
 ```
 
-No database setup is required for the bolt.gives core runtime.
+bolt.gives core still does not require an external hosted database, but the full self-hosted operator stack now supports a local PostgreSQL service for:
+
+- registered client profiles
+- managed Cloudflare trial assignments
+- admin/operator email activity
+
+Important:
+
+- keep `FREE_OPENROUTER_API_KEY` on the server only
+- keep any `OPENAI_API_KEY`, `OPEN_ROUTER_API_KEY`, or other provider secrets on the server only unless the user intentionally wants browser-local key entry
+- never commit `.env.local`
 
 Hosted-instance note:
 
@@ -381,6 +450,9 @@ Hosted-instance note:
 sudo systemctl status bolt-gives-app --no-pager
 sudo systemctl status bolt-gives-collab --no-pager
 sudo systemctl status bolt-gives-webbrowse --no-pager
+sudo systemctl status bolt-gives-runtime --no-pager
+sudo systemctl status postgresql --no-pager
+sudo systemctl status caddy --no-pager
 ```
 
 Open `http://127.0.0.1:5173`, then verify:
@@ -389,20 +461,40 @@ Open `http://127.0.0.1:5173`, then verify:
 - chat opens
 - terminal and preview panels render
 - collaboration and web browsing helper services are reachable
+- the admin domain loads the tenant/operator panel
+- the create domain loads the managed trial registration form
+
+Recommended public checks after DNS is pointed:
+
+- `https://code.example.com`
+- `https://admin.example.com`
+- `https://create.example.com`
 
 ### 4. Manual install alternative
 
-If you do not want to use the installer, this is the validated manual path.
+If you do not want to use the installer, this is the validated manual path for users who want to provision everything themselves.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates build-essential
+sudo apt-get install -y git curl ca-certificates build-essential python3 postgresql postgresql-contrib caddy
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 sudo npm install -g pnpm@9.14.4
 git clone https://github.com/embire2/bolt.gives.git
 cd bolt.gives
 cp .env.example .env.local
+sudo -u postgres createuser --pwprompt bolt_gives_admin
+sudo -u postgres createdb --owner=bolt_gives_admin bolt_gives_admin
+cat >> .env.local <<'EOF'
+BOLT_ADMIN_PANEL_PUBLIC_URL=https://admin.example.com
+BOLT_CREATE_TRIAL_PUBLIC_URL=https://create.example.com
+BOLT_ADMIN_DATABASE_HOST=127.0.0.1
+BOLT_ADMIN_DATABASE_PORT=5432
+BOLT_ADMIN_DATABASE_NAME=bolt_gives_admin
+BOLT_ADMIN_DATABASE_USER=bolt_gives_admin
+BOLT_ADMIN_DATABASE_PASSWORD=replace_me
+BOLT_ADMIN_DATABASE_SSL=disable
+EOF
 pnpm install --frozen-lockfile || pnpm install
 NODE_OPTIONS=--max-old-space-size=4096 pnpm exec remix vite:build
 ```
@@ -418,6 +510,65 @@ NODE_OPTIONS=--max-old-space-size=4096 pnpm run webbrowse:server
 
 # terminal 3
 NODE_OPTIONS=--max-old-space-size=4096 pnpm run start
+```
+
+Then place Caddy in front of the app with the chosen domains:
+
+```caddyfile
+code.example.com {
+  encode zstd gzip
+  header {
+    Cache-Control "no-store, max-age=0, must-revalidate"
+  }
+
+  handle /runtime/* {
+    reverse_proxy 127.0.0.1:4321
+  }
+
+  handle_path /collab/* {
+    reverse_proxy 127.0.0.1:1234
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:5173
+  }
+}
+
+admin.example.com {
+  encode zstd gzip
+  @root path /
+  redir @root /tenant-admin 302
+
+  handle /runtime/* {
+    reverse_proxy 127.0.0.1:4321
+  }
+
+  handle_path /collab/* {
+    reverse_proxy 127.0.0.1:1234
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:5173
+  }
+}
+
+create.example.com {
+  encode zstd gzip
+  @root path /
+  redir @root /managed-instances 302
+
+  handle /runtime/* {
+    reverse_proxy 127.0.0.1:4321
+  }
+
+  handle_path /collab/* {
+    reverse_proxy 127.0.0.1:1234
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:5173
+  }
+}
 ```
 
 ### 5. Contributor note about memory

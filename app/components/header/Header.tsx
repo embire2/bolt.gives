@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { chatStore } from '~/lib/stores/chat';
+import { usePublicUrlConfig } from '~/lib/public-url-context';
 import { classNames } from '~/utils/classNames';
 import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
@@ -8,6 +9,7 @@ import { APP_VERSION } from '~/lib/version';
 
 export function Header() {
   const chat = useStore(chatStore);
+  const { adminPanelUrl, createTrialUrl } = usePublicUrlConfig();
 
   const handleSidebarToggle = () => {
     if (typeof window === 'undefined') {
@@ -59,13 +61,13 @@ export function Header() {
           Tenant Portal
         </a>
         <a
-          href="/managed-instances"
+          href={createTrialUrl}
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >
           Cloudflare Trials
         </a>
         <a
-          href="https://admin.bolt.gives"
+          href={adminPanelUrl}
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >
           Admin Panel

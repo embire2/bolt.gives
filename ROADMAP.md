@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-04
+Last updated: 2026-04-05
 
 Status legend:
 - `[x]` complete
@@ -72,6 +72,13 @@ Release theme: turn the managed Cloudflare trial flow into a registration-first 
 - [x] The private operator URL `https://admin.bolt.gives` is now wired to the admin control surface on this server.
 - [x] Admin can review registered client profiles, live Cloudflare assignments, and stored outbound client email activity from one dashboard.
 
+7. Self-host packaging and domain parity
+- [x] README now links directly to `https://create.bolt.gives` for the managed registration flow.
+- [x] The app can now redirect a dedicated create domain to `/managed-instances`, matching the admin-domain redirect behavior.
+- [x] The installer now supports custom app/admin/create domains for VPS self-hosting.
+- [x] The installer now provisions a local PostgreSQL service for the private admin/operator control plane.
+- [x] The installer now configures Caddy for public HTTPS reverse-proxy on the chosen self-hosted domains.
+
 7. Release communication
 - [x] Versioning aligned to `v3.0.8` across app/runtime/docs.
 - [x] Changelog and feature feed updated for the release.
@@ -128,6 +135,7 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [~] Add password change flow for bootstrap admin.
 - [~] Add tenant roles, audit trail, approval history, and basic session management.
 - [x] Enforce one-client / one-instance rules for managed deployments in runtime, not only docs.
+ - [x] Support self-hosted admin/create domain configuration instead of assuming only the hosted `bolt.gives` domains exist.
 
 5. Cloudflare managed control plane
 - [x] Build the actual spawn/provision/update control plane described in docs.
