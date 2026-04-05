@@ -9,6 +9,7 @@
 ### Fixed
 
 - `https://admin.bolt.gives` now completes Let’s Encrypt issuance correctly after DNS becomes live, and the private operator panel is reachable over HTTPS on the server-hosted deployment.
+- Tenant Admin sign-in on `https://admin.bolt.gives` now completes with a proper cookie-backed `303` document redirect, so the authenticated operator dashboard loads immediately after login instead of leaving the browser on the bootstrap sign-in view.
 - The public `/managed-instances` page now uses the same scrollable app-shell layout as the rest of the server-hosted control plane, so long registration/operator content remains usable on live domains.
 
 ## v3.0.8 (2026-04-04)

@@ -117,23 +117,6 @@ async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promis
   return (await response.json()) as T;
 }
 
-function createSessionRedirectDocument(target: string) {
-  const escapedTarget = JSON.stringify(target);
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0;url=${target}" />
-    <title>Redirecting…</title>
-  </head>
-  <body>
-    <p>Redirecting…</p>
-    <script>window.location.replace(${escapedTarget});</script>
-  </body>
-</html>`;
-}
-
 export async function loader({ request }: LoaderFunctionArgs) {
   const adminSessionCookie = createAdminSessionCookie();
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
@@ -222,9 +205,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = String(formData.get('intent') || '');
 
   if (intent === 'logout') {
-    return new Response(createSessionRedirectDocument('/tenant-admin'), {
+    return redirect('/tenant-admin', {
+      status: 303,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
         'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }),
       },
     });
@@ -246,9 +229,9 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'Invalid tenant admin credentials.' }, { status: 400 });
     }
 
-    return new Response(createSessionRedirectDocument('/tenant-admin'), {
+    return redirect('/tenant-admin', {
+      status: 303,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
         'Set-Cookie': await adminSessionCookie.serialize({
           username,
           issuedAt: new Date().toISOString(),

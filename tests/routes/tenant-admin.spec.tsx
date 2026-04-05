@@ -131,7 +131,7 @@ describe('TenantAdminPage', () => {
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
   });
 
-  it('forces full document auth submits so the cookie redirect handshake runs outside the SPA', () => {
+  it('forces full document auth submits so cookie-backed redirects stay outside the SPA', () => {
     remixMocks.formProps.length = 0;
     remixMocks.useLoaderData.mockReturnValue({
       adminHost: true,

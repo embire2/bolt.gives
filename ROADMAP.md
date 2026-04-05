@@ -102,6 +102,7 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [x] Prevent stale terminal panel state from crashing the workspace surface on live hosted instances.
 - [x] Keep the locked hosted FREE model visible as `DeepSeek V3.2` in the selector instead of a misleading placeholder during async provider/model bootstrap.
 - [x] Keep the public `/managed-instances` registration/control surface scrollable inside the locked app shell instead of relying on document-level scrolling.
+- [x] Keep `admin.bolt.gives` operator sign-in on a browser-native cookie redirect path so the dashboard loads cleanly after authentication instead of relying on fragile SPA handoffs.
 - [ ] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 
