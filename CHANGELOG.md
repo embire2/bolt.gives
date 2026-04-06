@@ -2,16 +2,6 @@
 
 ## Unreleased (`v3.0.9` in progress)
 
-### Added
-
-- Electron builds now support multi-architecture for all platforms:
-  - macOS: Intel (x64) and Apple Silicon (arm64)
-  - Windows: x64 and ARM64
-  - Linux: x64 and ARM64
-- Electron builder memory optimizations to prevent heap exhaustion during packaging:
-  - Increased Node heap size from 4GB to 8GB for build processes
-  - Added `electronRebuildNodeOptions` and disabled unnecessary native rebuilds
-
 ### Changed
 
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.

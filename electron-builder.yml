@@ -6,9 +6,9 @@ directories:
 files:
   - build/**/*
   - package.json
+  - node_modules/**/*
   - icons/**
   - electron-update.yml
-  - node_modules/**/*
 extraMetadata:
   main: build/electron/main/index.mjs
 asarUnpack:
@@ -16,15 +16,11 @@ asarUnpack:
   - build/client/**/*
   - build/server/**/*
   - electron-update.yml
-electronRebuildNodeOptions: "--max_old_space_size=8192"
-buildDependenciesFromSource: false
-nodeGypRebuild: false
 
 mac:
   icon: assets/icons/icon.icns
   target:
-    - target: dmg
-      arch: [x64, arm64]
+    - dmg
   identity: null
   category: "public.app-category.developer-tools"
   type: "distribution"
@@ -32,22 +28,18 @@ mac:
   entitlements: "assets/entitlements.mac.plist"
   entitlementsInherit: "assets/entitlements.mac.plist"
   gatekeeperAssess: false
-  artifactName: ${name}-${version}-${os}-${arch}.${ext}
 
 win:
   icon: assets/icons/icon.ico
   target:
-    - target: nsis
-      arch: [x64, arm64]
+    - nsis
   artifactName: ${name}-${version}-${os}-${arch}.${ext}
 
 linux:
   icon: assets/icons/icon.png
   target:
-    - target: AppImage
-      arch: [x64, arm64]
-    - target: deb
-      arch: [x64, arm64]
+    - AppImage
+    - deb
   artifactName: ${name}-${version}-${os}-${arch}.${ext}
   category: Development
 
