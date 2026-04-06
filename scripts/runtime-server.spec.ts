@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
+  authorizeHostedFreeRelaySecret,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
   collectMissingWorkspacePackages,
@@ -47,6 +48,12 @@ afterEach(async () => {
 });
 
 describe('runtime server workspace isolation', () => {
+  it('authorizes hosted FREE relay secrets only on exact match', () => {
+    expect(authorizeHostedFreeRelaySecret('expected-secret', 'expected-secret')).toBe(true);
+    expect(authorizeHostedFreeRelaySecret('wrong-secret', 'expected-secret')).toBe(false);
+    expect(authorizeHostedFreeRelaySecret('', 'expected-secret')).toBe(false);
+  });
+
   it('uses an explicit runtime workspace root when provided', () => {
     expect(resolveRuntimeWorkspaceRoot({ RUNTIME_WORKSPACE_DIR: '/srv/custom-runtime' }, '/srv/bolt-gives')).toBe(
       '/srv/custom-runtime',

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   getHostedFreeRelaySecret,
   isHostedFreeRelayAuthorized,
+  resolveHostedFreeRelayVerifierUrl,
   resolveHostedFreeRelayOrigin,
+  verifyHostedFreeRelayAuthorization,
 } from './hosted-free-relay';
 
 describe('resolveHostedFreeRelayOrigin', () => {
@@ -106,5 +108,38 @@ describe('resolveHostedFreeRelayOrigin', () => {
         providerName: 'FREE',
       }),
     ).toBe(false);
+  });
+
+  it('uses the local runtime verifier when direct worker env verification is unavailable', async () => {
+    const request = new Request('https://alpha1.bolt.gives/api/chat', {
+      headers: {
+        'X-Bolt-Hosted-Free-Relay': '1',
+        'X-Bolt-Hosted-Free-Relay-Secret': 'relay-secret',
+      },
+    });
+
+    const authorized = await verifyHostedFreeRelayAuthorization({
+      request,
+      runtimeEnv: {
+        BOLT_HOSTED_FREE_RELAY_VERIFIER_URL: 'http://127.0.0.1:4321/runtime/internal/hosted-free-relay/verify',
+      },
+      providerName: 'FREE',
+      fetchImpl: async (input) =>
+        new Response(
+          JSON.stringify({ authorized: String(input).includes('/runtime/internal/hosted-free-relay/verify') }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+    });
+
+    expect(authorized).toBe(true);
+  });
+
+  it('resolves the default local verifier url when none is configured', () => {
+    expect(resolveHostedFreeRelayVerifierUrl({})).toBe(
+      'http://127.0.0.1:4321/runtime/internal/hosted-free-relay/verify',
+    );
   });
 });

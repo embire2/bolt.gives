@@ -74,6 +74,7 @@ Release theme: turn the managed Cloudflare trial flow into a registration-first 
 - [x] Existing trial owners now land on a dedicated success page with the live URL, assigned hostname, expiry, and rollout details instead of returning to the registration form.
 - [x] Managed trial instances now receive the hosted `FREE` provider through a protected relay configuration, so `DeepSeek V3.2` works on trial instances without embedding the OpenRouter key in the Pages project.
 - [x] Managed trial instances now provision the hosted FREE relay credential as a Pages secret, keeping the relay path server-only while restoring the FREE provider retroactively across existing live trials.
+- [x] Hosted FREE relay authorization now falls back to the local runtime verifier, so Pages-hosted surfaces and retroactively repaired managed trials keep `DeepSeek V3.2` working without exposing the upstream OpenRouter key.
 
 7. Self-host packaging and domain parity
 - [x] README now links directly to `https://create.bolt.gives` for the managed registration flow.

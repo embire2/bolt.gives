@@ -2,6 +2,7 @@ import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
 import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials';
 
 const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://alpha1.bolt.gives';
+const DEFAULT_HOSTED_FREE_RELAY_VERIFIER_URL = 'http://127.0.0.1:4321/runtime/internal/hosted-free-relay/verify';
 const HOSTED_FREE_PROXY_HOSTS = new Set(['bolt-gives.pages.dev']);
 export const HOSTED_FREE_RELAY_HEADER = 'X-Bolt-Hosted-Free-Relay';
 export const HOSTED_FREE_RELAY_SECRET_HEADER = 'X-Bolt-Hosted-Free-Relay-Secret';
@@ -101,6 +102,65 @@ export function isHostedFreeRelayAuthorized(options: {
   }
 
   return expectedSecret === providedSecret;
+}
+
+export function resolveHostedFreeRelayVerifierUrl(runtimeEnv?: Record<string, string>) {
+  return (
+    normalizeHttpUrl(runtimeEnv?.BOLT_HOSTED_FREE_RELAY_VERIFIER_URL) ||
+    normalizeHttpUrl(runtimeEnv?.HOSTED_FREE_RELAY_VERIFIER_URL) ||
+    DEFAULT_HOSTED_FREE_RELAY_VERIFIER_URL
+  );
+}
+
+export async function verifyHostedFreeRelayAuthorization(options: {
+  request: Request;
+  runtimeEnv?: Record<string, string>;
+  providerName?: string;
+  fetchImpl?: typeof fetch;
+}) {
+  if (!isHostedFreeRelayRequest(options.request)) {
+    return true;
+  }
+
+  if (options.providerName !== FREE_PROVIDER_NAME) {
+    return false;
+  }
+
+  if (isHostedFreeRelayAuthorized(options)) {
+    return true;
+  }
+
+  const providedSecret = normalizeCredential(options.request.headers.get(HOSTED_FREE_RELAY_SECRET_HEADER));
+
+  if (!providedSecret) {
+    return false;
+  }
+
+  const fetchImpl = options.fetchImpl || fetch;
+  const verifierUrl = resolveHostedFreeRelayVerifierUrl(options.runtimeEnv);
+
+  try {
+    const response = await fetchImpl(verifierUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        providerName: options.providerName,
+        providedSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = (await response.json().catch(() => null)) as { authorized?: boolean } | null;
+
+    return payload?.authorized === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function relayHostedFreeRequest(options: {

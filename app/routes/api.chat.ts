@@ -38,10 +38,10 @@ import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/li
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
 import {
-  isHostedFreeRelayAuthorized,
   isHostedFreeRelayRequest,
   relayHostedFreeRequest,
   resolveHostedFreeRelayOrigin,
+  verifyHostedFreeRelayAuthorization,
 } from '~/lib/.server/llm/hosted-free-relay';
 import {
   ensureLatestUserMessageSelectionEnvelope,
@@ -249,11 +249,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
   if (
     isHostedFreeRelayRequest(request) &&
-    !isHostedFreeRelayAuthorized({
+    !(await verifyHostedFreeRelayAuthorization({
       request,
       runtimeEnv,
       providerName: selectedProvider,
-    })
+    }))
   ) {
     return new Response('Invalid hosted FREE relay credentials.', { status: 403 });
   }

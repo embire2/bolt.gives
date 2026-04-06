@@ -119,6 +119,21 @@ const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
 
+function normalizeRuntimeSecret(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+export function authorizeHostedFreeRelaySecret(providedSecret, expectedSecret = MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET) {
+  const normalizedProvidedSecret = normalizeRuntimeSecret(providedSecret);
+  const normalizedExpectedSecret = normalizeRuntimeSecret(expectedSecret);
+
+  if (!normalizedProvidedSecret || !normalizedExpectedSecret) {
+    return false;
+  }
+
+  return normalizedProvidedSecret === normalizedExpectedSecret;
+}
+
 function buildClientRegistrationSource(hostname = '') {
   return hostname ? `managed-instance:${String(hostname).trim().toLowerCase()}` : 'managed-instance:runtime';
 }
@@ -2734,6 +2749,21 @@ export function createRuntimeServer() {
 
     if (pathname === '/runtime/health') {
       sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/internal/hosted-free-relay/verify') {
+      try {
+        const body = await readJsonBody(req);
+        const providedSecret = typeof body?.providedSecret === 'string' ? body.providedSecret : '';
+        const providerName = typeof body?.providerName === 'string' ? body.providerName : '';
+
+        sendJson(res, 200, {
+          authorized: providerName === 'FREE' && authorizeHostedFreeRelaySecret(providedSecret),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to verify the hosted FREE relay secret.');
+      }
       return;
     }
 

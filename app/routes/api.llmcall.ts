@@ -12,10 +12,10 @@ import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
 import { ensureFreeProviderAvailability } from '~/lib/.server/llm/free-provider-preflight';
 import {
-  isHostedFreeRelayAuthorized,
   isHostedFreeRelayRequest,
   relayHostedFreeRequest,
   resolveHostedFreeRelayOrigin,
+  verifyHostedFreeRelayAuthorization,
 } from '~/lib/.server/llm/hosted-free-relay';
 
 export async function action(args: ActionFunctionArgs) {
@@ -130,11 +130,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
   if (
     isHostedFreeRelayRequest(request) &&
-    !isHostedFreeRelayAuthorized({
+    !(await verifyHostedFreeRelayAuthorization({
       request,
       runtimeEnv,
       providerName,
-    })
+    }))
   ) {
     throw new Response('Invalid hosted FREE relay credentials.', {
       status: 403,
