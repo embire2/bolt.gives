@@ -3,6 +3,8 @@ import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials
 
 const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://alpha1.bolt.gives';
 const HOSTED_FREE_PROXY_HOSTS = new Set(['bolt-gives.pages.dev']);
+export const HOSTED_FREE_RELAY_HEADER = 'X-Bolt-Hosted-Free-Relay';
+export const HOSTED_FREE_RELAY_SECRET_HEADER = 'X-Bolt-Hosted-Free-Relay-Secret';
 
 function shouldUseDefaultRelayHost(hostname: string) {
   return HOSTED_FREE_PROXY_HOSTS.has(hostname) || hostname.endsWith('.bolt-gives.pages.dev');
@@ -55,10 +57,44 @@ function buildRelayHeaders(request: Request) {
     headers.set('Cookie', cookie);
   }
 
-  headers.set('X-Bolt-Hosted-Free-Relay', '1');
+  headers.set(HOSTED_FREE_RELAY_HEADER, '1');
   headers.set('X-Bolt-Forwarded-Host', request.headers.get('Host') || '');
 
   return headers;
+}
+
+export function getHostedFreeRelaySecret(runtimeEnv?: Record<string, string>) {
+  return (
+    normalizeCredential(runtimeEnv?.BOLT_HOSTED_FREE_RELAY_SECRET) ||
+    normalizeCredential(runtimeEnv?.HOSTED_FREE_RELAY_SECRET)
+  );
+}
+
+export function isHostedFreeRelayRequest(request: Request) {
+  return request.headers.get(HOSTED_FREE_RELAY_HEADER) === '1';
+}
+
+export function isHostedFreeRelayAuthorized(options: {
+  request: Request;
+  runtimeEnv?: Record<string, string>;
+  providerName?: string;
+}) {
+  if (!isHostedFreeRelayRequest(options.request)) {
+    return true;
+  }
+
+  if (options.providerName !== FREE_PROVIDER_NAME) {
+    return false;
+  }
+
+  const expectedSecret = getHostedFreeRelaySecret(options.runtimeEnv);
+  const providedSecret = normalizeCredential(options.request.headers.get(HOSTED_FREE_RELAY_SECRET_HEADER));
+
+  if (!expectedSecret || !providedSecret) {
+    return false;
+  }
+
+  return expectedSecret === providedSecret;
 }
 
 export async function relayHostedFreeRequest(options: {
@@ -66,12 +102,19 @@ export async function relayHostedFreeRequest(options: {
   requestUrl: URL;
   relayOrigin: string;
   body: unknown;
+  runtimeEnv?: Record<string, string>;
 }) {
   const relayUrl = new URL(`${options.requestUrl.pathname}${options.requestUrl.search}`, options.relayOrigin);
+  const headers = buildRelayHeaders(options.request);
+  const relaySecret = getHostedFreeRelaySecret(options.runtimeEnv);
+
+  if (relaySecret) {
+    headers.set(HOSTED_FREE_RELAY_SECRET_HEADER, relaySecret);
+  }
 
   return fetch(relayUrl, {
     method: options.request.method,
-    headers: buildRelayHeaders(options.request),
+    headers,
     body: JSON.stringify(options.body),
   });
 }

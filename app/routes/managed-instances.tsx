@@ -258,6 +258,16 @@ export default function ManagedInstancesPage() {
   const assignedHostnameDiffers = Boolean(
     instance && instance.routeHostname && instance.routeHostname !== preferredHostname,
   );
+  const instanceDetails = instance
+    ? [
+        { label: 'Live URL', value: instance.pagesUrl },
+        { label: 'Assigned hostname', value: instance.routeHostname },
+        { label: 'Status', value: instance.status },
+        { label: 'Trial ends', value: new Date(instance.trialEndsAt).toLocaleString() },
+        { label: 'Current git SHA', value: instance.currentGitSha || 'pending first rollout' },
+        { label: 'Support email', value: instance.email },
+      ]
+    : [];
 
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
@@ -294,136 +304,249 @@ export default function ManagedInstancesPage() {
 
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="space-y-4">
-              <Form
-                reloadDocument
-                method="post"
-                className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-lg backdrop-blur"
-              >
-                <input type="hidden" name="intent" value="spawn" />
-                <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Request your trial instance</h2>
-                <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                  Registration is required before a trial can be provisioned. Your profile is stored in the private
-                  admin panel and linked to the Cloudflare instance assigned to you. One client can hold one managed
-                  instance. Repeating the request from the same browser session returns the same instance instead of
-                  creating a second one.
-                </p>
-
-                <div className="mt-5 grid gap-4">
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Full name
-                    <input
-                      name="name"
-                      required
-                      minLength={2}
-                      placeholder="Ada Lovelace"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Work email
-                    <input
-                      name="email"
-                      type="email"
-                      required
-                      defaultValue={instance?.email || sessionEmail}
-                      placeholder="owner@example.com"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Company
-                      <input
-                        name="company"
-                        placeholder="OpenWeb"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Role
-                      <input
-                        name="role"
-                        placeholder="Founder / Engineering Lead"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Phone
-                      <input
-                        name="phone"
-                        placeholder="+27 ..."
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Country
-                      <input
-                        name="country"
-                        placeholder="South Africa"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                  </div>
-
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Preferred subdomain
-                    <div className="flex items-center rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2">
-                      <input
-                        name="subdomain"
-                        required
-                        minLength={3}
-                        defaultValue={instance?.projectName || sessionProjectName}
-                        placeholder="my-team-bolt"
-                        className="min-w-0 flex-1 bg-transparent text-bolt-elements-textPrimary outline-none"
-                      />
-                      <span className="pl-3 text-xs font-mono text-bolt-elements-textSecondary">
-                        .{support.rootDomain}
-                      </span>
+              {instance ? (
+                <>
+                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6 shadow-lg backdrop-blur">
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                      Trial instance ready
                     </div>
-                  </label>
+                    <h2 className="mt-2 text-2xl font-semibold text-bolt-elements-textPrimary">
+                      Your bolt.gives server is live
+                    </h2>
+                    <a
+                      href={instance.pagesUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 block break-all rounded-xl border border-emerald-300/30 bg-bolt-elements-background-depth-1 px-4 py-4 text-lg font-semibold text-emerald-200 underline-offset-4 transition hover:text-white hover:underline"
+                    >
+                      {instance.pagesUrl}
+                    </a>
+                    <p className="mt-4 text-sm text-bolt-elements-textSecondary">
+                      Bookmark the live URL above. This browser session is already linked to your active trial, so you
+                      do not need to complete the registration form again.
+                    </p>
+                    {assignedHostnameDiffers ? (
+                      <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                        Cloudflare assigned <span className="font-mono">{instance.routeHostname}</span> because the
+                        preferred hostname <span className="font-mono">{preferredHostname}</span> was not available.
+                        Always use the live URL shown above.
+                      </div>
+                    ) : null}
+                  </div>
 
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    What are you building?
-                    <textarea
-                      name="useCase"
-                      rows={4}
-                      placeholder="Describe the product, users, and what you need bolt.gives to help you build."
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                </div>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
+                      <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Server details
+                      </div>
+                      <dl className="mt-4 grid gap-4 md:grid-cols-2">
+                        {instanceDetails.map((detail) => (
+                          <div
+                            key={detail.label}
+                            className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-4 py-3"
+                          >
+                            <dt className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                              {detail.label}
+                            </dt>
+                            <dd className="mt-2 break-all text-sm font-medium text-bolt-elements-textPrimary">
+                              {detail.value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                      {instance.lastError ? (
+                        <div className="mt-4 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                          Last runtime error: {instance.lastError}
+                        </div>
+                      ) : null}
+                    </div>
 
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button
-                    type="submit"
-                    disabled={!support.supported}
-                    className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:opacity-50"
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
+                        <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Actions</div>
+                        <div className="mt-4 flex flex-col gap-3">
+                          <a
+                            href={instance.pagesUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-center text-sm font-medium text-bolt-elements-button-primary-text"
+                          >
+                            Open live instance
+                          </a>
+                          <Form reloadDocument method="post">
+                            <input type="hidden" name="intent" value="refresh" />
+                            <button className="w-full rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary">
+                              Refresh from current build
+                            </button>
+                          </Form>
+                          <Form reloadDocument method="post">
+                            <input type="hidden" name="intent" value="suspend" />
+                            <button className="w-full rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-200">
+                              Suspend trial
+                            </button>
+                          </Form>
+                        </div>
+                      </div>
+
+                      <Form
+                        reloadDocument
+                        method="post"
+                        className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
+                      >
+                        <input type="hidden" name="intent" value="clear-session" />
+                        <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                          Need a different instance?
+                        </div>
+                        <p className="mt-3 text-sm text-bolt-elements-textSecondary">
+                          Clear the local session only if support has told you to restart the trial flow or switch to a
+                          different assigned instance.
+                        </p>
+                        <button
+                          type="submit"
+                          className="mt-4 rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary"
+                        >
+                          Clear local instance session
+                        </button>
+                      </Form>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Form
+                    reloadDocument
+                    method="post"
+                    className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-lg backdrop-blur"
                   >
-                    Spawn trial instance
-                  </button>
-                </div>
-              </Form>
+                    <input type="hidden" name="intent" value="spawn" />
+                    <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">
+                      Request your trial instance
+                    </h2>
+                    <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                      Registration is required before a trial can be provisioned. Your profile is stored in the private
+                      admin panel and linked to the Cloudflare instance assigned to you. One client can hold one managed
+                      instance. Repeating the request from the same browser session returns the same instance instead of
+                      creating a second one.
+                    </p>
 
-              <Form
-                reloadDocument
-                method="post"
-                className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
-              >
-                <input type="hidden" name="intent" value="clear-session" />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary"
-                >
-                  Clear local instance session
-                </button>
-              </Form>
+                    <div className="mt-5 grid gap-4">
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        Full name
+                        <input
+                          name="name"
+                          required
+                          minLength={2}
+                          placeholder="Ada Lovelace"
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        Work email
+                        <input
+                          name="email"
+                          type="email"
+                          required
+                          defaultValue={sessionEmail}
+                          placeholder="owner@example.com"
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Company
+                          <input
+                            name="company"
+                            placeholder="OpenWeb"
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
+                        </label>
+
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Role
+                          <input
+                            name="role"
+                            placeholder="Founder / Engineering Lead"
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Phone
+                          <input
+                            name="phone"
+                            placeholder="+27 ..."
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
+                        </label>
+
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Country
+                          <input
+                            name="country"
+                            placeholder="South Africa"
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        Preferred subdomain
+                        <div className="flex items-center rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2">
+                          <input
+                            name="subdomain"
+                            required
+                            minLength={3}
+                            defaultValue={sessionProjectName}
+                            placeholder="my-team-bolt"
+                            className="min-w-0 flex-1 bg-transparent text-bolt-elements-textPrimary outline-none"
+                          />
+                          <span className="pl-3 text-xs font-mono text-bolt-elements-textSecondary">
+                            .{support.rootDomain}
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        What are you building?
+                        <textarea
+                          name="useCase"
+                          rows={4}
+                          placeholder="Describe the product, users, and what you need bolt.gives to help you build."
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button
+                        type="submit"
+                        disabled={!support.supported}
+                        className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:opacity-50"
+                      >
+                        Spawn trial instance
+                      </button>
+                    </div>
+                  </Form>
+
+                  <Form
+                    reloadDocument
+                    method="post"
+                    className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
+                  >
+                    <input type="hidden" name="intent" value="clear-session" />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary"
+                    >
+                      Clear local instance session
+                    </button>
+                  </Form>
+                </>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -437,53 +560,6 @@ export default function ManagedInstancesPage() {
                   <li>Your registration profile is stored in the private admin panel for operator support.</li>
                 </ul>
               </div>
-
-              {instance ? (
-                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
-                  <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                    Current instance
-                  </div>
-                  <div className="mt-3 text-lg font-semibold text-bolt-elements-textPrimary">
-                    {instance.projectName}
-                  </div>
-                  <div className="mt-1 text-sm text-bolt-elements-textSecondary">{instance.pagesUrl}</div>
-                  {assignedHostnameDiffers ? (
-                    <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                      Cloudflare assigned <span className="font-mono">{instance.routeHostname}</span> because the
-                      preferred hostname <span className="font-mono">{preferredHostname}</span> was not available.
-                      Always use the assigned live URL shown above.
-                    </div>
-                  ) : null}
-                  <div className="mt-4 grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    <div>Status: {instance.status}</div>
-                    <div>Trial ends: {new Date(instance.trialEndsAt).toLocaleString()}</div>
-                    <div>Current git SHA: {instance.currentGitSha || 'pending first rollout'}</div>
-                    {instance.lastError ? <div className="text-red-300">Last error: {instance.lastError}</div> : null}
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <a
-                      href={instance.pagesUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text"
-                    >
-                      Open instance
-                    </a>
-                    <Form reloadDocument method="post">
-                      <input type="hidden" name="intent" value="refresh" />
-                      <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary">
-                        Refresh from current build
-                      </button>
-                    </Form>
-                    <Form reloadDocument method="post">
-                      <input type="hidden" name="intent" value="suspend" />
-                      <button className="rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-200">
-                        Suspend trial
-                      </button>
-                    </Form>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </section>
         </div>

@@ -17,6 +17,7 @@ import {
 } from './runtime-preview.mjs';
 import {
   appendManagedInstanceEvent,
+  buildManagedInstancePagesEnvConfig,
   claimManagedInstanceTrial,
   getManagedInstanceBySessionSecret,
   hashManagedInstanceValue,
@@ -99,6 +100,12 @@ const MANAGED_INSTANCE_DEPLOY_DIR =
 const MANAGED_INSTANCE_SYNC_INTERVAL_MS = Number(process.env.RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS || '600000');
 const MANAGED_INSTANCE_DELETE_ON_SUSPEND = process.env.RUNTIME_MANAGED_INSTANCE_DELETE_ON_SUSPEND === '1';
 const MANAGED_INSTANCE_PUBLIC_ENABLED = process.env.RUNTIME_MANAGED_INSTANCE_ENABLED !== 'false';
+const MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN =
+  process.env.BOLT_MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN ||
+  process.env.BOLT_HOSTED_FREE_RELAY_ORIGIN ||
+  'https://alpha1.bolt.gives';
+const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
+  process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
 
@@ -499,6 +506,42 @@ async function fetchCloudflarePagesProject(projectName) {
   return payload?.result || null;
 }
 
+function buildManagedInstanceDeploymentConfigs() {
+  return buildManagedInstancePagesEnvConfig({
+    hostedFreeRelayOrigin: MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN,
+    hostedFreeRelaySecret: MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
+  });
+}
+
+async function configureManagedInstanceProject(instance) {
+  if (!MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN || !MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET) {
+    return;
+  }
+
+  const config = getManagedInstanceCloudflareConfig();
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/pages/projects/${encodeURIComponent(instance.projectName)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${config.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        deployment_configs: buildManagedInstanceDeploymentConfigs(),
+      }),
+    },
+  );
+  const payload = await response.json();
+
+  if (!response.ok || payload?.success === false) {
+    const apiError = Array.isArray(payload?.errors) && payload.errors[0]?.message ? payload.errors[0].message : null;
+    throw new Error(apiError || `Cloudflare project configuration failed with status ${response.status}.`);
+  }
+
+  return payload?.result || null;
+}
+
 async function ensureManagedInstanceProjectExists(instance) {
   const existingProject = await fetchCloudflarePagesProject(instance.projectName);
 
@@ -535,6 +578,7 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
 
   await fs.access(MANAGED_INSTANCE_DEPLOY_DIR, fsConstants.R_OK);
   await ensureManagedInstanceProjectExists(instance);
+  await configureManagedInstanceProject(instance);
 
   const result = await runManagedInstanceProcess(
     'pnpm',

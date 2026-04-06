@@ -11,7 +11,12 @@ import { createScopedLogger } from '~/utils/logger';
 import { resolveRuntimeEnvFromContext } from '~/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '~/lib/.server/llm/api-key-utils';
 import { ensureFreeProviderAvailability } from '~/lib/.server/llm/free-provider-preflight';
-import { relayHostedFreeRequest, resolveHostedFreeRelayOrigin } from '~/lib/.server/llm/hosted-free-relay';
+import {
+  isHostedFreeRelayAuthorized,
+  isHostedFreeRelayRequest,
+  relayHostedFreeRequest,
+  resolveHostedFreeRelayOrigin,
+} from '~/lib/.server/llm/hosted-free-relay';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -123,12 +128,27 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     runtimeEnv,
   });
 
+  if (
+    isHostedFreeRelayRequest(request) &&
+    !isHostedFreeRelayAuthorized({
+      request,
+      runtimeEnv,
+      providerName,
+    })
+  ) {
+    throw new Response('Invalid hosted FREE relay credentials.', {
+      status: 403,
+      statusText: 'Forbidden',
+    });
+  }
+
   if (hostedFreeRelayOrigin) {
     return relayHostedFreeRequest({
       request,
       requestUrl,
       relayOrigin: hostedFreeRelayOrigin,
       body: requestBody,
+      runtimeEnv,
     });
   }
 

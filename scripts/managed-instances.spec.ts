@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildManagedInstancePagesEnvConfig,
   buildManagedInstanceHostname,
   claimManagedInstanceTrial,
   createManagedInstanceTrialExpiry,
@@ -178,6 +179,40 @@ describe('managed instance registry helpers', () => {
     expect(resolveManagedInstancePagesAddress(null, 'clinic-five', 'pages.dev')).toEqual({
       routeHostname: 'clinic-five.pages.dev',
       pagesUrl: 'https://clinic-five.pages.dev',
+    });
+  });
+
+  it('builds the managed trial Pages env config without exposing the model key', () => {
+    expect(
+      buildManagedInstancePagesEnvConfig({
+        hostedFreeRelayOrigin: 'https://alpha1.bolt.gives',
+        hostedFreeRelaySecret: 'relay-secret',
+      }),
+    ).toEqual({
+      preview: {
+        env_vars: {
+          BOLT_HOSTED_FREE_RELAY_ORIGIN: {
+            type: 'plain_text',
+            value: 'https://alpha1.bolt.gives',
+          },
+          BOLT_HOSTED_FREE_RELAY_SECRET: {
+            type: 'plain_text',
+            value: 'relay-secret',
+          },
+        },
+      },
+      production: {
+        env_vars: {
+          BOLT_HOSTED_FREE_RELAY_ORIGIN: {
+            type: 'plain_text',
+            value: 'https://alpha1.bolt.gives',
+          },
+          BOLT_HOSTED_FREE_RELAY_SECRET: {
+            type: 'plain_text',
+            value: 'relay-secret',
+          },
+        },
+      },
     });
   });
 });

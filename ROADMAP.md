@@ -71,6 +71,8 @@ Release theme: turn the managed Cloudflare trial flow into a registration-first 
 - [x] Trial registrations are mirrored into the private admin panel database and linked back to assigned managed instances.
 - [x] The private operator URL `https://admin.bolt.gives` is now wired to the admin control surface on this server.
 - [x] Admin can review registered client profiles, live Cloudflare assignments, and stored outbound client email activity from one dashboard.
+- [x] Existing trial owners now land on a dedicated success page with the live URL, assigned hostname, expiry, and rollout details instead of returning to the registration form.
+- [x] Managed trial instances now receive the hosted `FREE` provider through a protected relay configuration, so `DeepSeek V3.2` works on trial instances without embedding the OpenRouter key in the Pages project.
 
 7. Self-host packaging and domain parity
 - [x] README now links directly to `https://create.bolt.gives` for the managed registration flow.
@@ -147,6 +149,7 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [x] Add an operator surface inside `Tenant Admin` that lists managed trial instances, status, expiry, and server-backed refresh/suspend actions.
 - [x] Keep Cloudflare operator credentials on the runtime service only; browser/operator pages receive sanitized instance metadata only.
 - [~] Implement automatic rollout from the current stable build to managed instances.
+- [~] Keep managed-instance runtime configuration in sync across retroactive fleet updates, not only new spawns.
 - [ ] Add health-verified rollback on failed updates.
 - [~] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
 

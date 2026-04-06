@@ -35,6 +35,7 @@ What the user does:
 - Complete the registration profile form
 - Choose a preferred Cloudflare subdomain
 - Submit the request
+- Land on a dedicated success page that shows the live trial URL, assigned hostname, expiry, and rollout details
 - Reuse the same trial instance for the rest of the 15-day window
 
 What the platform does:
@@ -45,6 +46,7 @@ What the platform does:
 - Stores and shows the actual Cloudflare-assigned `*.pages.dev` hostname when the preferred slug is already taken globally
 - Lets the operator manage refresh/suspend actions from `https://admin.bolt.gives`
 - Keeps Cloudflare and OpenRouter secrets on the server only
+- Bootstraps managed trial instances with the hosted `FREE` provider through an authenticated relay, so `DeepSeek V3.2` works immediately without exposing the OpenRouter key inside the trial instance
 
 Private operator surface:
 

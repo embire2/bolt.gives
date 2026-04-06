@@ -16,6 +16,8 @@
 - The public `/managed-instances` page now uses the same scrollable app-shell layout as the rest of the server-hosted control plane, so long registration/operator content remains usable on live domains.
 - Managed Cloudflare trial instances now persist and display the real Cloudflare-assigned `*.pages.dev` hostname instead of assuming the requested slug is always the live public URL.
 - Self-hosted deployments no longer need to hard-code `admin.bolt.gives` in the shell; the app now respects the configured public admin/create URLs.
+- `create.bolt.gives` now lands existing trial owners on a dedicated success page with the live URL, assigned hostname, expiry, and rollout details instead of effectively dropping them back into the registration form.
+- Managed Cloudflare trial instances now bootstrap the hosted `FREE` provider through an authenticated relay path, so `DeepSeek V3.2` works immediately on trial instances without shipping the protected OpenRouter key into those Pages projects.
 
 ## v3.0.8 (2026-04-04)
 

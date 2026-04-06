@@ -85,6 +85,33 @@ export function resolveManagedInstancePagesAddress(project, fallbackProjectName,
   };
 }
 
+export function buildManagedInstancePagesEnvConfig({ hostedFreeRelayOrigin = '', hostedFreeRelaySecret = '' } = {}) {
+  const envVars = {};
+
+  if (String(hostedFreeRelayOrigin || '').trim()) {
+    envVars.BOLT_HOSTED_FREE_RELAY_ORIGIN = {
+      type: 'plain_text',
+      value: String(hostedFreeRelayOrigin).trim(),
+    };
+  }
+
+  if (String(hostedFreeRelaySecret || '').trim()) {
+    envVars.BOLT_HOSTED_FREE_RELAY_SECRET = {
+      type: 'plain_text',
+      value: String(hostedFreeRelaySecret).trim(),
+    };
+  }
+
+  return {
+    preview: {
+      env_vars: Object.keys(envVars).length ? envVars : null,
+    },
+    production: {
+      env_vars: Object.keys(envVars).length ? envVars : null,
+    },
+  };
+}
+
 export function createManagedInstanceSessionSecret() {
   return crypto.randomBytes(24).toString('hex');
 }

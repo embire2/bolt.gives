@@ -37,7 +37,12 @@ import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
-import { relayHostedFreeRequest, resolveHostedFreeRelayOrigin } from '~/lib/.server/llm/hosted-free-relay';
+import {
+  isHostedFreeRelayAuthorized,
+  isHostedFreeRelayRequest,
+  relayHostedFreeRequest,
+  resolveHostedFreeRelayOrigin,
+} from '~/lib/.server/llm/hosted-free-relay';
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
@@ -242,12 +247,24 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     runtimeEnv,
   });
 
+  if (
+    isHostedFreeRelayRequest(request) &&
+    !isHostedFreeRelayAuthorized({
+      request,
+      runtimeEnv,
+      providerName: selectedProvider,
+    })
+  ) {
+    return new Response('Invalid hosted FREE relay credentials.', { status: 403 });
+  }
+
   if (hostedFreeRelayOrigin) {
     return relayHostedFreeRequest({
       request,
       requestUrl,
       relayOrigin: hostedFreeRelayOrigin,
       body: requestPayload,
+      runtimeEnv,
     });
   }
 
