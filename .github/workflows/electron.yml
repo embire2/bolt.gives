@@ -67,7 +67,8 @@ jobs:
       - name: Build Electron app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: "--max_old_space_size=4096"
+          NODE_OPTIONS: "--max_old_space_size=8192"
+          ELECTRON_BUILDER_NODE_OPTIONS: "--max_old_space_size=8192"
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
             pnpm run electron:build:win
@@ -89,10 +90,14 @@ jobs:
           # For tag pushes, name the release as "Release <tagname>", otherwise "Electron Release".
           name: ${{ (github.event_name == 'push' && github.ref_type == 'tag') && format('Release {0}', github.ref_name) || 'Electron Release' }}
           files: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.deb
-            dist/*.AppImage
+            dist/*x64.exe
+            dist/*arm64.exe
+            dist/*x64.dmg
+            dist/*arm64.dmg
+            dist/*x64.deb
+            dist/*arm64.deb
+            dist/*x64.AppImage
+            dist/*arm64.AppImage
             dist/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
