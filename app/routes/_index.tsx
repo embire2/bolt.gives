@@ -3,7 +3,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { BaseChat } from '~/components/chat/BaseChat';
 import { Chat } from '~/components/chat/Chat.client';
 import { Header } from '~/components/header/Header';
-import { getPublicUrlConfig } from '~/lib/public-urls';
+import { getCreateRedirectHost, getPublicUrlConfig } from '~/lib/public-urls';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import { APP_VERSION } from '~/lib/version';
 
@@ -16,13 +16,14 @@ export const meta: MetaFunction = () => {
 
 export const loader = ({ request }: LoaderFunctionArgs) => {
   const host = new URL(request.url).host.toLowerCase();
-  const { adminHost, createHost } = getPublicUrlConfig();
+  const { adminHost } = getPublicUrlConfig(undefined, request.url);
+  const createRedirectHost = getCreateRedirectHost();
 
   if (host === adminHost) {
     return redirect('/tenant-admin');
   }
 
-  if (host === createHost) {
+  if (host === createRedirectHost) {
     return redirect('/managed-instances');
   }
 

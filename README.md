@@ -344,7 +344,19 @@ Windows/macOS note:
 
 ### 1. Recommended: run the installer
 
-Download the installer from GitHub, inspect it, then run it:
+Download the installer from GitHub, inspect it, then run it.
+
+Simplest path:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh -o install-bolt-gives.sh
+chmod +x install-bolt-gives.sh
+./install-bolt-gives.sh
+```
+
+If you run it without domain or PostgreSQL flags, the installer now prompts interactively for the missing values.
+
+Fully explicit path:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/main/install.sh -o install-bolt-gives.sh
@@ -366,6 +378,7 @@ The installer will:
 - clone or update `https://github.com/embire2/bolt.gives`
 - create `.env.local` from `.env.example` if it does not exist
 - write self-host public URLs into `.env.local` for:
+  - `BOLT_APP_PUBLIC_URL`
   - `BOLT_ADMIN_PANEL_PUBLIC_URL`
   - `BOLT_CREATE_TRIAL_PUBLIC_URL`
 - write local PostgreSQL connection settings into `.env.local` for:
@@ -382,6 +395,16 @@ The installer will:
   - `bolt-gives-collab`
   - `bolt-gives-webbrowse`
   - `bolt-gives-runtime`
+
+If the domain or PostgreSQL flags are omitted, the installer now prompts interactively for:
+
+- public app domain
+- public admin domain
+- optional public create/trial domain
+- Let's Encrypt contact email
+- local PostgreSQL database name
+- local PostgreSQL user
+- optional local PostgreSQL password (blank = generated)
 
 Recommended real-world installer command:
 
@@ -469,6 +492,10 @@ Recommended public checks after DNS is pointed:
 - `https://code.example.com`
 - `https://admin.example.com`
 - `https://create.example.com`
+
+If the user skips a dedicated create domain, the installer falls back to:
+
+- `https://code.example.com/managed-instances`
 
 ### 4. Manual install alternative
 

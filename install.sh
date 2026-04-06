@@ -17,14 +17,23 @@ APP_DOMAIN="${APP_DOMAIN:-}"
 ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
 CREATE_DOMAIN="${CREATE_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
-POSTGRES_DB="${POSTGRES_DB:-bolt_gives_admin}"
-POSTGRES_USER="${POSTGRES_USER:-bolt_gives_admin}"
+DEFAULT_POSTGRES_DB="bolt_gives_admin"
+DEFAULT_POSTGRES_USER="bolt_gives_admin"
+POSTGRES_DB="${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}"
+POSTGRES_USER="${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 INSTALL_DEPS=1
 INSTALL_SERVICE=1
 BUILD_APP=1
 INSTALL_POSTGRES=1
 INSTALL_CADDY=1
+APP_DOMAIN_SET_BY_FLAG=0
+ADMIN_DOMAIN_SET_BY_FLAG=0
+CREATE_DOMAIN_SET_BY_FLAG=0
+LETSENCRYPT_EMAIL_SET_BY_FLAG=0
+POSTGRES_DB_SET_BY_FLAG=0
+POSTGRES_USER_SET_BY_FLAG=0
+POSTGRES_PASSWORD_SET_BY_FLAG=0
 
 APP_SERVICE="${SERVICE_PREFIX}-app"
 COLLAB_SERVICE="${SERVICE_PREFIX}-collab"
@@ -51,6 +60,8 @@ Options:
   --postgres-user NAME Local PostgreSQL user name (default: bolt_gives_admin)
   --postgres-password VALUE
                        Local PostgreSQL password (generated if omitted)
+  --letsencrypt-email VALUE
+                       Contact email for Let's Encrypt / Caddy
   --skip-deps          Skip apt, Node.js, and pnpm installation
   --skip-service       Skip systemd service installation/startup
   --skip-build         Skip production build
@@ -117,14 +128,22 @@ parse_args() {
         ;;
       --app-domain)
         APP_DOMAIN="$2"
+        APP_DOMAIN_SET_BY_FLAG=1
         shift 2
         ;;
       --admin-domain)
         ADMIN_DOMAIN="$2"
+        ADMIN_DOMAIN_SET_BY_FLAG=1
         shift 2
         ;;
       --create-domain)
         CREATE_DOMAIN="$2"
+        CREATE_DOMAIN_SET_BY_FLAG=1
+        shift 2
+        ;;
+      --letsencrypt-email)
+        LETSENCRYPT_EMAIL="$2"
+        LETSENCRYPT_EMAIL_SET_BY_FLAG=1
         shift 2
         ;;
       --skip-postgres)
@@ -137,14 +156,17 @@ parse_args() {
         ;;
       --postgres-db)
         POSTGRES_DB="$2"
+        POSTGRES_DB_SET_BY_FLAG=1
         shift 2
         ;;
       --postgres-user)
         POSTGRES_USER="$2"
+        POSTGRES_USER_SET_BY_FLAG=1
         shift 2
         ;;
       --postgres-password)
         POSTGRES_PASSWORD="$2"
+        POSTGRES_PASSWORD_SET_BY_FLAG=1
         shift 2
         ;;
       --skip-deps)
@@ -183,6 +205,131 @@ generate_secret() {
 import secrets
 print(secrets.token_hex(24))
 PY
+}
+
+is_interactive_install() {
+  [[ -t 0 && -t 1 && "${BOLT_INSTALL_NONINTERACTIVE:-0}" != "1" ]]
+}
+
+prompt_line() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local answer=""
+
+  if [[ -n "${default_value}" ]]; then
+    read -r -p "${prompt} [${default_value}]: " answer || true
+    printf '%s' "${answer:-${default_value}}"
+    return
+  fi
+
+  read -r -p "${prompt}: " answer || true
+  printf '%s' "${answer}"
+}
+
+prompt_required_line() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local answer=""
+
+  while true; do
+    answer="$(prompt_line "${prompt}" "${default_value}")"
+
+    if [[ -n "${answer}" ]]; then
+      printf '%s' "${answer}"
+      return
+    fi
+
+    printf 'A value is required.\n' >&2
+  done
+}
+
+prompt_secret_line() {
+  local prompt="$1"
+  local answer=""
+
+  read -r -s -p "${prompt}: " answer || true
+  printf '\n' >&2
+  printf '%s' "${answer}"
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default_answer="${2:-Y}"
+  local answer=""
+
+  while true; do
+    read -r -p "${prompt} [${default_answer}/$( [[ "${default_answer}" == "Y" ]] && printf 'n' || printf 'y' )]: " answer || true
+    answer="${answer:-${default_answer}}"
+    answer="${answer^^}"
+
+    case "${answer}" in
+      Y|YES)
+        return 0
+        ;;
+      N|NO)
+        return 1
+        ;;
+    esac
+  done
+}
+
+prompt_for_missing_config() {
+  if ! is_interactive_install; then
+    return
+  fi
+
+  if [[ "${INSTALL_CADDY}" -eq 1 ]]; then
+    if [[ -z "${APP_DOMAIN}" && -z "${ADMIN_DOMAIN}" && "${APP_DOMAIN_SET_BY_FLAG}" -eq 0 && "${ADMIN_DOMAIN_SET_BY_FLAG}" -eq 0 ]]; then
+      if prompt_yes_no "Configure public app/admin domains with Caddy and Let's Encrypt now?" "Y"; then
+        APP_DOMAIN="$(normalize_domain "$(prompt_required_line "Public app domain (for example: code.example.com)")")"
+        ADMIN_DOMAIN="$(normalize_domain "$(prompt_required_line "Public admin domain (for example: admin.example.com)")")"
+
+        if [[ "${CREATE_DOMAIN_SET_BY_FLAG}" -eq 0 ]]; then
+          CREATE_DOMAIN="$(normalize_domain "$(prompt_line "Public create/trial domain (optional, for example: create.example.com)")")"
+        fi
+      else
+        INSTALL_CADDY=0
+      fi
+    else
+      if [[ -z "${APP_DOMAIN}" ]]; then
+        APP_DOMAIN="$(normalize_domain "$(prompt_required_line "Public app domain (required for Caddy)")")"
+      fi
+
+      if [[ -z "${ADMIN_DOMAIN}" ]]; then
+        ADMIN_DOMAIN="$(normalize_domain "$(prompt_required_line "Public admin domain (required for Caddy)")")"
+      fi
+
+      if [[ -z "${CREATE_DOMAIN}" && "${CREATE_DOMAIN_SET_BY_FLAG}" -eq 0 ]]; then
+        CREATE_DOMAIN="$(normalize_domain "$(prompt_line "Public create/trial domain (optional)")")"
+      fi
+    fi
+
+    if [[ "${INSTALL_CADDY}" -eq 1 && -n "${APP_DOMAIN}" && -n "${ADMIN_DOMAIN}" && -z "${LETSENCRYPT_EMAIL}" && "${LETSENCRYPT_EMAIL_SET_BY_FLAG}" -eq 0 ]]; then
+      LETSENCRYPT_EMAIL="$(prompt_line "Let's Encrypt contact email (recommended)" "hello@${ADMIN_DOMAIN}")"
+    fi
+  fi
+
+  if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+    if [[ "${POSTGRES_DB_SET_BY_FLAG}" -eq 0 && "${POSTGRES_USER_SET_BY_FLAG}" -eq 0 && "${POSTGRES_PASSWORD_SET_BY_FLAG}" -eq 0 ]]; then
+      if ! prompt_yes_no "Install and configure local PostgreSQL for the private admin panel?" "Y"; then
+        INSTALL_POSTGRES=0
+      fi
+    fi
+
+    if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
+      if [[ "${POSTGRES_DB_SET_BY_FLAG}" -eq 0 ]]; then
+        POSTGRES_DB="$(prompt_required_line "Local PostgreSQL database name" "${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}")"
+      fi
+
+      if [[ "${POSTGRES_USER_SET_BY_FLAG}" -eq 0 ]]; then
+        POSTGRES_USER="$(prompt_required_line "Local PostgreSQL user name" "${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}")"
+      fi
+
+      if [[ "${POSTGRES_PASSWORD_SET_BY_FLAG}" -eq 0 && -z "${POSTGRES_PASSWORD}" ]]; then
+        POSTGRES_PASSWORD="$(prompt_secret_line "Local PostgreSQL password (leave blank to generate)")"
+      fi
+    fi
+  fi
 }
 
 validate_sql_identifier() {
@@ -363,6 +510,7 @@ prepare_env_file() {
   upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
   upsert_env_line "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET" "${existing_cookie_secret}"
+  upsert_env_line "${env_file}" "BOLT_APP_PUBLIC_URL" "${APP_DOMAIN:+https://${APP_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_ADMIN_PANEL_PUBLIC_URL" "${ADMIN_DOMAIN:+https://${ADMIN_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_CREATE_TRIAL_PUBLIC_URL" "${CREATE_DOMAIN:+https://${CREATE_DOMAIN}}"
 
@@ -701,6 +849,7 @@ main() {
   parse_args "$@"
   require_non_root
   require_ubuntu
+  prompt_for_missing_config
   normalize_config_inputs
 
   if [[ "${INSTALL_DEPS}" -eq 1 ]]; then

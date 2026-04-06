@@ -7,6 +7,7 @@
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 - README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
+- The self-host installer now supports an interactive setup path when domain/PostgreSQL flags are omitted, and self-hosted trial links now fall back to the local app domain’s `/managed-instances` route instead of pointing back to the hosted `create.bolt.gives` domain.
 
 ### Fixed
 

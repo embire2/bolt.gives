@@ -76,6 +76,8 @@ Release theme: turn the managed Cloudflare trial flow into a registration-first 
 - [x] README now links directly to `https://create.bolt.gives` for the managed registration flow.
 - [x] The app can now redirect a dedicated create domain to `/managed-instances`, matching the admin-domain redirect behavior.
 - [x] The installer now supports custom app/admin/create domains for VPS self-hosting.
+- [x] The installer now prompts interactively for domain/PostgreSQL values when CLI flags are omitted.
+- [x] Self-hosted installs now fall back to the local app domain’s `/managed-instances` route when no dedicated create domain is configured.
 - [x] The installer now provisions a local PostgreSQL service for the private admin/operator control plane.
 - [x] The installer now configures Caddy for public HTTPS reverse-proxy on the chosen self-hosted domains.
 

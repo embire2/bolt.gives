@@ -24,9 +24,42 @@ function normalizeConfiguredUrl(rawValue: string | undefined, fallbackUrl: strin
   }
 }
 
-export function getPublicUrlConfig(env: EnvLike = typeof process !== 'undefined' ? process.env : {}): PublicUrlConfig {
+function normalizeOptionalUrl(rawValue: string | undefined) {
+  const value = String(rawValue || '').trim();
+
+  if (!value) {
+    return '';
+  }
+
+  try {
+    return new URL(value).toString().replace(/\/$/, '');
+  } catch {
+    return new URL(`https://${value}`).toString().replace(/\/$/, '');
+  }
+}
+
+function normalizeRequestOrigin(requestUrl: string | undefined) {
+  if (!requestUrl) {
+    return '';
+  }
+
+  return new URL(requestUrl).origin.replace(/\/$/, '');
+}
+
+export function getCreateRedirectHost(env: EnvLike = typeof process !== 'undefined' ? process.env : {}) {
+  const configuredCreateTrialUrl = normalizeOptionalUrl(env.BOLT_CREATE_TRIAL_PUBLIC_URL) || DEFAULT_CREATE_TRIAL_URL;
+  return new URL(configuredCreateTrialUrl).host.toLowerCase();
+}
+
+export function getPublicUrlConfig(
+  env: EnvLike = typeof process !== 'undefined' ? process.env : {},
+  requestUrl?: string,
+): PublicUrlConfig {
   const adminPanelUrl = normalizeConfiguredUrl(env.BOLT_ADMIN_PANEL_PUBLIC_URL, DEFAULT_ADMIN_PANEL_URL);
-  const createTrialUrl = normalizeConfiguredUrl(env.BOLT_CREATE_TRIAL_PUBLIC_URL, DEFAULT_CREATE_TRIAL_URL);
+  const appPublicUrl = normalizeOptionalUrl(env.BOLT_APP_PUBLIC_URL) || normalizeRequestOrigin(requestUrl);
+  const configuredCreateTrialUrl = normalizeOptionalUrl(env.BOLT_CREATE_TRIAL_PUBLIC_URL);
+  const createTrialUrl =
+    configuredCreateTrialUrl || (appPublicUrl ? `${appPublicUrl}/managed-instances` : DEFAULT_CREATE_TRIAL_URL);
 
   return {
     adminPanelUrl,
