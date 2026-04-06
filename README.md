@@ -468,6 +468,7 @@ Hosted-instance note:
 - If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked hosted coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
 - The hosted `FREE` coder is pinned to `deepseek/deepseek-v3.2`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
+- Managed Cloudflare trial instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 
 ### 3. Verify the install
 
@@ -760,6 +761,7 @@ If the UI loads but the FREE provider does not work:
 
 - confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
 - redeploy the project after saving env changes
+- for managed 15-day trial instances, refresh the trial deployment from the operator/runtime control plane so the Pages relay secret is applied; end users should never need to enter a FREE API key manually
 
 If the deploy succeeds but the URL still shows an older release:
 

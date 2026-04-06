@@ -7,7 +7,11 @@ export const HOSTED_FREE_RELAY_HEADER = 'X-Bolt-Hosted-Free-Relay';
 export const HOSTED_FREE_RELAY_SECRET_HEADER = 'X-Bolt-Hosted-Free-Relay-Secret';
 
 function shouldUseDefaultRelayHost(hostname: string) {
-  return HOSTED_FREE_PROXY_HOSTS.has(hostname) || hostname.endsWith('.bolt-gives.pages.dev');
+  if (HOSTED_FREE_PROXY_HOSTS.has(hostname) || hostname.endsWith('.bolt-gives.pages.dev')) {
+    return true;
+  }
+
+  return hostname.endsWith('.pages.dev') && hostname !== 'pages.dev';
 }
 
 export function resolveHostedFreeRelayOrigin(options: {
@@ -24,13 +28,15 @@ export function resolveHostedFreeRelayOrigin(options: {
     return undefined;
   }
 
+  const relaySecret = getHostedFreeRelaySecret(options.runtimeEnv);
   const configuredRelayOrigin =
     normalizeHttpUrl(options.runtimeEnv?.HOSTED_FREE_RELAY_ORIGIN) ||
     normalizeHttpUrl(options.runtimeEnv?.BOLT_HOSTED_FREE_RELAY_ORIGIN);
-  const defaultRelayOrigin = shouldUseDefaultRelayHost(options.requestUrl.hostname)
-    ? DEFAULT_HOSTED_FREE_RELAY_ORIGIN
-    : undefined;
-  const relayOrigin = configuredRelayOrigin || defaultRelayOrigin;
+  const defaultRelayOrigin =
+    relaySecret && shouldUseDefaultRelayHost(options.requestUrl.hostname)
+      ? DEFAULT_HOSTED_FREE_RELAY_ORIGIN
+      : undefined;
+  const relayOrigin = relaySecret ? configuredRelayOrigin || defaultRelayOrigin : undefined;
 
   if (!relayOrigin || relayOrigin === options.requestUrl.origin) {
     return undefined;

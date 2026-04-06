@@ -406,7 +406,7 @@ async function writeManagedInstanceRegistry(registry) {
   await fs.writeFile(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
 }
 
-async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {} } = {}) {
+async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {}, input = '' } = {}) {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
@@ -429,6 +429,15 @@ async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env =
     });
 
     child.on('error', reject);
+
+    if (child.stdin) {
+      if (input) {
+        child.stdin.write(input);
+      }
+
+      child.stdin.end();
+    }
+
     child.on('close', (code) => {
       resolve({
         code: Number(code || 0),
@@ -509,8 +518,32 @@ async function fetchCloudflarePagesProject(projectName) {
 function buildManagedInstanceDeploymentConfigs() {
   return buildManagedInstancePagesEnvConfig({
     hostedFreeRelayOrigin: MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN,
-    hostedFreeRelaySecret: MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
   });
+}
+
+async function upsertManagedInstanceProjectSecret(instance, secretName, secretValue) {
+  const normalizedSecretValue = String(secretValue || '').trim();
+
+  if (!normalizedSecretValue) {
+    return;
+  }
+
+  const config = getManagedInstanceCloudflareConfig();
+  const result = await runManagedInstanceProcess(
+    'pnpm',
+    ['exec', 'wrangler', 'pages', 'secret', 'put', secretName, '--project-name', instance.projectName],
+    {
+      env: {
+        CLOUDFLARE_API_TOKEN: config.apiToken,
+        CLOUDFLARE_ACCOUNT_ID: config.accountId,
+      },
+      input: normalizedSecretValue,
+    },
+  );
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || `Failed to set Pages secret ${secretName}.`);
+  }
 }
 
 async function configureManagedInstanceProject(instance) {
@@ -578,6 +611,11 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
 
   await fs.access(MANAGED_INSTANCE_DEPLOY_DIR, fsConstants.R_OK);
   await ensureManagedInstanceProjectExists(instance);
+  await upsertManagedInstanceProjectSecret(
+    instance,
+    'BOLT_HOSTED_FREE_RELAY_SECRET',
+    MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
+  );
   await configureManagedInstanceProject(instance);
 
   const result = await runManagedInstanceProcess(

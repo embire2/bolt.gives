@@ -186,7 +186,6 @@ describe('managed instance registry helpers', () => {
     expect(
       buildManagedInstancePagesEnvConfig({
         hostedFreeRelayOrigin: 'https://alpha1.bolt.gives',
-        hostedFreeRelaySecret: 'relay-secret',
       }),
     ).toEqual({
       preview: {
@@ -195,10 +194,6 @@ describe('managed instance registry helpers', () => {
             type: 'plain_text',
             value: 'https://alpha1.bolt.gives',
           },
-          BOLT_HOSTED_FREE_RELAY_SECRET: {
-            type: 'plain_text',
-            value: 'relay-secret',
-          },
         },
       },
       production: {
@@ -206,10 +201,6 @@ describe('managed instance registry helpers', () => {
           BOLT_HOSTED_FREE_RELAY_ORIGIN: {
             type: 'plain_text',
             value: 'https://alpha1.bolt.gives',
-          },
-          BOLT_HOSTED_FREE_RELAY_SECRET: {
-            type: 'plain_text',
-            value: 'relay-secret',
           },
         },
       },

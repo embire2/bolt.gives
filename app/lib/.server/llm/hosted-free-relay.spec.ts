@@ -6,7 +6,7 @@ import {
 } from './hosted-free-relay';
 
 describe('resolveHostedFreeRelayOrigin', () => {
-  it('enables the official relay for the public pages host when the FREE key is absent', () => {
+  it('does not enable the relay without a relay secret', () => {
     const relayOrigin = resolveHostedFreeRelayOrigin({
       requestUrl: new URL('https://bolt-gives.pages.dev/api/chat'),
       providerName: 'FREE',
@@ -14,15 +14,26 @@ describe('resolveHostedFreeRelayOrigin', () => {
       runtimeEnv: {},
     });
 
+    expect(relayOrigin).toBeUndefined();
+  });
+
+  it('enables the official relay for the public pages host when the relay secret is present', () => {
+    const relayOrigin = resolveHostedFreeRelayOrigin({
+      requestUrl: new URL('https://bolt-gives.pages.dev/api/chat'),
+      providerName: 'FREE',
+      apiKey: '',
+      runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
+    });
+
     expect(relayOrigin).toBe('https://alpha1.bolt.gives');
   });
 
-  it('enables the official relay for preview pages subdomains when the FREE key is absent', () => {
+  it('enables the official relay for managed pages.dev subdomains when the relay secret is present', () => {
     const relayOrigin = resolveHostedFreeRelayOrigin({
-      requestUrl: new URL('https://0e0a4d2d.bolt-gives.pages.dev/api/chat'),
+      requestUrl: new URL('https://team2-6og.pages.dev/api/chat'),
       providerName: 'FREE',
       apiKey: '',
-      runtimeEnv: {},
+      runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
     });
 
     expect(relayOrigin).toBe('https://alpha1.bolt.gives');

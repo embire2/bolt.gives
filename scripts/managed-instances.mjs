@@ -85,20 +85,13 @@ export function resolveManagedInstancePagesAddress(project, fallbackProjectName,
   };
 }
 
-export function buildManagedInstancePagesEnvConfig({ hostedFreeRelayOrigin = '', hostedFreeRelaySecret = '' } = {}) {
+export function buildManagedInstancePagesEnvConfig({ hostedFreeRelayOrigin = '' } = {}) {
   const envVars = {};
 
   if (String(hostedFreeRelayOrigin || '').trim()) {
     envVars.BOLT_HOSTED_FREE_RELAY_ORIGIN = {
       type: 'plain_text',
       value: String(hostedFreeRelayOrigin).trim(),
-    };
-  }
-
-  if (String(hostedFreeRelaySecret || '').trim()) {
-    envVars.BOLT_HOSTED_FREE_RELAY_SECRET = {
-      type: 'plain_text',
-      value: String(hostedFreeRelaySecret).trim(),
     };
   }
 

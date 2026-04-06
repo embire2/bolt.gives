@@ -18,6 +18,7 @@
 - Self-hosted deployments no longer need to hard-code `admin.bolt.gives` in the shell; the app now respects the configured public admin/create URLs.
 - `create.bolt.gives` now lands existing trial owners on a dedicated success page with the live URL, assigned hostname, expiry, and rollout details instead of effectively dropping them back into the registration form.
 - Managed Cloudflare trial instances now bootstrap the hosted `FREE` provider through an authenticated relay path, so `DeepSeek V3.2` works immediately on trial instances without shipping the protected OpenRouter key into those Pages projects.
+- Managed Cloudflare trial instances now provision the hosted FREE relay credential as a Pages secret on the trial project itself, and existing trial projects are refreshed onto the same path retroactively so live `*.pages.dev` instances stop reporting `FREE` as unconfigured.
 
 ## v3.0.8 (2026-04-04)
 
