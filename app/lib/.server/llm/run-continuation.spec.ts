@@ -209,4 +209,30 @@ describe('shouldForceRunContinuation', () => {
       startCommand: 'npm run dev',
     });
   });
+
+  it('replays explicit runtime commands when preview was never verified', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="doctor app">
+<boltAction type="file" filePath="/home/project/package.json">{
+  "name": "doctor-scheduler",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="/home/project/src/App.jsx">export default function App(){return <div>Doctor schedule</div>;}</boltAction>
+<boltAction type="shell">npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      setupCommand: 'npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile',
+      startCommand: 'pnpm run dev',
+    });
+    expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">pnpm run dev</boltAction>');
+  });
 });

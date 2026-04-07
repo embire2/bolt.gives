@@ -44,6 +44,7 @@ const STARTER_BOOTSTRAP_RE =
   /Bolt is initializing your project|template import is done|built-in .*starter fallback|fallback starter/i;
 const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
 const START_ACTION_RE = /<boltAction[^>]*type="start"/i;
+const START_ACTION_WITH_CONTENT_RE = /<boltAction[^>]*type="start"[^>]*>([\s\S]*?)<\/boltAction>/gi;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type="file"/i;
 const FILE_PATH_RE = /<boltAction[^>]*type="file"[^>]*filePath=(["'])([^"']+)\1[^>]*>/gi;
@@ -72,6 +73,21 @@ function extractShellCommands(assistantContent: string): string[] {
   let match: RegExpExecArray | null;
 
   while ((match = SHELL_ACTION_RE.exec(assistantContent)) !== null) {
+    const command = match[1]?.trim();
+
+    if (command) {
+      commands.push(command);
+    }
+  }
+
+  return commands;
+}
+
+function extractStartCommands(assistantContent: string): string[] {
+  const commands: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = START_ACTION_WITH_CONTENT_RE.exec(assistantContent)) !== null) {
     const command = match[1]?.trim();
 
     if (command) {
@@ -208,28 +224,72 @@ function hasOnlyBootstrapShellCommands(commands: string[]): boolean {
   return foundBootstrapSignal;
 }
 
+function extractSetupCommandFromShellCommands(commands: string[]): string | undefined {
+  for (const command of commands) {
+    const setupSegments = splitCommandSegments(command).filter(
+      (segment) =>
+        INSTALL_COMMAND_RE.test(segment) ||
+        /^npx\s+update-browserslist-db@latest\b/i.test(segment) ||
+        /^corepack\s+enable\b/i.test(segment),
+    );
+
+    if (setupSegments.length > 0) {
+      return setupSegments.join(' && ');
+    }
+  }
+
+  return undefined;
+}
+
+function extractStartCommandFromShellCommands(commands: string[]): string | undefined {
+  for (const command of commands) {
+    const startSegment = splitCommandSegments(command).find((segment) => START_COMMAND_RE.test(segment));
+
+    if (startSegment) {
+      return startSegment;
+    }
+  }
+
+  return undefined;
+}
+
 export async function synthesizeRunHandoff(options: {
   assistantContent: string;
 }): Promise<SynthesizedRunHandoff | null> {
   const { assistantContent } = options;
 
-  if (START_ACTION_RE.test(assistantContent)) {
-    return null;
-  }
-
   const shellCommands = extractShellCommands(assistantContent);
-
-  if (
-    shellCommands.some((command) => splitCommandSegments(command).some((segment) => START_COMMAND_RE.test(segment)))
-  ) {
-    return null;
-  }
-
   const fileActions = extractFileActions(assistantContent);
   const filePaths = fileActions.map((file) => file.path);
 
   if (!hasImplementationFileAction(filePaths)) {
     return null;
+  }
+
+  const explicitStartCommand =
+    extractStartCommands(assistantContent)[0] || extractStartCommandFromShellCommands(shellCommands);
+  const explicitSetupCommand = extractSetupCommandFromShellCommands(shellCommands);
+
+  if (explicitStartCommand) {
+    const actionBlocks = [
+      explicitSetupCommand ? `<boltAction type="shell">${explicitSetupCommand}</boltAction>` : null,
+      `<boltAction type="start">${explicitStartCommand}</boltAction>`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return {
+      reason: 'inferred-project-commands',
+      setupCommand: explicitSetupCommand,
+      startCommand: explicitStartCommand,
+      followupMessage:
+        'The generated project already includes runtime commands. I am replaying them through the workspace runner so preview can start now.',
+      assistantContent: `The generated project already includes runtime commands. I am replaying them through the workspace runner so preview can start now.
+
+<boltArtifact id="runtime-handoff" title="Runtime Handoff">
+${actionBlocks}
+</boltArtifact>`,
+    };
   }
 
   const commands = await detectProjectCommands(fileActions);

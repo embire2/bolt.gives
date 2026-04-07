@@ -117,6 +117,7 @@ Current `v3.0.8` release line:
 - The hosted free model runs through a server-side OpenRouter token that is not exposed to browser users.
 - Hosted FREE now exposes only `DeepSeek V3.2`, so the installed product behaves exactly as the UI advertises.
 - Hosted FREE app-generation requests now run directly against the coding model instead of being forced through the fallback starter bootstrap path first, which restores prompt-to-code behavior on live hosted instances.
+- If a generated run already emitted install/start commands but the preview still was not verified, bolt.gives now replays those runtime commands through the workspace runner instead of looping back into another coding continuation.
 - The live commentary/timeline stack now stays readable while a run is active because the prompt surface no longer overlays those updates once coding starts.
 - The browser now reads provider metadata from a lightweight catalog, so provider SDKs stay on the server path and users still keep their own API-key flows for supported providers.
 - Cloudflare Pages / preview deployments now resolve hosted FREE credentials more reliably, including relay support when the preview runtime does not have the managed FREE secret locally configured.

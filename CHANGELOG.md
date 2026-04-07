@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- Runs that already emitted install/start commands but never reached a verified preview now replay those runtime commands through the workspace runner instead of falling back to another model continuation loop.
 - Hosted FREE runs no longer force every project request through the client-side starter bootstrap path on hosted runtime, which restores direct coding/execution for generated app requests instead of trapping users on the fallback starter shell.
 - The chat prompt surface no longer sits in a sticky overlay above the commentary/timeline stack after a run starts, so live agent updates remain readable instead of being hidden behind the prompt box.
 - `https://admin.bolt.gives` now completes Let’s Encrypt issuance correctly after DNS becomes live, and the private operator panel is reachable over HTTPS on the server-hosted deployment.

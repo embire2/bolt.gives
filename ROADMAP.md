@@ -118,6 +118,7 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [x] Keep `admin.bolt.gives` operator sign-in on a browser-native cookie redirect path so the dashboard loads cleanly after authentication instead of relying on fragile SPA handoffs.
 - [x] Persist and show the real Cloudflare-assigned Pages hostname for managed trials so clients do not get sent to the wrong `*.pages.dev` site when Cloudflare appends a suffix.
 - [x] Keep live agent updates readable by letting the prompt box flow with the page instead of covering the commentary/timeline stack.
+- [x] Replay generated install/start commands through the workspace runner whenever a run ended without a verified preview, instead of falling back immediately to another model continuation.
 - [~] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
 - [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
 
