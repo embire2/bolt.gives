@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Hosted FREE runs no longer force every project request through the client-side starter bootstrap path on hosted runtime, which restores direct coding/execution for generated app requests instead of trapping users on the fallback starter shell.
+- The chat prompt surface no longer sits in a sticky overlay above the commentary/timeline stack after a run starts, so live agent updates remain readable instead of being hidden behind the prompt box.
 - `https://admin.bolt.gives` now completes Let’s Encrypt issuance correctly after DNS becomes live, and the private operator panel is reachable over HTTPS on the server-hosted deployment.
 - Tenant Admin sign-in on `https://admin.bolt.gives` now completes with a proper cookie-backed `303` document redirect, so the authenticated operator dashboard loads immediately after login instead of leaving the browser on the bootstrap sign-in view.
 - The public `/managed-instances` page now uses the same scrollable app-shell layout as the rest of the server-hosted control plane, so long registration/operator content remains usable on live domains.

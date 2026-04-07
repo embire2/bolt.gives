@@ -50,15 +50,51 @@ const messageParser = new EnhancedStreamingMessageParser({
   },
 });
 
-const extractTextContent = (message: Message) => {
-  if (!message?.content) {
+function extractTextFromParts(parts: unknown): string {
+  if (!Array.isArray(parts)) {
     return '';
   }
 
-  return Array.isArray(message.content)
-    ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
-    : message.content;
-};
+  return parts
+    .map((part) => {
+      if (!part || typeof part !== 'object') {
+        return '';
+      }
+
+      const candidate = part as { type?: string; text?: unknown };
+
+      return candidate.type === 'text' && typeof candidate.text === 'string' ? candidate.text : '';
+    })
+    .join('');
+}
+
+export function extractMessageTextContent(message: Message): string {
+  if (!message) {
+    return '';
+  }
+
+  if (typeof message.content === 'string' && message.content.length > 0) {
+    return message.content;
+  }
+
+  if (Array.isArray(message.content)) {
+    const contentText = extractTextFromParts(message.content);
+
+    if (contentText.length > 0) {
+      return contentText;
+    }
+  }
+
+  if ('parts' in message) {
+    const partsText = extractTextFromParts((message as Message & { parts?: unknown }).parts);
+
+    if (partsText.length > 0) {
+      return partsText;
+    }
+  }
+
+  return '';
+}
 
 export function useMessageParser() {
   const [parsedMessages, setParsedMessages] = useState<{ [key: number]: string }>({});
@@ -73,7 +109,7 @@ export function useMessageParser() {
 
     for (const [index, message] of messages.entries()) {
       if (message.role === 'assistant' || message.role === 'user') {
-        const newParsedContent = messageParser.parse(message.id, extractTextContent(message));
+        const newParsedContent = messageParser.parse(message.id, extractMessageTextContent(message));
         setParsedMessages((prevParsed) => ({
           ...prevParsed,
           [index]: !reset ? (prevParsed[index] || '') + newParsedContent : newParsedContent,

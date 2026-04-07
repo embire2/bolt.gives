@@ -54,4 +54,51 @@ describe('detectProjectCommands', () => {
 
     expect(commands.startCommand).toBeUndefined();
   });
+
+  it('falls back to inferred Vite commands when package.json is malformed', async () => {
+    const commands = await detectProjectCommands([
+      {
+        path: '/package.json',
+        content: `{
+          "name": "doctor-scheduler",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173",
+          }
+        }`,
+      },
+      {
+        path: '/vite.config.ts',
+        content: 'import { defineConfig } from "vite"; export default defineConfig({});',
+      },
+      {
+        path: '/src/main.jsx',
+        content: 'import React from "react";',
+      },
+    ]);
+
+    expect(commands.startCommand).toBe('npm run dev');
+    expect(commands.followupMessage).toContain('Inferred');
+  });
+
+  it('uses the declared package manager when inferring fallback commands', async () => {
+    const commands = await detectProjectCommands([
+      {
+        path: '/package.json',
+        content: `{
+          "name": "doctor-scheduler",
+          "packageManager": "pnpm@9.0.0",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173"
+          }
+        }`,
+      },
+      {
+        path: '/src/main.tsx',
+        content: 'console.log("ready");',
+      },
+    ]);
+
+    expect(commands.setupCommand).toContain('pnpm install');
+    expect(commands.startCommand).toBe('pnpm run dev');
+  });
 });

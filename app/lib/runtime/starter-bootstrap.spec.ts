@@ -38,14 +38,14 @@ describe('shouldUseClientStarterBootstrap', () => {
     ).toBe(false);
   });
 
-  it('forces starter bootstrap on hosted runtime when the request clearly needs a project template', () => {
+  it('does not force starter bootstrap solely because hosted runtime is enabled', () => {
     expect(
       shouldUseClientStarterBootstrap({
-        providerName: 'OpenAI',
-        modelName: 'gpt-5.4',
+        providerName: 'FREE',
+        modelName: 'deepseek/deepseek-v3.2',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

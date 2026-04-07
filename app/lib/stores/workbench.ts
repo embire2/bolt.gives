@@ -13,6 +13,7 @@ import { extractRelativePath } from '~/utils/diff';
 import { description } from '~/lib/persistence';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
+import type { BoltAction } from '~/types/actions';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import {
   AUTONOMY_MODE_STORAGE_KEY,
@@ -929,6 +930,67 @@ export class WorkbenchStore {
 
     this.artifacts.setKey(artifactId, { ...artifact, ...state });
   }
+
+  dispatchSyntheticRuntimeHandoff(options: {
+    messageId: string;
+    handoffId: string;
+    setupCommand?: string;
+    startCommand: string;
+  }) {
+    return this.addToExecutionQueue(async () => {
+      const artifactId = `${options.messageId}-runtime-handoff`;
+      await this.addArtifact({
+        messageId: options.messageId,
+        id: artifactId,
+        artifactId,
+        title: 'Runtime Handoff',
+        type: 'shell',
+      });
+
+      const artifact = await this.#waitForArtifact(artifactId);
+
+      if (!artifact) {
+        const error = `Runtime handoff artifact "${artifactId}" could not be created.`;
+        logger.warn(error, { handoffId: options.handoffId, messageId: options.messageId });
+        this.#appendInteractiveStepEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: 'Runtime handoff failed to initialize',
+          error,
+        });
+
+        return;
+      }
+
+      this.showWorkbench.set(true);
+      this.currentView.set('preview');
+      this.#appendInteractiveStepEvent({
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Workspace runtime handoff queued',
+        output: `start=${options.startCommand}${options.setupCommand ? ` | setup=${options.setupCommand}` : ''}`,
+      });
+
+      const actions: BoltAction[] = [
+        ...(options.setupCommand ? ([{ type: 'shell', content: options.setupCommand }] as const) : []),
+        { type: 'start', content: options.startCommand },
+      ];
+
+      for (const [index, action] of actions.entries()) {
+        const actionId = `${artifactId}-action-${index}`;
+        const actionData: ActionCallbackData = {
+          artifactId,
+          messageId: options.messageId,
+          actionId,
+          action,
+        };
+
+        await artifact.runner.addAction(actionData);
+        await this._runAction(actionData);
+      }
+    });
+  }
+
   addAction(data: ActionCallbackData) {
     // this._addAction(data);
 

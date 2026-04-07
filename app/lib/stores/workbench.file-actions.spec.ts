@@ -181,4 +181,73 @@ describe('workbenchStore file actions', () => {
       vi.useRealTimers();
     }
   });
+
+  it('dispatches synthetic runtime handoffs through the queued workbench runner in setup/start order', async () => {
+    const runnerActions: Record<string, any> = {};
+    const addAction = vi.fn().mockImplementation(async (data: ActionCallbackData) => {
+      runnerActions[data.actionId] = {
+        executed: false,
+      };
+    });
+    const runAction = vi.fn().mockResolvedValue(undefined);
+
+    workbenchStore.artifacts.set({
+      'handoff-message-runtime-handoff': {
+        id: 'handoff-message-runtime-handoff',
+        title: 'Runtime Handoff',
+        closed: false,
+        runner: {
+          addAction,
+          runAction,
+          actions: {
+            get: () => runnerActions,
+          },
+        } as any,
+      },
+    });
+
+    await workbenchStore.dispatchSyntheticRuntimeHandoff({
+      handoffId: 'handoff-1',
+      messageId: 'handoff-message',
+      setupCommand: 'pnpm install',
+      startCommand: 'npm run dev',
+    });
+
+    expect(addAction).toHaveBeenCalledTimes(2);
+    expect(runAction).toHaveBeenCalledTimes(2);
+    expect(addAction.mock.calls[0][0]).toMatchObject({
+      artifactId: 'handoff-message-runtime-handoff',
+      messageId: 'handoff-message',
+      action: {
+        type: 'shell',
+        content: 'pnpm install',
+      },
+    });
+    expect(runAction.mock.calls[0][0]).toMatchObject({
+      artifactId: 'handoff-message-runtime-handoff',
+      messageId: 'handoff-message',
+      action: {
+        type: 'shell',
+        content: 'pnpm install',
+      },
+    });
+    expect(addAction.mock.calls[1][0]).toMatchObject({
+      artifactId: 'handoff-message-runtime-handoff',
+      messageId: 'handoff-message',
+      action: {
+        type: 'start',
+        content: 'npm run dev',
+      },
+    });
+    expect(runAction.mock.calls[1][0]).toMatchObject({
+      artifactId: 'handoff-message-runtime-handoff',
+      messageId: 'handoff-message',
+      action: {
+        type: 'start',
+        content: 'npm run dev',
+      },
+    });
+    expect(workbenchStore.currentView.get()).toBe('preview');
+    expect(workbenchStore.showWorkbench.get()).toBe(true);
+  });
 });

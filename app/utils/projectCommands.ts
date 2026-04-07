@@ -13,6 +13,15 @@ interface FileContent {
   path: string;
 }
 
+type SupportedPackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
+
+interface PackageScripts {
+  dev?: string;
+  start?: string;
+  preview?: string;
+  build?: string;
+}
+
 // Helper function to make any command non-interactive
 function makeNonInteractive(command: string): string {
   // Set environment variables for non-interactive mode
@@ -38,6 +47,114 @@ function makeNonInteractive(command: string): string {
   return `${envVars} && ${processedCommand}`;
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+function hasPathMatch(files: FileContent[], pattern: RegExp) {
+  return files.some((file) => pattern.test(normalizePath(file.path)));
+}
+
+function detectPackageManager(files: FileContent[], packageJsonContent: string): SupportedPackageManager {
+  const packageManagerMatch = packageJsonContent.match(/"packageManager"\s*:\s*"(pnpm|yarn|bun|npm)@/i);
+
+  if (packageManagerMatch) {
+    return packageManagerMatch[1].toLowerCase() as SupportedPackageManager;
+  }
+
+  if (hasPathMatch(files, /(^|\/)pnpm-lock\.ya?ml$/i)) {
+    return 'pnpm';
+  }
+
+  if (hasPathMatch(files, /(^|\/)yarn\.lock$/i)) {
+    return 'yarn';
+  }
+
+  if (hasPathMatch(files, /(^|\/)bun\.lockb?$/i)) {
+    return 'bun';
+  }
+
+  return 'npm';
+}
+
+function createSetupCommand(packageManager: SupportedPackageManager, isShadcnProject: boolean) {
+  let baseSetupCommand: string;
+
+  switch (packageManager) {
+    case 'pnpm':
+      baseSetupCommand = 'npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile';
+      break;
+    case 'yarn':
+      baseSetupCommand = 'npx update-browserslist-db@latest && yarn install --non-interactive';
+      break;
+    case 'bun':
+      baseSetupCommand = 'bun install';
+      break;
+    case 'npm':
+    default:
+      baseSetupCommand = 'npx update-browserslist-db@latest && npm install';
+      break;
+  }
+
+  if (isShadcnProject) {
+    baseSetupCommand += ' && npx shadcn@latest init';
+  }
+
+  return makeNonInteractive(baseSetupCommand);
+}
+
+function createStartCommand(packageManager: SupportedPackageManager, scriptName: 'dev' | 'start' | 'preview') {
+  switch (packageManager) {
+    case 'yarn':
+      return `yarn ${scriptName}`;
+    case 'bun':
+      return `bun run ${scriptName}`;
+    case 'pnpm':
+      return `pnpm run ${scriptName}`;
+    case 'npm':
+    default:
+      return `npm run ${scriptName}`;
+  }
+}
+
+function extractScriptsFromPackageJson(content: string): PackageScripts {
+  try {
+    const parsed = JSON.parse(content);
+    return parsed?.scripts && typeof parsed.scripts === 'object' ? parsed.scripts : {};
+  } catch {
+    const extracted: PackageScripts = {};
+    const scriptRegex = /"(dev|start|preview|build)"\s*:\s*"([^"]+)"/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = scriptRegex.exec(content)) !== null) {
+      const [, key, value] = match;
+      extracted[key as keyof PackageScripts] = value;
+    }
+
+    return extracted;
+  }
+}
+
+function inferProjectKind(files: FileContent[]) {
+  if (hasPathMatch(files, /(^|\/)vite\.config\.(t|j)sx?$/i) || hasPathMatch(files, /(^|\/)src\/main\.(t|j)sx?$/i)) {
+    return 'vite';
+  }
+
+  if (
+    hasPathMatch(files, /(^|\/)next\.config\.(mjs|js|ts)$/i) ||
+    hasPathMatch(files, /(^|\/)app\/page\.(t|j)sx?$/i) ||
+    hasPathMatch(files, /(^|\/)pages\/index\.(t|j)sx?$/i)
+  ) {
+    return 'next';
+  }
+
+  if (hasPathMatch(files, /(^|\/)angular\.json$/i)) {
+    return 'angular';
+  }
+
+  return null;
+}
+
 export async function detectProjectCommands(files: FileContent[]): Promise<ProjectCommands> {
   const hasFile = (name: string) => files.some((f) => f.path.endsWith(name));
   const hasFileContent = (name: string, content: string) =>
@@ -56,6 +173,7 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
       const packageJson = JSON.parse(packageJsonFile.content);
       const scripts = packageJson?.scripts || {};
       const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+      const packageManager = detectPackageManager(files, packageJsonFile.content);
 
       // Check if this is a shadcn project
       const isShadcnProject =
@@ -71,25 +189,17 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
       const previewCommand = scripts.preview && hasBuiltOutput() ? 'preview' : undefined;
       const availableCommand = primaryCommand || previewCommand;
 
-      // Build setup command with non-interactive handling
-      let baseSetupCommand = 'npx update-browserslist-db@latest && npm install';
-
-      // Add shadcn init if it's a shadcn project
-      if (isShadcnProject) {
-        baseSetupCommand += ' && npx shadcn@latest init';
-      }
-
-      const setupCommand = makeNonInteractive(baseSetupCommand);
+      const setupCommand = createSetupCommand(packageManager, isShadcnProject);
 
       if (availableCommand) {
         return {
           type: 'Node.js',
           setupCommand,
-          startCommand: `npm run ${availableCommand}`,
+          startCommand: createStartCommand(packageManager, availableCommand as 'dev' | 'start' | 'preview'),
           followupMessage:
             availableCommand === 'preview'
-              ? 'Found a built preview script in package.json. Running "npm run preview" because a production build already exists.'
-              : `Found "${availableCommand}" script in package.json. Running "npm run ${availableCommand}" after installation.`,
+              ? `Found a built preview script in package.json. Running "${createStartCommand(packageManager, 'preview')}" because a production build already exists.`
+              : `Found "${availableCommand}" script in package.json. Running "${createStartCommand(packageManager, availableCommand as 'dev' | 'start')}" after installation.`,
         };
       }
 
@@ -101,8 +211,34 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
       };
     } catch (error) {
       console.error('Error parsing package.json:', error);
-      return { type: '', setupCommand: '', followupMessage: '' };
     }
+
+    const fallbackScripts = extractScriptsFromPackageJson(packageJsonFile.content);
+    const fallbackPackageManager = detectPackageManager(files, packageJsonFile.content);
+    const inferredProjectKind = inferProjectKind(files);
+    const fallbackCommand =
+      (['dev', 'start'] as const).find((cmd) => Boolean(fallbackScripts[cmd])) ||
+      (fallbackScripts.preview && hasBuiltOutput() ? 'preview' : undefined) ||
+      (inferredProjectKind === 'vite' || inferredProjectKind === 'next'
+        ? 'dev'
+        : inferredProjectKind === 'angular'
+          ? 'start'
+          : undefined);
+
+    if (fallbackCommand) {
+      const setupCommand = createSetupCommand(fallbackPackageManager, hasFile('components.json'));
+
+      return {
+        type: inferredProjectKind === 'next' ? 'Next.js' : inferredProjectKind === 'angular' ? 'Angular' : 'Node.js',
+        setupCommand,
+        startCommand: createStartCommand(fallbackPackageManager, fallbackCommand),
+        followupMessage: fallbackScripts[fallbackCommand]
+          ? `Inferred the "${fallbackCommand}" runtime command from the generated package manifest. Running "${createStartCommand(fallbackPackageManager, fallbackCommand)}" after installation.`
+          : `The generated project matches a ${inferredProjectKind || 'Node.js'} app. Running "${createStartCommand(fallbackPackageManager, fallbackCommand)}" after installation.`,
+      };
+    }
+
+    return { type: '', setupCommand: '', followupMessage: '' };
   }
 
   if (hasFile('index.html')) {

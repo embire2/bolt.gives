@@ -186,4 +186,27 @@ describe('shouldForceRunContinuation', () => {
     expect(handoff?.assistantContent).not.toContain('<boltAction type="shell">');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
   });
+
+  it('synthesizes a runtime handoff from malformed package.json when the project shape is still clear', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="doctor app">
+<boltAction type="file" filePath="/home/project/package.json">{
+  "name": "doctor-scheduler",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+  }
+}</boltAction>
+<boltAction type="file" filePath="/home/project/vite.config.ts">import { defineConfig } from 'vite'; export default defineConfig({});</boltAction>
+<boltAction type="file" filePath="/home/project/src/main.jsx">import React from 'react';</boltAction>
+<boltAction type="file" filePath="/home/project/src/App.jsx">export default function App(){return <div>Doctor schedule</div>;}</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'npm run dev',
+    });
+  });
 });

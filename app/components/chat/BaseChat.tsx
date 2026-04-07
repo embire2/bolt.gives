@@ -768,7 +768,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 />
               </div>
             ) : null}
-            <div className={classNames('flex flex-col gap-2', { 'sticky bottom-2 z-10': chatStarted })}>
+            <div data-testid="chat-input-region" className="flex flex-col gap-2">
               <Suspense fallback={<LazyPanelFallback title="Prompt Surface" />}>
                 <LazyChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}

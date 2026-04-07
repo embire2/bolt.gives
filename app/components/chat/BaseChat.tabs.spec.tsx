@@ -179,6 +179,7 @@ describe('BaseChat surface tabs', () => {
     expect(screen.queryByTestId('workbench-panel')).toBeNull();
     expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
     expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(screen.getByTestId('chat-input-region').className).not.toContain('sticky');
   });
 
   it('boots into chat even if workspace was the last persisted active surface', async () => {

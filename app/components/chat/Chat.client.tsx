@@ -903,24 +903,21 @@ Requirements:
       appendStepRunnerEvent({
         type: 'telemetry',
         timestamp: new Date().toISOString(),
-        description: 'Workspace runtime handoff queued',
+        description: 'Workspace runtime handoff received',
         output: `start=${syntheticRunHandoff.startCommand}${syntheticRunHandoff.setupCommand ? ` | setup=${syntheticRunHandoff.setupCommand}` : ''}`,
       });
 
-      workbenchStore.showWorkbench.set(true);
-      workbenchStore.currentView.set('preview');
-
-      setMessages([
-        ...currentMessages,
-        {
-          id: syntheticRunHandoff.messageId,
-          role: 'assistant',
-          content: syntheticRunHandoff.assistantContent,
-        },
-      ]);
+      window.setTimeout(() => {
+        void workbenchStore.dispatchSyntheticRuntimeHandoff({
+          handoffId: syntheticRunHandoff.handoffId,
+          messageId: syntheticRunHandoff.messageId,
+          setupCommand: syntheticRunHandoff.setupCommand,
+          startCommand: syntheticRunHandoff.startCommand,
+        });
+      }, 0);
 
       toast.info('Workspace runtime handoff: launching the preview from inferred project commands.');
-    }, [boundedChatData, fakeLoading, isLoading, setMessages]);
+    }, [boundedChatData, fakeLoading, isLoading]);
 
     useEffect(() => {
       const streaming = isLoading || fakeLoading;
