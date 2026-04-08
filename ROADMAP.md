@@ -152,8 +152,9 @@ Release theme: harden the operator surface into a production-safe tenant service
 - [x] Let each client choose a subdomain during provisioning.
 - [x] Add an operator surface inside `Tenant Admin` that lists managed trial instances, status, expiry, and server-backed refresh/suspend actions.
 - [x] Keep Cloudflare operator credentials on the runtime service only; browser/operator pages receive sanitized instance metadata only.
-- [~] Implement automatic rollout from the current stable build to managed instances.
+- [x] Implement automatic rollout from the current stable build to managed instances.
 - [x] Keep managed-instance runtime configuration in sync across retroactive fleet updates, not only new spawns.
+- [x] Harden managed-instance registry persistence so fleet refreshes survive write races and can rebuild from the private admin assignment records.
 - [ ] Add health-verified rollback on failed updates.
 - [~] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
 

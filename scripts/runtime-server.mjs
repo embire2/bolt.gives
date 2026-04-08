@@ -31,6 +31,7 @@ import {
   buildAdminDatabaseConfig,
   listAdminEmailMessages,
   listClientProfiles,
+  listManagedInstanceAssignments,
   syncManagedInstanceAssignments,
   upsertClientProfile,
   upsertManagedInstanceAssignment,
@@ -399,26 +400,72 @@ async function ensureManagedInstanceRegistry() {
   try {
     const raw = await fs.readFile(MANAGED_INSTANCE_REGISTRY_PATH, 'utf8');
     const registry = normalizeManagedInstanceRegistry(JSON.parse(raw), { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN });
+    const recovered = await maybeRecoverManagedInstanceRegistryFromAdminAssignments(registry);
+
+    if (recovered) {
+      await writeManagedInstanceRegistry(recovered);
+      return recovered;
+    }
+
     await writeManagedInstanceRegistry(registry);
     return registry;
   } catch {
     await fs.mkdir(path.dirname(MANAGED_INSTANCE_REGISTRY_PATH), { recursive: true });
-    const registry = normalizeManagedInstanceRegistry(
-      {
-        rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
-        instances: [],
-        events: [],
-      },
-      { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
-    );
-    await fs.writeFile(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+    const registry =
+      (await buildManagedInstanceRegistryFromAdminAssignments()) ||
+      normalizeManagedInstanceRegistry(
+        {
+          rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+          instances: [],
+          events: [],
+        },
+        { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
+      );
+    await writeManagedInstanceRegistry(registry);
     return registry;
   }
 }
 
+async function writeJsonAtomically(filePath, payload) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tempPath, payload, 'utf8');
+  await fs.rename(tempPath, filePath);
+}
+
 async function writeManagedInstanceRegistry(registry) {
-  await fs.mkdir(path.dirname(MANAGED_INSTANCE_REGISTRY_PATH), { recursive: true });
-  await fs.writeFile(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+  await writeJsonAtomically(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+export function buildManagedInstanceRegistryFromAssignments(assignments = []) {
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    return null;
+  }
+
+  return normalizeManagedInstanceRegistry(
+    {
+      rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      instances: assignments,
+      events: [],
+    },
+    { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
+  );
+}
+
+export async function buildManagedInstanceRegistryFromAdminAssignments() {
+  if (!ADMIN_DB_CONFIG.enabled) {
+    return null;
+  }
+
+  return buildManagedInstanceRegistryFromAssignments(await listManagedInstanceAssignments());
+}
+
+async function maybeRecoverManagedInstanceRegistryFromAdminAssignments(registry) {
+  if (!ADMIN_DB_CONFIG.enabled || registry.instances.length > 0) {
+    return null;
+  }
+
+  return await buildManagedInstanceRegistryFromAdminAssignments();
 }
 
 async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {}, input = '' } = {}) {

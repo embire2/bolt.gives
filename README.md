@@ -142,6 +142,7 @@ Current `v3.0.8` release line:
 - Users can request a preferred Cloudflare Pages subdomain during trial provisioning, and the app now persists the real Cloudflare-assigned hostname if Pages adds a suffix.
 - Trial requests now require a registration profile before provisioning begins.
 - Managed trial instances now track rollout state and a 15-day expiry window in the runtime registry.
+- Managed trial rollout state is now written atomically and can recover from the private admin assignment store, so refreshing the active Cloudflare fleet no longer risks dropping live instances out of the runtime registry mid-update.
 - `Tenant Admin` now also includes a small operator surface for managed Cloudflare trials, showing live instance status, expiry, last deployment details, and refresh/suspend controls from the app UI.
 - `admin.bolt.gives` now routes directly to the private operator panel, where registered clients, assigned trials, and outbound admin email history are visible in one place.
 - Cloudflare operator credentials remain on the runtime service only; the browser sees sanitized managed-instance metadata and never receives the API token or account id.

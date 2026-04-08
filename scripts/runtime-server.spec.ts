@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
   authorizeHostedFreeRelaySecret,
+  buildManagedInstanceRegistryFromAssignments,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
   collectMissingWorkspacePackages,
@@ -63,6 +64,43 @@ describe('runtime server workspace isolation', () => {
   it('defaults the runtime workspace root to a sibling path outside the repo', () => {
     expect(resolveRuntimeWorkspaceRoot({}, '/srv/bolt-gives')).toBe('/srv/bolt-gives-runtime-workspaces');
     expect(resolveRuntimeWorkspaceRoot({}, '/root/bolt.gives')).toBe('/root/bolt.gives-runtime-workspaces');
+  });
+
+  it('rebuilds the managed instance registry from admin assignments deterministically', async () => {
+    const assignments = [
+      {
+        id: 'instance-1',
+        email: 'doctor@example.com',
+        name: 'Doctor Trial',
+        projectName: 'doctor-clinic',
+        routeHostname: 'doctor-clinic.pages.dev',
+        pagesUrl: 'https://doctor-clinic.pages.dev',
+        plan: 'experimental-free-15d',
+        status: 'active',
+        createdAt: '2026-04-08T12:00:00.000Z',
+        updatedAt: '2026-04-08T12:01:00.000Z',
+        trialEndsAt: '2026-04-23T12:00:00.000Z',
+        currentGitSha: '66c3e971482045c1ce334403082131ff4b15bb1e',
+        previousGitSha: null,
+        lastRolloutAt: '2026-04-08T12:01:00.000Z',
+        lastDeploymentUrl: 'https://doctor-clinic.pages.dev',
+        lastError: null,
+        suspendedAt: null,
+        expiredAt: null,
+        sourceBranch: 'main',
+      },
+    ];
+    const registry = buildManagedInstanceRegistryFromAssignments(assignments);
+
+    expect(registry?.instances).toHaveLength(1);
+    expect(registry?.instances[0]).toMatchObject({
+      projectName: 'doctor-clinic',
+      routeHostname: 'doctor-clinic.pages.dev',
+      pagesUrl: 'https://doctor-clinic.pages.dev',
+      status: 'active',
+      clientSessionSecretHash: null,
+    });
+    expect(registry?.instances[0].clientKeyHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('requires a project manifest for package-manager workspace commands only', () => {
