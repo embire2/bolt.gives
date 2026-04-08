@@ -325,7 +325,9 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
           ref={feedRef}
           className="rounded-md border border-dashed border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-3 py-3 text-xs text-bolt-elements-textSecondary"
         >
-          Detailed commentary has not arrived yet. The summary above will keep updating while the workspace continues.
+          Waiting for the first concrete runtime step.
+          <br />
+          If the provider fails before generation starts, the exact failure reason will appear here.
         </div>
       )}
     </div>

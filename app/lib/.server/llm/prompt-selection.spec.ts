@@ -38,4 +38,28 @@ describe('prompt selection', () => {
 
     expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'discuss' })).toBe('default');
   });
+
+  it('uses the small prompt for the hosted FREE provider', () => {
+    const model: ModelInfo = {
+      name: 'openai/gpt-oss-120b:free',
+      label: 'OpenAI gpt-oss-120b (free)',
+      provider: 'FREE',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 8192,
+    };
+
+    expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'build' })).toBe('small');
+  });
+
+  it('uses the small prompt for free-suffixed models even outside the FREE provider', () => {
+    const model: ModelInfo = {
+      name: 'vendor/example-coder:free',
+      label: 'Example Coder (free)',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 128000,
+      maxCompletionTokens: 8192,
+    };
+
+    expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'build' })).toBe('small');
+  });
 });

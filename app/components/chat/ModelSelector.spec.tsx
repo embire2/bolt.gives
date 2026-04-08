@@ -28,10 +28,10 @@ const freeProvider: ProviderInfo = {
   allowsUserApiKey: false,
   staticModels: [
     {
-      name: 'deepseek/deepseek-v3.2',
-      label: 'DeepSeek V3.2',
+      name: 'openai/gpt-oss-120b:free',
+      label: 'OpenAI gpt-oss-120b (free)',
       provider: 'FREE',
-      maxTokenAllowed: 262144,
+      maxTokenAllowed: 131072,
     },
   ],
 };
@@ -65,13 +65,13 @@ describe('ModelSelector', () => {
       <ModelSelector
         provider={freeProvider}
         providerList={[freeProvider]}
-        model="deepseek/deepseek-v3.2"
+        model="openai/gpt-oss-120b:free"
         modelList={[]}
         apiKeys={{}}
       />,
     );
 
-    expect(screen.getAllByRole('combobox')[1].textContent).toContain('DeepSeek V3.2');
+    expect(screen.getAllByRole('combobox')[1].textContent).toContain('OpenAI gpt-oss-120b (free)');
     expect(screen.queryByText('Select model')).toBeNull();
   });
 });

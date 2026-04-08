@@ -45,7 +45,6 @@ body::before {
   pointer-events: none;
   opacity: 0;
   transform: translate3d(-9999px, -9999px, 0);
-  will-change: transform, opacity;
   transition: opacity 220ms ease-out;
   border-radius: 9999px;
   background:

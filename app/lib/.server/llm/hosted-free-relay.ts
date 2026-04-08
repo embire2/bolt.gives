@@ -1,4 +1,4 @@
-import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
+import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials';
 
 const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://alpha1.bolt.gives';

@@ -1,6 +1,17 @@
 import type { ModelInfo } from '~/lib/modules/llm/types';
 
 export function isSmallModelForPrompting(model: ModelInfo): boolean {
+  const normalizedName = model.name.toLowerCase();
+  const normalizedProvider = model.provider.toLowerCase();
+
+  if (normalizedProvider === 'free') {
+    return true;
+  }
+
+  if (normalizedName.includes(':free') || normalizedName.includes('gpt-oss')) {
+    return true;
+  }
+
   /*
    * Heuristic: treat smaller-context models (common for local/smaller LLMs) as "small".
    * Also treat very low output limits as small.

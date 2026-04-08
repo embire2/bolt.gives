@@ -146,7 +146,7 @@ export class ImportExportService {
           bolt_read_logs: this._safeGetItem('bolt_read_logs'),
 
           // Event logs
-          eventLogs: allCookies.eventLogs,
+          eventLogs: this._safeGetItem('bolt_event_logs_v1'),
         },
 
         // Update settings
@@ -492,7 +492,7 @@ export class ImportExportService {
       });
 
       // Import debug cookies
-      const debugCookies = ['isDebugEnabled', 'eventLogs'];
+      const debugCookies = ['isDebugEnabled'];
       debugCookies.forEach((key) => {
         if (data.debug[key]) {
           try {
@@ -502,6 +502,15 @@ export class ImportExportService {
           }
         }
       });
+
+      if (data.debug.eventLogs) {
+        try {
+          this._safeSetItem('bolt_event_logs_v1', data.debug.eventLogs);
+          Cookies.remove('eventLogs');
+        } catch (err) {
+          console.error('Error importing event logs:', err);
+        }
+      }
     }
 
     // Import update settings
@@ -556,6 +565,13 @@ export class ImportExportService {
         }
 
         try {
+          if (key === 'eventLogs') {
+            this._safeSetItem('bolt_event_logs_v1', value);
+            Cookies.remove('eventLogs');
+
+            return;
+          }
+
           // Try to determine if this should be a cookie or localStorage item
           const isCookie = [
             'apiKeys',
@@ -565,7 +581,6 @@ export class ImportExportService {
             'tabConfiguration',
             'cachedPrompt',
             'isDebugEnabled',
-            'eventLogs',
           ].includes(key);
 
           if (isCookie) {

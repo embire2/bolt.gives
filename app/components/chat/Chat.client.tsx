@@ -2,9 +2,10 @@ import { useStore } from '@nanostores/react';
 import type { Message } from 'ai';
 import { useChat } from '@ai-sdk/react';
 import { useAnimate } from 'framer-motion';
-import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { flushSync } from 'react-dom';
+import { BaseChat } from './BaseChat';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
@@ -85,7 +86,6 @@ import type {
 import { requestLikelyNeedsMutatingActions } from '~/lib/runtime/mutating-intent';
 
 const logger = createScopedLogger('Chat');
-const LazyBaseChat = lazy(() => import('./BaseChat').then((module) => ({ default: module.BaseChat })));
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 const MAX_CHAT_DATA_EVENTS = 140;
@@ -370,9 +370,21 @@ export function Chat() {
 
   const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
   const title = useStore(description);
+
   useEffect(() => {
     workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
   }, [initialMessages]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    logStore.logSystem('Chat shell ready', {
+      initialMessageCount: initialMessages.length,
+      persistedHistoryReady: true,
+    });
+  }, [initialMessages.length, ready]);
 
   return (
     <>
@@ -386,14 +398,6 @@ export function Chat() {
         />
       )}
     </>
-  );
-}
-
-function ChatSurfaceFallback() {
-  return (
-    <div className="flex h-full min-h-0 w-full items-center justify-center bg-bolt-elements-background-depth-1 text-sm text-bolt-elements-textSecondary">
-      Loading chat shell...
-    </div>
   );
 }
 
@@ -428,6 +432,7 @@ export const ChatImpl = memo(
     useShortcuts();
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const promptSurfaceReadyLoggedRef = useRef(false);
     const [chatStarted, setChatStarted] = useState(initialMessages.length > 0);
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
     const [imageDataList, setImageDataList] = useState<string[]>([]);
@@ -529,6 +534,10 @@ export const ChatImpl = memo(
     }, [model, provider]);
 
     useEffect(() => {
+      promptSurfaceReadyLoggedRef.current = false;
+    }, [provider?.name, model]);
+
+    useEffect(() => {
       if (!mcpInitialized) {
         initializeMcp();
       }
@@ -598,6 +607,44 @@ export const ChatImpl = memo(
       initialMessages,
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
     });
+
+    useEffect(() => {
+      let delayedPromptCheck: number | null = null;
+
+      if (typeof window !== 'undefined') {
+        delayedPromptCheck = window.setTimeout(() => {
+          if (textareaRef.current || promptSurfaceReadyLoggedRef.current) {
+            return;
+          }
+
+          logStore.logWarning('Prompt surface did not mount within expected time', {
+            provider: provider?.name,
+            model,
+            chatStarted,
+            pathname: window.location.pathname,
+          });
+        }, 3000);
+      }
+
+      return () => {
+        if (delayedPromptCheck !== null && typeof window !== 'undefined') {
+          window.clearTimeout(delayedPromptCheck);
+        }
+      };
+    }, [chatStarted, model, provider?.name]);
+
+    useEffect(() => {
+      if (!textareaRef.current || promptSurfaceReadyLoggedRef.current) {
+        return;
+      }
+
+      promptSurfaceReadyLoggedRef.current = true;
+      logStore.logSystem('Prompt surface ready', {
+        provider: provider?.name,
+        model,
+        chatStarted,
+      });
+    }, [chatStarted, input, model, provider?.name]);
 
     const boundedChatData = useMemo(() => (chatData || []).slice(-MAX_CHAT_DATA_EVENTS), [chatData]);
     const lastDataEventAtRef = useRef(Date.now());
@@ -2717,92 +2764,90 @@ Requirements:
         : undefined;
 
     return (
-      <Suspense fallback={<ChatSurfaceFallback />}>
-        <LazyBaseChat
-          ref={animationScope}
-          textareaRef={textareaRef}
-          input={input}
-          showChat={showChat}
-          chatStarted={chatStarted}
-          isStreaming={isLoading || fakeLoading}
-          onStreamingChange={(streaming) => {
-            streamingState.set(streaming);
-          }}
-          enhancingPrompt={enhancingPrompt}
-          promptEnhanced={promptEnhanced}
-          sendMessage={sendMessage}
-          model={model}
-          setModel={handleModelChange}
-          provider={provider || (DEFAULT_PROVIDER as ProviderInfo)}
-          setProvider={handleProviderChange}
-          onProviderSelection={handleProviderSelection}
-          providerList={activeProviders.length > 0 ? activeProviders : [DEFAULT_PROVIDER as ProviderInfo]}
-          handleInputChange={(e) => {
-            onTextareaChange(e);
-            debouncedCachePrompt(e);
-          }}
-          handleStop={abort}
-          description={description}
-          importChat={importChat}
-          exportChat={exportChat}
-          messages={messages.map((message, i) => {
-            if (message.role === 'user') {
-              return message;
-            }
+      <BaseChat
+        ref={animationScope}
+        textareaRef={textareaRef}
+        input={input}
+        showChat={showChat}
+        chatStarted={chatStarted}
+        isStreaming={isLoading || fakeLoading}
+        onStreamingChange={(streaming) => {
+          streamingState.set(streaming);
+        }}
+        enhancingPrompt={enhancingPrompt}
+        promptEnhanced={promptEnhanced}
+        sendMessage={sendMessage}
+        model={model}
+        setModel={handleModelChange}
+        provider={provider || (DEFAULT_PROVIDER as ProviderInfo)}
+        setProvider={handleProviderChange}
+        onProviderSelection={handleProviderSelection}
+        providerList={activeProviders.length > 0 ? activeProviders : [DEFAULT_PROVIDER as ProviderInfo]}
+        handleInputChange={(e) => {
+          onTextareaChange(e);
+          debouncedCachePrompt(e);
+        }}
+        handleStop={abort}
+        description={description}
+        importChat={importChat}
+        exportChat={exportChat}
+        messages={messages.map((message, i) => {
+          if (message.role === 'user') {
+            return message;
+          }
 
-            return {
-              ...message,
-              content: parsedMessages?.[i] ?? '',
-            };
-          })}
-          enhancePrompt={() => {
-            enhancePrompt(
-              input,
-              (input) => {
-                setInput(input);
-                scrollTextArea();
-              },
-              model,
-              provider,
-              apiKeys,
-            );
-          }}
-          uploadedFiles={uploadedFiles}
-          setUploadedFiles={setUploadedFiles}
-          imageDataList={imageDataList}
-          setImageDataList={setImageDataList}
-          actionAlert={actionAlert}
-          actionAlertAutoFixState={actionAlertAutoFixState}
-          clearAlert={() => workbenchStore.clearAlert()}
-          supabaseAlert={supabaseAlert}
-          clearSupabaseAlert={() => workbenchStore.clearSupabaseAlert()}
-          deployAlert={deployAlert}
-          clearDeployAlert={() => workbenchStore.clearDeployAlert()}
-          llmErrorAlert={llmErrorAlert}
-          clearLlmErrorAlert={clearApiErrorAlert}
-          data={boundedChatData}
-          chatMode={chatMode}
-          setChatMode={setChatMode}
-          append={append}
-          designScheme={designScheme}
-          setDesignScheme={setDesignScheme}
-          selectedElement={selectedElement}
-          setSelectedElement={setSelectedElement}
-          addToolResult={addToolResult}
-          onWebSearchResult={handleWebSearchResult}
-          onSaveSession={handleSaveSession}
-          onResumeSession={handleResumeSession}
-          onShareSession={handleShareSession}
-          agentMode={agentMode}
-          setAgentMode={setAgentMode}
-          onSketchChange={setSketchElements}
-          autonomyMode={autonomyMode}
-          setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
-          latestRunMetrics={latestRunMetrics}
-          latestUsage={latestUsage}
-          onApiKeysUpdated={handleApiKeysUpdated}
-        />
-      </Suspense>
+          return {
+            ...message,
+            content: parsedMessages?.[i] ?? '',
+          };
+        })}
+        enhancePrompt={() => {
+          enhancePrompt(
+            input,
+            (input) => {
+              setInput(input);
+              scrollTextArea();
+            },
+            model,
+            provider,
+            apiKeys,
+          );
+        }}
+        uploadedFiles={uploadedFiles}
+        setUploadedFiles={setUploadedFiles}
+        imageDataList={imageDataList}
+        setImageDataList={setImageDataList}
+        actionAlert={actionAlert}
+        actionAlertAutoFixState={actionAlertAutoFixState}
+        clearAlert={() => workbenchStore.clearAlert()}
+        supabaseAlert={supabaseAlert}
+        clearSupabaseAlert={() => workbenchStore.clearSupabaseAlert()}
+        deployAlert={deployAlert}
+        clearDeployAlert={() => workbenchStore.clearDeployAlert()}
+        llmErrorAlert={llmErrorAlert}
+        clearLlmErrorAlert={clearApiErrorAlert}
+        data={boundedChatData}
+        chatMode={chatMode}
+        setChatMode={setChatMode}
+        append={append}
+        designScheme={designScheme}
+        setDesignScheme={setDesignScheme}
+        selectedElement={selectedElement}
+        setSelectedElement={setSelectedElement}
+        addToolResult={addToolResult}
+        onWebSearchResult={handleWebSearchResult}
+        onSaveSession={handleSaveSession}
+        onResumeSession={handleResumeSession}
+        onShareSession={handleShareSession}
+        agentMode={agentMode}
+        setAgentMode={setAgentMode}
+        onSketchChange={setSketchElements}
+        autonomyMode={autonomyMode}
+        setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
+        latestRunMetrics={latestRunMetrics}
+        latestUsage={latestUsage}
+        onApiKeysUpdated={handleApiKeysUpdated}
+      />
     );
   },
 );

@@ -268,6 +268,16 @@ export async function streamText(props: {
     chatMode: effectiveChatMode,
   });
 
+  logger.info(
+    `Prompt selection resolved ${JSON.stringify({
+      provider: provider.name,
+      model: modelDetails.name,
+      chatMode: effectiveChatMode,
+      requestedPromptId: promptId || 'default',
+      effectivePromptId,
+    })}`,
+  );
+
   let systemPrompt =
     PromptLibrary.getPromptFromLibrary(effectivePromptId, {
       cwd: WORK_DIR,
@@ -348,6 +358,7 @@ export async function streamText(props: {
 
     EXECUTION OUTPUT CONTRACT (MANDATORY):
     - Start your response with executable <boltAction> block(s). Do not start with plan-only prose.
+    - Your first non-whitespace output for build mode must be <boltArtifact.
     - If the project already exists, continue from current files and do not re-scaffold.
     - After install/build steps, include <boltAction type="start"> to launch preview.
     - Keep each action focused and verifiable; then provide concise plain-English progress updates.

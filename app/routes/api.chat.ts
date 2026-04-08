@@ -1102,6 +1102,20 @@ Next: I am sending the final result now.`,
               assistantContent: content,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
             });
+            logger.info(
+              `run continuation analysis ${JSON.stringify({
+                runId,
+                provider,
+                model,
+                reason: runContinuationDecision.reason,
+                shouldContinue: runContinuationDecision.shouldContinue,
+                attempt: runContinuationAttempts,
+                maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+                previewCheckpointObserved,
+                hasExecutionFailures,
+              })}`,
+            );
+
             const shouldContinueForRunIntent = runContinuationDecision.shouldContinue;
             const shouldContinueForUnverifiedPreview =
               effectiveChatMode === 'build' &&
@@ -1417,6 +1431,10 @@ Next: I am sending the final result now.`,
 
         if (errorMessage.includes('FREE_PROVIDER_RATE_LIMITED')) {
           return 'Custom error: The hosted FREE coder is temporarily rate-limited upstream. Please retry shortly, or switch to OpenRouter with your own key for uninterrupted access.';
+        }
+
+        if (errorMessage.includes('FREE_PROVIDER_CREDITS_EXHAUSTED')) {
+          return 'Custom error: The hosted FREE model on this server is out of operator credits. Use OpenRouter with your own key right now, or ask the operator to replenish the hosted FREE route.';
         }
 
         if (errorMessage.includes('FREE_PROVIDER_UNAVAILABLE')) {

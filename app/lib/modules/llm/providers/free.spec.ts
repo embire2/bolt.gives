@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import FreeProvider, { FREE_HOSTED_MODEL, clearHostedFreeModelResolution } from './free';
+import FreeProvider, { clearHostedFreeModelResolution } from './free';
+import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL } from '~/lib/modules/llm/free-provider-config';
 
 const { chatSpy, createOpenRouterSpy } = vi.hoisted(() => {
   const chatSpy = vi.fn();
@@ -24,7 +25,7 @@ describe('FreeProvider', () => {
     clearHostedFreeModelResolution();
   });
 
-  it('uses the dedicated server-side OpenRouter key and hard-locks the hosted DeepSeek model', () => {
+  it('uses the dedicated server-side OpenRouter key and hard-locks the hosted FREE model', () => {
     const provider = new FreeProvider();
     const modelInstance = { id: 'free-model-instance' };
     chatSpy.mockReturnValue(modelInstance);
@@ -73,5 +74,10 @@ describe('FreeProvider', () => {
     });
     expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
+  });
+
+  it('exposes the visible hosted FREE model label expected by the UI', () => {
+    const provider = new FreeProvider();
+    expect(provider.staticModels[0]?.label).toBe(FREE_HOSTED_MODEL_LABEL);
   });
 });

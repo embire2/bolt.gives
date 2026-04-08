@@ -4,6 +4,10 @@ import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('LogStore');
 
+export const EVENT_LOG_STORAGE_KEY = 'bolt_event_logs_v1';
+
+const LEGACY_EVENT_LOG_COOKIE_KEY = 'eventLogs';
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -81,12 +85,18 @@ class LogStore {
   }
 
   private _loadLogs() {
-    const savedLogs = Cookies.get('eventLogs');
+    const storage = this._getBrowserStorage();
+    const savedLogs = storage?.getItem(EVENT_LOG_STORAGE_KEY) || Cookies.get(LEGACY_EVENT_LOG_COOKIE_KEY);
 
     if (savedLogs) {
       try {
         const parsedLogs = JSON.parse(savedLogs);
         this._logs.set(parsedLogs);
+
+        if (storage?.setItem) {
+          storage.setItem(EVENT_LOG_STORAGE_KEY, savedLogs);
+          Cookies.remove(LEGACY_EVENT_LOG_COOKIE_KEY);
+        }
       } catch (error) {
         logger.error('Failed to parse logs from cookies:', error);
       }
@@ -114,7 +124,14 @@ class LogStore {
 
   private _saveLogs() {
     const currentLogs = this._logs.get();
-    Cookies.set('eventLogs', JSON.stringify(currentLogs));
+    const storage = this._getBrowserStorage();
+
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(EVENT_LOG_STORAGE_KEY, JSON.stringify(currentLogs));
+    Cookies.remove(LEGACY_EVENT_LOG_COOKIE_KEY);
   }
 
   private _saveReadLogs() {

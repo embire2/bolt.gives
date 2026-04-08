@@ -47,14 +47,14 @@
 
 - Tighten Cloudflare managed-instance lifecycle around health-verified updates and rollback.
 - Expand operator visibility inside `admin.bolt.gives` with trial capacity, deployment state, and outbound communication history.
-- Keep the built-in `FREE` + `DeepSeek V3.2` path reliable across hosted, Pages, and managed trial instances.
+- Keep the built-in `FREE` + `OpenAI gpt-oss-120b (free)` path reliable across hosted, Pages, and managed trial instances.
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
 ## Current Platform Baseline (`v3.0.8`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
-- Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
+- Hosted `FREE` provider ships locked to `OpenAI gpt-oss-120b (free)` through a protected server-side OpenRouter route.
 - Managed hosted runtime handles installs, builds, tests, preview hosting, and file sync on live instances by default.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare trial instances are registration-first, one-client / one-instance, 15-day environments with preferred-subdomain support.
@@ -243,9 +243,9 @@ Hosted-instance note:
 
 - If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked hosted coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
-- The hosted `FREE` coder is pinned to `deepseek/deepseek-v3.2`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
+- The hosted `FREE` coder is pinned to `openai/gpt-oss-120b:free`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
 - Managed Cloudflare trial instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
-- Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V3.2` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
+- Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `OpenAI gpt-oss-120b (free)` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
 
 ### 3. Verify the install
 
@@ -472,7 +472,7 @@ Optional, depending on how they want the AI runtime to behave:
 - `FREE_OPENROUTER_API_KEY=...`
   - Use this only if they want the built-in hosted `FREE` provider to work on **their** deployment.
   - This stays server-side in Cloudflare. It is **not** exposed to browser users.
-  - The shipped FREE path is locked to `deepseek/deepseek-v3.2`.
+  - The shipped FREE path is locked to `openai/gpt-oss-120b:free`.
 - `OPENAI_API_KEY=...`
   - Optional if they want OpenAI available server-side by default on their own instance.
 - `OPEN_ROUTER_API_KEY=...`
@@ -496,7 +496,7 @@ On first load, the expected default UX is:
 
 - land on `Chat`
 - provider already set to `FREE`
-- model label already showing `DeepSeek V3.2`
+- model label already showing `OpenAI gpt-oss-120b (free)`
 
 ### 7. Give the user their own subdomain
 

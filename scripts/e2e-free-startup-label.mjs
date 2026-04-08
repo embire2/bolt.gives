@@ -26,8 +26,8 @@ try {
     throw new Error(`Expected FREE provider on startup, received: ${providerText}`);
   }
 
-  if (!modelText.includes('DeepSeek V3.2')) {
-    throw new Error(`Expected DeepSeek V3.2 model label on startup, received: ${modelText}`);
+  if (!modelText.includes('OpenAI gpt-oss-120b (free)')) {
+    throw new Error(`Expected OpenAI gpt-oss-120b (free) model label on startup, received: ${modelText}`);
   }
 
   await page.screenshot({

@@ -26,7 +26,7 @@ Release theme: move the hosted product onto a real server-first runtime, stand u
 - [x] Live release smoke covers generated-app success plus intentional preview break/recovery.
 
 2. Managed FREE provider
-- [x] Hosted `FREE` is locked to `deepseek/deepseek-v3.2`.
+- [x] Hosted `FREE` is locked to `openai/gpt-oss-120b:free`.
 - [x] Hosted OpenRouter credentials stay server-side only.
 - [x] Managed trial instances inherit the hosted FREE path through a protected relay, not a browser-visible key.
 
@@ -63,7 +63,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [ ] Keep browser runtime surfaces thin enough that longer sessions no longer degrade visibly on lower-end machines.
 
 4. FREE / managed-instance reliability
-- [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed trial instances.
+- [~] Keep `FREE` + `OpenAI gpt-oss-120b (free)` reliable across hosted, Pages, and managed trial instances.
 - [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
 - [ ] Surface deployment history, last good SHA, and rollback outcomes to the operator panel.
 

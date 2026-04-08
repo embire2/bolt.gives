@@ -5,6 +5,7 @@ import { Menu } from '~/components/sidebar/Menu.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { getApiKeysFromCookies } from './APIKeyManager';
+import { ChatBox } from './ChatBox';
 import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import styles from './BaseChat.module.scss';
@@ -26,6 +27,7 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import { usePublicUrlConfig } from '~/lib/public-url-context';
+import { logStore } from '~/lib/stores/logs';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const TEXTAREA_MIN_HEIGHT = 72;
@@ -59,7 +61,6 @@ const LazyWorkbench = React.lazy(() =>
   import('~/components/workbench/Workbench.client').then((module) => ({ default: module.Workbench })),
 );
 const LazyMessages = React.lazy(() => import('./Messages.client').then((module) => ({ default: module.Messages })));
-const LazyChatBox = React.lazy(() => import('./ChatBox').then((module) => ({ default: module.ChatBox })));
 const LazyCommentaryFeed = React.lazy(() =>
   import('./CommentaryFeed').then((module) => ({ default: module.CommentaryFeed })),
 );
@@ -332,7 +333,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     ref,
   ) => {
     const { adminPanelUrl } = usePublicUrlConfig();
-    const TEXTAREA_MAX_HEIGHT = chatStarted ? 180 : 136;
+    const TEXTAREA_MAX_HEIGHT = chatStarted ? 132 : 136;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
     const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
     const [modelList, setModelList] = useState<ModelInfo[]>([]);
@@ -352,6 +353,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [activeSurface, setActiveSurface] = useState<SurfaceTabId>('chat');
     const [surfaceLayoutHydrated, setSurfaceLayoutHydrated] = useState(false);
     const providerListSignature = (providerList || PROVIDER_LIST).map((item) => item.name).join('|');
+    const promptSurfaceMountLoggedRef = useRef(false);
 
     useEffect(() => {
       if (expoUrl) {
@@ -394,6 +396,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         behavior: 'auto',
       });
     }, [chatStarted, data, isStreaming, progressAnnotations.length]);
+
+    useEffect(() => {
+      if (!textareaRef?.current || promptSurfaceMountLoggedRef.current) {
+        return;
+      }
+
+      promptSurfaceMountLoggedRef.current = true;
+      logStore.logSystem('Chat input mounted', {
+        provider: provider?.name,
+        model,
+        chatStarted,
+      });
+    }, [chatStarted, input, model, provider?.name, textareaRef]);
     useEffect(() => {
       const storedLayout = readStoredSurfaceLayout();
 
@@ -751,79 +766,86 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               )}
             </div>
             {chatStarted ? (
-              <div className="space-y-2">
-                <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
-                  <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
-                </Suspense>
-                <TechnicalFeedContent
-                  data={data}
-                  progressAnnotations={progressAnnotations}
-                  model={model}
-                  provider={provider}
-                  isStreaming={isStreaming}
-                  autonomyMode={autonomyMode}
-                  latestRunMetrics={latestRunMetrics}
-                  latestUsage={latestUsage}
-                  technicalFeedRef={technicalFeedRef}
-                />
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                <div className="min-w-0">
+                  <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
+                    <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+                  </Suspense>
+                </div>
+                <div className="min-w-0">
+                  <TechnicalFeedContent
+                    data={data}
+                    progressAnnotations={progressAnnotations}
+                    model={model}
+                    provider={provider}
+                    isStreaming={isStreaming}
+                    autonomyMode={autonomyMode}
+                    latestRunMetrics={latestRunMetrics}
+                    latestUsage={latestUsage}
+                    technicalFeedRef={technicalFeedRef}
+                  />
+                </div>
               </div>
             ) : null}
             <div data-testid="chat-input-region" className="flex flex-col gap-2">
-              <Suspense fallback={<LazyPanelFallback title="Prompt Surface" />}>
-                <LazyChatBox
-                  isModelSettingsCollapsed={isModelSettingsCollapsed}
-                  setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
-                  provider={provider}
-                  setProvider={setProvider}
-                  onProviderSelection={onProviderSelection}
-                  providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
-                  model={model}
-                  setModel={setModel}
-                  modelList={modelList}
-                  apiKeys={apiKeys}
-                  isModelLoading={isModelLoading}
-                  onApiKeysChange={onApiKeysChange}
-                  uploadedFiles={uploadedFiles}
-                  setUploadedFiles={setUploadedFiles}
-                  imageDataList={imageDataList}
-                  setImageDataList={setImageDataList}
-                  textareaRef={textareaRef}
-                  input={input}
-                  handleInputChange={handleInputChange}
-                  handlePaste={handlePaste}
-                  TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
-                  TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
-                  isStreaming={isStreaming}
-                  handleStop={handleStop}
-                  handleSendMessage={handleSendMessage}
-                  enhancingPrompt={enhancingPrompt}
-                  enhancePrompt={enhancePrompt}
-                  isListening={isListening}
-                  startListening={startListening}
-                  stopListening={stopListening}
-                  chatStarted={chatStarted}
-                  exportChat={exportChat}
-                  qrModalOpen={qrModalOpen}
-                  setQrModalOpen={setQrModalOpen}
-                  handleFileUpload={handleFileUpload}
-                  chatMode={chatMode}
-                  setChatMode={setChatMode}
-                  designScheme={designScheme}
-                  setDesignScheme={setDesignScheme}
-                  selectedElement={selectedElement}
-                  setSelectedElement={setSelectedElement}
-                  onWebSearchResult={onWebSearchResult}
-                  onSaveSession={onSaveSession}
-                  onResumeSession={onResumeSession}
-                  onShareSession={onShareSession}
-                  agentMode={agentMode}
-                  setAgentMode={setAgentMode}
-                  onSketchChange={onSketchChange}
-                  autonomyMode={autonomyMode}
-                  setAutonomyMode={setAutonomyMode}
-                />
-              </Suspense>
-              <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+              <ChatBox
+                isModelSettingsCollapsed={isModelSettingsCollapsed}
+                setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
+                provider={provider}
+                setProvider={setProvider}
+                onProviderSelection={onProviderSelection}
+                providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
+                model={model}
+                setModel={setModel}
+                modelList={modelList}
+                apiKeys={apiKeys}
+                isModelLoading={isModelLoading}
+                onApiKeysChange={onApiKeysChange}
+                uploadedFiles={uploadedFiles}
+                setUploadedFiles={setUploadedFiles}
+                imageDataList={imageDataList}
+                setImageDataList={setImageDataList}
+                textareaRef={textareaRef}
+                input={input}
+                handleInputChange={handleInputChange}
+                handlePaste={handlePaste}
+                TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
+                TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
+                isStreaming={isStreaming}
+                handleStop={handleStop}
+                handleSendMessage={handleSendMessage}
+                enhancingPrompt={enhancingPrompt}
+                enhancePrompt={enhancePrompt}
+                isListening={isListening}
+                startListening={startListening}
+                stopListening={stopListening}
+                chatStarted={chatStarted}
+                exportChat={exportChat}
+                qrModalOpen={qrModalOpen}
+                setQrModalOpen={setQrModalOpen}
+                handleFileUpload={handleFileUpload}
+                chatMode={chatMode}
+                setChatMode={setChatMode}
+                designScheme={designScheme}
+                setDesignScheme={setDesignScheme}
+                selectedElement={selectedElement}
+                setSelectedElement={setSelectedElement}
+                onWebSearchResult={onWebSearchResult}
+                onSaveSession={onSaveSession}
+                onResumeSession={onResumeSession}
+                onShareSession={onShareSession}
+                agentMode={agentMode}
+                setAgentMode={setAgentMode}
+                onSketchChange={onSketchChange}
+                autonomyMode={autonomyMode}
+                setAutonomyMode={setAutonomyMode}
+              />
+              <div
+                className={classNames(
+                  'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary',
+                  chatStarted ? 'px-3 py-1.5 text-[11px]' : 'px-3 py-2 text-xs',
+                )}
+              >
                 <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives
                 can browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code>{' '}
                 file with its understanding of the full API environment. No setup is required.

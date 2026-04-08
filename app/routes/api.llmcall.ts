@@ -349,6 +349,23 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         );
       }
 
+      if (error instanceof Error && error.message?.includes('FREE_PROVIDER_CREDITS_EXHAUSTED')) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message:
+              'The hosted FREE model on this server is out of operator credits. Use OpenRouter with your own key right now, or ask the operator to replenish the hosted FREE route.',
+            statusCode: 503,
+            isRetryable: false,
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Hosted FREE Provider Credits Exhausted',
+          },
+        );
+      }
+
       if (error instanceof Error && error.message?.includes('FREE_PROVIDER_UNAVAILABLE')) {
         return new Response(
           JSON.stringify({

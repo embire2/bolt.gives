@@ -1,6 +1,5 @@
 import { useStore } from '@nanostores/react';
 import { useMemo, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import type { JSONValue } from 'ai';
@@ -188,7 +187,6 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
 
   const recent = events.filter((event) => !isArchitectTimelineEvent(event)).slice(-96);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const canVirtualize = typeof ResizeObserver === 'function';
 
   const getPrimaryText = (event: InteractiveStepRunnerEvent): string => {
     switch (event.type) {
@@ -306,13 +304,6 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
 
     return items;
   }, [architectEvents, checkpointEvents, commentaryEvents, recent]);
-  const rowVirtualizer = useVirtualizer({
-    count: feedItems.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => feedItems[index]?.estimateSize ?? 120,
-    overscan: 8,
-  });
-  const shouldVirtualize = canVirtualize && feedItems.length > 24;
 
   if (feedItems.length === 0) {
     return null;
@@ -333,43 +324,11 @@ export function StepRunnerFeed(props: StepRunnerFeedProps) {
         ref={scrollRef}
         className="modern-scrollbar max-h-[44vh] overflow-x-hidden overflow-y-auto pr-1 sm:max-h-[30rem]"
       >
-        {shouldVirtualize ? (
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              position: 'relative',
-              width: '100%',
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-              const item = feedItems[virtualItem.index];
-
-              return (
-                <div
-                  key={item.key}
-                  ref={rowVirtualizer.measureElement}
-                  data-index={virtualItem.index}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualItem.start}px)`,
-                    paddingBottom: '0.5rem',
-                  }}
-                >
-                  {item.render()}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {feedItems.map((item) => (
-              <div key={item.key}>{item.render()}</div>
-            ))}
-          </div>
-        )}
+        <div className="space-y-2">
+          {feedItems.map((item) => (
+            <div key={item.key}>{item.render()}</div>
+          ))}
+        </div>
       </div>
     </div>
   );

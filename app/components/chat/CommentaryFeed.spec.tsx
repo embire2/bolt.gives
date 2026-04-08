@@ -69,7 +69,7 @@ describe('CommentaryFeed', () => {
     expect(screen.getByText(/Current status/i)).toBeTruthy();
     expect(screen.getByText(/^Now:/i)).toBeTruthy();
     expect(screen.getByText(/Running pnpm install/i)).toBeTruthy();
-    expect(screen.getByText(/Detailed commentary has not arrived yet/i)).toBeTruthy();
+    expect(screen.getByText(/Waiting for the first concrete runtime step/i)).toBeTruthy();
   });
 
   it('prioritizes terminal failures over stale generic commentary in the summary card', () => {

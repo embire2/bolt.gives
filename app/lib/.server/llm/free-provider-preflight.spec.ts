@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureFreeProviderAvailability, resetFreeProviderPreflightCache } from './free-provider-preflight';
-import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/providers/free';
+import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 
 describe('ensureFreeProviderAvailability', () => {
   afterEach(() => {
@@ -49,13 +49,36 @@ describe('ensureFreeProviderAvailability', () => {
     ).rejects.toThrow('FREE_PROVIDER_RATE_LIMITED');
   });
 
-  it('returns unavailable when the hosted deepseek route is unavailable', async () => {
+  it('throws a credits-exhausted error when the hosted route is operator-funded and out of credits', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        json: async () => ({
+          error: {
+            message: 'Insufficient credits. Add more using https://openrouter.ai/settings/credits',
+          },
+        }),
+      }),
+    );
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'sk-or-v1-real-secret',
+      }),
+    ).rejects.toThrow('FREE_PROVIDER_CREDITS_EXHAUSTED');
+  });
+
+  it('returns unavailable when the hosted FREE route is unavailable', async () => {
     const fetchSpy = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 503,
       json: async () => ({
         error: {
-          message: 'deepseek/deepseek-v3.2 is temporarily unavailable upstream.',
+          message: 'openai/gpt-oss-120b:free is temporarily unavailable upstream.',
         },
       }),
     });

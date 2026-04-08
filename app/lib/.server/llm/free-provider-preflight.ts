@@ -1,9 +1,7 @@
-import {
-  FREE_HOSTED_MODEL,
-  FREE_PROVIDER_NAME,
-  clearHostedFreeModelResolution,
-} from '~/lib/modules/llm/providers/free';
+import { clearHostedFreeModelResolution } from '~/lib/modules/llm/providers/free';
+import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '~/lib/runtime/credentials';
+import { createScopedLogger } from '~/utils/logger';
 
 type FreeProviderPreflightResult = {
   ok: boolean;
@@ -13,6 +11,7 @@ type FreeProviderPreflightResult = {
 };
 
 let cachedResult: FreeProviderPreflightResult | null = null;
+const logger = createScopedLogger('free-provider-preflight');
 
 const SUCCESS_TTL_MS = 60_000;
 const RATE_LIMIT_TTL_MS = 30_000;
@@ -81,6 +80,10 @@ function isRateLimited(status: number, message: string): boolean {
   return status === 429 || /rate[-\s]*limit/i.test(message);
 }
 
+function isCreditsExhausted(status: number, message: string): boolean {
+  return status === 402 || /insufficient credits/i.test(message);
+}
+
 export async function ensureFreeProviderAvailability(options: {
   providerName: string;
   modelName: string;
@@ -119,6 +122,13 @@ export async function ensureFreeProviderAvailability(options: {
   });
 
   if (hostedProbe.ok) {
+    logger.info(
+      `FREE preflight available ${JSON.stringify({
+        providerName: options.providerName,
+        modelName: FREE_HOSTED_MODEL,
+        status: hostedProbe.status,
+      })}`,
+    );
     cachedResult = {
       ok: true,
       expiresAt: now + SUCCESS_TTL_MS,
@@ -133,10 +143,22 @@ export async function ensureFreeProviderAvailability(options: {
 
   clearHostedFreeModelResolution();
 
+  const creditsExhausted = isCreditsExhausted(hostedProbe.status, hostedProbe.message);
   const upstreamRateLimited = isRateLimited(hostedProbe.status, hostedProbe.message);
-  const errorMessage = upstreamRateLimited
-    ? `FREE_PROVIDER_RATE_LIMITED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
-    : `FREE_PROVIDER_UNAVAILABLE: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`;
+  const errorMessage = creditsExhausted
+    ? `FREE_PROVIDER_CREDITS_EXHAUSTED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
+    : upstreamRateLimited
+      ? `FREE_PROVIDER_RATE_LIMITED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
+      : `FREE_PROVIDER_UNAVAILABLE: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`;
+
+  logger.warn(
+    `FREE preflight failed ${JSON.stringify({
+      providerName: options.providerName,
+      modelName: FREE_HOSTED_MODEL,
+      status: hostedProbe.status,
+      errorMessage,
+    })}`,
+  );
 
   cachedResult = {
     ok: false,

@@ -16,6 +16,10 @@ export function shouldUseClientStarterBootstrap(options: StarterBootstrapDecisio
     return false;
   }
 
+  if (providerName === 'FREE') {
+    return true;
+  }
+
   if (LOCAL_PROVIDER_SET.has(providerName)) {
     return true;
   }

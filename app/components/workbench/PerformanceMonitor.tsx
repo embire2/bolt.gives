@@ -84,14 +84,14 @@ export function PerformanceMonitor() {
         const response = await fetch('/api/system/performance');
 
         if (!response.ok) {
-          scheduleNextPoll(hostedRuntimeEnabled ? 60000 : 15000);
+          scheduleNextPoll(hostedRuntimeEnabled ? 120000 : 30000);
           return;
         }
 
         const nextSample = (await response.json()) as NodePerformanceSample;
 
         if (!mounted || !nextSample.available || !nextSample.cpu) {
-          scheduleNextPoll(hostedRuntimeEnabled ? 60000 : 15000);
+          scheduleNextPoll(hostedRuntimeEnabled ? 120000 : 30000);
           return;
         }
 
@@ -118,7 +118,7 @@ export function PerformanceMonitor() {
         // Best-effort widget; keep silent if endpoint is unavailable.
       } finally {
         const hidden = typeof document !== 'undefined' ? document.hidden : false;
-        const nextDelayMs = hostedRuntimeEnabled ? (hidden ? 90000 : 30000) : hidden ? 30000 : 10000;
+        const nextDelayMs = hostedRuntimeEnabled ? (hidden ? 120000 : 60000) : hidden ? 30000 : 10000;
         scheduleNextPoll(nextDelayMs);
       }
     };

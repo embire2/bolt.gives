@@ -7,7 +7,6 @@
       --at-apply: bolt-ease-cubic-bezier;
       transition-property: transform, opacity;
       transition-duration: 0.3s;
-      will-change: transform, opacity;
       transform: translateX(-50%);
       opacity: 0;
     }

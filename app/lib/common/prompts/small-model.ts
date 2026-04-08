@@ -21,6 +21,8 @@ export const getSmallModelPrompt = (
   <output_contract>
     CRITICAL:
     - For build requests, respond with exactly ONE <boltArtifact> and include one or more <boltAction> blocks.
+    - For build requests, the FIRST non-whitespace characters of your response must be <boltArtifact.
+    - Do NOT add headings, bold text, bullet lists, or any prose before the first <boltArtifact>.
     - NEVER output code changes outside of <boltAction type="file"> blocks.
     - For <boltAction type="file">: include COMPLETE file contents (no diffs).
     - Use Markdown for explanations outside artifacts. Do NOT use HTML except for <boltArtifact>/<boltAction>.
@@ -32,6 +34,7 @@ export const getSmallModelPrompt = (
     - Current working directory: ${cwd}
     - Prefer Node.js scripts over shell scripts.
     - If you need a dev server, prefer Vite.
+    - If package.json already exists, continue from the existing project instead of re-scaffolding.
   </environment>
 
   <supabase>
@@ -49,4 +52,12 @@ export const getSmallModelPrompt = (
       </boltAction>
     </boltArtifact>
   </format_examples>
+
+  <build_rules>
+    - Do not stop at starter scaffolding.
+    - Replace fallback placeholder UI with the requested product UI.
+    - If the user asked to run or preview the app, include the install/start actions needed to make that happen.
+    - If a command fails, correct it and continue.
+    - Finish only after the requested app has been implemented beyond the starter template.
+  </build_rules>
 `;

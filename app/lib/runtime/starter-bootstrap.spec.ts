@@ -38,14 +38,14 @@ describe('shouldUseClientStarterBootstrap', () => {
     ).toBe(false);
   });
 
-  it('does not force starter bootstrap solely because hosted runtime is enabled', () => {
+  it('forces starter bootstrap for the hosted FREE provider', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
-        modelName: 'deepseek/deepseek-v3.2',
+        modelName: 'openai/gpt-oss-120b:free',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

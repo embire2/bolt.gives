@@ -6,6 +6,7 @@
 
 - `ROADMAP.md` is now rewritten around the actual `v3.0.9` launch plan, with explicit launch blockers, operator/self-host priorities, and release metrics.
 - `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` trial flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
+- The hosted `FREE` default path now uses `openai/gpt-oss-120b:free`, because the previously pinned paid DeepSeek route could fail before generation starts whenever the operator-funded OpenRouter credits were exhausted.
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 - README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
@@ -14,6 +15,9 @@
 
 ### Fixed
 
+- Hosted FREE preflight now emits explicit structured diagnostics for rate-limit, credits-exhausted, and unavailable failures, so server logs show the real upstream cause instead of collapsing everything into a generic availability error.
+- Browser event logs no longer persist in cookies; they now live in local storage, which removes the oversized `eventLogs` cookie warnings and reduces client-side state churn.
+- The chat status lane now lays out `Live Commentary` and `Technical Feed` side-by-side on wider screens and shrinks the active prompt surface, which stops the Firefox run view from collapsing into a dense stacked column during active generation.
 - The self-host installer now retries and repairs common apt, dependency-install, build, Caddy, and service-start failures instead of exiting on the first recoverable error.
 - Managed Cloudflare trial registry writes are now atomic and can recover from the private admin assignment records, so active-instance refresh waves no longer risk dropping live projects from the runtime registry during rollout.
 - Runs that already emitted install/start commands but never reached a verified preview now replay those runtime commands through the workspace runner instead of falling back to another model continuation loop.
