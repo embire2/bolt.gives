@@ -87,9 +87,75 @@ log() {
   printf '[bolt.gives installer] %s\n' "$*"
 }
 
+warn() {
+  printf '[bolt.gives installer] WARN: %s\n' "$*" >&2
+}
+
 fail() {
   printf '[bolt.gives installer] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+retry_command() {
+  local attempts="$1"
+  local delay_seconds="$2"
+  local label="$3"
+  shift 3
+
+  local attempt=1
+  local exit_code=0
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+
+    exit_code=$?
+
+    if (( attempt >= attempts )); then
+      warn "${label} failed after ${attempts} attempt(s)"
+      return "${exit_code}"
+    fi
+
+    warn "${label} failed on attempt ${attempt}/${attempts}; retrying in ${delay_seconds}s"
+    sleep "${delay_seconds}"
+    attempt=$((attempt + 1))
+  done
+}
+
+repair_apt_state() {
+  warn "Repairing apt/dpkg state before retry"
+  sudo dpkg --configure -a >/dev/null 2>&1 || true
+  sudo apt-get install -f -y >/dev/null 2>&1 || true
+}
+
+repair_repo_dependencies() {
+  warn "Repairing pnpm cache and workspace dependency state"
+  (
+    cd "${INSTALL_DIR}" || exit 0
+    rm -rf node_modules/.vite node_modules/.cache >/dev/null 2>&1 || true
+    pnpm store prune >/dev/null 2>&1 || true
+  )
+}
+
+recover_services() {
+  local services=("$@")
+
+  for service_name in "${services[@]}"; do
+    sudo systemctl restart "${service_name}" >/dev/null 2>&1 || true
+  done
+}
+
+ensure_service_active() {
+  local service_name="$1"
+
+  if sudo systemctl is-active --quiet "${service_name}"; then
+    return 0
+  fi
+
+  warn "${service_name} is not active; attempting one restart"
+  sudo systemctl restart "${service_name}" >/dev/null 2>&1 || true
+  sudo systemctl is-active --quiet "${service_name}"
 }
 
 require_non_root() {
@@ -361,8 +427,9 @@ need_cmd() {
 
 install_apt_packages() {
   log "Installing Ubuntu base packages"
-  sudo apt-get update
-  local packages=(git curl ca-certificates build-essential python3)
+  repair_apt_state
+  retry_command 3 5 "apt-get update" sudo apt-get update >/dev/null
+  local packages=(git curl ca-certificates build-essential python3 postgresql-client)
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     packages+=(postgresql postgresql-contrib)
@@ -372,7 +439,11 @@ install_apt_packages() {
     packages+=(caddy)
   fi
 
-  sudo apt-get install -y "${packages[@]}"
+  if ! retry_command 2 5 "apt-get install base packages" sudo apt-get install -y "${packages[@]}"; then
+    repair_apt_state
+    retry_command 2 5 "apt-get install base packages after repair" sudo apt-get install -y "${packages[@]}" \
+      || fail "Unable to install required Ubuntu packages."
+  fi
 }
 
 install_nodejs() {
@@ -388,8 +459,14 @@ install_nodejs() {
   fi
 
   log "Installing Node.js ${NODE_MAJOR}.x"
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
-  sudo apt-get install -y nodejs
+  repair_apt_state
+
+  retry_command 3 5 "NodeSource setup for Node.js ${NODE_MAJOR}" bash -lc \
+    "curl -fsSL 'https://deb.nodesource.com/setup_${NODE_MAJOR}.x' | sudo -E bash -" \
+    || fail "Unable to prepare the NodeSource repository for Node.js ${NODE_MAJOR}."
+
+  retry_command 3 5 "nodejs package install" sudo apt-get install -y nodejs \
+    || fail "Unable to install Node.js ${NODE_MAJOR}."
 }
 
 install_pnpm() {
@@ -405,24 +482,33 @@ install_pnpm() {
   fi
 
   log "Installing pnpm ${PNPM_VERSION}"
-  sudo npm install -g "pnpm@${PNPM_VERSION}"
+  retry_command 3 5 "pnpm ${PNPM_VERSION} install" sudo npm install -g "pnpm@${PNPM_VERSION}" \
+    || fail "Unable to install pnpm ${PNPM_VERSION}."
 }
 
 clone_or_update_repo() {
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     log "Updating existing repository in ${INSTALL_DIR}"
-    git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
-    git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-    git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
-    return
+    if git -C "${INSTALL_DIR}" fetch origin "${BRANCH}" \
+      && git -C "${INSTALL_DIR}" checkout "${BRANCH}" \
+      && git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"; then
+      return
+    fi
+
+    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+    warn "Repository update failed; preserving the current tree at ${backup_dir} and recloning"
+    mv "${INSTALL_DIR}" "${backup_dir}"
   fi
 
   if [[ -e "${INSTALL_DIR}" ]]; then
-    fail "Install directory exists but is not a git repository: ${INSTALL_DIR}"
+    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+    warn "Install directory exists but is not a git repository; moving it to ${backup_dir}"
+    mv "${INSTALL_DIR}" "${backup_dir}"
   fi
 
   log "Cloning ${REPO_URL} into ${INSTALL_DIR}"
-  git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+  retry_command 3 5 "git clone ${BRANCH}" git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}" \
+    || fail "Unable to clone ${REPO_URL} (${BRANCH})."
 }
 
 upsert_env_line() {
@@ -535,7 +621,8 @@ setup_local_postgres() {
   need_cmd psql
 
   log "Configuring local PostgreSQL database '${POSTGRES_DB}'"
-  sudo systemctl enable --now postgresql
+  retry_command 3 3 "postgresql startup" sudo systemctl enable --now postgresql \
+    || fail "Unable to start PostgreSQL."
   local postgres_password_sql="${POSTGRES_PASSWORD//\'/\'\'}"
 
   if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'" | grep -q 1; then
@@ -547,14 +634,32 @@ setup_local_postgres() {
   if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'" | grep -q 1; then
     sudo -u postgres createdb -O "${POSTGRES_USER}" "${POSTGRES_DB}"
   fi
+
+  retry_command 3 2 "postgresql verification" \
+    env PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'SELECT 1' >/dev/null \
+    || fail "PostgreSQL was installed but the configured database credentials did not verify."
 }
 
 install_dependencies() {
   log "Installing project dependencies"
   (
     cd "${INSTALL_DIR}"
-    pnpm install --frozen-lockfile || pnpm install
-  )
+    if pnpm install --frozen-lockfile; then
+      exit 0
+    fi
+
+    warn "pnpm install --frozen-lockfile failed; repairing dependency state and retrying"
+    repair_repo_dependencies
+
+    if pnpm install --no-frozen-lockfile; then
+      exit 0
+    fi
+
+    warn "pnpm install retry failed; removing node_modules and attempting one clean install"
+    rm -rf node_modules
+    repair_repo_dependencies
+    pnpm install --force --no-frozen-lockfile
+  ) || fail "Unable to install project dependencies after recovery attempts."
 }
 
 build_application() {
@@ -562,8 +667,15 @@ build_application() {
   (
     cd "${INSTALL_DIR}"
     export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
-    pnpm exec remix vite:build
-  )
+    if pnpm run build; then
+      exit 0
+    fi
+
+    warn "Build failed on first attempt; clearing generated artifacts and retrying once"
+    rm -rf build node_modules/.vite
+    repair_repo_dependencies
+    pnpm run build
+  ) || fail "Unable to build bolt.gives after recovery attempts."
 }
 
 write_launcher_scripts() {
@@ -668,7 +780,14 @@ install_systemd_services() {
   write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${APP_PORT}"
 
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"
+  retry_command 2 3 "enable/start systemd services" \
+    sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}" \
+    || fail "Unable to enable or start the bolt.gives services."
+
+  local service_name
+  for service_name in "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"; do
+    ensure_service_active "${service_name}" || fail "${service_name} failed to reach the active state."
+  done
 }
 
 ensure_caddy_import() {
@@ -759,9 +878,17 @@ configure_caddy() {
 
   printf '%s\n' "${fragment_content}" | sudo tee "${caddy_fragment}" >/dev/null
   sudo caddy fmt --overwrite "${caddy_fragment}" >/dev/null
-  sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null
-  sudo systemctl enable --now caddy
-  sudo systemctl reload caddy
+  retry_command 2 2 "caddy validate" sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null \
+    || fail "Caddy configuration validation failed."
+  retry_command 2 2 "caddy enable/start" sudo systemctl enable --now caddy \
+    || fail "Unable to start Caddy."
+
+  if ! retry_command 2 2 "caddy reload" sudo systemctl reload caddy; then
+    warn "Caddy reload failed; attempting a full restart"
+    sudo systemctl restart caddy || fail "Unable to restart Caddy after reload failure."
+  fi
+
+  sudo systemctl is-active --quiet caddy || fail "Caddy is not active after configuration."
 }
 
 wait_for_http() {
@@ -879,7 +1006,12 @@ main() {
     install_systemd_services
     configure_caddy
 
-    if wait_for_http "http://127.0.0.1:${APP_PORT}" 45 2; then
+    if ! wait_for_http "http://127.0.0.1:${APP_PORT}" 45 2; then
+      warn "Application health check failed after first startup; restarting the service stack once"
+      recover_services "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"
+    fi
+
+    if wait_for_http "http://127.0.0.1:${APP_PORT}" 30 2; then
       log "Application responded on http://127.0.0.1:${APP_PORT}"
     else
       fail "Install finished but the app did not respond on http://127.0.0.1:${APP_PORT}. Check systemd logs."

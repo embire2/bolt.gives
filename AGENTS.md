@@ -79,6 +79,7 @@ Never force-push shared branches unless explicitly approved.
 - Expand the operator surface with deployment history, rollback outcomes, and capacity visibility
 - Production-safe tenant/account/RBAC hardening
 - Tenant approval/invite lifecycle beyond the server-local registry baseline
+- Self-host installer resilience, including interactive PostgreSQL setup and recovery from common apt/build/service failures
 - First-party template packs + CI smoke coverage
 - Teams add-on and collaboration audit trail
 - Update-channel rollback verification and operator tooling

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-05
+Last updated: 2026-04-08
 
 Status legend:
 - `[x]` complete
@@ -15,168 +15,114 @@ Next release target:
 
 ## v3.0.8 - Shipped Baseline
 
-Release theme: turn the managed Cloudflare trial flow into a registration-first operator system, keep the public/free path honest, and stand up a private admin control plane on the live server.
+Release theme: move the hosted product onto a real server-first runtime, stand up the private operator surface, and make managed Cloudflare trial instances real instead of aspirational.
 
 ### Shipped in v3.0.8
 
 1. Hosted runtime and browser offload
-- [x] Hosted instances now prefer the managed server runtime for install/build/dev/test/preview flows.
-- [x] Hosted preview state now comes from server-side status/SSE instead of tight browser polling.
+- [x] Hosted instances now default to the managed server runtime for install/build/dev/test/preview flows.
+- [x] Preview status and recovery now come from server-side status/SSE instead of tight browser polling.
 - [x] Preview breakage now routes into server-side self-heal and last-known-good restore.
-- [x] A committed live release smoke path now verifies generated app success, intentional preview breakage, self-heal, and preview restoration.
+- [x] Live release smoke covers generated-app success plus intentional preview break/recovery.
 
-2. Browser load reduction
-- [x] Explicit manual chunking now separates framework/editor/terminal/collaboration/markdown/chart/git domains.
-- [x] CodeMirror language packages now split into narrower per-language chunks.
-- [x] Terminal code now loads only after the terminal is opened.
-- [x] GitHub/GitLab deploy dialogs now lazy-load so export/deploy SDKs stay off the startup path.
-- [x] Collaboration config was split away from the heavy Yjs client so non-collab paths no longer pay that cost.
-- [x] Editor loading is deferred harder: the editor shell and vscode theme payload now load on demand.
-- [x] Settings surfaces with chart/PDF dependencies now lazy-load only when opened.
-- [x] Long technical feeds remain virtualized.
-- [x] Provider metadata is now served from a lightweight client catalog instead of pulling full provider implementations/SDKs into the browser startup path.
-- [x] Framework/runtime/LLM/editor chunking was split further into smaller dedicated buckets (`react-core`, `remix-runtime`, `router-runtime`, `llm-core`, `llm-react`, `llm-openrouter`, `editor-state`, `editor-view`, `editor-language-core`, `editor-autocomplete`, `editor-commands`, `editor-search`).
+2. Managed FREE provider
+- [x] Hosted `FREE` is locked to `deepseek/deepseek-v3.2`.
+- [x] Hosted OpenRouter credentials stay server-side only.
+- [x] Managed trial instances inherit the hosted FREE path through a protected relay, not a browser-visible key.
 
-3. Prompt and navigation usability
-- [x] Provider/model summary is visible again directly above the prompt box.
-- [x] User-supplied provider API key flows remain available for supported providers.
-- [x] Sidebar now has an explicit click target plus a wider hover-open threshold.
-- [x] Commentary heartbeat text now derives from active file/command/step state instead of generic keep-alive filler.
+3. Cloudflare managed trials
+- [x] `/managed-instances` is a real registration-first provisioning surface.
+- [x] One-client / one-instance enforcement is implemented in runtime.
+- [x] Managed trials now persist the real Cloudflare-assigned hostname and 15-day expiry state.
+- [x] `admin.bolt.gives` now exposes the private operator surface for profiles, assignments, and admin email activity.
 
-4. Tenant management baseline
-- [x] Tenant management entry points are now visible in the main shell and header.
-- [x] Bootstrap `Tenant Admin` dashboard added for server-hosted instances.
-- [x] Default bootstrap credentials are `admin / admin`.
-- [x] Tenant users now have a dedicated `/tenant` sign-in surface.
-- [x] Tenant password rotation is now available through server-backed auth endpoints instead of only bootstrap admin flows.
-- [x] Tenant creation now starts in `pending`.
-- [x] Tenant approval, invite issuance, forced password reset via invite, and disable/re-enable lifecycle metadata are now available.
-- [~] Current tenant registry is still a server-local baseline and still needs full RBAC, durable storage, and production-hardening work.
+4. Self-host packaging
+- [x] Installer supports custom app/admin/create domains.
+- [x] Installer provisions local PostgreSQL and Caddy-managed HTTPS.
+- [x] Self-hosted installs can expose the same public `create` and `admin` flows as the hosted service.
 
-5. Protected default FREE provider
-- [x] FREE now ships as a single locked hosted model: `deepseek/deepseek-v3.2`.
-- [x] FREE exposes no user API-key entry path and no client-visible fallback model.
-- [x] Managed OpenRouter token remains server-side only so fresh installs can start coding immediately without leaking the token.
+## v3.0.9 - Launch Plan
 
-6. Managed Cloudflare trial control plane
-- [x] A real managed-instance route now exists at `/managed-instances`.
-- [x] Runtime control endpoints now handle support/config, session lookup, spawn, refresh, and suspend flows.
-- [x] Trial instances now carry a 15-day expiry window plus event history in the runtime registry.
-- [x] Runtime enforcement now prevents a second trial from being minted for the same claimed client identity.
-- [x] Runtime enforcement also binds the active browser session to the already-issued instance so the same browser cannot quietly mint a second one under a different email.
-- [x] Users can request a preferred subdomain during provisioning.
-- [x] Managed trial instances are designed to roll forward from the current stable build via the runtime sync loop.
-- [x] Live provisioning is enabled on the server-hosted runtime where operator-side Cloudflare credentials are configured.
-- [x] Trial provisioning is now registration-first: the public form captures a client profile before a trial instance is created.
-- [x] Trial registrations are mirrored into the private admin panel database and linked back to assigned managed instances.
-- [x] The private operator URL `https://admin.bolt.gives` is now wired to the admin control surface on this server.
-- [x] Admin can review registered client profiles, live Cloudflare assignments, and stored outbound client email activity from one dashboard.
-- [x] Existing trial owners now land on a dedicated success page with the live URL, assigned hostname, expiry, and rollout details instead of returning to the registration form.
-- [x] Managed trial instances now receive the hosted `FREE` provider through a protected relay configuration, so `DeepSeek V3.2` works on trial instances without embedding the OpenRouter key in the Pages project.
-- [x] Managed trial instances now provision the hosted FREE relay credential as a Pages secret, keeping the relay path server-only while restoring the FREE provider retroactively across existing live trials.
-- [x] Hosted FREE relay authorization now falls back to the local runtime verifier, so Pages-hosted surfaces and retroactively repaired managed trials keep `DeepSeek V3.2` working without exposing the upstream OpenRouter key.
+Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to-preview reliability, operator controls, self-host resilience, and release observability.
 
-7. Self-host packaging and domain parity
-- [x] README now links directly to `https://create.bolt.gives` for the managed registration flow.
-- [x] The app can now redirect a dedicated create domain to `/managed-instances`, matching the admin-domain redirect behavior.
-- [x] The installer now supports custom app/admin/create domains for VPS self-hosting.
-- [x] The installer now prompts interactively for domain/PostgreSQL values when CLI flags are omitted.
-- [x] Self-hosted installs now fall back to the local app domain’s `/managed-instances` route when no dedicated create domain is configured.
-- [x] The installer now provisions a local PostgreSQL service for the private admin/operator control plane.
-- [x] The installer now configures Caddy for public HTTPS reverse-proxy on the chosen self-hosted domains.
+### P0 Launch Blockers
 
-7. Release communication
-- [x] Versioning aligned to `v3.0.8` across app/runtime/docs.
-- [x] Changelog and feature feed updated for the release.
-- [x] Release gate now boots the local runtime stack, verifies the locked `FREE` + `DeepSeek V3.2` startup label, and runs `pnpm run smoke:live`.
+1. Prompt-to-preview reliability
+- [~] Keep `Chat` and `Workspace` status explicit during generation so users always know whether the system is scaffolding, installing, starting, ready, or repairing.
+- [ ] Remove remaining starter/workspace hydration ambiguity on generated-app flows.
+- [ ] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified.
 
-### Validation expectations for v3.0.8
+2. Commentary quality and transparency
+- [~] Derive commentary from real runtime steps, files, commands, and recovery events.
+- [ ] Eliminate remaining generic keep-alive phrasing.
+- [ ] Keep the same status model visible in both `Chat` and `Workspace` so progress is never hidden behind the active pane.
+
+3. Browser-weight reduction and server offload
+- [~] Continue cutting the remaining heavy browser chunks (`editor`, `pdf`, `git`, `terminal`).
+- [ ] Push more preview/log reconciliation state entirely to the server.
+- [ ] Keep browser runtime surfaces thin enough that longer sessions no longer degrade visibly on lower-end machines.
+
+4. FREE / managed-instance reliability
+- [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed trial instances.
+- [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
+- [ ] Surface deployment history, last good SHA, and rollback outcomes to the operator panel.
+
+5. Tenant and operator hardening
+- [ ] Replace the bootstrap-only admin/tenant baseline with production-safe account and RBAC rules.
+- [ ] Add approval history, invite lifecycle, and auditable state transitions.
+- [ ] Add safer admin credential rotation and clearer operator session management.
+
+6. Self-host installer resilience
+- [~] Keep self-host install interactive for domains and local PostgreSQL credentials.
+- [ ] Install both PostgreSQL server and client tooling (`psql`) as part of the supported VPS baseline.
+- [ ] Recover automatically from common apt, dependency, build, and service-start failures instead of exiting on the first error.
+- [ ] Add a repeatable no-db and full-db installer smoke path to release validation.
+
+7. Template and request reliability
+- [ ] Ship first-party templates for the most common requested stacks.
+- [ ] Add CI smoke coverage for those templates.
+- [ ] Reduce the number of “empty scaffold / starter only” outcomes on real user requests.
+
+8. Release visibility and operator observability
+- [ ] Add capacity visibility for managed trial usage and expiry.
+- [ ] Add deployment history and last rollout result to the admin surface.
+- [ ] Make release smoke a hard pre-deploy gate for hosted and managed-instance updates.
+
+### P1 Improvements
+
+1. Teams and collaboration
+- [ ] Teams mode with RBAC and shared project ownership.
+- [ ] Collaboration audit trail and operator export.
+
+2. Additional runtime hardening
+- [ ] Broader Architect recovery signatures beyond preview restore.
+- [ ] More bounded retry/recovery flows for dependency and dev-server failures.
+
+3. Product polish
+- [ ] Cleaner operator email workflows.
+- [ ] Better first-run education for hosted and self-hosted users.
+- [ ] Additional bundle budgets in CI so browser weight cannot silently regress.
+
+## v3.0.9 Release Metrics
+
+- [ ] First prompt-to-preview success rate >= 90% on the first-party template set.
+- [ ] Commentary first visible update <= 2s on hosted runs.
+- [ ] No hidden agent actions: critical execution state always visible in `Chat` or `Workspace`.
+- [ ] Managed Cloudflare refresh path is health-verified and reversible.
+- [ ] Installer success rate >= 95% on the validated Ubuntu VPS baseline.
+- [ ] No shared browser startup chunk exceeds the agreed budget.
+
+## Required Validation Before Release
+
+- `bash -n install.sh`
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 - `pnpm run build`
 - `pnpm run e2e:free-startup`
-- live browser E2E on `https://alpha1.bolt.gives`
-- live smoke on `https://ahmad.bolt.gives`
-- live smoke on `https://bolt-gives.pages.dev`
-- live admin/operator E2E on `https://admin.bolt.gives`
 - `pnpm run smoke:live`
-
-## v3.0.9 - Next Priority Stack
-
-Release theme: harden the operator surface into a production-safe tenant service, tighten rollout/rollback visibility, and keep shrinking the remaining browser/runtime heavy paths.
-
-### P0
-
-0. Execution UX clarity
-- [x] Keep `Chat` active by default while the workspace spins up so users can still follow commentary.
-- [x] Add a bottom `Workspace Activity` panel with live commentary, execution transparency, and technical timeline.
-- [x] Default live loads back into `Chat` instead of restoring a stale `Workspace` focus from prior browser state.
-- [x] Prevent stale terminal panel state from crashing the workspace surface on live hosted instances.
-- [x] Keep the locked hosted FREE model visible as `DeepSeek V3.2` in the selector instead of a misleading placeholder during async provider/model bootstrap.
-- [x] Keep the public `/managed-instances` registration/control surface scrollable inside the locked app shell instead of relying on document-level scrolling.
-- [x] Keep `admin.bolt.gives` operator sign-in on a browser-native cookie redirect path so the dashboard loads cleanly after authentication instead of relying on fragile SPA handoffs.
-- [x] Persist and show the real Cloudflare-assigned Pages hostname for managed trials so clients do not get sent to the wrong `*.pages.dev` site when Cloudflare appends a suffix.
-- [x] Keep live agent updates readable by letting the prompt box flow with the page instead of covering the commentary/timeline stack.
-- [x] Replay generated install/start commands through the workspace runner whenever a run ended without a verified preview, instead of falling back immediately to another model continuation.
-- [~] Make prompt-to-preview progress feel continuous on generated-app flows instead of bouncing between starter/workspace states.
-- [ ] Add stronger explicit preview lifecycle states (`scaffolding`, `installing`, `starting`, `preview ready`, `repairing`) to the main shell.
-
-1. Vendor and editor payload reduction
-- [ ] Split the remaining heavy startup/runtime chunks (`editor-language-core`, `pdf-export`, `git-export`, `terminal-xterm`) into stricter action-driven boundaries.
-- [~] Move more CodeMirror language/theme payloads behind language-use boundaries.
-- [~] Remove any remaining editor/collab/chart heavy imports from shared startup paths.
-
-2. Full server-first execution closure
-- [ ] Eliminate remaining hosted dependence on browser WebContainer for normal coding paths.
-- [ ] Keep browser terminal/status surfaces thin and server-backed only.
-- [~] Push more preview/log reconciliation state entirely to the server.
-
-3. Self-heal hardening
-- [ ] Expand Architect preview/runtime diagnostics beyond restore-only recovery.
-- [ ] Add confidence-based fix loops with bounded retries.
-- [~] Add regression E2E that breaks generated apps in multiple ways and proves recovery.
-- [~] Cover starter-to-editor/workspace hydration races so generated apps do not fail during the first live editing pass.
-
-4. Tenant and account hardening
-- [ ] Replace bootstrap tenant registry with a proper production-safe tenant/account model.
-- [~] Add password change flow for bootstrap admin.
-- [~] Add tenant roles, audit trail, approval history, and basic session management.
-- [x] Enforce one-client / one-instance rules for managed deployments in runtime, not only docs.
- - [x] Support self-hosted admin/create domain configuration instead of assuming only the hosted `bolt.gives` domains exist.
-
-5. Cloudflare managed control plane
-- [x] Build the actual spawn/provision/update control plane described in docs.
-- [x] Let a signed-in client request one experimental managed trial instance for 15 days through the managed control-plane surface.
-- [x] Enforce one-client / one-instance allocation with a clear reclaim/expiry path.
-- [x] Let each client choose a subdomain during provisioning.
-- [x] Add an operator surface inside `Tenant Admin` that lists managed trial instances, status, expiry, and server-backed refresh/suspend actions.
-- [x] Keep Cloudflare operator credentials on the runtime service only; browser/operator pages receive sanitized instance metadata only.
-- [x] Implement automatic rollout from the current stable build to managed instances.
-- [x] Keep managed-instance runtime configuration in sync across retroactive fleet updates, not only new spawns.
-- [x] Harden managed-instance registry persistence so fleet refreshes survive write races and can rebuild from the private admin assignment records.
-- [ ] Add health-verified rollback on failed updates.
-- [~] Wire live operator credentials on hosted runtimes so provisioning is enabled in production, not just implemented in code.
-
-### P1
-
-1. Teams and collaboration
-- [ ] Optional Teams mode with RBAC.
-- [ ] Collaboration audit export and operator visibility.
-
-2. Template reliability
-- [ ] First-party template packs for common stacks.
-- [ ] CI smoke coverage for each template.
-
-3. Operator quality
-- [ ] Build no-db installer smoke into CI.
-- [ ] Add bundle budgets to CI so startup weight cannot silently regress.
-- [ ] Add runtime telemetry dashboards for memory, stalls, and recovery rate.
-
-### v3.0.8 Release Metrics
-- [~] Initial hosted chat shell materially lighter than `v3.0.7`.
-- [ ] No shared startup chunk above agreed budget.
-- [ ] Hosted scaffold-to-preview success rate >= 90%.
-- [ ] Architect known-failure recovery success >= 75%.
-- [~] Tenant admin flows work end-to-end on server-hosted instances.
-- [ ] Managed instance rollout/update path is health-checked and reversible.
+- live browser E2E on `https://alpha1.bolt.gives`
+- smoke on `https://ahmad.bolt.gives`
+- smoke on `https://bolt-gives.pages.dev`
+- operator/admin E2E on `https://admin.bolt.gives`
+- installer smoke on a fresh Ubuntu VPS path

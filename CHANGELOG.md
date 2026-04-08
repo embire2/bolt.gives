@@ -4,13 +4,17 @@
 
 ### Changed
 
+- `ROADMAP.md` is now rewritten around the actual `v3.0.9` launch plan, with explicit launch blockers, operator/self-host priorities, and release metrics.
+- `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` trial flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 - README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
 - The self-host installer now supports an interactive setup path when domain/PostgreSQL flags are omitted, and self-hosted trial links now fall back to the local app domain’s `/managed-instances` route instead of pointing back to the hosted `create.bolt.gives` domain.
+- The installer now installs PostgreSQL client tooling (`psql`) as part of the supported self-host baseline and keeps asking interactively for the local PostgreSQL database name, username, and password when those flags are omitted.
 
 ### Fixed
 
+- The self-host installer now retries and repairs common apt, dependency-install, build, Caddy, and service-start failures instead of exiting on the first recoverable error.
 - Managed Cloudflare trial registry writes are now atomic and can recover from the private admin assignment records, so active-instance refresh waves no longer risk dropping live projects from the runtime registry during rollout.
 - Runs that already emitted install/start commands but never reached a verified preview now replay those runtime commands through the workspace runner instead of falling back to another model continuation loop.
 - Hosted FREE runs no longer force every project request through the client-side starter bootstrap path on hosted runtime, which restores direct coding/execution for generated app requests instead of trapping users on the fallback starter shell.
