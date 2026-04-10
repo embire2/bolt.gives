@@ -6,7 +6,7 @@
 
 - `ROADMAP.md` is now rewritten around the actual `v3.0.9` launch plan, with explicit launch blockers, operator/self-host priorities, and release metrics.
 - `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` trial flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
-- The hosted `FREE` default path now uses `openai/gpt-oss-120b:free`, because the previously pinned paid DeepSeek route could fail before generation starts whenever the operator-funded OpenRouter credits were exhausted.
+- The hosted `FREE` default path is pinned to `deepseek/deepseek-v3.2`, with the server runtime carrying the protected OpenRouter token so hosted and trial instances can start coding immediately without exposing operator credentials.
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 - README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.

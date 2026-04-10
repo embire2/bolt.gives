@@ -4,7 +4,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
-import { getApiKeysFromCookies } from './APIKeyManager';
+import { getApiKeysFromCookies } from '~/lib/runtime/api-key-storage';
 import { ChatBox } from './ChatBox';
 import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';

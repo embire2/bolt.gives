@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '~/types/model';
 import Cookies from 'js-cookie';
+import { getApiKeysFromCookies } from '~/lib/runtime/api-key-storage';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -13,23 +14,6 @@ interface APIKeyManagerProps {
 
 // cache which stores whether the provider's API key is set via environment variable
 const providerEnvKeyStatusCache: Record<string, boolean> = {};
-
-const apiKeyMemoizeCache: { [k: string]: Record<string, string> } = {};
-
-export function getApiKeysFromCookies() {
-  const storedApiKeys = Cookies.get('apiKeys');
-  let parsedKeys: Record<string, string> = {};
-
-  if (storedApiKeys) {
-    parsedKeys = apiKeyMemoizeCache[storedApiKeys];
-
-    if (!parsedKeys) {
-      parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
-    }
-  }
-
-  return parsedKeys;
-}
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, setApiKey }) => {

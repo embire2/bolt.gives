@@ -22,7 +22,7 @@ const FEATURE_FEED: FeatureDefinition[] = [
     id: 'release-v3.0.7',
     name: 'v3.0.7 managed Cloudflare trials and locked FREE startup regression',
     description:
-      'bolt.gives now ships the managed Cloudflare trial-instance control plane, enforces one-client/one-instance in runtime via email plus browser session ownership, and includes a browser release regression that verifies startup lands on the locked FREE OpenAI gpt-oss-120b (free) path.',
+      'bolt.gives now ships the managed Cloudflare trial-instance control plane, enforces one-client/one-instance in runtime via email plus browser session ownership, and includes a browser release regression that verifies startup lands on the locked FREE DeepSeek V3.2 path.',
     releaseDate: '2026-04-03',
   },
   {
@@ -57,7 +57,7 @@ const FEATURE_FEED: FeatureDefinition[] = [
     id: 'release-v3.0.1',
     name: 'v3.0.1 hosted free-model fallback',
     description:
-      'Hosted FREE moved to a managed OpenAI gpt-oss-120b (free) route as the visible default, alongside a wider prompt rail and refreshed release docs.',
+      'Hosted FREE moved to a managed OpenRouter route as the visible default, alongside a wider prompt rail and refreshed release docs.',
     releaseDate: '2026-03-25',
   },
   {

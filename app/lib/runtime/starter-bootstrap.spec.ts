@@ -42,7 +42,7 @@ describe('shouldUseClientStarterBootstrap', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
-        modelName: 'openai/gpt-oss-120b:free',
+        modelName: 'deepseek/deepseek-v3.2',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
       }),

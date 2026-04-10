@@ -5,6 +5,7 @@ import { cleanStackTrace } from '~/utils/stacktrace';
 import { createHostedWebContainerStub } from './hosted-stub';
 import { createBoltContainer } from './bolt-container';
 import { recoveryManager } from './manager/recovery';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 interface WebContainerContext {
   loaded: boolean;
@@ -82,8 +83,6 @@ if (!import.meta.env.SSR) {
         }
 
         webcontainerContext.loaded = true;
-
-        const { workbenchStore } = await import('~/lib/stores/workbench');
 
         // Only load inspector script for WebContainer (BoltContainer handles its own preview)
         if (runtime === 'webcontainer') {

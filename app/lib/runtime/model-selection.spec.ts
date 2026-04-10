@@ -172,10 +172,10 @@ describe('model-selection utilities', () => {
   it('replaces a stale hidden FREE fallback selection with the visible hosted FREE model', () => {
     const models: ModelInfo[] = [
       {
-        name: 'openai/gpt-oss-120b:free',
-        label: 'OpenAI gpt-oss-120b (free)',
+        name: 'deepseek/deepseek-v3.2',
+        label: 'DeepSeek V3.2',
         provider: 'FREE',
-        maxTokenAllowed: 131072,
+        maxTokenAllowed: 64000,
         maxCompletionTokens: 8192,
       },
     ];
@@ -187,7 +187,7 @@ describe('model-selection utilities', () => {
       savedModelName: 'deepseek/deepseek-v3.2',
     });
 
-    expect(resolved).toBe('openai/gpt-oss-120b:free');
+    expect(resolved).toBe('deepseek/deepseek-v3.2');
   });
 
   it('stores and retrieves provider model selections', () => {

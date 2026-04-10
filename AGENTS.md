@@ -49,21 +49,21 @@ Never force-push shared branches unless explicitly approved.
 - Architect self-heal v1 foundations
 - Provider/model/API-key persistence and cost estimation normalization
 - Installer-first self-host baseline
-- Hosted FREE provider with a protected managed-token route pinned to `openai/gpt-oss-120b:free`
+- Hosted FREE provider with a protected managed-token route pinned to `deepseek/deepseek-v3.2`
 - Cloudflare managed-instance architecture docs
 - Server-first hosted runtime default path
 - Preview auto-recovery via server-side health checks
 - Top-level Chat / Workspace tabs
 - Harder client chunking and deferred heavy surfaces
 - Bootstrap Tenant Admin route with default `admin / admin` on server-hosted instances
-- Hosted FREE provider locked to one protected OpenRouter model (`openai/gpt-oss-120b:free`) with no client-visible fallback path
+- Hosted FREE provider locked to one protected OpenRouter model (`deepseek/deepseek-v3.2`) with no client-visible fallback path
 - Lightweight client-side provider catalog so server/provider SDK code stays off the browser startup path
 - Tenant user portal with sign-in and password rotation
 - Committed live smoke path for generated-app success plus preview break/recovery
-- Locked FREE model label now renders consistently as `OpenAI gpt-oss-120b (free)` during selector bootstrap instead of falling back to a generic placeholder
+- Locked FREE model label now renders consistently as `DeepSeek V3.2` during selector bootstrap instead of falling back to a generic placeholder
 - Managed Cloudflare trial-instance control plane route/API surface at `/managed-instances`
 - One-client / one-instance runtime enforcement based on claimed email identity and browser session ownership
-- Browser regression coverage for `FREE` + `OpenAI gpt-oss-120b (free)` label rendering on startup
+- Browser regression coverage for `FREE` + `DeepSeek V3.2` label rendering on startup
 - `Tenant Admin` now includes an operator view for managed Cloudflare trials, with status/expiry visibility plus server-backed refresh and suspend actions
 - Managed Cloudflare instance metadata returned to browser surfaces is sanitized; Cloudflare operator credentials remain server-side only
 - Managed Cloudflare trials now require a registration profile before provisioning

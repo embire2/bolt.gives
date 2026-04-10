@@ -1166,42 +1166,11 @@ export class WorkbenchStore {
   }
 
   async downloadZip() {
-    const [{ default: jsZip }, fileSaver] = await Promise.all([import('jszip'), import('file-saver')]);
-    const zip = new jsZip();
-    const files = this.files.get();
-
-    // Get the project name from the description input, or use a default name
-    const projectName = (description.value ?? 'project').toLocaleLowerCase().split(' ').join('_');
-
-    // Generate a simple 6-character hash based on the current timestamp
-    const timestampHash = Date.now().toString(36).slice(-6);
-    const uniqueProjectName = `${projectName}_${timestampHash}`;
-
-    for (const [filePath, dirent] of Object.entries(files)) {
-      if (dirent?.type === 'file' && !dirent.isBinary) {
-        const relativePath = extractRelativePath(filePath);
-
-        // split the path into segments
-        const pathSegments = relativePath.split('/');
-
-        // if there's more than one segment, we need to create folders
-        if (pathSegments.length > 1) {
-          let currentFolder = zip;
-
-          for (let i = 0; i < pathSegments.length - 1; i++) {
-            currentFolder = currentFolder.folder(pathSegments[i])!;
-          }
-          currentFolder.file(pathSegments[pathSegments.length - 1], dirent.content);
-        } else {
-          // if there's only one segment, it's a file in the root
-          zip.file(relativePath, dirent.content);
-        }
-      }
-    }
-
-    // Generate the zip file and save it
-    const content = await zip.generateAsync({ type: 'blob' });
-    fileSaver.saveAs(content, `${uniqueProjectName}.zip`);
+    const { downloadWorkspaceZip } = await import('~/lib/runtime/archive-export');
+    await downloadWorkspaceZip({
+      files: this.files.get(),
+      projectDescription: description.value ?? 'project',
+    });
   }
 
   async runTestAndSecurityScan() {
@@ -1214,67 +1183,17 @@ export class WorkbenchStore {
     try {
       const changes = this.getFileModifcations() || {};
       const changedPaths = Object.keys(changes);
-      const [{ getMissingJestStubs, createTestAndSecuritySteps }, interactiveStepRunnerModule, collaborationConfig] =
-        await Promise.all([
-          import('~/lib/runtime/test-security'),
-          import('~/lib/runtime/interactive-step-runner'),
-          import('~/lib/collaboration/config'),
-        ]);
-      const missingStubs = getMissingJestStubs(this.files.get(), changedPaths);
-
-      for (const stub of missingStubs) {
-        await this.createFile(stub.path, stub.content);
-      }
-
       const shell = this.boltTerminal;
-      await shell.ready();
-
-      let eventSocket: WebSocket | undefined;
-
-      try {
-        if (typeof window !== 'undefined') {
-          const base = collaborationConfig.getCollaborationServerUrl();
-          eventSocket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
-        }
-      } catch {
-        eventSocket = undefined;
-      }
-
-      const steps = createTestAndSecuritySteps();
-      const runner = new interactiveStepRunnerModule.InteractiveStepRunner(
-        {
-          executeStep: async (step, context) => {
-            const commandText =
-              step.command[0] === 'bash' && step.command[1] === '-lc' && step.command[2]
-                ? `bash -lc ${JSON.stringify(step.command[2])}`
-                : step.command.join(' ');
-            const resp = await shell.executeCommand(`quality-${Date.now()}`, commandText, undefined, (chunk) =>
-              context.onStdout(chunk),
-            );
-
-            return {
-              exitCode: resp?.exitCode ?? 1,
-              stdout: resp?.output || '',
-              stderr: resp?.exitCode === 0 ? '' : resp?.output || '',
-            };
-          },
+      const { runWorkspaceTestAndSecurityScan } = await import('~/lib/runtime/test-security-runner');
+      await runWorkspaceTestAndSecurityScan({
+        files: this.files.get(),
+        changedPaths,
+        shell,
+        createFile: (filePath, content) => this.createFile(filePath, content),
+        onEvent: (event) => {
+          this.#appendInteractiveStepEvent(event);
         },
-        eventSocket,
-      );
-
-      runner.addEventListener('event', (event) => {
-        const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
-        this.#appendInteractiveStepEvent(detail);
       });
-
-      await runner.run(steps);
-
-      if (
-        eventSocket &&
-        (eventSocket.readyState === WebSocket.OPEN || eventSocket.readyState === WebSocket.CONNECTING)
-      ) {
-        eventSocket.close();
-      }
     } finally {
       this.isTestAndScanRunning.set(false);
     }
@@ -1321,255 +1240,24 @@ export class WorkbenchStore {
     branchName: string = 'main',
   ) {
     try {
-      const isGitHub = provider === 'github';
-      const isGitLab = provider === 'gitlab';
-
-      const cookies = (await import('js-cookie')).default;
-      const authToken = token || cookies.get(isGitHub ? 'githubToken' : 'gitlabToken');
-      const owner = username || cookies.get(isGitHub ? 'githubUsername' : 'gitlabUsername');
-
-      if (!authToken || !owner) {
-        throw new Error(`${provider} token or username is not set in cookies or provided.`);
-      }
-
       const files = this.files.get();
 
       if (!files || Object.keys(files).length === 0) {
         throw new Error('No files found to push');
       }
 
-      if (isGitHub) {
-        const octokitModule = await import('@octokit/rest');
+      const { pushWorkspaceToRepository } = await import('~/lib/runtime/repository-publisher');
 
-        // Initialize Octokit with the auth token.
-        const octokit = new octokitModule.Octokit({ auth: authToken });
-
-        // Check if the repository already exists before creating it
-        let repo: any;
-        let visibilityJustChanged = false;
-
-        try {
-          const resp = await octokit.repos.get({ owner, repo: repoName });
-          repo = resp.data;
-          console.log('Repository already exists, using existing repo');
-
-          // Check if we need to update visibility of existing repo
-          if (repo.private !== isPrivate) {
-            console.log(
-              `Updating repository visibility from ${repo.private ? 'private' : 'public'} to ${isPrivate ? 'private' : 'public'}`,
-            );
-
-            try {
-              // Update repository visibility using the update method
-              const { data: updatedRepo } = await octokit.repos.update({
-                owner,
-                repo: repoName,
-                private: isPrivate,
-              });
-
-              console.log('Repository visibility updated successfully');
-              repo = updatedRepo;
-              visibilityJustChanged = true;
-
-              // Add a delay after changing visibility to allow GitHub to fully process the change
-              console.log('Waiting for visibility change to propagate...');
-              await new Promise((resolve) => setTimeout(resolve, 3000)); // 3 second delay
-            } catch (visibilityError) {
-              console.error('Failed to update repository visibility:', visibilityError);
-
-              // Continue with push even if visibility update fails
-            }
-          }
-        } catch (error) {
-          if (error instanceof Error && 'status' in error && error.status === 404) {
-            // Repository doesn't exist, so create a new one
-            console.log(`Creating new repository with private=${isPrivate}`);
-
-            // Create new repository with specified privacy setting
-            const createRepoOptions = {
-              name: repoName,
-              private: isPrivate,
-              auto_init: true,
-            };
-
-            console.log('Create repo options:', createRepoOptions);
-
-            const { data: newRepo } = await octokit.repos.createForAuthenticatedUser(createRepoOptions);
-
-            console.log('Repository created:', newRepo.html_url, 'Private:', newRepo.private);
-            repo = newRepo;
-
-            // Add a small delay after creating a repository to allow GitHub to fully initialize it
-            console.log('Waiting for repository to initialize...');
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 second delay
-          } else {
-            console.error('Cannot create repo:', error);
-            throw error; // Some other error occurred
-          }
-        }
-
-        // Get all files
-        const files = this.files.get();
-
-        if (!files || Object.keys(files).length === 0) {
-          throw new Error('No files found to push');
-        }
-
-        // Function to push files with retry logic
-        const pushFilesToRepo = async (attempt = 1): Promise<string> => {
-          const maxAttempts = 3;
-
-          try {
-            console.log(`Pushing files to repository (attempt ${attempt}/${maxAttempts})...`);
-
-            // Create blobs for each file
-            const blobs = await Promise.all(
-              Object.entries(files).map(async ([filePath, dirent]) => {
-                if (dirent?.type === 'file' && dirent.content) {
-                  const { data: blob } = await octokit.git.createBlob({
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    content: Buffer.from(dirent.content).toString('base64'),
-                    encoding: 'base64',
-                  });
-                  return { path: extractRelativePath(filePath), sha: blob.sha };
-                }
-
-                return null;
-              }),
-            );
-
-            const validBlobs = blobs.filter(Boolean); // Filter out any undefined blobs
-
-            if (validBlobs.length === 0) {
-              throw new Error('No valid files to push');
-            }
-
-            // Refresh repository reference to ensure we have the latest data
-            const repoRefresh = await octokit.repos.get({ owner, repo: repoName });
-            repo = repoRefresh.data;
-
-            // Get the latest commit SHA (assuming main branch, update dynamically if needed)
-            const { data: ref } = await octokit.git.getRef({
-              owner: repo.owner.login,
-              repo: repo.name,
-              ref: `heads/${repo.default_branch || 'main'}`, // Handle dynamic branch
-            });
-            const latestCommitSha = ref.object.sha;
-
-            // Create a new tree
-            const { data: newTree } = await octokit.git.createTree({
-              owner: repo.owner.login,
-              repo: repo.name,
-              base_tree: latestCommitSha,
-              tree: validBlobs.map((blob) => ({
-                path: blob!.path,
-                mode: '100644',
-                type: 'blob',
-                sha: blob!.sha,
-              })),
-            });
-
-            // Create a new commit
-            const { data: newCommit } = await octokit.git.createCommit({
-              owner: repo.owner.login,
-              repo: repo.name,
-              message: commitMessage || 'Initial commit from your app',
-              tree: newTree.sha,
-              parents: [latestCommitSha],
-            });
-
-            // Update the reference
-            await octokit.git.updateRef({
-              owner: repo.owner.login,
-              repo: repo.name,
-              ref: `heads/${repo.default_branch || 'main'}`, // Handle dynamic branch
-              sha: newCommit.sha,
-            });
-
-            console.log('Files successfully pushed to repository');
-
-            return repo.html_url;
-          } catch (error) {
-            console.error(`Error during push attempt ${attempt}:`, error);
-
-            // If we've just changed visibility and this is not our last attempt, wait and retry
-            if ((visibilityJustChanged || attempt === 1) && attempt < maxAttempts) {
-              const delayMs = attempt * 2000; // Increasing delay with each attempt
-              console.log(`Waiting ${delayMs}ms before retry...`);
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-              return pushFilesToRepo(attempt + 1);
-            }
-
-            throw error; // Rethrow if we're out of attempts
-          }
-        };
-
-        // Execute the push function with retry logic
-        const repoUrl = await pushFilesToRepo();
-
-        // Return the repository URL
-        return repoUrl;
-      }
-
-      if (isGitLab) {
-        const { GitLabApiService: gitLabApiServiceClass } = await import('~/lib/services/gitlabApiService');
-        const gitLabApiService = new gitLabApiServiceClass(authToken, 'https://gitlab.com');
-
-        // Check or create repo
-        let repo = await gitLabApiService.getProject(owner, repoName);
-
-        if (!repo) {
-          repo = await gitLabApiService.createProject(repoName, isPrivate);
-          await new Promise((r) => setTimeout(r, 2000)); // Wait for repo initialization
-        }
-
-        // Check if branch exists, create if not
-        const branchRes = await gitLabApiService.getFile(repo.id, 'README.md', branchName).catch(() => null);
-
-        if (!branchRes || !branchRes.ok) {
-          // Create branch from default
-          await gitLabApiService.createBranch(repo.id, branchName, repo.default_branch);
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-
-        const actions = Object.entries(files).reduce(
-          (acc, [filePath, dirent]) => {
-            if (dirent?.type === 'file' && dirent.content) {
-              acc.push({
-                action: 'create',
-                file_path: extractRelativePath(filePath),
-                content: dirent.content,
-              });
-            }
-
-            return acc;
-          },
-          [] as { action: 'create' | 'update'; file_path: string; content: string }[],
-        );
-
-        // Check which files exist and update action accordingly
-        for (const action of actions) {
-          const fileCheck = await gitLabApiService.getFile(repo.id, action.file_path, branchName);
-
-          if (fileCheck.ok) {
-            action.action = 'update';
-          }
-        }
-
-        // Commit all files
-        await gitLabApiService.commitFiles(repo.id, {
-          branch: branchName,
-          commit_message: commitMessage || 'Commit multiple files',
-          actions,
-        });
-
-        return repo.web_url;
-      }
-
-      // Should not reach here since we only handle GitHub and GitLab
-      throw new Error(`Unsupported provider: ${provider}`);
+      return await pushWorkspaceToRepository({
+        provider,
+        files,
+        repoName,
+        commitMessage,
+        username,
+        token,
+        isPrivate,
+        branchName,
+      });
     } catch (error) {
       console.error('Error pushing to repository:', error);
       throw error; // Rethrow the error for further handling

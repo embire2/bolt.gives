@@ -9,7 +9,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'openai/gpt-oss-120b:free', label: 'OpenAI gpt-oss-120b (free)', provider: 'FREE' }],
+            staticModels: [{ name: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', provider: 'FREE' }],
           },
         ],
         [
@@ -30,8 +30,8 @@ describe('LLMManager.updateModelList', () => {
     });
 
     expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual([
+      'FREE:deepseek/deepseek-v3.2',
       'OpenAI:gpt-5.4',
-      'FREE:openai/gpt-oss-120b:free',
     ]);
   });
 
@@ -42,7 +42,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'openai/gpt-oss-120b:free', label: 'OpenAI gpt-oss-120b (free)', provider: 'FREE' }],
+            staticModels: [{ name: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', provider: 'FREE' }],
           },
         ],
         [
@@ -63,6 +63,6 @@ describe('LLMManager.updateModelList', () => {
       },
     });
 
-    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:openai/gpt-oss-120b:free']);
+    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:deepseek/deepseek-v3.2']);
   });
 });

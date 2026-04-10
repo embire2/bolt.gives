@@ -34,8 +34,6 @@ import type { ActionAlert, LlmErrorAlertType } from '~/types/actions';
 import { buildModelSelectionEnvelope, selectModelForPrompt } from '~/lib/runtime/model-orchestrator';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { recordTokenUsage } from '~/lib/stores/performance';
-import { SessionManager } from '~/lib/services/sessionManager';
-import { normalizeSessionPayload, restoreConversationFromPayload } from '~/lib/services/session-payload';
 import { mergePromptContext } from '~/lib/services/prompt-merge';
 import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import {
@@ -50,31 +48,13 @@ import {
   resolvePreferredModelName,
 } from '~/lib/runtime/model-selection';
 import { normalizeUsageEvent } from '~/lib/runtime/cost-estimation';
-import {
-  ARCHITECT_NAME,
-  type ArchitectDiagnosis,
-  buildArchitectAutoHealPrompt,
-  decideArchitectAutoHeal,
-  decideStarterContinuationPrecedence,
-  diagnoseArchitectIssue,
-} from '~/lib/runtime/architect';
-import {
-  executeApprovedPlanSteps,
-  generatePlanSteps,
-  type AgentMode,
-  type AgentPlanStep,
-} from '~/lib/runtime/agent-workflow';
+import type { ArchitectDiagnosis } from '~/lib/runtime/architect';
+import type { AgentMode, AgentPlanStep } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
 import { resolveStallPolicy } from '~/lib/runtime/stall-policy';
-import { shouldUseClientStarterBootstrap } from '~/lib/runtime/starter-bootstrap';
 import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
-import {
-  computeTextFileDelta,
-  computeTextSnapshotRevertOps,
-  formatCheckpointConfirmMessage,
-  snapshotTextFiles,
-} from '~/lib/runtime/agent-file-diffs';
+import type { TextFileSnapshot } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import type {
@@ -83,9 +63,9 @@ import type {
   SyntheticRunHandoffDataEvent,
   UsageDataEvent,
 } from '~/types/context';
-import { requestLikelyNeedsMutatingActions } from '~/lib/runtime/mutating-intent';
 
 const logger = createScopedLogger('Chat');
+const ARCHITECT_NAME = 'Architect';
 const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 const MAX_CHAT_DATA_EVENTS = 140;
@@ -104,6 +84,13 @@ const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
 const STARTER_IGNORE_FILE_RE = /(^|\/)(readme(\.[a-z0-9]+)?|changelog(\.[a-z0-9]+)?|\.bolt\/prompt)$/i;
+const loadSessionManager = () => import('~/lib/services/sessionManager');
+const loadSessionPayloadModule = () => import('~/lib/services/session-payload');
+const loadArchitectModule = () => import('~/lib/runtime/architect');
+const loadAgentWorkflowModule = () => import('~/lib/runtime/agent-workflow');
+const loadAgentFileDiffsModule = () => import('~/lib/runtime/agent-file-diffs');
+const loadStarterBootstrapModule = () => import('~/lib/runtime/starter-bootstrap');
+const loadMutatingIntentModule = () => import('~/lib/runtime/mutating-intent');
 
 type StoredProjectMemory = ProjectMemoryDataEvent | null;
 type ApiKeysUpdatePayload = {
@@ -1145,40 +1132,55 @@ Requirements:
 
     useEffect(() => {
       if (isLoading || fakeLoading) {
-        return;
+        return undefined;
       }
 
       if (!pendingStarterContinuationRef.current) {
-        return;
+        return undefined;
       }
 
-      const previewDiagnosis = actionAlert ? diagnoseArchitectIssue(actionAlert) : null;
-      const starterContinuationDecision = decideStarterContinuationPrecedence({
-        diagnosis: previewDiagnosis,
-        hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
-        starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
-      });
+      let cancelled = false;
 
-      if (actionAlert?.source === 'preview' && !starterContinuationDecision.shouldDispatchStarterContinuation) {
-        return;
-      }
+      const evaluateStarterContinuation = async () => {
+        const { decideStarterContinuationPrecedence, diagnoseArchitectIssue } = await loadArchitectModule();
+        const previewDiagnosis = actionAlert ? diagnoseArchitectIssue(actionAlert) : null;
+        const starterContinuationDecision = decideStarterContinuationPrecedence({
+          diagnosis: previewDiagnosis,
+          hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
+          starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
+        });
 
-      const starterWorkspaceReady = hasMaterializedStarterWorkspace(files);
-      const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(files);
+        if (actionAlert?.source === 'preview' && !starterContinuationDecision.shouldDispatchStarterContinuation) {
+          return;
+        }
 
-      if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
-        return;
-      }
+        const starterWorkspaceReady = hasMaterializedStarterWorkspace(files);
+        const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(files);
 
-      if (!starterPlaceholderStillPresent) {
-        pendingStarterContinuationRef.current = null;
+        if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
+          return;
+        }
+
+        if (!starterPlaceholderStillPresent) {
+          pendingStarterContinuationRef.current = null;
+          starterContinuationTriggeredRef.current = false;
+
+          return;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
         starterContinuationTriggeredRef.current = false;
+        dispatchStarterContinuation('stream-finished');
+      };
 
-        return;
-      }
+      void evaluateStarterContinuation();
 
-      starterContinuationTriggeredRef.current = false;
-      dispatchStarterContinuation('stream-finished');
+      return () => {
+        cancelled = true;
+      };
     }, [actionAlert?.source, dispatchStarterContinuation, fakeLoading, files, isLoading]);
 
     useEffect(() => {
@@ -1862,6 +1864,7 @@ Requirements:
 
     const handleSaveSession = useCallback(async () => {
       try {
+        const { SessionManager } = await loadSessionManager();
         const saved = await SessionManager.saveSession(buildSessionPayload(), activeSessionId);
         setActiveSessionId(saved.id);
         toast.success('Session saved');
@@ -1872,6 +1875,8 @@ Requirements:
 
     const handleResumeSession = useCallback(async () => {
       try {
+        const { SessionManager } = await loadSessionManager();
+        const { normalizeSessionPayload, restoreConversationFromPayload } = await loadSessionPayloadModule();
         const sessions = await SessionManager.listSessions();
 
         if (sessions.length === 0) {
@@ -1909,6 +1914,7 @@ Requirements:
 
     const handleShareSession = useCallback(async () => {
       try {
+        const { SessionManager } = await loadSessionManager();
         let sessionId = activeSessionId;
 
         if (!sessionId) {
@@ -1929,11 +1935,23 @@ Requirements:
       const shareSlug = searchParams.get('shareSession');
 
       if (!shareSlug) {
-        return;
+        return undefined;
       }
 
-      SessionManager.loadSessionByShareSlug(shareSlug)
-        .then((loaded) => {
+      let cancelled = false;
+
+      const loadSharedSession = async () => {
+        try {
+          const [{ SessionManager }, { normalizeSessionPayload, restoreConversationFromPayload }] = await Promise.all([
+            loadSessionManager(),
+            loadSessionPayloadModule(),
+          ]);
+          const loaded = await SessionManager.loadSessionByShareSlug(shareSlug);
+
+          if (cancelled) {
+            return;
+          }
+
           if (!loaded?.payload) {
             toast.error('Shared session not found');
             return;
@@ -1945,15 +1963,24 @@ Requirements:
           chatStore.setKey('started', true);
           setChatStarted(true);
           toast.success('Shared session loaded');
-        })
-        .catch((error) => {
-          toast.error(error instanceof Error ? error.message : 'Failed to load shared session');
-        })
-        .finally(() => {
-          const next = new URLSearchParams(searchParams);
-          next.delete('shareSession');
-          setSearchParams(next);
-        });
+        } catch (error) {
+          if (!cancelled) {
+            toast.error(error instanceof Error ? error.message : 'Failed to load shared session');
+          }
+        } finally {
+          if (!cancelled) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('shareSession');
+            setSearchParams(next);
+          }
+        }
+      };
+
+      void loadSharedSession();
+
+      return () => {
+        cancelled = true;
+      };
     }, [searchParams, setMessages, setSearchParams]);
 
     const runAgentActWorkflow = useCallback(async () => {
@@ -1963,11 +1990,21 @@ Requirements:
       }
 
       try {
+        const [{ executeApprovedPlanSteps }, agentFileDiffs] = await Promise.all([
+          loadAgentWorkflowModule(),
+          loadAgentFileDiffsModule(),
+        ]);
+        const {
+          computeTextFileDelta,
+          computeTextSnapshotRevertOps,
+          formatCheckpointConfirmMessage,
+          snapshotTextFiles,
+        } = agentFileDiffs;
         const shell = workbenchStore.boltTerminal;
         await shell.ready();
 
         const baselineSnapshot = snapshotTextFiles(workbenchStore.files.get());
-        const stepSnapshots = new Map<number, ReturnType<typeof snapshotTextFiles>>();
+        const stepSnapshots = new Map<number, TextFileSnapshot>();
 
         let socket: WebSocket | undefined;
 
@@ -2113,7 +2150,10 @@ Requirements:
 
       const currentAutonomyMode = workbenchStore.autonomyMode.get();
 
-      if (currentAutonomyMode === 'read-only' && requestLikelyNeedsMutatingActions(finalMessageContent)) {
+      if (
+        currentAutonomyMode === 'read-only' &&
+        (await loadMutatingIntentModule()).requestLikelyNeedsMutatingActions(finalMessageContent)
+      ) {
         logger.warn('Read-only autonomy mode cannot satisfy mutating request', {
           messagePreview: finalMessageContent.slice(0, 180),
         });
@@ -2172,6 +2212,7 @@ Requirements:
 
       if (agentMode === 'plan') {
         try {
+          const { generatePlanSteps } = await loadAgentWorkflowModule();
           const steps = await generatePlanSteps({
             goal: finalMessageContent,
             model: effectiveModel,
@@ -2233,7 +2274,7 @@ Requirements:
         setFakeLoading(true);
 
         const shouldBootstrapStarter = autoSelectTemplate
-          ? shouldUseClientStarterBootstrap({
+          ? (await loadStarterBootstrapModule()).shouldUseClientStarterBootstrap({
               providerName: effectiveProvider.name,
               modelName: effectiveModel,
               message: finalMessageContent,
@@ -2441,6 +2482,7 @@ Requirements:
 
     const dispatchArchitectAutoHeal = useCallback(
       async (alert: ActionAlert, diagnosis: ArchitectDiagnosis) => {
+        const { buildArchitectAutoHealPrompt, decideArchitectAutoHeal } = await loadArchitectModule();
         const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
         const decision = decideArchitectAutoHeal({
           autonomyMode,
@@ -2524,86 +2566,98 @@ Requirements:
 
     useEffect(() => {
       if (!actionAlert || architectInFlightRef.current) {
-        return;
+        return undefined;
       }
 
-      const diagnosis = diagnoseArchitectIssue(actionAlert);
+      let cancelled = false;
 
-      if (!diagnosis) {
-        return;
-      }
+      const evaluateArchitectAutoHeal = async () => {
+        const { decideArchitectAutoHeal, decideStarterContinuationPrecedence, diagnoseArchitectIssue } =
+          await loadArchitectModule();
+        const diagnosis = diagnoseArchitectIssue(actionAlert);
 
-      const alertKey = buildActionAlertKey(actionAlert);
-
-      if (pendingArchitectAutoHeal?.alertKey === alertKey) {
-        return;
-      }
-
-      const starterContinuationDecision = decideStarterContinuationPrecedence({
-        diagnosis,
-        hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
-        starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
-      });
-
-      if (starterContinuationDecision.shouldDispatchStarterContinuation) {
-        appendArchitectTimelineEvent({
-          type: 'telemetry',
-          description: 'Starter continuation takes precedence over Architect auto-heal',
-          output: `${diagnosis.title} (${diagnosis.issueId})`,
-        });
-
-        if (!isLoading) {
-          starterContinuationTriggeredRef.current = false;
-          dispatchStarterContinuation('stream-finished');
+        if (!diagnosis || cancelled) {
+          return;
         }
 
-        return;
-      }
+        const alertKey = buildActionAlertKey(actionAlert);
 
-      appendArchitectTimelineEvent({
-        type: 'telemetry',
-        description: `${ARCHITECT_NAME} diagnosis`,
-        output: `${diagnosis.title} (${diagnosis.issueId})`,
-      });
+        if (pendingArchitectAutoHeal?.alertKey === alertKey) {
+          return;
+        }
 
-      const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
-      const decision = decideArchitectAutoHeal({
-        autonomyMode,
-        diagnosis,
-        attemptsForFingerprint,
-      });
-
-      if (!decision.shouldAutoHeal) {
-        appendArchitectTimelineEvent({
-          type: 'error',
-          description: `${ARCHITECT_NAME} auto-heal skipped`,
-          error:
-            decision.reason === 'autonomy-blocked'
-              ? 'Autonomy mode blocks auto-heal for this issue.'
-              : 'Auto-heal attempt limit reached for this issue fingerprint.',
-          output: `${diagnosis.title} (${diagnosis.issueId})`,
-        });
-
-        return;
-      }
-
-      if (isLoading) {
-        setPendingArchitectAutoHeal({
-          alert: actionAlert,
+        const starterContinuationDecision = decideStarterContinuationPrecedence({
           diagnosis,
-          alertKey,
+          hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
+          starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
         });
-        setArchitectAutoHealStatus('queued');
+
+        if (starterContinuationDecision.shouldDispatchStarterContinuation) {
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: 'Starter continuation takes precedence over Architect auto-heal',
+            output: `${diagnosis.title} (${diagnosis.issueId})`,
+          });
+
+          if (!isLoading) {
+            starterContinuationTriggeredRef.current = false;
+            dispatchStarterContinuation('stream-finished');
+          }
+
+          return;
+        }
+
         appendArchitectTimelineEvent({
           type: 'telemetry',
-          description: `${ARCHITECT_NAME} auto-heal queued`,
+          description: `${ARCHITECT_NAME} diagnosis`,
           output: `${diagnosis.title} (${diagnosis.issueId})`,
         });
 
-        return;
-      }
+        const attemptsForFingerprint = architectAttemptCountsRef.current[diagnosis.fingerprint] || 0;
+        const decision = decideArchitectAutoHeal({
+          autonomyMode,
+          diagnosis,
+          attemptsForFingerprint,
+        });
 
-      void dispatchArchitectAutoHeal(actionAlert, diagnosis);
+        if (!decision.shouldAutoHeal) {
+          appendArchitectTimelineEvent({
+            type: 'error',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            error:
+              decision.reason === 'autonomy-blocked'
+                ? 'Autonomy mode blocks auto-heal for this issue.'
+                : 'Auto-heal attempt limit reached for this issue fingerprint.',
+            output: `${diagnosis.title} (${diagnosis.issueId})`,
+          });
+
+          return;
+        }
+
+        if (isLoading) {
+          setPendingArchitectAutoHeal({
+            alert: actionAlert,
+            diagnosis,
+            alertKey,
+          });
+          setArchitectAutoHealStatus('queued');
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal queued`,
+            output: `${diagnosis.title} (${diagnosis.issueId})`,
+          });
+
+          return;
+        }
+
+        void dispatchArchitectAutoHeal(actionAlert, diagnosis);
+      };
+
+      void evaluateArchitectAutoHeal();
+
+      return () => {
+        cancelled = true;
+      };
     }, [
       actionAlert,
       append,

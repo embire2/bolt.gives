@@ -30,7 +30,7 @@ describe('index route fallback shell', () => {
 
     expect(screen.getByText('Preparing the coding workspace. The prompt box will become interactive as soon as the chat shell is ready.')).toBeTruthy();
     expect(screen.getByText('FREE')).toBeTruthy();
-    expect(screen.getByText(/OpenAI gpt-oss-120b \(free\)/i)).toBeTruthy();
+    expect(screen.getByText(/DeepSeek V3\.2/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
   });
 });
