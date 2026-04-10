@@ -56,6 +56,7 @@
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
 - Managed hosted runtime handles installs, builds, tests, preview hosting, and file sync on live instances by default.
+- Follow-up prompts on existing hosted projects now reuse validated runtime commands instead of stalling on prose-only model handoffs.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare trial instances are registration-first, one-client / one-instance, 15-day environments with preferred-subdomain support.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, and admin email activity.

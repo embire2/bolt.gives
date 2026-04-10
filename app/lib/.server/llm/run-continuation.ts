@@ -1,3 +1,8 @@
+import {
+  decodeHtmlCommandDelimiters,
+  normalizeShellCommandSurface,
+  unwrapCommandJsonEnvelope,
+} from '~/lib/runtime/shell-command-utils';
 import { detectProjectCommands } from '~/utils/projectCommands';
 
 export interface RunContinuationOptions {
@@ -55,9 +60,11 @@ const SHELL_ACTION_RE = /<boltAction[^>]*type="shell"[^>]*>([\s\S]*?)<\/boltActi
 const INSPECTION_COMMAND_RE =
   /^\s*(ls(\s|$)|pwd(\s|$)|echo(\s|$)|cat(\s|$)|find(\s|$)|tree(\s|$)|whoami(\s|$)|env(\s|$)|printenv(\s|$)|cd(\s|$))/i;
 const INSTALL_COMMAND_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
-const START_COMMAND_RE = /^(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|preview)\b|^vite\s+--host\b/i;
+const START_COMMAND_RE =
+  /^(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|preview)\b|^vite(?:\s|$)|^next\s+dev\b|^react-scripts\s+start\b|^astro\s+dev\b|^nuxt\s+dev\b|^ng\s+serve\b|^serve\b/i;
 const BOOTSTRAP_ECHO_RE = /^echo\s+["']?Using built-in .*starter files["']?$/i;
 const CD_OR_MKDIR_RE = /^(cd|mkdir\s+-p)\b/i;
+const START_AUXILIARY_SEGMENT_RE = /^(cd\b|mkdir\s+-p\b|export\b|set\s+-[a-z-]+\b|source\b|[A-Z_][A-Z0-9_]*=)/i;
 const NON_IMPLEMENTATION_FILE_RE =
   /(^|\/)(readme(\.[a-z0-9]+)?|changelog(\.[a-z0-9]+)?|package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb|tsconfig(\.[a-z0-9-]+)?\.json|vite\.config\.[a-z0-9]+|eslint\.config\.[a-z0-9]+|prettier\.config\.[a-z0-9]+|postcss\.config\.[a-z0-9]+|tailwind\.config\.[a-z0-9]+|index\.html|\.gitignore|\.npmrc|\.nvmrc|\.editorconfig|\.env(\.[a-z0-9-]+)?)$/i;
 
@@ -96,6 +103,72 @@ function extractStartCommands(assistantContent: string): string[] {
   }
 
   return commands;
+}
+
+function sanitizeShellCommand(command: string): string {
+  let sanitized = command.trim();
+
+  const applyRewrite = (nextCommand?: string) => {
+    if (nextCommand && nextCommand.trim().length > 0 && nextCommand !== sanitized) {
+      sanitized = nextCommand.trim();
+    }
+  };
+
+  applyRewrite(unwrapCommandJsonEnvelope(sanitized).modifiedCommand);
+  applyRewrite(normalizeShellCommandSurface(sanitized).modifiedCommand);
+  applyRewrite(decodeHtmlCommandDelimiters(sanitized).modifiedCommand);
+
+  return sanitized;
+}
+
+function isRunnableStartCommand(command: string): boolean {
+  const sanitized = sanitizeShellCommand(command);
+  const segments = splitCommandSegments(sanitized);
+
+  if (segments.length === 0) {
+    return false;
+  }
+
+  let sawRunnableStartSegment = false;
+
+  for (const segment of segments) {
+    if (START_COMMAND_RE.test(segment) || INSTALL_COMMAND_RE.test(segment)) {
+      if (START_COMMAND_RE.test(segment)) {
+        sawRunnableStartSegment = true;
+      }
+
+      continue;
+    }
+
+    if (START_AUXILIARY_SEGMENT_RE.test(segment)) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return sawRunnableStartSegment;
+}
+
+function extractRunnableStartCommand(assistantContent: string): string | undefined {
+  for (const command of extractStartCommands(assistantContent)) {
+    const sanitized = sanitizeShellCommand(command);
+
+    if (isRunnableStartCommand(sanitized)) {
+      return sanitized;
+    }
+  }
+
+  for (const command of extractShellCommands(assistantContent)) {
+    const sanitized = sanitizeShellCommand(command);
+    const startSegment = splitCommandSegments(sanitized).find((segment) => START_COMMAND_RE.test(segment));
+
+    if (startSegment && isRunnableStartCommand(sanitized)) {
+      return sanitized;
+    }
+  }
+
+  return undefined;
 }
 
 function extractFilePaths(assistantContent: string): string[] {
@@ -241,18 +314,6 @@ function extractSetupCommandFromShellCommands(commands: string[]): string | unde
   return undefined;
 }
 
-function extractStartCommandFromShellCommands(commands: string[]): string | undefined {
-  for (const command of commands) {
-    const startSegment = splitCommandSegments(command).find((segment) => START_COMMAND_RE.test(segment));
-
-    if (startSegment) {
-      return startSegment;
-    }
-  }
-
-  return undefined;
-}
-
 export async function synthesizeRunHandoff(options: {
   assistantContent: string;
 }): Promise<SynthesizedRunHandoff | null> {
@@ -266,8 +327,7 @@ export async function synthesizeRunHandoff(options: {
     return null;
   }
 
-  const explicitStartCommand =
-    extractStartCommands(assistantContent)[0] || extractStartCommandFromShellCommands(shellCommands);
+  const explicitStartCommand = extractRunnableStartCommand(assistantContent);
   const explicitSetupCommand = extractSetupCommandFromShellCommands(shellCommands);
 
   if (explicitStartCommand) {
@@ -301,7 +361,7 @@ ${actionBlocks}
   const installAlreadyPresent = shellCommands.some((command) =>
     splitCommandSegments(command).some((segment) => INSTALL_COMMAND_RE.test(segment)),
   );
-  const setupCommand = installAlreadyPresent ? undefined : commands.setupCommand;
+  const setupCommand = explicitSetupCommand || (installAlreadyPresent ? undefined : commands.setupCommand);
   const actionBlocks = [
     setupCommand ? `<boltAction type="shell">${setupCommand}</boltAction>` : null,
     `<boltAction type="start">${commands.startCommand}</boltAction>`,

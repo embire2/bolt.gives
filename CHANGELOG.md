@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- FREE/DeepSeek follow-up runs on existing projects no longer trust plain-English `start` actions as runnable shell commands; the backend now rejects prose handoffs and falls back to inferred project commands so preview can continue after the first prompt instead of stalling on a fake runtime command.
 - Hosted FREE preflight now emits explicit structured diagnostics for rate-limit, credits-exhausted, and unavailable failures, so server logs show the real upstream cause instead of collapsing everything into a generic availability error.
 - Browser event logs no longer persist in cookies; they now live in local storage, which removes the oversized `eventLogs` cookie warnings and reduces client-side state churn.
 - The chat status lane now lays out `Live Commentary` and `Technical Feed` side-by-side on wider screens and shrinks the active prompt surface, which stops the Firefox run view from collapsing into a dense stacked column during active generation.
