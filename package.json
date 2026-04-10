@@ -60,7 +60,7 @@
     "electron:build:dist": "rm -rf dist && pnpm electron:build:renderer && pnpm electron:build:deps && electron-builder --mwl",
     "tauri:dev": "tauri dev",
     "tauri:build": "pnpm build && tauri build",
-    "neutralino:dev": "node scripts/electron-dev.mjs",
+    "neutralino:dev": "pnpm run dev",
     "neutralino:build": "pnpm build && node scripts/neutralino-build.mjs",
     "mobile:ios": "cd apps/mobile && pnpm expo start --ios",
     "mobile:android": "cd apps/mobile && pnpm expo start --android",

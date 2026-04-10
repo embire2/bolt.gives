@@ -2,7 +2,7 @@
 name = "bolt-gives"
 description = "bolt.gives collaborative AI agent"
 authors = ["bolt.gives team <maintainers@bolt.gives>"]
-version = "1.0.2"
+version = "3.0.8"
 edition = "2021"
 rust-version = "1.77"
 

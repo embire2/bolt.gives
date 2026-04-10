@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/neutralinojs/neutralinojs/main/schemas/config-schema.json",
   "applicationName": "bolt.gives",
-  "version": "1.0.2",
+  "version": "3.0.8",
   "framework": "neutralino",
   "defaultMode": "window",
   "window": {
@@ -11,7 +11,7 @@
     "minWidth": 800,
     "minHeight": 600,
     "resizable": true,
-    "fullscreen": false,
+    "fullscreen": true,
     "center": true
   },
   "modes": {
@@ -31,8 +31,7 @@
     "resourcesPath": "build/client",
     "port": 5173,
     "frontendLibrary": {
-      "name": "react",
-      "端口": 5173
+      "name": "react"
     }
   },
   "security": {
