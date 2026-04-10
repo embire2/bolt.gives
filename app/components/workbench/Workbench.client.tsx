@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react';
-import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
@@ -201,8 +201,6 @@ interface WorkspaceProps {
   latestRunMetrics?: AgentRunMetricsDataEvent | null;
   latestUsage?: UsageDataEvent | null;
 }
-
-const viewTransition = { ease: cubicEasingFn };
 
 const sliderOptions: SliderOptions<WorkbenchViewType> = {
   left: {
@@ -737,7 +735,7 @@ export const Workbench = memo(
               }}
             />
           </div>
-          <div className="relative flex-1 overflow-hidden">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
             {chatStarted ? (
               <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3 py-2">
                 <div className={`rounded-lg border px-3 py-2 ${getWorkspaceToneClasses(workspaceSummary.tone)}`}>
@@ -782,8 +780,8 @@ export const Workbench = memo(
               </div>
             ) : null}
             {hasWorkspaceContent ? (
-              <>
-                <View initial={{ x: '0%' }} animate={{ x: selectedView === 'code' ? '0%' : '-100%' }}>
+              <div className="h-full min-h-0">
+                {selectedView === 'code' ? (
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading code editor" />}>
                     <LazyEditorPanel
                       editorDocument={currentDocument}
@@ -799,25 +797,22 @@ export const Workbench = memo(
                       onFileReset={onFileReset}
                     />
                   </Suspense>
-                </View>
-                {loadedViews.has('diff') ? (
-                  <View
-                    initial={{ x: '100%' }}
-                    animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
-                  >
+                ) : null}
+                {selectedView === 'diff' && loadedViews.has('diff') ? (
+                  <div className="h-full min-h-0">
                     <Suspense fallback={<WorkbenchPanelFallback label="Loading diff view" />}>
                       <LazyDiffView fileHistory={fileHistory} setFileHistory={setFileHistory} />
                     </Suspense>
-                  </View>
+                  </div>
                 ) : null}
-                {loadedViews.has('preview') ? (
-                  <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
+                {selectedView === 'preview' && loadedViews.has('preview') ? (
+                  <div className="h-full min-h-0">
                     <Suspense fallback={<WorkbenchPanelFallback label="Loading preview" />}>
                       <LazyPreview setSelectedElement={setSelectedElement} />
                     </Suspense>
-                  </View>
+                  </div>
                 ) : null}
-              </>
+              </div>
             ) : (
               <div className="h-full flex items-center justify-center px-6 text-center">
                 <div className="max-w-md">
@@ -905,16 +900,3 @@ export const Workbench = memo(
     );
   },
 );
-
-// View component for rendering content with motion transitions
-interface ViewProps extends HTMLMotionProps<'div'> {
-  children: JSX.Element;
-}
-
-const View = memo(({ children, ...props }: ViewProps) => {
-  return (
-    <motion.div className="absolute inset-0" transition={viewTransition} {...props}>
-      {children}
-    </motion.div>
-  );
-});

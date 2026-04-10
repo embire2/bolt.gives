@@ -4,12 +4,15 @@ import {
   unwrapCommandJsonEnvelope,
 } from '~/lib/runtime/shell-command-utils';
 import { detectProjectCommands } from '~/utils/projectCommands';
+import type { FileMap } from '~/lib/stores/files';
+import { WORK_DIR } from '~/utils/constants';
 
 export interface RunContinuationOptions {
   chatMode: 'build' | 'discuss';
   lastUserContent: string;
   assistantContent: string;
   alreadyAttempted: boolean;
+  currentFiles?: FileMap;
 }
 
 export interface RunContinuationDecision {
@@ -23,8 +26,10 @@ export interface RunContinuationDecision {
     | 'scaffold-without-start'
     | 'run-intent-without-start'
     | 'starter-without-implementation'
+    | 'starter-entry-unchanged'
     | 'bootstrap-only-shell-actions'
     | 'continuation-not-required';
+  starterEntryFilePath?: string;
 }
 
 export interface SynthesizedRunHandoff {
@@ -35,7 +40,7 @@ export interface SynthesizedRunHandoff {
   startCommand: string;
 }
 
-interface ExtractedFileAction {
+export interface ExtractedFileAction {
   content: string;
   path: string;
 }
@@ -48,6 +53,8 @@ const SCAFFOLD_RE = /create-vite|npm\s+create\s+vite|pnpm\s+dlx\s+create-vite|cr
 const STARTER_BOOTSTRAP_RE =
   /Bolt is initializing your project|template import is done|built-in .*starter fallback|fallback starter/i;
 const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
+const STARTER_ENTRY_FILE_RE =
+  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
 const START_ACTION_RE = /<boltAction[^>]*type="start"/i;
 const START_ACTION_WITH_CONTENT_RE = /<boltAction[^>]*type="start"[^>]*>([\s\S]*?)<\/boltAction>/gi;
 const BOLT_ACTION_RE = /<boltAction\b/i;
@@ -75,7 +82,7 @@ function splitCommandSegments(command: string): string[] {
     .filter((segment) => segment.length > 0);
 }
 
-function extractShellCommands(assistantContent: string): string[] {
+export function extractShellCommands(assistantContent: string): string[] {
   const commands: string[] = [];
   let match: RegExpExecArray | null;
 
@@ -90,7 +97,7 @@ function extractShellCommands(assistantContent: string): string[] {
   return commands;
 }
 
-function extractStartCommands(assistantContent: string): string[] {
+export function extractStartCommands(assistantContent: string): string[] {
   const commands: string[] = [];
   let match: RegExpExecArray | null;
 
@@ -105,7 +112,7 @@ function extractStartCommands(assistantContent: string): string[] {
   return commands;
 }
 
-function sanitizeShellCommand(command: string): string {
+export function sanitizeShellCommand(command: string): string {
   let sanitized = command.trim();
 
   const applyRewrite = (nextCommand?: string) => {
@@ -171,6 +178,55 @@ function extractRunnableStartCommand(assistantContent: string): string | undefin
   return undefined;
 }
 
+function extractPackageJsonContent(fileActions: ExtractedFileAction[]): string | undefined {
+  const packageJsonAction = fileActions.find((fileAction) => fileAction.path.endsWith('package.json'));
+
+  return packageJsonAction?.content;
+}
+
+function extractPackageScriptNames(fileActions: ExtractedFileAction[]): Set<string> {
+  const packageJsonContent = extractPackageJsonContent(fileActions);
+
+  if (!packageJsonContent) {
+    return new Set();
+  }
+
+  try {
+    const parsed = JSON.parse(packageJsonContent) as { scripts?: Record<string, unknown> };
+
+    if (parsed?.scripts && typeof parsed.scripts === 'object') {
+      return new Set(Object.keys(parsed.scripts));
+    }
+  } catch {
+    const scriptNames = new Set<string>();
+    const scriptRegex = /"(dev|start|preview|build|test)"\s*:/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = scriptRegex.exec(packageJsonContent)) !== null) {
+      scriptNames.add(match[1]);
+    }
+
+    return scriptNames;
+  }
+
+  return new Set();
+}
+
+function extractPackageScriptNameFromCommand(command: string): string | undefined {
+  const sanitized = sanitizeShellCommand(command);
+  const segments = splitCommandSegments(sanitized);
+
+  for (const segment of segments) {
+    const npmRunMatch = segment.match(/^(npm|pnpm|yarn|bun)\s+(?:run\s+)?([a-z0-9:_-]+)\b/i);
+
+    if (npmRunMatch) {
+      return npmRunMatch[2];
+    }
+  }
+
+  return undefined;
+}
+
 function extractFilePaths(assistantContent: string): string[] {
   const filePaths: string[] = [];
   let match: RegExpExecArray | null;
@@ -202,7 +258,7 @@ function normalizeGeneratedFileContent(filePath: string, content: string): strin
   return normalized.endsWith('\n') ? normalized : `${normalized}\n`;
 }
 
-function extractFileActions(assistantContent: string): ExtractedFileAction[] {
+export function extractFileActions(assistantContent: string): ExtractedFileAction[] {
   const files: ExtractedFileAction[] = [];
   let match: RegExpExecArray | null;
 
@@ -226,8 +282,36 @@ function extractFileActions(assistantContent: string): ExtractedFileAction[] {
 function normalizeFilePath(filePath: string): string {
   return filePath
     .replace(/\\/g, '/')
+    .replace(new RegExp(`^${WORK_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?`, 'i'), '')
+    .replace(/^\/home\/project\/?/i, '')
     .replace(/^\.?\//, '')
     .toLowerCase();
+}
+
+function findStarterEntryFiles(filesSnapshot?: FileMap): string[] {
+  if (!filesSnapshot) {
+    return [];
+  }
+
+  return Object.entries(filesSnapshot)
+    .filter(([filePath, dirent]) => {
+      if (dirent?.type !== 'file' || dirent.isBinary) {
+        return false;
+      }
+
+      return STARTER_ENTRY_FILE_RE.test(filePath) && STARTER_PLACEHOLDER_RE.test(dirent.content || '');
+    })
+    .map(([filePath]) => filePath);
+}
+
+function touchesStarterEntryFile(filePaths: string[], starterEntryFiles: string[]): boolean {
+  if (filePaths.length === 0 || starterEntryFiles.length === 0) {
+    return false;
+  }
+
+  const normalizedStarterEntries = new Set(starterEntryFiles.map((filePath) => normalizeFilePath(filePath)));
+
+  return filePaths.some((filePath) => normalizedStarterEntries.has(normalizeFilePath(filePath)));
 }
 
 function hasImplementationFileAction(filePaths: string[]): boolean {
@@ -329,8 +413,15 @@ export async function synthesizeRunHandoff(options: {
 
   const explicitStartCommand = extractRunnableStartCommand(assistantContent);
   const explicitSetupCommand = extractSetupCommandFromShellCommands(shellCommands);
+  const inferredCommands = await detectProjectCommands(fileActions);
+  const packageScriptNames = extractPackageScriptNames(fileActions);
+  const explicitScriptName = explicitStartCommand
+    ? extractPackageScriptNameFromCommand(explicitStartCommand)
+    : undefined;
+  const explicitScriptExists = explicitScriptName ? packageScriptNames.has(explicitScriptName) : true;
+  const shouldUseExplicitStartCommand = explicitStartCommand && explicitScriptExists;
 
-  if (explicitStartCommand) {
+  if (shouldUseExplicitStartCommand) {
     const actionBlocks = [
       explicitSetupCommand ? `<boltAction type="shell">${explicitSetupCommand}</boltAction>` : null,
       `<boltAction type="start">${explicitStartCommand}</boltAction>`,
@@ -352,7 +443,7 @@ ${actionBlocks}
     };
   }
 
-  const commands = await detectProjectCommands(fileActions);
+  const commands = inferredCommands;
 
   if (!commands.startCommand) {
     return null;
@@ -414,9 +505,12 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
   const hasStartAction = START_ACTION_RE.test(assistantContent);
   const shellCommands = extractShellCommands(assistantContent);
   const filePaths = extractFilePaths(assistantContent);
+  const starterEntryFiles = findStarterEntryFiles(options.currentFiles);
+  const starterEntryFilePath = starterEntryFiles[0];
   const hasAnyBoltAction = BOLT_ACTION_RE.test(assistantContent);
   const hasFileAction = FILE_ACTION_RE.test(assistantContent);
   const hasImplementationFile = hasImplementationFileAction(filePaths);
+  const updatedStarterEntry = touchesStarterEntryFile(filePaths, starterEntryFiles);
   const mentionsScaffold = SCAFFOLD_RE.test(assistantContent);
   const starterPlaceholderDetected = STARTER_PLACEHOLDER_RE.test(assistantContent);
   const onlyInspectionCommands = hasOnlyInspectionCommands(shellCommands);
@@ -433,6 +527,15 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'inspection-only-shell-actions',
+      starterEntryFilePath,
+    };
+  }
+
+  if (starterEntryFilePath && !updatedStarterEntry) {
+    return {
+      shouldContinue: true,
+      reason: 'starter-entry-unchanged',
+      starterEntryFilePath,
     };
   }
 
@@ -440,6 +543,7 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'scaffold-without-start',
+      starterEntryFilePath,
     };
   }
 
@@ -447,6 +551,7 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'run-intent-without-start',
+      starterEntryFilePath,
     };
   }
 
@@ -458,6 +563,7 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'starter-without-implementation',
+      starterEntryFilePath,
     };
   }
 
@@ -465,6 +571,7 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'bootstrap-only-shell-actions',
+      starterEntryFilePath,
     };
   }
 
@@ -472,6 +579,7 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'starter-without-implementation',
+      starterEntryFilePath,
     };
   }
 

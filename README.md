@@ -58,6 +58,7 @@
 - Managed hosted runtime handles installs, builds, tests, preview hosting, and file sync on live instances by default.
 - Follow-up prompts on existing hosted projects now reuse validated runtime commands instead of stalling on prose-only model handoffs.
 - Hosted file actions now target the active starter entry file even when the model chooses the wrong JS/TS sibling extension, so generated apps replace the fallback starter instead of being written into an inactive file.
+- Hosted FREE preview verification now ignores stale fallback-starter detections once the synced workspace no longer contains the starter placeholder, which stops valid generated apps from being rolled back to an older starter snapshot.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare trial instances are registration-first, one-client / one-instance, 15-day environments with preferred-subdomain support.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, and admin email activity.

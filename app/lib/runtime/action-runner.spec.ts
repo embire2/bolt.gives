@@ -530,7 +530,7 @@ describe('ActionRunner start actions', () => {
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
       sessionId: 'shared-session-1',
       files,
-      prune: false,
+      prune: true,
     });
     expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -697,7 +697,7 @@ describe('ActionRunner start actions', () => {
           isBinary: false,
         },
       },
-      prune: false,
+      prune: true,
     });
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(2, {
       sessionId: 'shared-session-command-flush',

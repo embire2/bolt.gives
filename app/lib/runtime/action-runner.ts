@@ -32,6 +32,7 @@ import {
   syncHostedRuntimeWorkspace,
   type HostedRuntimePreviewInfo,
 } from './hosted-runtime-client';
+import { sanitizeHostedRuntimeFileMap } from './hosted-runtime-sanitize';
 
 const logger = createScopedLogger('ActionRunner');
 const NOISY_PACKAGE_PROGRESS_RE =
@@ -158,12 +159,12 @@ export class ActionRunner {
       return;
     }
 
-    const files = this.#getFilesSnapshot();
+    const files = sanitizeHostedRuntimeFileMap(this.#getFilesSnapshot());
 
     await syncHostedRuntimeWorkspace({
       sessionId: this.#getHostedRuntimeSessionId(),
       files,
-      prune: false,
+      prune: true,
     });
 
     this.#hostedRuntimeFullSyncPending = false;

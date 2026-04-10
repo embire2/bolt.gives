@@ -88,11 +88,16 @@ export const EditorPanel = memo(
     }, [editorDocument, unsavedFiles]);
 
     return (
-      <PanelGroup direction="vertical">
-        <Panel defaultSize={showTerminal ? DEFAULT_EDITOR_SIZE : 100} minSize={20}>
-          <PanelGroup direction="horizontal">
-            <Panel defaultSize={20} minSize={15} collapsible className="border-r border-bolt-elements-borderColor">
-              <div className="h-full">
+      <PanelGroup direction="vertical" className="h-full min-h-0">
+        <Panel defaultSize={showTerminal ? DEFAULT_EDITOR_SIZE : 100} minSize={20} className="min-h-0">
+          <PanelGroup direction="horizontal" className="h-full min-h-0">
+            <Panel
+              defaultSize={20}
+              minSize={15}
+              collapsible
+              className="min-h-0 border-r border-bolt-elements-borderColor"
+            >
+              <div className="h-full min-h-0">
                 <Tabs.Root defaultValue="files" className="flex flex-col h-full">
                   <PanelHeader className="w-full text-sm font-medium text-bolt-elements-textSecondary px-1">
                     <div className="h-full flex-shrink-0 flex items-center justify-between w-full">
@@ -150,7 +155,7 @@ export const EditorPanel = memo(
             </Panel>
 
             <PanelResizeHandle />
-            <Panel className="flex flex-col" defaultSize={80} minSize={20}>
+            <Panel className="flex min-h-0 flex-col" defaultSize={80} minSize={20}>
               <PanelHeader className="overflow-x-auto">
                 {activeFileSegments?.length && (
                   <div className="flex items-center flex-1 text-sm">
@@ -170,7 +175,7 @@ export const EditorPanel = memo(
                   </div>
                 )}
               </PanelHeader>
-              <div className="h-full flex-1 overflow-hidden modern-scrollbar bg-bolt-elements-background-depth-2 rounded-lg mx-2 mb-2 border border-bolt-elements-borderColor shadow-sm">
+              <div className="mx-2 mb-2 flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 shadow-sm">
                 <Suspense
                   fallback={
                     <div className="flex h-full items-center justify-center text-sm text-bolt-elements-textSecondary">

@@ -63,6 +63,8 @@ import type {
   SyntheticRunHandoffDataEvent,
   UsageDataEvent,
 } from '~/types/context';
+import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
+import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -80,10 +82,6 @@ const TELEMETRY_MERGE_WINDOW_MS = 20000;
 const LOCAL_PROVIDER_SET = new Set<string>(LOCAL_PROVIDERS);
 const ANSI_ESCAPE_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 const CARRIAGE_RETURN_RE = /\r+/g;
-const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
-const STARTER_ENTRY_FILE_RE =
-  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
-const STARTER_IGNORE_FILE_RE = /(^|\/)(readme(\.[a-z0-9]+)?|changelog(\.[a-z0-9]+)?|\.bolt\/prompt)$/i;
 const loadSessionManager = () => import('~/lib/services/sessionManager');
 const loadSessionPayloadModule = () => import('~/lib/services/session-payload');
 const loadArchitectModule = () => import('~/lib/runtime/architect');
@@ -104,24 +102,6 @@ type PendingArchitectAutoHeal = {
   diagnosis: ArchitectDiagnosis;
   alertKey: string;
 };
-
-function hasFallbackStarterPlaceholder(fileMap: FileMap | undefined): boolean {
-  if (!fileMap) {
-    return false;
-  }
-
-  return Object.entries(fileMap).some(([filePath, dirent]) => {
-    if (dirent?.type !== 'file' || dirent.isBinary || STARTER_IGNORE_FILE_RE.test(filePath)) {
-      return false;
-    }
-
-    if (!STARTER_ENTRY_FILE_RE.test(filePath)) {
-      return false;
-    }
-
-    return typeof dirent.content === 'string' && dirent.content.includes(STARTER_PLACEHOLDER_TEXT);
-  });
-}
 
 function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean {
   if (!fileMap) {
@@ -552,6 +532,7 @@ export const ChatImpl = memo(
         selectedProvider: provider.name,
         selectedModel: model,
         files,
+        hostedRuntimeSessionId: hostedRuntimeEnabled ? workbenchStore.hostedRuntimeSessionId : undefined,
         promptId,
         contextOptimization: contextOptimizationEnabled,
         chatMode,
@@ -645,6 +626,7 @@ export const ChatImpl = memo(
     const pendingStarterContinuationRef = useRef<string | null>(null);
     const starterContinuationTriggeredRef = useRef(false);
     const autoContinuationCountRef = useRef(0);
+    const previewPromptUnlockTriggeredRef = useRef(false);
     const isLoadingRef = useRef(isLoading);
     const fakeLoadingRef = useRef(fakeLoading);
     const messagesRef = useRef(messages);
@@ -965,6 +947,7 @@ Requirements:
         stallReportedRef.current = false;
         stallRecoveryTriggeredRef.current = false;
         lastTelemetryEmitAtRef.current = 0;
+        previewPromptUnlockTriggeredRef.current = false;
       } else {
         interval = window.setInterval(() => {
           if (typeof document !== 'undefined' && document.hidden && hostedRuntimeEnabled) {
@@ -994,7 +977,7 @@ Requirements:
           const lastMeaningfulTimestamp = getLastMeaningfulProgressTimestamp(
             recentStepEvents,
             requestLifecycleStartedAtRef.current,
-            [lastDataEventAtRef.current, lastMessageProgressAtRef.current],
+            [lastMessageProgressAtRef.current],
           );
           const meaningfulStallMs = Date.now() - lastMeaningfulTimestamp;
           const meaningfulStallSeconds = Math.round(meaningfulStallMs / 1000);
@@ -1012,6 +995,27 @@ Requirements:
               output: telemetryMessage,
             });
             lastTelemetryEmitAtRef.current = now;
+          }
+
+          const previewReadyQuietThresholdMs = hostedRuntimeEnabled ? 20000 : 12000;
+
+          if (
+            shouldUnlockPromptAfterPreviewReady(recentStepEvents, meaningfulStallMs, previewReadyQuietThresholdMs) &&
+            !previewPromptUnlockTriggeredRef.current
+          ) {
+            previewPromptUnlockTriggeredRef.current = true;
+
+            appendStepRunnerEvent({
+              type: 'telemetry',
+              timestamp: new Date().toISOString(),
+              description: 'Preview verified; unlocking prompt after quiet period',
+              output: `idle=${meaningfulStallSeconds}s`,
+            });
+
+            stop();
+            setFakeLoading(false);
+
+            return;
           }
 
           if (

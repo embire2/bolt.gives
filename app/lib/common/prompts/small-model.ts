@@ -55,6 +55,11 @@ export const getSmallModelPrompt = (
 
   <build_rules>
     - Do not stop at starter scaffolding.
+    - Do not use inspection-only shell commands such as ls, pwd, cat, find, tree, or echo unless a failing command must be debugged.
+    - If package.json already exists, do not run create-vite/create-react-app again.
+    - If the project already contains a fallback starter, your first executable action must replace the active entry UI file with the requested app implementation.
+    - For starter-based web apps, prefer replacing src/App.tsx, src/App.jsx, app/page.tsx, or the active equivalent entry file immediately.
+    - Write the requested UI before starting the dev server.
     - Replace fallback placeholder UI with the requested product UI.
     - If the user asked to run or preview the app, include the install/start actions needed to make that happen.
     - If a command fails, correct it and continue.

@@ -991,23 +991,29 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           </div>
 
           <div className="flex-1 min-h-0 overflow-hidden">
-            {activeSurface === 'chat' ? (
+            {openSurfaces.includes('chat') ? (
               <div
                 id="chat-surface-panel"
                 role="tabpanel"
                 aria-labelledby="chat-surface-tab"
-                className="h-full min-h-0"
+                aria-hidden={activeSurface !== 'chat'}
+                className={classNames('h-full min-h-0', {
+                  hidden: activeSurface !== 'chat',
+                })}
               >
                 {chatSurface}
               </div>
             ) : null}
 
-            {activeSurface === 'workspace' ? (
+            {openSurfaces.includes('workspace') ? (
               <div
                 id="workspace-surface-panel"
                 role="tabpanel"
                 aria-labelledby="workspace-surface-tab"
-                className="h-full min-h-0 overflow-hidden py-3"
+                aria-hidden={activeSurface !== 'workspace'}
+                className={classNames('h-full min-h-0 overflow-hidden py-3', {
+                  hidden: activeSurface !== 'workspace',
+                })}
               >
                 <ClientOnly>
                   {() => (

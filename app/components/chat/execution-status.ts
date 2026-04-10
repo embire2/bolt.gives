@@ -16,6 +16,14 @@ export function hasPreviewVerification(stepRunnerEvents: InteractiveStepRunnerEv
   return stepRunnerEvents.some(isPreviewReadyStepEvent);
 }
 
+export function shouldUnlockPromptAfterPreviewReady(
+  stepRunnerEvents: InteractiveStepRunnerEvent[],
+  meaningfulStallMs: number,
+  thresholdMs: number,
+): boolean {
+  return hasPreviewVerification(stepRunnerEvents) && meaningfulStallMs >= thresholdMs;
+}
+
 export function deriveProgressMessage(
   progressEvents: ProgressAnnotation[],
   stepRunnerEvents: InteractiveStepRunnerEvent[],

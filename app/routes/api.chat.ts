@@ -48,6 +48,8 @@ import {
   resolvePreferredModelProvider,
   sanitizeSelectionWithApiKeys,
 } from '~/lib/.server/llm/message-selection';
+import { fetchHostedRuntimeSnapshotForRequest } from '~/lib/.server/hosted-runtime-snapshot';
+import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -171,6 +173,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const requestPayload = await request.json<{
     messages: Messages;
     files: any;
+    hostedRuntimeSessionId?: string;
     promptId?: string;
     contextOptimization: boolean;
     chatMode: 'discuss' | 'build';
@@ -199,7 +202,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   }>();
   const {
     messages,
-    files,
+    files: requestFiles,
+    hostedRuntimeSessionId,
     promptId,
     contextOptimization,
     supabase,
@@ -213,11 +217,35 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     selectedProvider: selectedProviderBody,
   } = requestPayload;
 
+  let files = requestFiles;
   const cookieHeader = request.headers.get('Cookie');
   const parsedCookies = parseCookies(cookieHeader || '');
   const cookieApiKeys = parseJsonObject<Record<string, string>>(parsedCookies.apiKeys, {});
   const cookieProviderSettings = parseJsonObject<Record<string, IProviderSetting>>(parsedCookies.providers, {});
   const selectedModelCookie = parsedCookies.selectedModel;
+
+  if (typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0) {
+    try {
+      const hostedRuntimeSnapshot = await fetchHostedRuntimeSnapshotForRequest({
+        requestUrl: request.url,
+        sessionId: hostedRuntimeSessionId,
+      });
+
+      if (hostedRuntimeSnapshot) {
+        files = hostedRuntimeSnapshot;
+        logger.info('Using hosted runtime snapshot as canonical chat file state', {
+          hostedRuntimeSessionId,
+          fileCount: Object.keys(hostedRuntimeSnapshot).length,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to load hosted runtime snapshot for chat request', {
+        hostedRuntimeSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const selectedProviderCookie = parsedCookies.selectedProvider;
   const selectedModel = selectedModelBody || selectedModelCookie;
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
@@ -1101,6 +1129,7 @@ Next: I am sending the final result now.`,
               lastUserContent,
               assistantContent: content,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
+              currentFiles: files,
             });
             logger.info(
               `run continuation analysis ${JSON.stringify({
@@ -1113,6 +1142,7 @@ Next: I am sending the final result now.`,
                 maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
                 previewCheckpointObserved,
                 hasExecutionFailures,
+                starterEntryFilePath: runContinuationDecision.starterEntryFilePath || null,
               })}`,
             );
 
@@ -1127,6 +1157,8 @@ Next: I am sending the final result now.`,
               const continuationReason = shouldContinueForRunIntent
                 ? runContinuationDecision.reason
                 : 'preview-not-verified';
+              const starterEntryTarget =
+                runContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
               const synthesizedRunHandoff = await synthesizeRunHandoff({
                 assistantContent: content,
               });
@@ -1137,6 +1169,59 @@ Next: I am sending the final result now.`,
                   continuationReason === 'preview-not-verified' ||
                   continuationReason === 'bootstrap-only-shell-actions')
               ) {
+                if (typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0) {
+                  try {
+                    const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                      requestUrl: request.url,
+                      sessionId: hostedRuntimeSessionId,
+                      assistantContent: content,
+                      synthesizedRunHandoff,
+                    });
+
+                    if (hostedHandoffResult) {
+                      writeCommentary(
+                        'action',
+                        synthesizedRunHandoff.followupMessage,
+                        'in-progress',
+                        `Key changes: The server applied ${hostedHandoffResult.appliedFilePaths.length.toString()} file update${hostedHandoffResult.appliedFilePaths.length === 1 ? '' : 's'} and replayed the workspace commands directly.
+Next: I am waiting for the hosted preview to confirm the updated app is running.`,
+                      );
+                      logger.info(
+                        `run continuation applied on hosted runtime ${JSON.stringify({
+                          runId,
+                          reason: continuationReason,
+                          provider,
+                          model,
+                          hostedRuntimeSessionId,
+                          appliedFilePaths: hostedHandoffResult.appliedFilePaths,
+                          setupExitCode: hostedHandoffResult.setup?.exitCode ?? null,
+                          startExitCode: hostedHandoffResult.start.exitCode,
+                          previewBaseUrl: hostedHandoffResult.start.previewBaseUrl,
+                        })}`,
+                      );
+
+                      emitFinalNextStepCommentary();
+
+                      stopRunMonitors();
+                      emitRunCompletionEvents(content, model, provider);
+                      await new Promise((resolve) => setTimeout(resolve, 0));
+
+                      return;
+                    }
+                  } catch (error) {
+                    logger.warn(
+                      `hosted runtime handoff replay failed ${JSON.stringify({
+                        runId,
+                        reason: continuationReason,
+                        provider,
+                        model,
+                        hostedRuntimeSessionId,
+                        error: error instanceof Error ? error.message : String(error),
+                      })}`,
+                    );
+                  }
+                }
+
                 writeCommentary(
                   'action',
                   synthesizedRunHandoff.followupMessage,
@@ -1216,12 +1301,14 @@ Continue now and do ALL of the following:
 1) continue from the current project files (do NOT re-run create-vite/create-react-app if package.json already exists).
 2) implement the requested product requirements from the original user request:
    ${lastUserContent}
-3) install dependencies only if missing.
-4) include a <boltAction type="start"> command that launches the dev server.
-5) if a command fails, self-heal and retry with a corrected command.
-6) your response must start with executable <boltAction> steps (no plan-only prose).
-7) if preview still shows the starter, replace src/App.tsx (or equivalent entry UI file) with the requested implementation.
-8) keep the final response concise and execution-focused.
+3) your FIRST executable action must be a <boltAction type="file"> that replaces ${starterEntryTarget} if the starter placeholder is still present there.
+4) install dependencies only if missing.
+5) include a <boltAction type="start"> command that launches the dev server.
+6) if a command fails, self-heal and retry with a corrected command.
+7) your response must start with executable <boltAction> steps (no plan-only prose).
+8) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
+9) do NOT re-scaffold or re-bootstrap the starter when package.json already exists.
+10) keep the final response concise and execution-focused.
 `
                   : `[Model: ${model}]
 
@@ -1232,12 +1319,13 @@ Continue from the current project state right now and do ALL of the following:
 1) do not re-scaffold the project if package.json or app files already exist.
 2) implement the original user request fully:
    ${lastUserContent}
-3) run whatever install or fix steps are still required.
-4) emit executable <boltAction> steps immediately.
-5) launch the dev server and do not finish until a preview-ready checkpoint is produced.
-6) if preview still shows the fallback starter, replace the entry UI with the requested app.
-7) if a command fails, self-heal and retry with the corrected command.
-8) finish with a concise summary only after the requested app is actually running in preview.
+3) if the starter placeholder is still present, replace ${starterEntryTarget} before any additional prose.
+4) run whatever install or fix steps are still required.
+5) emit executable <boltAction> steps immediately.
+6) launch the dev server and do not finish until a preview-ready checkpoint is produced.
+7) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
+8) if a command fails, self-heal and retry with the corrected command.
+9) finish with a concise summary only after the requested app is actually running in preview.
 `,
               });
 

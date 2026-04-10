@@ -6,6 +6,7 @@ import {
   deriveProgressMessage,
   deriveWhyThisAction,
   hasPreviewVerification,
+  shouldUnlockPromptAfterPreviewReady,
 } from './execution-status';
 
 function createTelemetryEvent(output: string, description = 'runtime telemetry'): InteractiveStepRunnerEvent {
@@ -22,6 +23,20 @@ describe('execution-status helpers', () => {
     expect(hasPreviewVerification([createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready')])).toBe(
       true,
     );
+  });
+
+  it('unlocks the prompt after preview verification once the quiet threshold is reached', () => {
+    expect(
+      shouldUnlockPromptAfterPreviewReady(
+        [createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready')],
+        20_000,
+        20_000,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not unlock the prompt before preview verification', () => {
+    expect(shouldUnlockPromptAfterPreviewReady([], 20_000, 20_000)).toBe(false);
   });
 
   it('upgrades preview pending progress once preview is verified', () => {

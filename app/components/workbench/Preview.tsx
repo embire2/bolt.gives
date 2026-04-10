@@ -19,6 +19,7 @@ import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
 import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
+import { hasFallbackStarterPlaceholder, isStarterPlaceholderAlert } from '~/lib/runtime/starter-placeholder';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -135,15 +136,25 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const lastHostedPreviewReloadKeyRef = useRef<string | null>(null);
   const lastAppliedHostedRecoveryTokenRef = useRef<number | null>(null);
   const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
+  const lastAppliedHostedSnapshotRevisionRef = useRef<number | null>(null);
   const lastHostedPreviewEventAtRef = useRef<number>(0);
   const hostedPreviewSubscriptionHealthyRef = useRef(true);
   const hostedRuntimeEnabled = isHostedRuntimeEnabled();
+
+  const shouldIgnoreStarterPlaceholderAlert = useCallback((alert: ReturnType<typeof extractPreviewAlertFromText>) => {
+    if (!isStarterPlaceholderAlert(alert)) {
+      return false;
+    }
+
+    return !hasFallbackStarterPlaceholder(workbenchStore.files.get());
+  }, []);
 
   const inspectHostedPreviewIframe = useCallback(
     async (previewSessionId: string | null, serverSignature: string | null) => {
       try {
         const previewDocument = iframeRef.current?.contentDocument;
-        const iframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
+        const rawIframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
+        const iframeAlert = shouldIgnoreStarterPlaceholderAlert(rawIframeAlert) ? null : rawIframeAlert;
         const iframeSignature = iframeAlert ? `${iframeAlert.description}\n${iframeAlert.content}` : null;
 
         if (iframeAlert && iframeSignature && iframeSignature !== lastPreviewAlertSignatureRef.current) {
@@ -231,6 +242,19 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
       if (
         previewSessionId &&
+        status.status === 'ready' &&
+        status.healthy &&
+        status.preview &&
+        typeof status.preview.revision === 'number' &&
+        lastAppliedHostedSnapshotRevisionRef.current !== status.preview.revision
+      ) {
+        const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
+        await workbenchStore.restoreSnapshot(snapshotFiles);
+        lastAppliedHostedSnapshotRevisionRef.current = status.preview.revision;
+      }
+
+      if (
+        previewSessionId &&
         status.recovery?.state === 'restored' &&
         typeof status.recovery.token === 'number' &&
         lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token
@@ -238,6 +262,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
         await workbenchStore.restoreSnapshot(snapshotFiles);
         lastAppliedHostedRecoveryTokenRef.current = status.recovery.token;
+        lastAppliedHostedSnapshotRevisionRef.current =
+          status.preview?.revision ?? lastAppliedHostedSnapshotRevisionRef.current;
         lastReloadedHostedRecoveryTokenRef.current = null;
       }
 
@@ -291,7 +317,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         lastHostedPreviewReloadKeyRef.current = null;
       }
     },
-    [activePreview, displayPath, inspectHostedPreviewIframe],
+    [activePreview, displayPath, inspectHostedPreviewIframe, shouldIgnoreStarterPlaceholderAlert],
   );
 
   const handlePreviewFrameLoad = useCallback(() => {
@@ -311,7 +337,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         return;
       }
 
-      const alert = extractPreviewAlertFromDocument(previewDocument);
+      const rawAlert = extractPreviewAlertFromDocument(previewDocument);
+      const alert = shouldIgnoreStarterPlaceholderAlert(rawAlert) ? null : rawAlert;
       const signature = alert ? `${alert.description}\n${alert.content}` : null;
 
       if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
@@ -339,6 +366,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       lastHostedPreviewReloadKeyRef.current = null;
       lastAppliedHostedRecoveryTokenRef.current = null;
       lastReloadedHostedRecoveryTokenRef.current = null;
+      lastAppliedHostedSnapshotRevisionRef.current = null;
 
       return;
     }
@@ -435,7 +463,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           return;
         }
 
-        const alert = extractPreviewAlertFromDocument(previewDocument);
+        const rawAlert = extractPreviewAlertFromDocument(previewDocument);
+        const alert = shouldIgnoreStarterPlaceholderAlert(rawAlert) ? null : rawAlert;
         const signature = alert ? `${alert.description}\n${alert.content}` : null;
 
         if (alert && signature && signature !== lastPreviewAlertSignatureRef.current) {
@@ -467,7 +496,14 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       window.clearInterval(interval);
       window.clearTimeout(initialProbe);
     };
-  }, [activePreview?.baseUrl, activePreview?.port, applyHostedPreviewStatus, hostedRuntimeEnabled, iframeUrl]);
+  }, [
+    activePreview?.baseUrl,
+    activePreview?.port,
+    applyHostedPreviewStatus,
+    hostedRuntimeEnabled,
+    iframeUrl,
+    shouldIgnoreStarterPlaceholderAlert,
+  ]);
 
   const findMinPortIndex = useCallback(
     (minIndex: number, preview: { port: number }, index: number, array: { port: number }[]) => {

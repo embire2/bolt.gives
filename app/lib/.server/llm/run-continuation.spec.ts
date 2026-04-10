@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeRunContinuation, shouldForceRunContinuation, synthesizeRunHandoff } from './run-continuation';
+import type { FileMap } from '~/lib/stores/files';
 
 describe('shouldForceRunContinuation', () => {
   it('continues when a build request ends with scaffold-only output', () => {
@@ -108,6 +109,81 @@ describe('shouldForceRunContinuation', () => {
 
     expect(decision.shouldContinue).toBe(true);
     expect(decision.reason).toBe('inspection-only-shell-actions');
+  });
+
+  it('continues when the active starter entry file was never replaced', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a doctor scheduler and run it.',
+      assistantContent: `
+<boltAction type="file" filePath="src/components/Header.tsx">export function Header(){return <header>Luma Clinic</header>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+      currentFiles: {
+        'src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+      } as any,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('starter-entry-unchanged');
+    expect(decision.starterEntryFilePath).toBe('src/App.tsx');
+  });
+
+  it('does not force continuation once the starter entry file is replaced', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a doctor scheduler and run it.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Luma Clinic</div>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+      currentFiles: {
+        'src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+      } as any,
+    });
+
+    expect(decision.shouldContinue).toBe(false);
+    expect(decision.reason).toBe('continuation-not-required');
+  });
+
+  it('treats hosted absolute starter entry paths as the same file as relative generated paths', () => {
+    const assistantContent = [
+      '<boltArtifact id="demo" title="Demo">',
+      '<boltAction type="file" filePath="src/App.tsx">export default function App() { return <main>done</main>; }</boltAction>',
+      '<boltAction type="start">npm run dev</boltAction>',
+      '</boltArtifact>',
+    ].join('\n');
+
+    expect(
+      analyzeRunContinuation({
+        chatMode: 'build',
+        lastUserContent: 'Build a task tracker and run it',
+        assistantContent,
+        alreadyAttempted: false,
+        currentFiles: {
+          '/home/project/src/App.tsx': {
+            type: 'file',
+            content: 'Your fallback starter is ready.',
+            isBinary: false,
+          },
+        } as unknown as FileMap,
+      }),
+    ).toEqual({
+      shouldContinue: false,
+      reason: 'continuation-not-required',
+    });
   });
 
   it('returns reason when continuation is skipped due prior attempt', () => {
@@ -263,5 +339,34 @@ describe('shouldForceRunContinuation', () => {
       '<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>',
     );
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
+  });
+
+  it('overrides an explicit start command when the generated package.json does not support it', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="notes app">
+<boltAction type="file" filePath="/home/project/package.json">{
+  "name": "taskboard-pro",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}</boltAction>
+<boltAction type="file" filePath="/home/project/vite.config.ts">import { defineConfig } from 'vite'; export default defineConfig({});</boltAction>
+<boltAction type="file" filePath="/home/project/src/main.tsx">import React from 'react';</boltAction>
+<boltAction type="file" filePath="/home/project/src/App.tsx">export default function App(){return <footer>FOLLOWUP</footer>;}</boltAction>
+<boltAction type="shell">pnpm install --reporter=append-only --no-frozen-lockfile</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      setupCommand: 'pnpm install --reporter=append-only --no-frozen-lockfile',
+      startCommand: 'npm run start',
+    });
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run start</boltAction>');
   });
 });

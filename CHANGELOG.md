@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Hosted FREE preview verification no longer auto-restores an older starter snapshot just because the browser briefly reported the fallback placeholder while the generated app files were already synced; starter-placeholder reporting is now ignored once the active workspace no longer contains the starter text.
 - Generated app entry-file writes now resolve onto the active starter source file when the model picks a sibling JS/TS extension (`App.js` vs `App.tsx`, `main.jsx` vs `main.tsx`, etc.), which stops hosted Vite projects from leaving the real app in an inactive file while preview keeps showing the fallback starter.
 - FREE/DeepSeek follow-up runs on existing projects no longer trust plain-English `start` actions as runnable shell commands; the backend now rejects prose handoffs and falls back to inferred project commands so preview can continue after the first prompt instead of stalling on a fake runtime command.
 - Hosted FREE preflight now emits explicit structured diagnostics for rate-limit, credits-exhausted, and unavailable failures, so server logs show the real upstream cause instead of collapsing everything into a generic availability error.
