@@ -24,7 +24,7 @@ import {
   rewriteAllPackageManagersToPnpm,
   rewritePythonCommands,
 } from './shell-command-utils';
-import { normalizeArtifactFilePath } from './file-paths';
+import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath } from './file-paths';
 import type { FileMap } from '~/lib/stores/files';
 import {
   isHostedRuntimeEnabled,
@@ -785,7 +785,11 @@ export class ActionRunner {
     }
 
     const webcontainer = await this.#webcontainer;
-    const normalizedFilePath = normalizeArtifactFilePath(action.filePath, webcontainer.workdir);
+    const normalizedFilePath = resolvePreferredArtifactFilePath(
+      action.filePath,
+      this.#getFilesSnapshot?.(),
+      webcontainer.workdir,
+    );
     const relativePath = nodePath.relative(webcontainer.workdir, normalizedFilePath);
     const existingFile = this.#getFilesSnapshot?.()[normalizedFilePath];
     const hostedRuntimeEnabled = isHostedRuntimeEnabled();

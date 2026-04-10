@@ -149,6 +149,58 @@ describe('ActionRunner start actions', () => {
     expect(writeFile).toHaveBeenCalledWith('src/App.jsx', 'export default function App() { return null; }');
   });
 
+  it('rewrites generated JavaScript entry files onto the active TypeScript starter file', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const mkdir = vi.fn().mockResolvedValue(undefined);
+    const shell = {
+      ready: vi.fn().mockResolvedValue(undefined),
+      terminal: {},
+      process: {},
+      executeCommand,
+    };
+    const webcontainer = Promise.resolve({
+      workdir: '/home/project',
+      fs: {
+        readFile: vi.fn().mockResolvedValue('{}'),
+        readdir: vi.fn().mockResolvedValue([]),
+        mkdir,
+        writeFile,
+      },
+    });
+
+    const runner = new ActionRunner(
+      webcontainer as any,
+      () => shell as any,
+      () =>
+        ({
+          '/home/project/src/App.tsx': {
+            type: 'file',
+            content: 'fallback starter',
+            isBinary: false,
+          } as any,
+        }) satisfies FileMap,
+    );
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-1b',
+      action: {
+        type: 'file',
+        filePath: '/home/project/src/App.js',
+        content: 'export default function App() { return <main>real app</main>; }',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(writeFile).toHaveBeenCalledWith(
+      'src/App.tsx',
+      'export default function App() { return <main>real app</main>; }',
+    );
+  });
+
   it('batches hosted file syncs for touched files instead of pushing a full snapshot on each write', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 

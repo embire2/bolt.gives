@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeArtifactFilePath, toWorkbenchRelativeFilePath } from './file-paths';
+import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath, toWorkbenchRelativeFilePath } from './file-paths';
 
 describe('normalizeArtifactFilePath', () => {
   it('preserves canonical project paths', () => {
@@ -24,5 +24,48 @@ describe('toWorkbenchRelativeFilePath', () => {
 
   it('returns a workbench-relative path for root-relative artifact files', () => {
     expect(toWorkbenchRelativeFilePath('/src/App.jsx')).toBe('src/App.jsx');
+  });
+});
+
+describe('resolvePreferredArtifactFilePath', () => {
+  it('keeps the requested file path when no preferred sibling exists', () => {
+    expect(
+      resolvePreferredArtifactFilePath('/home/project/src/App.js', {
+        '/home/project/src/App.js': {
+          type: 'file',
+          content: 'export default function App() {}',
+          isBinary: false,
+        },
+      }),
+    ).toBe('/home/project/src/App.js');
+  });
+
+  it('maps generated JavaScript entry writes onto an existing TypeScript starter entry', () => {
+    expect(
+      resolvePreferredArtifactFilePath('/home/project/src/App.js', {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return null; }',
+          isBinary: false,
+        },
+      }),
+    ).toBe('/home/project/src/App.tsx');
+  });
+
+  it('prefers the active TypeScript sibling even when an accidental JavaScript duplicate exists', () => {
+    expect(
+      resolvePreferredArtifactFilePath('/home/project/src/App.js', {
+        '/home/project/src/App.js': {
+          type: 'file',
+          content: 'stale duplicate',
+          isBinary: false,
+        },
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'active starter',
+          isBinary: false,
+        },
+      }),
+    ).toBe('/home/project/src/App.tsx');
   });
 });

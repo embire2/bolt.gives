@@ -83,7 +83,18 @@ describe('workbenchStore file actions', () => {
     expect(writeFile).toHaveBeenCalledWith('/home/project/src/App.tsx', data.action.content);
     expect(saveFile).not.toHaveBeenCalled();
     expect(runAction).toHaveBeenCalledTimes(1);
-    expect(runAction).toHaveBeenCalledWith(data);
+    expect(runAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactId: 'artifact-1',
+        messageId: 'message-1',
+        actionId,
+        action: expect.objectContaining({
+          type: 'file',
+          filePath: '/home/project/src/App.tsx',
+          content: data.action.content,
+        }),
+      }),
+    );
   });
 
   it('keeps the preview visible when a ready hosted preview already exists', async () => {
@@ -132,6 +143,62 @@ describe('workbenchStore file actions', () => {
     expect(writeFile).toHaveBeenCalledWith('/home/project/src/App.tsx', data.action.content);
     expect(workbenchStore.currentView.get()).toBe('preview');
     expect(runAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rewrites generated entry-file variants onto the active starter file before persisting and running', async () => {
+    const runAction = vi.fn().mockResolvedValue(undefined);
+    const writeFile = vi.spyOn(workbenchStore, 'writeFile').mockResolvedValue(undefined);
+    const actionId = 'file-action-rewrite-1';
+    const data: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId,
+      action: {
+        type: 'file',
+        filePath: 'src/App.js',
+        content: 'export default function App() { return <main>real app</main>; }',
+      } as any,
+    };
+
+    workbenchStore.files.set({
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'fallback starter',
+        isBinary: false,
+      },
+    } as any);
+
+    workbenchStore.artifacts.set({
+      'artifact-1': {
+        id: 'artifact-1',
+        title: 'Runtime test',
+        closed: false,
+        runner: {
+          actions: {
+            get: () => ({
+              [actionId]: {
+                executed: false,
+              },
+            }),
+          },
+          runAction,
+        } as any,
+      },
+    });
+
+    await workbenchStore._runAction(data, false);
+
+    expect(writeFile).toHaveBeenCalledWith(
+      '/home/project/src/App.tsx',
+      'export default function App() { return <main>real app</main>; }',
+    );
+    expect(runAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: expect.objectContaining({
+          filePath: '/home/project/src/App.tsx',
+        }),
+      }),
+    );
   });
 
   it('waits for artifact registration before executing queued actions', async () => {

@@ -49,7 +49,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 
 1. Prompt-to-preview reliability
 - [~] Keep `Chat` and `Workspace` status explicit during generation so users always know whether the system is scaffolding, installing, starting, ready, or repairing.
-- [~] Remove remaining starter/workspace hydration ambiguity on generated-app flows, including rejecting prose-only runtime handoffs on follow-up prompts.
+- [~] Remove remaining starter/workspace hydration ambiguity on generated-app flows, including rejecting prose-only runtime handoffs on follow-up prompts and resolving generated entry-file writes onto the active starter file.
 - [ ] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified.
 
 2. Commentary quality and transparency

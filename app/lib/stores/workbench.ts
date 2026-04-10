@@ -23,7 +23,7 @@ import {
 } from '~/lib/runtime/autonomy';
 import { createResilientExecutionQueue } from '~/lib/runtime/serial-execution-queue';
 import { createScopedLogger } from '~/utils/logger';
-import { toWorkbenchAbsoluteFilePath } from '~/lib/runtime/file-paths';
+import { resolvePreferredArtifactFilePath } from '~/lib/runtime/file-paths';
 import { extractHostedRuntimeSessionIdFromPreviewBaseUrl } from '~/lib/runtime/hosted-runtime-client';
 
 const logger = createScopedLogger('WorkbenchStore');
@@ -1114,7 +1114,17 @@ export class WorkbenchStore {
 
     if (data.action.type === 'file') {
       const wc = await webcontainer;
-      const fullPath = toWorkbenchAbsoluteFilePath(data.action.filePath, wc.workdir);
+      const fullPath = resolvePreferredArtifactFilePath(data.action.filePath, this.files.get(), wc.workdir);
+      const fileActionData =
+        fullPath === data.action.filePath
+          ? data
+          : {
+              ...data,
+              action: {
+                ...data.action,
+                filePath: fullPath,
+              },
+            };
 
       /*
        * For scoped locks, we would need to implement diff checking here
@@ -1139,7 +1149,7 @@ export class WorkbenchStore {
           this.#editorStore.updateFile(fullPath, data.action.content);
         }
 
-        await artifact.runner.runAction(data, true);
+        await artifact.runner.runAction(fileActionData, true);
 
         return;
       }
@@ -1149,7 +1159,7 @@ export class WorkbenchStore {
        * snapshots include unopened files before the runtime sync runs.
        */
       await this.writeFile(fullPath, data.action.content);
-      await artifact.runner.runAction(data);
+      await artifact.runner.runAction(fileActionData);
       this.resetAllFileModifications();
     } else {
       await artifact.runner.runAction(data);
