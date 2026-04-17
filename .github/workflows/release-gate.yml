@@ -68,6 +68,9 @@ jobs:
       - name: Run live release smoke against local release target
         run: BASE_URL=http://127.0.0.1:8788 E2E_PROVIDER=OpenAI E2E_MODEL=gpt-5.4 pnpm run smoke:live
 
+      - name: Run post-deploy asset health check against local release target
+        run: BASE_URLS=http://127.0.0.1:8788 pnpm run health:postdeploy
+
       - name: Dump local runtime logs on failure
         if: failure()
         run: |

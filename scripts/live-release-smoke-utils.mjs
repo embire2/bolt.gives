@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 const SOURCE_EXTENSIONS = ['.jsx', '.js', '.tsx', '.ts', '.mjs', '.mts', '.cts'];
+const STATIC_ASSET_PATH_RE = /\/assets\/.+\.(?:js|css|map|png|jpe?g|svg|webp|ico|woff2?|ttf|eot)$/i;
 
 function dirname(filePath) {
   return filePath.replace(/\\/g, '/').replace(/\/[^/]+$/, '') || '/';
@@ -125,4 +126,14 @@ export function selectBreakTarget(files) {
   }
 
   throw new Error('Could not find a generated application entry file to corrupt for recovery testing.');
+}
+
+export function isStaticAssetRequestUrl(url) {
+  try {
+    const parsed = new URL(url);
+
+    return STATIC_ASSET_PATH_RE.test(parsed.pathname);
+  } catch {
+    return STATIC_ASSET_PATH_RE.test(String(url || ''));
+  }
 }

@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { selectBreakTarget } from './live-release-smoke-utils.mjs';
+import { isStaticAssetRequestUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
 
 const baseUrl = process.env.BASE_URL || 'https://alpha1.bolt.gives';
 const providerName = process.env.E2E_PROVIDER || 'OpenAI';
@@ -11,9 +11,28 @@ const modelName = process.env.E2E_MODEL || 'gpt-5.4';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
 const secure = baseUrl.startsWith('https://');
 const appToken = `LUMA_${Date.now().toString(36)}`;
+const progressStartMs = Date.now();
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function elapsedSeconds() {
+  return Math.round((Date.now() - progressStartMs) / 1000);
+}
+
+function logProgress(stage, details = '') {
+  const suffix = details ? ` | ${details}` : '';
+  console.log(`[live-smoke +${elapsedSeconds()}s] ${stage}${suffix}`);
+}
+
+async function readPreviewText(page) {
+  const previewFrame = page.frameLocator('iframe[title="preview"]').first();
+
+  return previewFrame
+    .locator('body')
+    .innerText({ timeout: 1500 })
+    .catch(() => '');
 }
 
 function buildCookie(name, value) {
@@ -41,46 +60,104 @@ function extractSessionDetailsFromPreviewUrl(previewUrl) {
 }
 
 async function waitForPromptSurface(page) {
-  await page.waitForSelector('textarea[placeholder="How can Bolt help you today?"]', { timeout: 90000 });
+  const deadline = Date.now() + 90000;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    attempt += 1;
+
+    const promptVisible = await page
+      .locator('textarea[placeholder="How can Bolt help you today?"]')
+      .isVisible()
+      .catch(() => false);
+
+    if (promptVisible) {
+      logProgress('Prompt surface ready');
+      return;
+    }
+
+    const bodyText = ((await page.locator('body').innerText().catch(() => '')) || '').slice(0, 300).replace(/\s+/g, ' ');
+    logProgress('Waiting for prompt surface', `attempt=${attempt} body="${bodyText}"`);
+    await delay(3000);
+  }
+
+  throw new Error('Prompt surface never became visible.');
 }
 
 async function waitForCommentaryInCurrentSurface(page, label) {
-  await page.waitForFunction(
-    (expectedLabel) => {
-      const bodyText = document.body.innerText || '';
-      return bodyText.includes(expectedLabel) && bodyText.includes('Live Commentary');
-    },
-    label,
-    { timeout: 180000 },
-  );
+  const deadline = Date.now() + 180000;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    attempt += 1;
+
+    const ready = await page
+      .evaluate((expectedLabel) => {
+        const bodyText = document.body.innerText || '';
+        return bodyText.includes(expectedLabel) && bodyText.includes('Live Commentary');
+      }, label)
+      .catch(() => false);
+
+    if (ready) {
+      logProgress('Commentary visible', `label=${label}`);
+      return;
+    }
+
+    logProgress('Waiting for commentary', `attempt=${attempt} label=${label}`);
+    await delay(4000);
+  }
+
+  throw new Error(`Commentary did not become visible for label: ${label}`);
 }
 
 async function waitForPreviewToRender(page) {
   await page.getByRole('tab', { name: /^Workspace$/i }).click();
+  logProgress('Switched to workspace tab');
   await waitForCommentaryInCurrentSurface(page, 'Live Commentary');
 
   const previewButton = page.getByRole('button', { name: /^Preview$/i }).first();
 
   if (await previewButton.isVisible().catch(() => false)) {
     await previewButton.click();
+    logProgress('Selected preview pane');
   }
 
-  await page.waitForSelector('iframe[title="preview"]', { timeout: 180000 });
-  await page.waitForFunction(
-    ({ expectedToken }) => {
-      const frame = document.querySelector('iframe[title="preview"]');
-      const previewText = frame?.contentDocument?.body?.innerText || '';
+  const iframeDeadline = Date.now() + 180000;
 
-      return (
-        previewText.includes(expectedToken) ||
-        (previewText.includes('Doctor') &&
-          previewText.includes('Appointment') &&
-          (previewText.includes('SMTP') || previewText.includes('Reminder')))
-      );
-    },
-    { expectedToken: appToken },
-    { timeout: 240000 },
-  );
+  while (Date.now() < iframeDeadline) {
+    const iframeVisible = await page.locator('iframe[title="preview"]').isVisible().catch(() => false);
+
+    if (iframeVisible) {
+      logProgress('Preview iframe mounted');
+      break;
+    }
+
+    logProgress('Waiting for preview iframe');
+    await delay(4000);
+  }
+
+  const previewDeadline = Date.now() + 240000;
+  let attempt = 0;
+
+  while (Date.now() < previewDeadline) {
+    attempt += 1;
+    const previewText = await readPreviewText(page);
+
+    if (
+      previewText.includes(appToken) ||
+      (previewText.includes('Doctor') &&
+        previewText.includes('Appointment') &&
+        (previewText.includes('SMTP') || previewText.includes('Reminder')))
+    ) {
+      logProgress('Preview rendered expected application', `attempt=${attempt}`);
+      return;
+    }
+
+    logProgress('Waiting for preview content', `attempt=${attempt} previewExcerpt="${previewText.slice(0, 160).replace(/\s+/g, ' ')}"`);
+    await delay(5000);
+  }
+
+  throw new Error('Preview never rendered the expected application content.');
 }
 
 async function runtimeFetch(page, sessionId, suffix, options = {}) {
@@ -124,8 +201,15 @@ const context = await browser.newContext({
   viewport: { width: 1600, height: 1000 },
 });
 const page = await context.newPage();
+const asset404s = [];
 
 try {
+  page.on('response', (response) => {
+    if (response.status() === 404 && isStaticAssetRequestUrl(response.url())) {
+      asset404s.push(`${response.status()} ${response.url()}`);
+    }
+  });
+
   await fs.mkdir(outDir, { recursive: true });
   await context.addCookies([
     buildCookie('selectedProvider', providerName),
@@ -151,10 +235,15 @@ try {
     },
   );
 
+  logProgress('Opening application', `baseUrl=${baseUrl} provider=${providerName} model=${modelName}`);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitForPromptSurface(page);
+  if (asset404s.length > 0) {
+    throw new Error(`Asset 404s detected during startup: ${asset404s.join(', ')}`);
+  }
   await page.screenshot({ path: path.join(outDir, 'live-smoke-before-submit.png'), fullPage: true });
 
+  logProgress('Submitting prompt');
   await page.fill(
     'textarea[placeholder="How can Bolt help you today?"]',
     `Build a React doctor appointment scheduling website for a clinic with calendar slots, patient booking form, doctor selection, SMTP reminder settings, and a visible heading "${appToken}". Implement it and run it.`,
@@ -163,6 +252,9 @@ try {
 
   await waitForCommentaryInCurrentSurface(page, 'Live Commentary');
   await waitForPreviewToRender(page);
+  if (asset404s.length > 0) {
+    throw new Error(`Asset 404s detected before preview became ready: ${asset404s.join(', ')}`);
+  }
   await page.screenshot({ path: path.join(outDir, 'live-smoke-preview-ready.png'), fullPage: true });
 
   const previewSrc = await page.locator('iframe[title="preview"]').first().getAttribute('src');
@@ -198,6 +290,7 @@ try {
   if (!syncResponse.ok) {
     throw new Error(`Failed to corrupt generated app for recovery smoke: ${syncResponse.status}`);
   }
+  logProgress('Injected intentional preview break', `targetPath=${targetPath}`);
 
   const breakDeadline = Date.now() + 30000;
   let breakApplied = false;
@@ -252,10 +345,7 @@ try {
       sawRecoveryTokenAdvance = true;
     }
 
-    const livePreviewText = await page.evaluate(() => {
-      const frame = document.querySelector('iframe[title="preview"]');
-      return frame?.contentDocument?.body?.innerText || '';
-    });
+    const livePreviewText = await readPreviewText(page);
 
     if (
       livePreviewText.includes(appToken) ||
@@ -273,9 +363,14 @@ try {
     }
 
     if (sawError && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy && lastStatus.status === 'ready') {
+      logProgress('Preview recovery confirmed');
       break;
     }
 
+    logProgress(
+      'Waiting for recovery',
+      `status=${lastStatus.status} healthy=${lastStatus.healthy} sawError=${sawError} restoredSnapshot=${sawRestoredSnapshot} restoredPreview=${sawRestoredPreview}`,
+    );
     await delay(1500);
   }
 
@@ -299,6 +394,9 @@ try {
   }
 
   await page.screenshot({ path: path.join(outDir, 'live-smoke-after-restore.png'), fullPage: true });
+  if (asset404s.length > 0) {
+    throw new Error(`Asset 404s detected during smoke: ${asset404s.join(', ')}`);
+  }
   console.log(
     JSON.stringify(
       {

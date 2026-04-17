@@ -507,10 +507,7 @@ ${actionBlocks}
     return null;
   }
 
-  const installAlreadyPresent = shellCommands.some((command) =>
-    splitCommandSegments(command).some((segment) => INSTALL_COMMAND_RE.test(segment)),
-  );
-  const setupCommand = explicitSetupCommand || (installAlreadyPresent ? undefined : commands.setupCommand);
+  const setupCommand = explicitSetupCommand ?? commands.setupCommand;
   const actionBlocks = [
     setupCommand ? `<boltAction type="shell">${setupCommand}</boltAction>` : null,
     `<boltAction type="start">${commands.startCommand}</boltAction>`,

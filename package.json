@@ -42,6 +42,7 @@
     "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
     "e2e:free-startup": "node scripts/e2e-free-startup-label.mjs",
     "smoke:live": "node scripts/live-release-smoke.mjs",
+    "health:postdeploy": "node scripts/post-deploy-health-check.mjs",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
     "postinstall": "node scripts/install-playwright.mjs",

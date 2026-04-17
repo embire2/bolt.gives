@@ -402,7 +402,8 @@ describe('shouldForceRunContinuation', () => {
       reason: 'inferred-project-commands',
       startCommand: 'npm run dev',
     });
-    expect(handoff?.setupCommand).not.toBe('npm install moment');
+    expect(handoff?.setupCommand).toContain('npm install');
+    expect(handoff?.setupCommand).not.toContain('moment');
     expect(handoff?.assistantContent).not.toContain('npx --yes serve');
   });
 });
