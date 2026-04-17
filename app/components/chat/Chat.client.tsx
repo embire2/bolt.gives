@@ -65,6 +65,7 @@ import type {
 } from '~/types/context';
 import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
+import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -101,6 +102,15 @@ type PendingArchitectAutoHeal = {
   alert: ActionAlert;
   diagnosis: ArchitectDiagnosis;
   alertKey: string;
+};
+
+type QueuedHiddenContinuation = {
+  idSuffix: string;
+  content: string;
+  failureDescription: string;
+  successDescription?: string;
+  attempt: number;
+  scheduledAt: number;
 };
 
 function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean {
@@ -631,6 +641,7 @@ export const ChatImpl = memo(
     const fakeLoadingRef = useRef(fakeLoading);
     const messagesRef = useRef(messages);
     const appliedSyntheticRunHandoffsRef = useRef(new Set<string>());
+    const [queuedHiddenContinuation, setQueuedHiddenContinuation] = useState<QueuedHiddenContinuation | null>(null);
 
     useEffect(() => {
       isLoadingRef.current = isLoading;
@@ -682,48 +693,105 @@ export const ChatImpl = memo(
 
     const appendHiddenContinuation = useCallback(
       (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
-        const maxAttempts = 4;
+        const initialBusy = isLoadingRef.current || fakeLoadingRef.current;
+        const delayMs = getHiddenContinuationDelay({
+          attempt: 1,
+          isBusy: initialBusy,
+        });
 
-        const attemptDispatch = (attempt: number) => {
-          const initialBusy = isLoadingRef.current || fakeLoadingRef.current;
-          const delayMs = attempt === 1 ? (initialBusy ? 350 : 0) : Math.min(2200, attempt * 550);
-
-          window.setTimeout(() => {
-            append({
-              id: `${Date.now()}-${args.idSuffix}`,
-              role: 'user',
-              content: args.content,
-              annotations: ['hidden'],
-            })
-              .then(() => {
-                if (args.successDescription) {
-                  appendStepRunnerEvent({
-                    type: 'telemetry',
-                    timestamp: new Date().toISOString(),
-                    description: args.successDescription,
-                    output: `attempt=${attempt}/${maxAttempts}`,
-                  });
-                }
-              })
-              .catch((dispatchError) => {
-                appendStepRunnerEvent({
-                  type: 'error',
-                  timestamp: new Date().toISOString(),
-                  description: `${args.failureDescription} (attempt ${attempt}/${maxAttempts})`,
-                  error: dispatchError instanceof Error ? dispatchError.message : 'Unknown continuation dispatch error',
-                });
-
-                if (attempt < maxAttempts) {
-                  attemptDispatch(attempt + 1);
-                }
-              });
-          }, delayMs);
-        };
-
-        attemptDispatch(1);
+        setQueuedHiddenContinuation({
+          ...args,
+          attempt: 1,
+          scheduledAt: Date.now() + delayMs,
+        });
       },
-      [append],
+      [],
     );
+
+    useEffect(() => {
+      if (!queuedHiddenContinuation) {
+        return undefined;
+      }
+
+      const maxAttempts = 4;
+
+      if (
+        !shouldDispatchHiddenContinuation({
+          isLoading,
+          fakeLoading,
+          scheduledAt: queuedHiddenContinuation.scheduledAt,
+          now: Date.now(),
+        })
+      ) {
+        const delayMs = Math.max(100, queuedHiddenContinuation.scheduledAt - Date.now());
+        const timer = window.setTimeout(() => {
+          setQueuedHiddenContinuation((current) => (current ? { ...current } : current));
+        }, delayMs);
+
+        return () => {
+          window.clearTimeout(timer);
+        };
+      }
+
+      let cancelled = false;
+
+      void append({
+        id: `${Date.now()}-${queuedHiddenContinuation.idSuffix}`,
+        role: 'user',
+        content: queuedHiddenContinuation.content,
+        annotations: ['hidden'],
+      })
+        .then(() => {
+          if (cancelled) {
+            return;
+          }
+
+          if (queuedHiddenContinuation.successDescription) {
+            appendStepRunnerEvent({
+              type: 'telemetry',
+              timestamp: new Date().toISOString(),
+              description: queuedHiddenContinuation.successDescription,
+              output: `attempt=${queuedHiddenContinuation.attempt}/${maxAttempts}`,
+            });
+          }
+
+          setQueuedHiddenContinuation(null);
+        })
+        .catch((dispatchError) => {
+          if (cancelled) {
+            return;
+          }
+
+          appendStepRunnerEvent({
+            type: 'error',
+            timestamp: new Date().toISOString(),
+            description: `${queuedHiddenContinuation.failureDescription} (${queuedHiddenContinuation.attempt}/${maxAttempts})`,
+            error: dispatchError instanceof Error ? dispatchError.message : 'Unknown continuation dispatch error',
+          });
+
+          if (queuedHiddenContinuation.attempt >= maxAttempts) {
+            setQueuedHiddenContinuation(null);
+
+            return;
+          }
+
+          const nextAttempt = queuedHiddenContinuation.attempt + 1;
+          const delayMs = getHiddenContinuationDelay({
+            attempt: nextAttempt,
+            isBusy: isLoadingRef.current || fakeLoadingRef.current,
+          });
+
+          setQueuedHiddenContinuation({
+            ...queuedHiddenContinuation,
+            attempt: nextAttempt,
+            scheduledAt: Date.now() + delayMs,
+          });
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [append, fakeLoading, isLoading, queuedHiddenContinuation]);
 
     const dispatchAutoContinuation = useCallback(
       (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
