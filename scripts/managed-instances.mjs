@@ -109,9 +109,13 @@ export function createManagedInstanceSessionSecret() {
   return crypto.randomBytes(24).toString('hex');
 }
 
-export function createManagedInstanceTrialExpiry(trialDays = 15) {
+export function createManagedInstanceTrialExpiry(trialDays = 0) {
   const numericTrialDays = Number(trialDays);
-  const effectiveTrialDays = Number.isFinite(numericTrialDays) && numericTrialDays > 0 ? numericTrialDays : 15;
+  const effectiveTrialDays = Number.isFinite(numericTrialDays) ? numericTrialDays : 0;
+
+  if (effectiveTrialDays <= 0) {
+    return null;
+  }
 
   return new Date(Date.now() + effectiveTrialDays * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -160,9 +164,13 @@ export function sanitizeManagedInstanceForOperator(instance) {
   return buildSanitizedManagedInstance(instance);
 }
 
-export function normalizeManagedInstanceRegistry(input, { defaultRootDomain = 'pages.dev' } = {}) {
+export function normalizeManagedInstanceRegistry(
+  input,
+  { defaultRootDomain = 'pages.dev', defaultTrialDays = 0 } = {},
+) {
   const now = new Date().toISOString();
   const instances = Array.isArray(input?.instances) ? input.instances : [];
+  const indefiniteTrialMode = Number(defaultTrialDays) <= 0;
 
   return {
     rootDomain:
@@ -177,6 +185,17 @@ export function normalizeManagedInstanceRegistry(input, { defaultRootDomain = 'p
         typeof instance.routeHostname === 'string' && instance.routeHostname.trim()
           ? instance.routeHostname.trim()
           : buildManagedInstanceHostname(projectName, defaultRootDomain);
+      const normalizedPlan =
+        typeof instance.plan === 'string' && instance.plan.trim()
+          ? instance.plan.trim()
+          : instance.trialEndsAt
+            ? 'experimental-free-15d'
+            : 'experimental-free-indefinite';
+      const shouldClearTrialExpiry =
+        indefiniteTrialMode &&
+        normalizedPlan.startsWith('experimental-free-') &&
+        instance.status !== 'expired' &&
+        !instance.expiredAt;
 
       return {
         id: String(instance.id || crypto.randomUUID()),
@@ -197,14 +216,16 @@ export function normalizeManagedInstanceRegistry(input, { defaultRootDomain = 'p
             ? instance.pagesUrl.trim()
             : `https://${routeHostname}`,
         plan:
-          typeof instance.plan === 'string' && instance.plan.trim() ? instance.plan.trim() : 'experimental-free-15d',
+          shouldClearTrialExpiry && normalizedPlan.startsWith('experimental-free-')
+            ? 'experimental-free-indefinite'
+            : normalizedPlan,
         status: MANAGED_INSTANCE_STATUSES.has(instance.status) ? instance.status : 'provisioning',
         createdAt: typeof instance.createdAt === 'string' && instance.createdAt ? instance.createdAt : now,
         updatedAt: typeof instance.updatedAt === 'string' && instance.updatedAt ? instance.updatedAt : now,
         trialEndsAt:
-          typeof instance.trialEndsAt === 'string' && instance.trialEndsAt
+          !shouldClearTrialExpiry && typeof instance.trialEndsAt === 'string' && instance.trialEndsAt
             ? instance.trialEndsAt
-            : createManagedInstanceTrialExpiry(15),
+            : null,
         currentGitSha:
           typeof instance.currentGitSha === 'string' && instance.currentGitSha ? instance.currentGitSha : null,
         previousGitSha:
@@ -256,7 +277,7 @@ export function getManagedInstanceBySessionSecret(registry, sessionSecret) {
  */
 export function claimManagedInstanceTrial(
   registry,
-  { name, email, requestedSubdomain, rootDomain = 'pages.dev', trialDays = 15, sessionSecret = undefined },
+  { name, email, requestedSubdomain, rootDomain = 'pages.dev', trialDays = 0, sessionSecret = undefined },
 ) {
   const normalizedName = String(name || '').trim();
   const normalizedEmail = normalizeManagedInstanceEmail(email);
@@ -320,7 +341,7 @@ export function claimManagedInstanceTrial(
     projectName: normalizedSubdomain,
     routeHostname,
     pagesUrl: `https://${routeHostname}`,
-    plan: 'experimental-free-15d',
+    plan: trialDays > 0 ? `experimental-free-${trialDays}d` : 'experimental-free-indefinite',
     status: 'provisioning',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -342,7 +363,7 @@ export function claimManagedInstanceTrial(
     target: routeHostname,
     details: {
       projectName: normalizedSubdomain,
-      plan: 'experimental-free-15d',
+      plan: instance.plan,
     },
   });
 

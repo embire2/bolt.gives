@@ -4,11 +4,13 @@
 
 ### Changed
 
+- Managed Cloudflare instances are now indefinite for now instead of auto-expiring after 15 days, and legacy timed expiry state is normalized away on the live registry/admin paths.
+- The managed-instance registration flow is now explicitly treated as client profile capture, including email address, so operators can support and message registered users from the private admin surface.
 - `ROADMAP.md` is now rewritten around the actual `v3.0.9` launch plan, with explicit launch blockers, operator/self-host priorities, and release metrics.
-- `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` trial flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
-- The hosted `FREE` default path is pinned to `deepseek/deepseek-v3.2`, with the server runtime carrying the protected OpenRouter token so hosted and trial instances can start coding immediately without exposing operator credentials.
+- `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` managed-instance flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
+- The hosted `FREE` default path is pinned to `deepseek/deepseek-v3.2`, with the server runtime carrying the protected OpenRouter token so hosted and managed instances can start coding immediately without exposing operator credentials.
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
-- README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed 15-day registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
+- README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed-instance registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
 - The self-host installer now supports an interactive setup path when domain/PostgreSQL flags are omitted, and self-hosted trial links now fall back to the local app domain’s `/managed-instances` route instead of pointing back to the hosted `create.bolt.gives` domain.
 - The installer now installs PostgreSQL client tooling (`psql`) as part of the supported self-host baseline and keeps asking interactively for the local PostgreSQL database name, username, and password when those flags are omitted.

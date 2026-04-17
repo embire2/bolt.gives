@@ -93,7 +93,7 @@ const TENANT_REGISTRY_PATH =
 const TENANT_INVITE_TTL_MS = Number(process.env.RUNTIME_TENANT_INVITE_TTL_MS || `${72 * 60 * 60 * 1000}`);
 const MANAGED_INSTANCE_REGISTRY_PATH =
   process.env.RUNTIME_MANAGED_INSTANCE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'managed-instance-registry.json');
-const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '15');
+const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '0');
 const MANAGED_INSTANCE_ROOT_DOMAIN = process.env.RUNTIME_MANAGED_INSTANCE_ROOT_DOMAIN || 'pages.dev';
 const MANAGED_INSTANCE_SOURCE_BRANCH = process.env.RUNTIME_MANAGED_INSTANCE_SOURCE_BRANCH || 'main';
 const MANAGED_INSTANCE_DEPLOY_DIR =
@@ -399,7 +399,10 @@ function buildManagedInstanceSupportState() {
 async function ensureManagedInstanceRegistry() {
   try {
     const raw = await fs.readFile(MANAGED_INSTANCE_REGISTRY_PATH, 'utf8');
-    const registry = normalizeManagedInstanceRegistry(JSON.parse(raw), { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN });
+    const registry = normalizeManagedInstanceRegistry(JSON.parse(raw), {
+      defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+    });
     const recovered = await maybeRecoverManagedInstanceRegistryFromAdminAssignments(registry);
 
     if (recovered) {
@@ -419,7 +422,7 @@ async function ensureManagedInstanceRegistry() {
           instances: [],
           events: [],
         },
-        { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
+        { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN, defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS },
       );
     await writeManagedInstanceRegistry(registry);
     return registry;
@@ -448,7 +451,7 @@ export function buildManagedInstanceRegistryFromAssignments(assignments = []) {
       instances: assignments,
       events: [],
     },
-    { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN },
+    { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN, defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS },
   );
 }
 
@@ -762,7 +765,7 @@ async function expireManagedInstanceIfRequired(registry, instance, { actor = 'sy
   instance.status = 'expired';
   instance.updatedAt = new Date().toISOString();
   instance.expiredAt = new Date().toISOString();
-  instance.lastError = 'The 15-day experimental managed instance trial has expired.';
+  instance.lastError = 'The managed instance reached its scheduled expiry.';
   appendManagedInstanceEvent(registry, {
     actor,
     action: 'managed-instance.expired',

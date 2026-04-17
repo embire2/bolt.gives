@@ -30,7 +30,7 @@ describe('managed instances route', () => {
             projectName: 'clinic-trial',
             email: 'owner@example.com',
             pagesUrl: 'https://clinic-trial.pages.dev',
-            trialEndsAt: '2026-04-19T12:00:00.000Z',
+            trialEndsAt: null,
             currentGitSha: 'abc1234',
             currentDeploymentId: null,
             status: 'active',
@@ -44,7 +44,7 @@ describe('managed instances route', () => {
       if (pathname === '/managed-instances/config') {
         return {
           supported: true,
-          trialDays: 15,
+          trialDays: 0,
           rootDomain: 'pages.dev',
           sourceBranch: 'main',
         };

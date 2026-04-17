@@ -143,7 +143,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       managedSupport: status.managedSupport || {
         supported: false,
         reason: 'Managed Cloudflare trials are unavailable on this deployment.',
-        trialDays: 15,
+        trialDays: 0,
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       },
@@ -175,7 +175,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       managedSupport: {
         supported: false,
         reason: 'Managed Cloudflare trials are unavailable on this deployment.',
-        trialDays: 15,
+        trialDays: 0,
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       } satisfies ManagedInstanceSupport,
@@ -538,9 +538,9 @@ export default function TenantAdminPage() {
                   {adminHost ? 'Admin Panel' : 'Tenant Admin'}
                 </h1>
                 <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                  Manage client registrations, Cloudflare trial assignments, tenant access, and outbound mail from one
-                  server-backed admin surface. Default bootstrap login: <span className="font-mono">admin / admin</span>
-                  .
+                  Manage client registrations, Cloudflare instance assignments, tenant access, and outbound mail from
+                  one server-backed admin surface. Default bootstrap login:{' '}
+                  <span className="font-mono">admin / admin</span>.
                 </p>
                 <p className="mt-2 text-xs text-bolt-elements-textTertiary">Primary operator URL: {adminPanelUrl}</p>
                 {admin.mustChangePassword ? (
@@ -609,10 +609,10 @@ export default function TenantAdminPage() {
               <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">What this dashboard controls</h2>
                 <ul className="mt-4 space-y-2 text-sm text-bolt-elements-textSecondary">
-                  <li>Postgres-backed client profile registrations for Cloudflare trial requests.</li>
+                  <li>Postgres-backed client profile registrations for Cloudflare managed-instance requests.</li>
                   <li>Bootstrap admin account with required password rotation after first sign-in.</li>
                   <li>Tenant creation plus enable/disable lifecycle controls for isolated customer workspaces.</li>
-                  <li>Managed Cloudflare trial assignments mapped to the client email that requested them.</li>
+                  <li>Managed Cloudflare instance assignments mapped to the client email that requested them.</li>
                   <li>
                     Outbound client email log, with SMTP sending enabled when runtime mail transport is configured.
                   </li>
@@ -662,12 +662,13 @@ export default function TenantAdminPage() {
                       {clientProfiles.length}
                     </div>
                     <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      {clientProfiles.filter((profile) => profile.lastInstanceSlug).length} mapped to a trial instance.
+                      {clientProfiles.filter((profile) => profile.lastInstanceSlug).length} mapped to a managed
+                      instance.
                     </div>
                   </div>
                   <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
                     <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                      Managed trials
+                      Managed instances
                     </div>
                     <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
                       {managedInstances.length}
@@ -726,7 +727,8 @@ export default function TenantAdminPage() {
                     <div>
                       <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Client Profiles</h2>
                       <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                        Every Cloudflare trial request must complete this profile before an instance can be provisioned.
+                        Every Cloudflare managed-instance request must complete this profile before an instance can be
+                        provisioned.
                       </p>
                     </div>
                     <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
@@ -1004,17 +1006,19 @@ export default function TenantAdminPage() {
             <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Managed Cloudflare Trials</h2>
+                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Managed Cloudflare Instances</h2>
                   <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                    Operator view of live trial instances. Actions run server-side through the managed control plane and
-                    are matched to the registered client that requested them. Cloudflare credentials remain on the
+                    Operator view of live managed instances. Actions run server-side through the managed control plane
+                    and are matched to the registered client that requested them. Cloudflare credentials remain on the
                     runtime service and are never sent to the browser.
                   </p>
                 </div>
                 <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
                   {managedSupport.supported
-                    ? `${managedSupport.trialDays}-day trials on ${managedSupport.rootDomain}`
-                    : 'Trials unavailable'}
+                    ? managedSupport.trialDays > 0
+                      ? `${managedSupport.trialDays}-day trials on ${managedSupport.rootDomain}`
+                      : `Indefinite managed instances on ${managedSupport.rootDomain}`
+                    : 'Instances unavailable'}
                 </span>
               </div>
 
@@ -1024,7 +1028,7 @@ export default function TenantAdminPage() {
                 </div>
               ) : managedInstances.length === 0 ? (
                 <div className="mt-4 rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                  No managed trial instances have been provisioned yet.
+                  No managed instances have been provisioned yet.
                 </div>
               ) : (
                 <div className="mt-5 space-y-3">
@@ -1045,8 +1049,10 @@ export default function TenantAdminPage() {
                               <span className="font-mono">{instance.routeHostname}</span>
                             </div>
                             <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                              Trial ends {new Date(instance.trialEndsAt).toLocaleString()} · Updated{' '}
-                              {new Date(instance.updatedAt).toLocaleString()}
+                              {instance.trialEndsAt
+                                ? `Availability until ${new Date(instance.trialEndsAt).toLocaleString()}`
+                                : 'No scheduled expiry'}{' '}
+                              · Updated {new Date(instance.updatedAt).toLocaleString()}
                             </div>
                             {instance.lastDeploymentUrl ? (
                               <div className="mt-1 text-xs text-bolt-elements-textTertiary">
@@ -1093,7 +1099,7 @@ export default function TenantAdminPage() {
                                 <input type="hidden" name="intent" value="suspend-managed-instance" />
                                 <input type="hidden" name="slug" value={instance.projectName} />
                                 <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                  Suspend trial
+                                  Suspend instance
                                 </button>
                               </Form>
                             ) : null}

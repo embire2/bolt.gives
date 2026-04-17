@@ -80,7 +80,7 @@ describe('TenantAdminPage', () => {
       managedSupport: {
         supported: true,
         reason: null,
-        trialDays: 15,
+        trialDays: 0,
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       },
@@ -92,11 +92,11 @@ describe('TenantAdminPage', () => {
           projectName: 'clinic-trial',
           routeHostname: 'clinic-trial.pages.dev',
           pagesUrl: 'https://clinic-trial.pages.dev',
-          plan: 'experimental-free-15d',
+          plan: 'experimental-free-indefinite',
           status: 'active',
           createdAt: '2026-04-04T12:00:00.000Z',
           updatedAt: '2026-04-04T12:10:00.000Z',
-          trialEndsAt: '2026-04-19T12:00:00.000Z',
+          trialEndsAt: null,
           currentGitSha: 'abc1234',
           previousGitSha: null,
           lastRolloutAt: '2026-04-04T12:10:00.000Z',
@@ -123,11 +123,11 @@ describe('TenantAdminPage', () => {
     expect(screen.getByText('Admin Panel')).toBeTruthy();
     expect(screen.getByText('Client Profiles')).toBeTruthy();
     expect(screen.getByText('Owner Example')).toBeTruthy();
-    expect(screen.getByText('Managed Cloudflare Trials')).toBeTruthy();
+    expect(screen.getByText('Managed Cloudflare Instances')).toBeTruthy();
     expect(screen.getByText('Clinic Trial')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Refresh deployment' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Suspend trial' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Suspend instance' })).toBeTruthy();
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
   });
 
@@ -161,7 +161,7 @@ describe('TenantAdminPage', () => {
       managedSupport: {
         supported: true,
         reason: null,
-        trialDays: 15,
+        trialDays: 0,
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       },

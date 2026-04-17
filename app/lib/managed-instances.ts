@@ -11,7 +11,7 @@ export type ManagedInstanceRecord = {
   status: ManagedInstanceStatus;
   createdAt: string;
   updatedAt: string;
-  trialEndsAt: string;
+  trialEndsAt: string | null;
   currentGitSha: string | null;
   previousGitSha: string | null;
   lastRolloutAt: string | null;

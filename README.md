@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
-  <a href="https://create.bolt.gives">create a 15-day trial instance</a> ·
+  <a href="https://create.bolt.gives">create a managed instance</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
   <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
@@ -22,12 +22,12 @@
 
 ## Start Here
 
-- [Create a 15-day managed Cloudflare trial instance](https://create.bolt.gives)
+- [Create a managed Cloudflare instance](https://create.bolt.gives)
 - [Open the live alpha environment](https://alpha1.bolt.gives)
 - [Review the roadmap](ROADMAP.md)
 - [Read the changelog](CHANGELOG.md)
 
-`create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, expiry, and rollout state for the trial.
+`create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
 ## Roadmap to v3.0.9
 
@@ -51,7 +51,7 @@ Release verification now also includes a browser-level post-deploy asset health 
 
 - Tighten Cloudflare managed-instance lifecycle around health-verified updates and rollback.
 - Expand operator visibility inside `admin.bolt.gives` with trial capacity, deployment state, and outbound communication history.
-- Keep the built-in `FREE` + `DeepSeek V3.2` path reliable across hosted, Pages, and managed trial instances.
+- Keep the built-in `FREE` + `DeepSeek V3.2` path reliable across hosted, Pages, and managed instances.
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
@@ -64,7 +64,7 @@ Release verification now also includes a browser-level post-deploy asset health 
 - Hosted file actions now target the active starter entry file even when the model chooses the wrong JS/TS sibling extension, so generated apps replace the fallback starter instead of being written into an inactive file.
 - Hosted FREE preview verification now ignores stale fallback-starter detections once the synced workspace no longer contains the starter placeholder, which stops valid generated apps from being rolled back to an older starter snapshot.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
-- Managed Cloudflare trial instances are registration-first, one-client / one-instance, 15-day environments with preferred-subdomain support.
+- Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, and admin email activity.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.
 - Live release validation already includes real browser startup and preview-recovery smoke coverage.
@@ -251,7 +251,7 @@ Hosted-instance note:
 - If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked hosted coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
 - The hosted `FREE` coder is pinned to `deepseek/deepseek-v3.2`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
-- Managed Cloudflare trial instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
+- Managed Cloudflare instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 - Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V3.2` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
 
 ### 3. Verify the install
@@ -545,7 +545,7 @@ If the UI loads but the FREE provider does not work:
 
 - confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
 - redeploy the project after saving env changes
-- for managed 15-day trial instances, refresh the trial deployment from the operator/runtime control plane so the Pages relay secret is applied; end users should never need to enter a FREE API key manually
+- for managed Cloudflare instances, refresh the deployment from the operator/runtime control plane so the Pages relay secret is applied; end users should never need to enter a FREE API key manually
 
 If the deploy succeeds but the URL still shows an older release:
 
@@ -553,7 +553,7 @@ If the deploy succeeds but the URL still shows an older release:
 - confirm the connected Git branch and latest commit SHA
 - trigger a redeploy from the newest commit
 
-### 10. About the managed 15-day trial
+### 10. About the managed Cloudflare instance program
 
 The shipped control-plane model is:
 
@@ -563,10 +563,12 @@ The shipped control-plane model is:
 The shipped control plane now covers:
 
 - user signs into bolt.gives
+- user completes a short managed-instance profile, including email address
+- the operator panel stores that client profile privately for support and messaging
 - user requests a managed Cloudflare instance
 - bolt.gives enforces one-client / one-instance ownership
 - user chooses a subdomain
-- the managed instance stays active for 15 days
+- the managed instance is currently available indefinitely unless the operator suspends it
 - updates can roll forward from the current stable build through the runtime sync path
 
 What still remains:

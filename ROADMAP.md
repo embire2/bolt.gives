@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-08
+Last updated: 2026-04-17
 
 Status legend:
 - `[x]` complete
@@ -33,7 +33,7 @@ Release theme: move the hosted product onto a real server-first runtime, stand u
 3. Cloudflare managed trials
 - [x] `/managed-instances` is a real registration-first provisioning surface.
 - [x] One-client / one-instance enforcement is implemented in runtime.
-- [x] Managed trials now persist the real Cloudflare-assigned hostname and 15-day expiry state.
+- [x] Managed instances now persist the real Cloudflare-assigned hostname and private client profile linkage in the operator panel.
 - [x] `admin.bolt.gives` now exposes the private operator surface for profiles, assignments, and admin email activity.
 
 4. Self-host packaging
@@ -67,7 +67,8 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [ ] Keep browser runtime surfaces thin enough that longer sessions no longer degrade visibly on lower-end machines.
 
 4. FREE / managed-instance reliability
-- [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed trial instances.
+- [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed instances.
+- [~] Keep registration, private client profile capture, email contactability, and one-client / one-instance enforcement aligned across the managed-instance surfaces.
 - [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
 - [ ] Surface deployment history, last good SHA, and rollback outcomes to the operator panel.
 

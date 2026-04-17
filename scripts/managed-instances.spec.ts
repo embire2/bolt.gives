@@ -157,7 +157,29 @@ describe('managed instance registry helpers', () => {
 
   it('builds hostnames and trial expiries deterministically', () => {
     expect(buildManagedInstanceHostname('Clinic Five', 'pages.dev')).toBe('clinic-five.pages.dev');
-    expect(Date.parse(createManagedInstanceTrialExpiry(15))).toBeGreaterThan(Date.now());
+    const timedExpiry = createManagedInstanceTrialExpiry(15);
+    expect(timedExpiry).toBeTruthy();
+    expect(Date.parse(timedExpiry as string)).toBeGreaterThan(Date.now());
+    expect(createManagedInstanceTrialExpiry(0)).toBeNull();
+  });
+
+  it('creates indefinite managed instances when trialDays is zero or omitted', () => {
+    const registry = normalizeManagedInstanceRegistry({});
+    const claim = claimManagedInstanceTrial(registry, {
+      name: 'Clinic Forever',
+      email: 'forever@example.com',
+      requestedSubdomain: 'clinic-forever',
+      rootDomain: 'pages.dev',
+      trialDays: 0,
+    });
+
+    expect(claim.kind).toBe('created');
+    if (claim.kind !== 'created') {
+      throw new Error('Expected a created managed instance claim.');
+    }
+
+    expect(claim.instance.trialEndsAt).toBeNull();
+    expect(claim.instance.plan).toBe('experimental-free-indefinite');
   });
 
   it('prefers the actual Cloudflare-assigned subdomain when resolving the live Pages host', () => {

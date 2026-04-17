@@ -20,7 +20,7 @@ type ManagedInstanceSession = {
   issuedAt: string;
   pagesUrl?: string;
   status?: ManagedInstanceRecord['status'];
-  trialEndsAt?: string;
+  trialEndsAt?: string | null;
   currentGitSha?: string | null;
 };
 
@@ -38,12 +38,12 @@ function createManagedInstanceCookie() {
     path: '/',
     sameSite: 'lax',
     secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
-    maxAge: 60 * 60 * 24 * 15,
+    maxAge: 60 * 60 * 24 * 365,
     secrets: [getManagedInstanceCookieSecret()],
   });
 }
 
-export const meta: MetaFunction = () => [{ title: `Managed Cloudflare Trials | bolt.gives v${APP_VERSION}` }];
+export const meta: MetaFunction = () => [{ title: `Managed Cloudflare Instances | bolt.gives v${APP_VERSION}` }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const sessionCookie = createManagedInstanceCookie();
@@ -51,8 +51,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   let support: ManagedInstanceSupport = {
     supported: false,
-    reason: 'Managed Cloudflare trial instances are unavailable on this deployment.',
-    trialDays: 15,
+    reason: 'Managed Cloudflare instances are unavailable on this deployment.',
+    trialDays: 0,
     rootDomain: 'pages.dev',
     sourceBranch: 'main',
   };
@@ -64,10 +64,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     support = {
       supported: false,
       reason:
-        error instanceof Error
-          ? error.message
-          : 'Managed Cloudflare trial instances are unavailable on this deployment.',
-      trialDays: 15,
+        error instanceof Error ? error.message : 'Managed Cloudflare instances are unavailable on this deployment.',
+      trialDays: 0,
       rootDomain: 'pages.dev',
       sourceBranch: 'main',
     };
@@ -80,7 +78,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       );
       instance = payload.instance;
     } catch {
-      if (session.projectName && session.pagesUrl && session.trialEndsAt) {
+      if (session.projectName && session.pagesUrl) {
         instance = {
           id: `session:${session.projectName}`,
           name: session.projectName,
@@ -88,8 +86,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           routeHostname: new URL(session.pagesUrl).host,
           email: session.email,
           pagesUrl: session.pagesUrl,
-          trialEndsAt: session.trialEndsAt,
-          plan: `experimental-free-${support.trialDays}d`,
+          trialEndsAt: session.trialEndsAt || null,
+          plan: support.trialDays > 0 ? `experimental-free-${support.trialDays}d` : 'experimental-free-indefinite',
           currentGitSha: session.currentGitSha || null,
           previousGitSha: null,
           lastRolloutAt: session.issuedAt,
@@ -194,7 +192,7 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     } catch (error) {
       return json(
-        { error: error instanceof Error ? error.message : 'Unable to provision the managed trial instance.' },
+        { error: error instanceof Error ? error.message : 'Unable to provision the managed instance.' },
         { status: 400 },
       );
     }
@@ -263,7 +261,12 @@ export default function ManagedInstancesPage() {
         { label: 'Live URL', value: instance.pagesUrl },
         { label: 'Assigned hostname', value: instance.routeHostname },
         { label: 'Status', value: instance.status },
-        { label: 'Trial ends', value: new Date(instance.trialEndsAt).toLocaleString() },
+        {
+          label: 'Availability',
+          value: instance.trialEndsAt
+            ? `Until ${new Date(instance.trialEndsAt).toLocaleString()}`
+            : 'Indefinite for now',
+        },
         { label: 'Current git SHA', value: instance.currentGitSha || 'pending first rollout' },
         { label: 'Support email', value: instance.email },
       ]
@@ -277,13 +280,13 @@ export default function ManagedInstancesPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
           <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-xl backdrop-blur">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-bolt-elements-textTertiary">
-              Experimental Cloudflare trials
+              Experimental Cloudflare managed instances
             </div>
             <h1 className="mt-2 text-3xl font-semibold text-bolt-elements-textPrimary">
-              Spawn one managed bolt.gives instance for {support.trialDays} days
+              Spawn one managed bolt.gives instance
             </h1>
             <p className="mt-3 max-w-3xl text-sm text-bolt-elements-textSecondary">
-              This control plane provisions one Pages-hosted trial instance per client, keeps it tied to your original
+              This control plane provisions one Pages-hosted managed instance per client, keeps it tied to your original
               browser session, and rolls updates forward from the current stable build. Choose your preferred subdomain
               on <span className="font-mono">{support.rootDomain}</span>; the final assigned hostname follows Cloudflare
               availability and is shown below after provisioning.
@@ -308,7 +311,7 @@ export default function ManagedInstancesPage() {
                 <>
                   <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6 shadow-lg backdrop-blur">
                     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                      Trial instance ready
+                      Managed instance ready
                     </div>
                     <h2 className="mt-2 text-2xl font-semibold text-bolt-elements-textPrimary">
                       Your bolt.gives server is live
@@ -322,8 +325,8 @@ export default function ManagedInstancesPage() {
                       {instance.pagesUrl}
                     </a>
                     <p className="mt-4 text-sm text-bolt-elements-textSecondary">
-                      Bookmark the live URL above. This browser session is already linked to your active trial, so you
-                      do not need to complete the registration form again.
+                      Bookmark the live URL above. This browser session is already linked to your active managed
+                      instance, so you do not need to complete the registration form again.
                     </p>
                     {assignedHostnameDiffers ? (
                       <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
@@ -382,7 +385,7 @@ export default function ManagedInstancesPage() {
                           <Form reloadDocument method="post">
                             <input type="hidden" name="intent" value="suspend" />
                             <button className="w-full rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-200">
-                              Suspend trial
+                              Suspend instance
                             </button>
                           </Form>
                         </div>
@@ -398,8 +401,8 @@ export default function ManagedInstancesPage() {
                           Need a different instance?
                         </div>
                         <p className="mt-3 text-sm text-bolt-elements-textSecondary">
-                          Clear the local session only if support has told you to restart the trial flow or switch to a
-                          different assigned instance.
+                          Clear the local session only if support has told you to restart the managed-instance flow or
+                          switch to a different assigned instance.
                         </p>
                         <button
                           type="submit"
@@ -420,13 +423,13 @@ export default function ManagedInstancesPage() {
                   >
                     <input type="hidden" name="intent" value="spawn" />
                     <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">
-                      Request your trial instance
+                      Request your managed instance
                     </h2>
                     <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                      Registration is required before a trial can be provisioned. Your profile is stored in the private
-                      admin panel and linked to the Cloudflare instance assigned to you. One client can hold one managed
-                      instance. Repeating the request from the same browser session returns the same instance instead of
-                      creating a second one.
+                      Registration is required before an instance can be provisioned. Your profile is stored in the
+                      private admin panel and linked to the Cloudflare instance assigned to you. One client can hold one
+                      managed instance. Repeating the request from the same browser session returns the same instance
+                      instead of creating a second one.
                     </p>
 
                     <div className="mt-5 grid gap-4">
@@ -527,7 +530,7 @@ export default function ManagedInstancesPage() {
                         disabled={!support.supported}
                         className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:opacity-50"
                       >
-                        Spawn trial instance
+                        Spawn managed instance
                       </button>
                     </div>
                   </Form>
@@ -551,13 +554,18 @@ export default function ManagedInstancesPage() {
 
             <div className="space-y-4">
               <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
-                <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Trial policy</div>
+                <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                  Managed instance policy
+                </div>
                 <ul className="mt-3 space-y-2 text-sm text-bolt-elements-textSecondary">
                   <li>One client gets one Pages-hosted experimental instance.</li>
-                  <li>Trial expires after {support.trialDays} days.</li>
+                  <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                   <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
                   <li>The FREE provider now boots with DeepSeek V3.2 preselected.</li>
-                  <li>Your registration profile is stored in the private admin panel for operator support.</li>
+                  <li>
+                    Your registration profile, including your email address, is stored in the private admin panel for
+                    operator support and messaging.
+                  </li>
                 </ul>
               </div>
             </div>

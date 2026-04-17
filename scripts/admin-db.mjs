@@ -116,7 +116,7 @@ export async function ensureAdminDatabaseSchema() {
             status TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL,
-            trial_ends_at TIMESTAMPTZ NOT NULL,
+            trial_ends_at TIMESTAMPTZ NULL,
             current_git_sha TEXT NULL,
             previous_git_sha TEXT NULL,
             last_rollout_at TIMESTAMPTZ NULL,
@@ -152,6 +152,10 @@ export async function ensureAdminDatabaseSchema() {
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_admin_email_messages_profile_email_idx ON bolt_admin_email_messages (profile_email);`,
         );
+        await client.query(`
+          ALTER TABLE bolt_admin_managed_instances
+          ALTER COLUMN trial_ends_at DROP NOT NULL;
+        `);
       } finally {
         client.release();
       }
