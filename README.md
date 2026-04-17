@@ -34,6 +34,7 @@
 `v3.0.9` is the next launch-hardening release. The goal is to make bolt.gives easier to trust as a daily coding workspace, easier to self-host, and safer to operate at scale.
 
 Recent hardening in this line includes safer hidden continuation dispatch: follow-up recovery prompts now wait until the active chat stream is genuinely idle before they are sent, which reduces mid-run disconnect/reconnect loops on longer builds.
+Another recent runtime fix now synthesizes preview handoff commands from the merged workspace state instead of the latest assistant delta only, which prevents broken follow-up runs from replaying dependency-only installs and stalling preview startup.
 
 ### Launch blockers
 

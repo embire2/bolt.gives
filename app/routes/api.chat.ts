@@ -1161,6 +1161,7 @@ Next: I am sending the final result now.`,
                 runContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
               const synthesizedRunHandoff = await synthesizeRunHandoff({
                 assistantContent: content,
+                currentFiles: files,
               });
 
               if (

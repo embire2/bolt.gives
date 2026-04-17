@@ -369,4 +369,40 @@ describe('shouldForceRunContinuation', () => {
     });
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run start</boltAction>');
   });
+
+  it('infers runtime handoff commands from the merged workspace state instead of a partial delta install', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="shell">npm install moment</boltAction>
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Luma Clinic</div>;}</boltAction>
+`,
+      currentFiles: {
+        'package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'doctor-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+              preview: 'vite preview',
+            },
+          }),
+        },
+        'src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'npm run dev',
+    });
+    expect(handoff?.setupCommand).not.toBe('npm install moment');
+    expect(handoff?.assistantContent).not.toContain('npx --yes serve');
+  });
 });

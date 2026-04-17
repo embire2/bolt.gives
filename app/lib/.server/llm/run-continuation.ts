@@ -381,13 +381,69 @@ function hasOnlyBootstrapShellCommands(commands: string[]): boolean {
   return foundBootstrapSignal;
 }
 
-function extractSetupCommandFromShellCommands(commands: string[]): string | undefined {
+function extractProjectFilesFromSnapshot(filesSnapshot?: FileMap): ExtractedFileAction[] {
+  if (!filesSnapshot) {
+    return [];
+  }
+
+  return Object.entries(filesSnapshot)
+    .filter(([, dirent]) => dirent?.type === 'file' && !dirent.isBinary)
+    .map(([path, dirent]) => ({
+      path,
+      content: dirent && dirent.type === 'file' ? dirent.content || '' : '',
+    }));
+}
+
+function mergeWorkspaceFiles(
+  filesSnapshot: FileMap | undefined,
+  fileActions: ExtractedFileAction[],
+): ExtractedFileAction[] {
+  const mergedFiles = new Map<string, ExtractedFileAction>();
+
+  for (const fileAction of extractProjectFilesFromSnapshot(filesSnapshot)) {
+    mergedFiles.set(normalizeFilePath(fileAction.path), fileAction);
+  }
+
+  for (const fileAction of fileActions) {
+    mergedFiles.set(normalizeFilePath(fileAction.path), fileAction);
+  }
+
+  return Array.from(mergedFiles.values());
+}
+
+function isFullProjectInstallSegment(segment: string, fileActions: ExtractedFileAction[]): boolean {
+  const normalizedSegment = segment.trim();
+
+  if (
+    /^npx\s+update-browserslist-db@latest\b/i.test(normalizedSegment) ||
+    /^corepack\s+enable\b/i.test(normalizedSegment)
+  ) {
+    return true;
+  }
+
+  if (!INSTALL_COMMAND_RE.test(normalizedSegment)) {
+    return false;
+  }
+
+  const hasPackageJson = extractPackageJsonContent(fileActions) !== undefined;
+  const packageScriptNames = extractPackageScriptNames(fileActions);
+
+  if (!hasPackageJson || packageScriptNames.size === 0) {
+    return true;
+  }
+
+  return /^(npm|pnpm|yarn|bun)\s+(install|i)(?:\s+--?[a-z0-9-]+(?:=(?:"[^"]*"|'[^']*'|[^\s]+))?)*\s*$/i.test(
+    normalizedSegment,
+  );
+}
+
+function extractSetupCommandFromShellCommandsUsingFiles(
+  commands: string[],
+  fileActions: ExtractedFileAction[],
+): string | undefined {
   for (const command of commands) {
-    const setupSegments = splitCommandSegments(command).filter(
-      (segment) =>
-        INSTALL_COMMAND_RE.test(segment) ||
-        /^npx\s+update-browserslist-db@latest\b/i.test(segment) ||
-        /^corepack\s+enable\b/i.test(segment),
+    const setupSegments = splitCommandSegments(command).filter((segment) =>
+      isFullProjectInstallSegment(segment, fileActions),
     );
 
     if (setupSegments.length > 0) {
@@ -400,21 +456,23 @@ function extractSetupCommandFromShellCommands(commands: string[]): string | unde
 
 export async function synthesizeRunHandoff(options: {
   assistantContent: string;
+  currentFiles?: FileMap;
 }): Promise<SynthesizedRunHandoff | null> {
-  const { assistantContent } = options;
+  const { assistantContent, currentFiles } = options;
 
   const shellCommands = extractShellCommands(assistantContent);
   const fileActions = extractFileActions(assistantContent);
-  const filePaths = fileActions.map((file) => file.path);
+  const mergedFiles = mergeWorkspaceFiles(currentFiles, fileActions);
+  const filePaths = mergedFiles.map((file) => file.path);
 
   if (!hasImplementationFileAction(filePaths)) {
     return null;
   }
 
   const explicitStartCommand = extractRunnableStartCommand(assistantContent);
-  const explicitSetupCommand = extractSetupCommandFromShellCommands(shellCommands);
-  const inferredCommands = await detectProjectCommands(fileActions);
-  const packageScriptNames = extractPackageScriptNames(fileActions);
+  const explicitSetupCommand = extractSetupCommandFromShellCommandsUsingFiles(shellCommands, mergedFiles);
+  const inferredCommands = await detectProjectCommands(mergedFiles);
+  const packageScriptNames = extractPackageScriptNames(mergedFiles);
   const explicitScriptName = explicitStartCommand
     ? extractPackageScriptNameFromCommand(explicitStartCommand)
     : undefined;

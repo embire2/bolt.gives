@@ -37,6 +37,7 @@
 - Managed Cloudflare trial instances now provision the hosted FREE relay credential as a Pages secret on the trial project itself, and existing trial projects are refreshed onto the same path retroactively so live `*.pages.dev` instances stop reporting `FREE` as unconfigured.
 - Hosted FREE relay requests are now verified against the local runtime service, so Pages-hosted surfaces and managed Cloudflare trials keep `DeepSeek V3.2` working even when the app worker itself does not carry the relay secret in-process.
 - Existing live managed trial instances have been refreshed onto the same runtime-verified relay path retroactively, so clients do not need to enter their own API key to keep using the built-in FREE model.
+- Hosted preview handoff no longer infers runtime commands from only the latest assistant delta; it now merges the active workspace snapshot before choosing setup/start commands, which prevents partial dependency installs like `npm install moment` from replacing the real project runtime and avoids stalled previews after stream interruptions.
 
 ## v3.0.8 (2026-04-04)
 
