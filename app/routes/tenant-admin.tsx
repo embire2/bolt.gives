@@ -97,6 +97,24 @@ export const meta: MetaFunction = () => [{ title: `Tenant Admin | bolt.gives v${
 
 const DEFAULT_ADMIN = { username: 'admin', password: 'admin' };
 
+function formatAdminTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return 'Unknown';
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('en-ZA', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  }).format(parsed);
+}
+
 function getTenantAdminCookieSecret() {
   if (typeof process !== 'undefined' && process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) {
     return process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET.trim();
@@ -885,7 +903,7 @@ export default function TenantAdminPage() {
                           </div>
                           <div className="mt-1 text-xs text-bolt-elements-textSecondary">
                             {admin.passwordUpdatedAt
-                              ? `Updated ${new Date(admin.passwordUpdatedAt).toLocaleString()}`
+                              ? `Updated ${formatAdminTimestamp(admin.passwordUpdatedAt)}`
                               : 'Still using the bootstrap password.'}
                           </div>
                         </div>
@@ -1108,10 +1126,8 @@ export default function TenantAdminPage() {
                                       </div>
                                     ) : null}
                                     <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                                      Registered {new Date(profile.createdAt).toLocaleString()}
-                                      {profile.updatedAt
-                                        ? ` · Updated ${new Date(profile.updatedAt).toLocaleString()}`
-                                        : ''}
+                                      Registered {formatAdminTimestamp(profile.createdAt)}
+                                      {profile.updatedAt ? ` · Updated ${formatAdminTimestamp(profile.updatedAt)}` : ''}
                                     </div>
                                   </div>
                                   <div className="flex flex-col items-start gap-2">
@@ -1221,19 +1237,17 @@ export default function TenantAdminPage() {
                                     </div>
                                   ) : null}
                                   <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                                    Created {new Date(tenant.createdAt).toLocaleString()}
-                                    {tenant.updatedAt
-                                      ? ` · Updated ${new Date(tenant.updatedAt).toLocaleString()}`
-                                      : ''}
+                                    Created {formatAdminTimestamp(tenant.createdAt)}
+                                    {tenant.updatedAt ? ` · Updated ${formatAdminTimestamp(tenant.updatedAt)}` : ''}
                                   </div>
                                   {tenant.passwordUpdatedAt ? (
                                     <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                      Password updated {new Date(tenant.passwordUpdatedAt).toLocaleString()}
+                                      Password updated {formatAdminTimestamp(tenant.passwordUpdatedAt)}
                                     </div>
                                   ) : null}
                                   {tenant.lastLoginAt ? (
                                     <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                      Last tenant login {new Date(tenant.lastLoginAt).toLocaleString()}
+                                      Last tenant login {formatAdminTimestamp(tenant.lastLoginAt)}
                                     </div>
                                   ) : null}
                                 </div>
@@ -1260,7 +1274,7 @@ export default function TenantAdminPage() {
                                   ) : null}
                                   {tenant.inviteExpiresAt ? (
                                     <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                                      invite live until {new Date(tenant.inviteExpiresAt).toLocaleString()}
+                                      invite live until {formatAdminTimestamp(tenant.inviteExpiresAt)}
                                     </span>
                                   ) : null}
                                   {tenant.status === 'pending' ? (
@@ -1310,13 +1324,13 @@ export default function TenantAdminPage() {
                               ) : null}
                               {tenant.approvedAt ? (
                                 <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                                  Approved {new Date(tenant.approvedAt).toLocaleString()}
+                                  Approved {formatAdminTimestamp(tenant.approvedAt)}
                                   {tenant.approvedBy ? ` by ${tenant.approvedBy}` : ''}
                                 </div>
                               ) : null}
                               {tenant.disabledAt ? (
                                 <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                  Disabled {new Date(tenant.disabledAt).toLocaleString()}
+                                  Disabled {formatAdminTimestamp(tenant.disabledAt)}
                                   {tenant.disabledBy ? ` by ${tenant.disabledBy}` : ''}
                                 </div>
                               ) : null}
@@ -1342,7 +1356,7 @@ export default function TenantAdminPage() {
                                     {event.action} · {event.target}
                                   </div>
                                   <div className="mt-1">
-                                    {new Date(event.timestamp).toLocaleString()} · actor {event.actor}
+                                    {formatAdminTimestamp(event.timestamp)} · actor {event.actor}
                                   </div>
                                 </div>
                               ))}
@@ -1405,9 +1419,9 @@ export default function TenantAdminPage() {
                                 </div>
                                 <div className="mt-2 text-xs text-bolt-elements-textTertiary">
                                   {instance.trialEndsAt
-                                    ? `Availability until ${new Date(instance.trialEndsAt).toLocaleString()}`
+                                    ? `Availability until ${formatAdminTimestamp(instance.trialEndsAt)}`
                                     : 'No scheduled expiry'}{' '}
-                                  · Updated {new Date(instance.updatedAt).toLocaleString()}
+                                  · Updated {formatAdminTimestamp(instance.updatedAt)}
                                 </div>
                                 {instance.lastDeploymentUrl ? (
                                   <div className="mt-1 text-xs text-bolt-elements-textTertiary">
@@ -1681,8 +1695,8 @@ export default function TenantAdminPage() {
                                   {message.status}
                                 </span>
                                 <span>Actor {message.actor}</span>
-                                <span>{new Date(message.createdAt).toLocaleString()}</span>
-                                {message.sentAt ? <span>Sent {new Date(message.sentAt).toLocaleString()}</span> : null}
+                                <span>{formatAdminTimestamp(message.createdAt)}</span>
+                                {message.sentAt ? <span>Sent {formatAdminTimestamp(message.sentAt)}</span> : null}
                                 {message.transport ? <span>{message.transport}</span> : null}
                                 {message.error ? <span className="text-red-300">{message.error}</span> : null}
                               </div>
