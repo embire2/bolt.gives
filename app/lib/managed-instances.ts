@@ -30,4 +30,12 @@ export type ManagedInstanceSupport = {
   trialDays: number;
   rootDomain: string;
   sourceBranch: string;
+  rolloutGuard?: {
+    allowed: boolean;
+    reason: string | null;
+    currentSha: string | null;
+    originMainSha: string | null;
+    behindCount: number;
+    checkedAt: string | null;
+  };
 };

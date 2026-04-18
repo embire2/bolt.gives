@@ -10,6 +10,13 @@ import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
+import {
+  buildClientProfileAudienceLabel,
+  buildClientProfilesCsv,
+  filterClientProfiles,
+  normalizeClientProfileFilters,
+  type ClientProfileFilters,
+} from '~/lib/client-profiles';
 import type { ManagedInstanceOperatorRecord, ManagedInstanceSupport } from '~/lib/managed-instances';
 import { getPublicUrlConfig } from '~/lib/public-urls';
 import { APP_VERSION } from '~/lib/version';
@@ -63,6 +70,27 @@ type TenantAdminStatusPayload = {
     target: string;
     details?: Record<string, string>;
   }>;
+};
+
+type TenantAdminLoaderPayload = {
+  adminHost: boolean;
+  supported: boolean;
+  authenticated: boolean;
+  defaultAdmin: typeof DEFAULT_ADMIN;
+  admin: TenantAdminRecord;
+  tenants: TenantRecord[];
+  managedSupport: ManagedInstanceSupport;
+  managedInstances: ManagedInstanceOperatorRecord[];
+  clientProfiles: ClientProfileRecord[];
+  filteredClientProfiles: ClientProfileRecord[];
+  clientProfileFilters: ClientProfileFilters;
+  clientProfileCompanies: string[];
+  clientProfileCountries: string[];
+  emailMessages: AdminMailMessageRecord[];
+  mailSupport: AdminMailSupport;
+  adminPanelUrl: string;
+  auditTrail: NonNullable<TenantAdminStatusPayload['auditTrail']>;
+  clientProfileAudienceLabel: string;
 };
 
 export const meta: MetaFunction = () => [{ title: `Tenant Admin | bolt.gives v${APP_VERSION}` }];
@@ -122,13 +150,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const adminSessionCookie = createAdminSessionCookie();
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
   const { adminHost: configuredAdminHost, adminPanelUrl } = getPublicUrlConfig();
-  const adminHost = new URL(request.url).host.toLowerCase() === configuredAdminHost;
+  const requestUrl = new URL(request.url);
+  const adminHost = requestUrl.host.toLowerCase() === configuredAdminHost;
+  const clientProfileFilters = normalizeClientProfileFilters(requestUrl.searchParams);
 
   try {
     const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const authenticated = isAuthenticatedAdminSession(session, status.admin);
+    const clientProfiles = authenticated ? status.clientProfiles || [] : [];
+    const filteredClientProfiles = filterClientProfiles(clientProfiles, clientProfileFilters);
+    const clientProfileCompanies = [...new Set(clientProfiles.map((profile) => profile.company).filter(Boolean))]
+      .map((company) => String(company))
+      .sort((left, right) => left.localeCompare(right));
+    const clientProfileCountries = [...new Set(clientProfiles.map((profile) => profile.country).filter(Boolean))]
+      .map((country) => String(country))
+      .sort((left, right) => left.localeCompare(right));
 
-    return json({
+    if (authenticated && requestUrl.searchParams.get('export') === 'profiles-csv') {
+      return new Response(buildClientProfilesCsv(filteredClientProfiles), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="bolt-gives-client-profiles.csv"',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    return json<TenantAdminLoaderPayload>({
       adminHost,
       supported: status.supported,
       authenticated,
@@ -148,7 +197,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         sourceBranch: 'main',
       },
       managedInstances: authenticated ? status.managedInstances || [] : [],
-      clientProfiles: authenticated ? status.clientProfiles || [] : [],
+      clientProfiles,
+      filteredClientProfiles,
+      clientProfileFilters,
+      clientProfileCompanies,
+      clientProfileCountries,
+      clientProfileAudienceLabel: buildClientProfileAudienceLabel(clientProfileFilters, filteredClientProfiles.length),
       emailMessages: authenticated ? status.emailMessages || [] : [],
       mailSupport: status.mailSupport || {
         configured: false,
@@ -160,7 +214,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       auditTrail: authenticated ? status.auditTrail || [] : [],
     });
   } catch {
-    return json({
+    return json<TenantAdminLoaderPayload>({
       adminHost,
       supported: false,
       authenticated: false,
@@ -181,6 +235,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       } satisfies ManagedInstanceSupport,
       managedInstances: [] as ManagedInstanceOperatorRecord[],
       clientProfiles: [] as ClientProfileRecord[],
+      filteredClientProfiles: [] as ClientProfileRecord[],
+      clientProfileFilters,
+      clientProfileCompanies: [],
+      clientProfileCountries: [],
+      clientProfileAudienceLabel: buildClientProfileAudienceLabel(clientProfileFilters, 0),
       emailMessages: [] as AdminMailMessageRecord[],
       mailSupport: {
         configured: false,
@@ -476,8 +535,22 @@ export async function action({ request }: ActionFunctionArgs) {
     const profileEmail = String(formData.get('profileEmail') || '')
       .trim()
       .toLowerCase();
+    const audienceMode = String(formData.get('audienceMode') || 'single').trim() === 'filtered' ? 'filtered' : 'single';
+    const audienceFilters = normalizeClientProfileFilters({
+      search: String(formData.get('search') || ''),
+      company: String(formData.get('company') || ''),
+      country: String(formData.get('country') || ''),
+      useCase: String(formData.get('useCase') || ''),
+      assignmentStatus: String(formData.get('assignmentStatus') || ''),
+    });
     const subject = String(formData.get('subject') || '').trim();
     const body = String(formData.get('body') || '').trim();
+    const filteredProfiles = filterClientProfiles(statusPayload.clientProfiles || [], audienceFilters);
+    const recipients = audienceMode === 'filtered' ? filteredProfiles.map((profile) => profile.email) : [];
+
+    if (audienceMode === 'filtered' && recipients.length === 0) {
+      return json({ error: 'No registered clients match the current audience filters.' }, { status: 400 });
+    }
 
     try {
       await fetchRuntimeJson<{ ok: boolean }>('/tenant-admin/email/send', {
@@ -487,6 +560,7 @@ export async function action({ request }: ActionFunctionArgs) {
         },
         body: JSON.stringify({
           profileEmail,
+          recipients,
           subject,
           body,
           actor: session?.username || 'admin',
@@ -514,13 +588,18 @@ export default function TenantAdminPage() {
     managedSupport,
     managedInstances,
     clientProfiles,
+    filteredClientProfiles,
+    clientProfileFilters,
+    clientProfileCompanies,
+    clientProfileCountries,
+    clientProfileAudienceLabel,
     emailMessages,
     mailSupport,
     adminPanelUrl,
     defaultAdmin,
     admin,
     auditTrail,
-  } = useLoaderData<typeof loader>();
+  } = useLoaderData<TenantAdminLoaderPayload>();
   const actionData = useActionData<typeof action>();
   const actionError =
     actionData && typeof actionData === 'object' && 'error' in actionData ? String(actionData.error) : null;
@@ -732,17 +811,101 @@ export default function TenantAdminPage() {
                       </p>
                     </div>
                     <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                      {clientProfiles.length} registered
+                      {filteredClientProfiles.length} of {clientProfiles.length} registered
                     </span>
                   </div>
 
+                  <Form
+                    method="get"
+                    className="mt-4 grid gap-3 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 lg:grid-cols-5"
+                  >
+                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-2">
+                      Search
+                      <input
+                        name="search"
+                        defaultValue={clientProfileFilters.search}
+                        placeholder="Name, email, company, use case"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                      Company
+                      <select
+                        name="company"
+                        defaultValue={clientProfileFilters.company}
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      >
+                        <option value="">All companies</option>
+                        {clientProfileCompanies.map((company) => (
+                          <option key={company} value={company}>
+                            {company}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                      Country
+                      <select
+                        name="country"
+                        defaultValue={clientProfileFilters.country}
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      >
+                        <option value="">All countries</option>
+                        {clientProfileCountries.map((country) => (
+                          <option key={country} value={country}>
+                            {country}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                      Assignment
+                      <select
+                        name="assignmentStatus"
+                        defaultValue={clientProfileFilters.assignmentStatus}
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      >
+                        <option value="all">All clients</option>
+                        <option value="assigned">Assigned</option>
+                        <option value="unassigned">Awaiting assignment</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-3">
+                      Use case contains
+                      <input
+                        name="useCase"
+                        defaultValue={clientProfileFilters.useCase}
+                        placeholder="Clinic scheduler, CRM, internal tools"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <div className="flex flex-wrap items-end gap-2 lg:col-span-2">
+                      <button className="rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
+                        Apply filters
+                      </button>
+                      <a
+                        href={`/tenant-admin?${new URLSearchParams({
+                          search: clientProfileFilters.search,
+                          company: clientProfileFilters.company,
+                          country: clientProfileFilters.country,
+                          useCase: clientProfileFilters.useCase,
+                          assignmentStatus: clientProfileFilters.assignmentStatus,
+                          export: 'profiles-csv',
+                        }).toString()}`}
+                        className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
+                      >
+                        Export CSV
+                      </a>
+                    </div>
+                  </Form>
+
                   <div className="mt-4 space-y-3">
-                    {clientProfiles.length === 0 ? (
+                    {filteredClientProfiles.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                        No client profiles have been registered yet.
+                        No client profiles match the current filters.
                       </div>
                     ) : (
-                      clientProfiles.map((profile) => (
+                      filteredClientProfiles.map((profile) => (
                         <div
                           key={profile.id}
                           className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
@@ -1124,8 +1287,8 @@ export default function TenantAdminPage() {
                   <div>
                     <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
                     <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                      Compose a message for a registered client. Messages are always logged; delivery only occurs when
-                      SMTP is configured on the runtime service.
+                      Compose a message for one client or for the currently filtered audience. Messages are always
+                      logged; delivery only occurs when SMTP is configured on the runtime service.
                     </p>
                   </div>
                   <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
@@ -1139,13 +1302,34 @@ export default function TenantAdminPage() {
                 ) : null}
                 <div className="mt-4 grid gap-4">
                   <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                    Audience
+                    <select
+                      name="audienceMode"
+                      defaultValue="single"
+                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                    >
+                      <option value="single">One client</option>
+                      <option value="filtered">Filtered audience</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
                     Client email
                     <input
                       name="profileEmail"
                       type="email"
+                      placeholder="Required for one-client sends"
                       className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                     />
                   </label>
+                  <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                    Current filtered audience:{' '}
+                    <span className="text-bolt-elements-textPrimary">{clientProfileAudienceLabel}</span>
+                  </div>
+                  <input type="hidden" name="search" value={clientProfileFilters.search} />
+                  <input type="hidden" name="company" value={clientProfileFilters.company} />
+                  <input type="hidden" name="country" value={clientProfileFilters.country} />
+                  <input type="hidden" name="useCase" value={clientProfileFilters.useCase} />
+                  <input type="hidden" name="assignmentStatus" value={clientProfileFilters.assignmentStatus} />
                   <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
                     Subject
                     <input

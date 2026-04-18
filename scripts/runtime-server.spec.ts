@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
   authorizeHostedFreeRelaySecret,
+  buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
@@ -101,6 +102,19 @@ describe('runtime server workspace isolation', () => {
       clientSessionSecretHash: null,
     });
     expect(registry?.instances[0].clientKeyHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('refuses managed-instance rollout when the live checkout is behind origin/main', () => {
+    const decision = buildManagedInstanceRolloutGuardDecision({
+      hasGitMetadata: true,
+      currentSha: 'abc123',
+      originMainSha: 'def456',
+      behindCount: 3,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('behind origin/main');
+    expect(decision.behindCount).toBe(3);
   });
 
   it('requires a project manifest for package-manager workspace commands only', () => {

@@ -36,7 +36,7 @@ import {
   upsertClientProfile,
   upsertManagedInstanceAssignment,
 } from './admin-db.mjs';
-import { buildAdminMailSupport, sendAdminEmail } from './admin-mailer.mjs';
+import { buildAdminMailSupport, sendAdminEmail, sendAdminEmailBatch } from './admin-mailer.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -109,10 +109,21 @@ const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
   process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
+const SHOUTBOX_MESSAGES_PATH = process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
+const MAX_SHOUTBOX_MESSAGES = Number(process.env.RUNTIME_SHOUTBOX_MAX_MESSAGES || '250');
 
 const sessions = new Map();
 const managedInstanceLocks = new Map();
 let managedInstanceSyncTimer = null;
+let managedRolloutGuardState = {
+  allowed: true,
+  reason: null,
+  currentSha: null,
+  originMainSha: null,
+  behindCount: 0,
+  checkedAt: null,
+  expiresAt: 0,
+};
 
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
 const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cts']);
@@ -363,7 +374,105 @@ function getManagedInstanceCloudflareConfig() {
   };
 }
 
-function buildManagedInstanceSupportState() {
+export function buildManagedInstanceRolloutGuardDecision(input = {}) {
+  const hasGitMetadata = input.hasGitMetadata !== false;
+
+  if (!hasGitMetadata) {
+    return {
+      allowed: false,
+      reason: 'Managed-instance rollout requires a live checkout with git metadata at /srv/bolt-gives/.git.',
+      currentSha: null,
+      originMainSha: null,
+      behindCount: 0,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  if (input.fetchError) {
+    return {
+      allowed: false,
+      reason: `Managed-instance rollout guard could not refresh origin/main: ${input.fetchError}`,
+      currentSha: input.currentSha || null,
+      originMainSha: input.originMainSha || null,
+      behindCount: 0,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  const behindCount = Number(input.behindCount || 0);
+
+  if (behindCount > 0) {
+    return {
+      allowed: false,
+      reason: `Managed-instance rollout refused because the live checkout is ${behindCount} commit(s) behind origin/main.`,
+      currentSha: input.currentSha || null,
+      originMainSha: input.originMainSha || null,
+      behindCount,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    currentSha: input.currentSha || null,
+    originMainSha: input.originMainSha || input.currentSha || null,
+    behindCount: 0,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function resolveManagedRolloutGuardState({ force = false } = {}) {
+  const now = Date.now();
+
+  if (!force && managedRolloutGuardState.checkedAt && managedRolloutGuardState.expiresAt > now) {
+    return managedRolloutGuardState;
+  }
+
+  const gitDir = path.join(REPO_ROOT, '.git');
+
+  try {
+    await fs.access(gitDir, fsConstants.R_OK);
+  } catch {
+    managedRolloutGuardState = {
+      ...buildManagedInstanceRolloutGuardDecision({ hasGitMetadata: false }),
+      expiresAt: now + 60000,
+    };
+    return managedRolloutGuardState;
+  }
+
+  const fetchResult = await runManagedInstanceProcess('git', ['fetch', 'origin', MANAGED_INSTANCE_SOURCE_BRANCH, '--quiet']);
+
+  if (fetchResult.code !== 0) {
+    managedRolloutGuardState = {
+      ...buildManagedInstanceRolloutGuardDecision({
+        fetchError: fetchResult.stderr.trim() || fetchResult.stdout.trim() || 'git fetch failed',
+      }),
+      expiresAt: now + 60000,
+    };
+    return managedRolloutGuardState;
+  }
+
+  const [currentResult, originResult, behindResult] = await Promise.all([
+    runManagedInstanceProcess('git', ['rev-parse', 'HEAD']),
+    runManagedInstanceProcess('git', ['rev-parse', `origin/${MANAGED_INSTANCE_SOURCE_BRANCH}`]),
+    runManagedInstanceProcess('git', ['rev-list', '--count', `HEAD..origin/${MANAGED_INSTANCE_SOURCE_BRANCH}`]),
+  ]);
+
+  managedRolloutGuardState = {
+    ...buildManagedInstanceRolloutGuardDecision({
+      hasGitMetadata: true,
+      currentSha: currentResult.code === 0 ? currentResult.stdout.trim() : null,
+      originMainSha: originResult.code === 0 ? originResult.stdout.trim() : null,
+      behindCount: behindResult.code === 0 ? Number(behindResult.stdout.trim() || '0') : 0,
+    }),
+    expiresAt: now + 60000,
+  };
+
+  return managedRolloutGuardState;
+}
+
+async function buildManagedInstanceSupportState() {
   const config = getManagedInstanceCloudflareConfig();
 
   if (!MANAGED_INSTANCE_PUBLIC_ENABLED) {
@@ -373,6 +482,7 @@ function buildManagedInstanceSupportState() {
       trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
       rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
       sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+      rolloutGuard: await resolveManagedRolloutGuardState(),
     };
   }
 
@@ -384,6 +494,20 @@ function buildManagedInstanceSupportState() {
       trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
       rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
       sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+      rolloutGuard: await resolveManagedRolloutGuardState(),
+    };
+  }
+
+  const rolloutGuard = await resolveManagedRolloutGuardState();
+
+  if (!rolloutGuard.allowed) {
+    return {
+      supported: false,
+      reason: rolloutGuard.reason,
+      trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+      rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+      rolloutGuard,
     };
   }
 
@@ -393,6 +517,7 @@ function buildManagedInstanceSupportState() {
     trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
     rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
     sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+    rolloutGuard,
   };
 }
 
@@ -898,7 +1023,7 @@ async function suspendManagedInstanceRecord(
 }
 
 async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', actor = 'system' } = {}) {
-  const support = buildManagedInstanceSupportState();
+  const support = await buildManagedInstanceSupportState();
 
   if (!support.supported) {
     return;
@@ -955,6 +1080,66 @@ function sendText(res, status, text, extraHeaders = {}) {
     ...extraHeaders,
   });
   res.end(text);
+}
+
+async function ensureShoutboxStore() {
+  try {
+    const raw = await fs.readFile(SHOUTBOX_MESSAGES_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed?.messages)) {
+      throw new Error('Invalid shoutbox store.');
+    }
+
+    return {
+      messages: parsed.messages
+        .filter((message) => message && typeof message === 'object')
+        .slice(-MAX_SHOUTBOX_MESSAGES),
+    };
+  } catch {
+    const initialStore = { messages: [] };
+    await writeJsonAtomically(SHOUTBOX_MESSAGES_PATH, JSON.stringify(initialStore, null, 2));
+    return initialStore;
+  }
+}
+
+async function writeShoutboxStore(store) {
+  const normalizedMessages = Array.isArray(store?.messages) ? store.messages.slice(-MAX_SHOUTBOX_MESSAGES) : [];
+  await writeJsonAtomically(SHOUTBOX_MESSAGES_PATH, JSON.stringify({ messages: normalizedMessages }, null, 2));
+}
+
+function sanitizeShoutMessage(message) {
+  return {
+    id: String(message.id || ''),
+    author: String(message.author || 'Anonymous'),
+    content: String(message.content || ''),
+    createdAt: String(message.createdAt || new Date().toISOString()),
+  };
+}
+
+async function listShoutboxMessages() {
+  const store = await ensureShoutboxStore();
+  return store.messages.map(sanitizeShoutMessage);
+}
+
+async function appendShoutboxMessage({ author, content }) {
+  const normalizedAuthor = String(author || '').trim().slice(0, 80) || 'Anonymous';
+  const normalizedContent = String(content || '').replace(/\r\n/g, '\n').trim().slice(0, 600);
+
+  if (!normalizedContent) {
+    throw new Error('A shout-out message is required.');
+  }
+
+  const store = await ensureShoutboxStore();
+  const message = sanitizeShoutMessage({
+    id: crypto.randomUUID(),
+    author: normalizedAuthor,
+    content: normalizedContent,
+    createdAt: new Date().toISOString(),
+  });
+  store.messages.push(message);
+  await writeShoutboxStore(store);
+  return message;
 }
 
 export function applyPreviewResponseHeaders(rawHeaders = {}) {
@@ -2824,7 +3009,7 @@ export function createRuntimeServer() {
 
     if (req.method === 'GET' && pathname === '/runtime/managed-instances/config') {
       try {
-        const support = buildManagedInstanceSupportState();
+        const support = await buildManagedInstanceSupportState();
         sendJson(res, 200, support);
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect managed instance support');
@@ -2856,7 +3041,7 @@ export function createRuntimeServer() {
 
     if (req.method === 'POST' && pathname === '/runtime/managed-instances/spawn') {
       try {
-        const support = buildManagedInstanceSupportState();
+        const support = await buildManagedInstanceSupportState();
 
         if (!support.supported) {
           sendText(res, 503, support.reason || 'Managed trial instances are unavailable on this deployment.');
@@ -2961,6 +3146,13 @@ export function createRuntimeServer() {
 
     if (req.method === 'POST' && managedInstanceRefreshMatch) {
       try {
+        const support = await buildManagedInstanceSupportState();
+
+        if (!support.supported) {
+          sendText(res, 503, support.reason || 'Managed instance rollout is unavailable on this deployment.');
+          return;
+        }
+
         const slug = decodeURIComponent(managedInstanceRefreshMatch[1] || '');
         const body = await readJsonBody(req);
         const sessionToken = String(body.sessionToken || '').trim();
@@ -3041,7 +3233,7 @@ export function createRuntimeServer() {
     if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
       try {
         const registry = await ensureTenantRegistry();
-        const managedSupport = buildManagedInstanceSupportState();
+        const managedSupport = await buildManagedInstanceSupportState();
         let managedInstances = [];
         let clientProfiles = [];
         let emailMessages = [];
@@ -3093,6 +3285,13 @@ export function createRuntimeServer() {
 
     if (req.method === 'POST' && tenantManagedInstanceRefreshMatch) {
       try {
+        const support = await buildManagedInstanceSupportState();
+
+        if (!support.supported) {
+          sendText(res, 503, support.reason || 'Managed instance rollout is unavailable on this deployment.');
+          return;
+        }
+
         const slug = decodeURIComponent(tenantManagedInstanceRefreshMatch[1] || '');
         const registry = await ensureManagedInstanceRegistry();
         await maybeExpireManagedInstances(registry, { actor: 'admin' });
@@ -3160,12 +3359,25 @@ export function createRuntimeServer() {
         const profileEmail = String(body.profileEmail || '')
           .trim()
           .toLowerCase();
+        const recipients = Array.isArray(body.recipients)
+          ? body.recipients.map((recipient) => String(recipient || '').trim().toLowerCase()).filter(Boolean)
+          : [];
         const subject = String(body.subject || '').trim();
         const messageBody = String(body.body || '').trim();
         const actor = String(body.actor || 'admin').trim() || 'admin';
 
-        if (!profileEmail || !isLikelyValidEmail(profileEmail)) {
+        if (!profileEmail && recipients.length === 0) {
+          sendText(res, 400, 'A valid client email address or recipient list is required.');
+          return;
+        }
+
+        if (profileEmail && !isLikelyValidEmail(profileEmail)) {
           sendText(res, 400, 'A valid client email address is required.');
+          return;
+        }
+
+        if (recipients.some((recipient) => !isLikelyValidEmail(recipient))) {
+          sendText(res, 400, 'All batch recipients must be valid email addresses.');
           return;
         }
 
@@ -3179,12 +3391,20 @@ export function createRuntimeServer() {
           return;
         }
 
-        const message = await sendAdminEmail({
-          profileEmail,
-          subject,
-          body: messageBody,
-          actor,
-        });
+        const message =
+          recipients.length > 0
+            ? await sendAdminEmailBatch({
+                recipients,
+                subject,
+                body: messageBody,
+                actor,
+              })
+            : await sendAdminEmail({
+                profileEmail,
+                subject,
+                body: messageBody,
+                actor,
+              });
 
         sendJson(res, 200, {
           ok: true,
@@ -3193,6 +3413,36 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to record the admin email message.');
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/shout/messages') {
+      try {
+        sendJson(res, 200, {
+          ok: true,
+          messages: await listShoutboxMessages(),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to load shout-out messages.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/shout/send') {
+      try {
+        const body = await readJsonBody(req);
+        const message = await appendShoutboxMessage({
+          author: String(body.author || '').trim(),
+          content: String(body.content || '').trim(),
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          message,
+        });
+      } catch (error) {
+        sendText(res, 400, error instanceof Error ? error.message : 'Failed to send the shout-out message.');
       }
       return;
     }
@@ -3832,9 +4082,15 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 function startServer() {
-  server.listen(PORT, HOST, () => {
+  server.listen(PORT, HOST, async () => {
     console.log(`[runtime] listening on http://${HOST}:${PORT}`);
     console.log(`[runtime] workspace dir: ${PERSIST_ROOT}`);
+
+    const rolloutGuard = await resolveManagedRolloutGuardState({ force: true });
+
+    if (!rolloutGuard.allowed) {
+      console.warn(`[runtime] managed rollout guard active: ${rolloutGuard.reason}`);
+    }
 
     void rolloutManagedInstancesToCurrentBuild({ reason: 'startup-sync', actor: 'system' }).catch((error) => {
       console.error('[runtime] managed instance startup sync failed:', error);

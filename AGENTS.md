@@ -45,6 +45,8 @@ The current hosted product baseline is:
   - model: `deepseek/deepseek-v3.2`
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
+- Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`
+- Header-level `Shout Out Box` broadcast messaging with user-side settings toggle
 - Interactive self-host installer with local PostgreSQL and Caddy HTTPS support
 
 Do not regress any of the above without an explicit user request.
@@ -85,6 +87,7 @@ These are the current release priorities:
 - Commentary derived from actual runtime events, not filler
 - Remaining browser-weight reduction on editor/PDF/git/terminal surfaces
 - Managed Cloudflare rollout/refresh/rollback observability
+- Admin/operator segmentation and broadcast tooling without secret leakage
 - Tenant/account/RBAC hardening
 - Self-host installer resilience
 - First-party template packs and smoke coverage

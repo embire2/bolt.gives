@@ -61,13 +61,14 @@ export default function SettingsTab() {
   const [currentTimezone, setCurrentTimezone] = useState('');
   const [settings, setSettings] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('bolt_user_profile');
-    return saved
-      ? JSON.parse(saved)
-      : {
-          notifications: true,
-          language: 'en',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        };
+    const defaults = {
+      notifications: true,
+      shoutboxEnabled: true,
+      language: 'en',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    };
+
+    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
   });
   const [modelOrchestrator, setModelOrchestrator] = useState<ModelOrchestratorSettings>(() =>
     getModelOrchestratorSettings(),
@@ -103,6 +104,8 @@ export default function SettingsTab() {
   // Save settings automatically when they change
   useEffect(() => {
     try {
+      const persistedSettings = JSON.parse(localStorage.getItem('settings') || '{}');
+
       // Get existing profile data
       const existingProfile = JSON.parse(localStorage.getItem('bolt_user_profile') || '{}');
 
@@ -110,11 +113,21 @@ export default function SettingsTab() {
       const updatedProfile = {
         ...existingProfile,
         notifications: settings.notifications,
+        shoutboxEnabled: settings.shoutboxEnabled,
+        language: settings.language,
+        timezone: settings.timezone,
+      };
+      const nextSettings = {
+        ...persistedSettings,
+        notifications: settings.notifications,
+        shoutboxEnabled: settings.shoutboxEnabled,
         language: settings.language,
         timezone: settings.timezone,
       };
 
       localStorage.setItem('bolt_user_profile', JSON.stringify(updatedProfile));
+      localStorage.setItem('settings', JSON.stringify(nextSettings));
+      window.dispatchEvent(new CustomEvent('bolt-settings-updated'));
       toast.success('Settings updated');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -198,6 +211,45 @@ export default function SettingsTab() {
                 );
 
                 toast.success(`Notifications ${checked ? 'enabled' : 'disabled'}`);
+              }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="i-ph:chat-teardrop-text-fill w-4 h-4 text-bolt-elements-textSecondary" />
+            <label className="block text-sm text-bolt-elements-textSecondary">Shout Out Box</label>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-bolt-elements-textSecondary">
+              {settings.shoutboxEnabled
+                ? 'Show cross-device shout-out messages in the header'
+                : 'Hide the shout-out header icon and mute message polling'}
+            </span>
+            <Switch
+              checked={settings.shoutboxEnabled}
+              onCheckedChange={(checked) => {
+                setSettings((prev) => ({ ...prev, shoutboxEnabled: checked }));
+
+                const existingProfile = JSON.parse(localStorage.getItem('bolt_user_profile') || '{}');
+                const existingSettings = JSON.parse(localStorage.getItem('settings') || '{}');
+                localStorage.setItem(
+                  'bolt_user_profile',
+                  JSON.stringify({
+                    ...existingProfile,
+                    shoutboxEnabled: checked,
+                  }),
+                );
+                localStorage.setItem(
+                  'settings',
+                  JSON.stringify({
+                    ...existingSettings,
+                    shoutboxEnabled: checked,
+                  }),
+                );
+                window.dispatchEvent(new CustomEvent('bolt-settings-updated'));
+                toast.success(`Shout Out Box ${checked ? 'enabled' : 'disabled'}`);
               }}
             />
           </div>

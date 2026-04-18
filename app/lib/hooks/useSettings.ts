@@ -28,6 +28,7 @@ export interface Settings {
   theme: 'light' | 'dark' | 'system';
   language: string;
   notifications: boolean;
+  shoutboxEnabled: boolean;
   eventLogs: boolean;
   timezone: string;
   tabConfiguration: TabWindowConfig;
@@ -38,6 +39,7 @@ export interface UseSettingsReturn {
   setTheme: (theme: Settings['theme']) => void;
   setLanguage: (language: string) => void;
   setNotifications: (enabled: boolean) => void;
+  setShoutboxEnabled: (enabled: boolean) => void;
   setEventLogs: (enabled: boolean) => void;
   setTimezone: (timezone: string) => void;
   settings: Settings;
@@ -86,6 +88,7 @@ export function useSettings(): UseSettingsReturn {
       theme: storedSettings?.theme || 'system',
       language: storedSettings?.language || 'en',
       notifications: storedSettings?.notifications ?? true,
+      shoutboxEnabled: storedSettings?.shoutboxEnabled ?? true,
       eventLogs: storedSettings?.eventLogs ?? true,
       timezone: storedSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       tabConfiguration,
@@ -177,6 +180,17 @@ export function useSettings(): UseSettingsReturn {
     [saveSettings],
   );
 
+  const setShoutboxEnabled = useCallback(
+    (enabled: boolean) => {
+      saveSettings({ shoutboxEnabled: enabled });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bolt-settings-updated'));
+      }
+    },
+    [saveSettings],
+  );
+
   const setTimezone = useCallback(
     (timezone: string) => {
       saveSettings({ timezone });
@@ -218,6 +232,7 @@ export function useSettings(): UseSettingsReturn {
     setTheme,
     setLanguage,
     setNotifications,
+    setShoutboxEnabled,
     setTimezone,
     settings,
     tabConfiguration,

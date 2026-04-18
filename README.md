@@ -65,7 +65,9 @@ Release verification now also includes a browser-level post-deploy asset health 
 - Hosted FREE preview verification now ignores stale fallback-starter detections once the synced workspace no longer contains the starter placeholder, which stops valid generated apps from being rolled back to an older starter snapshot.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
-- `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, and admin email activity.
+- `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.
+- Header-level `Shout Out Box` messaging lets users on the same deployment broadcast short updates to other active users, with an unread badge and a per-user settings toggle.
+- Managed-instance rollout now refuses to start when the live runtime checkout is behind `origin/main`, which prevents silent stale-fleet refreshes from the wrong git SHA.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.
 - Live release validation already includes real browser startup and preview-recovery smoke coverage.
 

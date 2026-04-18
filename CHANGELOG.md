@@ -2,6 +2,12 @@
 
 ## Unreleased (`v3.0.9` in progress)
 
+### Added
+
+- `admin.bolt.gives` now includes filter and export controls for client profiles, so operators can segment users by search, company, country, use case, and assignment status before acting on the data.
+- Operator email sends can now target the currently filtered client audience instead of storing single-recipient draft/log entries only.
+- A deployment-wide `Shout Out Box` is now available from the header, with unread badge tracking and a per-user Settings toggle to mute/hide it.
+
 ### Changed
 
 - Managed Cloudflare instances are now indefinite for now instead of auto-expiring after 15 days, and legacy timed expiry state is normalized away on the live registry/admin paths.
@@ -14,6 +20,7 @@
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
 - The self-host installer now supports an interactive setup path when domain/PostgreSQL flags are omitted, and self-hosted trial links now fall back to the local app domain’s `/managed-instances` route instead of pointing back to the hosted `create.bolt.gives` domain.
 - The installer now installs PostgreSQL client tooling (`psql`) as part of the supported self-host baseline and keeps asking interactively for the local PostgreSQL database name, username, and password when those flags are omitted.
+- Runtime startup now evaluates a managed-instance rollout guard against the live `/srv/bolt-gives` checkout, and refuses Cloudflare fleet rollout if that checkout is behind `origin/main`.
 
 ### Fixed
 
@@ -42,6 +49,7 @@
 - Hosted preview handoff no longer infers runtime commands from only the latest assistant delta; it now merges the active workspace snapshot before choosing setup/start commands, which prevents partial dependency installs like `npm install moment` from replacing the real project runtime and avoids stalled previews after stream interruptions.
 - The live release smoke now prints stage-by-stage progress during long runs, making it obvious whether it is waiting for the prompt surface, commentary, preview readiness, or recovery.
 - A new post-deploy browser health check now fails release validation if the live app serves hashed asset `404`s or never exposes the prompt surface after deploy.
+- Managed-instance startup support and tenant-admin status views now surface the rollout-guard reason when the live runtime is stale, instead of silently advertising trial rollout as available.
 
 ## v3.0.8 (2026-04-04)
 

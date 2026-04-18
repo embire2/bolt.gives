@@ -68,8 +68,9 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 
 4. FREE / managed-instance reliability
 - [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed instances.
-- [~] Keep registration, private client profile capture, email contactability, and one-client / one-instance enforcement aligned across the managed-instance surfaces.
+- [~] Keep registration, private client profile capture, filtered operator outreach, and one-client / one-instance enforcement aligned across the managed-instance surfaces.
 - [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
+- [~] Refuse managed-instance rollout when the live runtime checkout is behind `origin/main`, and surface that guard state in the operator/admin views.
 - [ ] Surface deployment history, last good SHA, and rollback outcomes to the operator panel.
 
 5. Tenant and operator hardening
@@ -92,6 +93,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [ ] Add capacity visibility for managed trial usage and expiry.
 - [ ] Add deployment history and last rollout result to the admin surface.
 - [ ] Make release smoke a hard pre-deploy gate for hosted and managed-instance updates.
+- [ ] Add broadcast communication controls and moderation for the Shout Out Box so operators can manage abuse/reporting without exposing secrets.
 
 ### P1 Improvements
 

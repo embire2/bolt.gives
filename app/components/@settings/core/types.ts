@@ -28,6 +28,7 @@ export interface UserProfile {
   avatar?: string;
   theme: 'light' | 'dark' | 'system';
   notifications: boolean;
+  shoutboxEnabled?: boolean;
   password?: string;
   bio?: string;
   language: string;
@@ -107,6 +108,7 @@ export interface Profile {
   avatar?: string;
   preferences?: {
     notifications?: boolean;
+    shoutboxEnabled?: boolean;
     theme?: 'light' | 'dark' | 'system';
     language?: string;
     timezone?: string;

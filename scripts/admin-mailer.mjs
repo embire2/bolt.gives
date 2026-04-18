@@ -117,3 +117,27 @@ export async function sendAdminEmail({ profileEmail, subject, body, actor = 'adm
     });
   }
 }
+
+export async function sendAdminEmailBatch({ recipients = [], subject, body, actor = 'admin' } = {}) {
+  const normalizedRecipients = [...new Set(recipients.map((recipient) => String(recipient || '').trim().toLowerCase()))].filter(
+    Boolean,
+  );
+
+  if (normalizedRecipients.length === 0) {
+    throw new Error('At least one recipient is required.');
+  }
+
+  const results = [];
+
+  for (const recipient of normalizedRecipients) {
+    results.push(await sendAdminEmail({ profileEmail: recipient, subject, body, actor }));
+  }
+
+  return {
+    total: normalizedRecipients.length,
+    sent: results.filter((result) => result?.status === 'sent').length,
+    drafted: results.filter((result) => result?.status === 'draft').length,
+    failed: results.filter((result) => result?.status === 'failed').length,
+    messages: results,
+  };
+}

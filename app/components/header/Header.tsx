@@ -6,6 +6,7 @@ import { classNames } from '~/utils/classNames';
 import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '~/lib/version';
+import { Shoutbox } from './Shoutbox.client';
 
 export function Header() {
   const chat = useStore(chatStore);
@@ -21,7 +22,7 @@ export function Header() {
 
   return (
     <header
-      className={classNames('flex items-center px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]', {
+      className={classNames('relative flex items-center px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]', {
         'border-transparent': !chat.started,
         'border-bolt-elements-borderColor': chat.started,
       })}
@@ -54,6 +55,7 @@ export function Header() {
       </span>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <ClientOnly>{() => <Shoutbox />}</ClientOnly>
         <a
           href="/tenant"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
