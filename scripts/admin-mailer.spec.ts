@@ -8,6 +8,10 @@ vi.mock('./admin-db.mjs', () => ({
   })),
 }));
 
+vi.mock('./runtime-env-file.mjs', () => ({
+  readMergedRuntimeEnv: vi.fn(() => ({})),
+}));
+
 describe('admin-mailer', () => {
   it('reports when smtp is not configured', () => {
     const support = buildAdminMailSupport({});

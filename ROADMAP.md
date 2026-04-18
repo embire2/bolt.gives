@@ -80,6 +80,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 
 - [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed instances.
 - [~] Keep public registration and operator surfaces visually readable in both light and dark themes, especially `create.bolt.gives` and `admin.bolt.gives`.
+- [x] Rebuild `admin.bolt.gives` into a structured operator shell with sticky sidebar navigation and grouped sections so tenants, client profiles, managed instances, and outreach actions are no longer presented as one long stacked page.
 - [~] Keep registration, private client profile capture, filtered operator outreach, and one-client / one-instance enforcement aligned across the managed-instance surfaces.
 - [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
 - [~] Refuse managed-instance rollout when the live runtime checkout is behind `origin/main`, and surface that guard state in the operator/admin views.

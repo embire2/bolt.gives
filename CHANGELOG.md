@@ -10,6 +10,7 @@
 - Operator email sends can now target the currently filtered client audience instead of storing single-recipient draft/log entries only.
 - A deployment-wide `Shout Out Box` is now available from the header, with unread badge tracking and a per-user Settings toggle to mute/hide it.
 - `admin.bolt.gives` now includes a proper SMTP configuration surface, so operators can save or clear the outgoing mail transport from the admin panel while keeping the stored password server-side only.
+- `admin.bolt.gives` now uses a real operator shell with sticky sidebar navigation, anchored sections, and grouped tenant/profile/instance/outreach panels instead of one long stacked page.
 
 ### Changed
 

@@ -651,13 +651,52 @@ export default function TenantAdminPage() {
   const actionData = useActionData<typeof action>();
   const actionError =
     actionData && typeof actionData === 'object' && 'error' in actionData ? String(actionData.error) : null;
+  const activeTenantCount = tenants.filter((tenant) => tenant.status === 'active').length;
+  const pendingTenantCount = tenants.filter((tenant) => tenant.status === 'pending').length;
+  const disabledTenantCount = tenants.filter((tenant) => tenant.status === 'disabled').length;
+  const mappedProfileCount = clientProfiles.filter((profile) => profile.lastInstanceSlug).length;
+  const liveManagedCount = managedInstances.filter((instance) =>
+    ['active', 'updating', 'provisioning', 'failed'].includes(instance.status),
+  ).length;
+  const sidebarSections = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      description: 'Health, password state, and audit signal',
+      count: `${tenants.length} tenants`,
+    },
+    {
+      id: 'tenants',
+      label: 'Tenants',
+      description: 'Create, approve, invite, disable, and reset access',
+      count: `${activeTenantCount}/${tenants.length || 0} active`,
+    },
+    {
+      id: 'profiles',
+      label: 'Client Profiles',
+      description: 'Registered leads, filters, and assignment visibility',
+      count: `${filteredClientProfiles.length} shown`,
+    },
+    {
+      id: 'instances',
+      label: 'Managed Instances',
+      description: 'Cloudflare deployments, status, and lifecycle actions',
+      count: `${liveManagedCount} live`,
+    },
+    {
+      id: 'outreach',
+      label: 'Outreach',
+      description: 'SMTP configuration, mail sends, and delivery log',
+      count: `${emailMessages.length} messages`,
+    },
+  ];
 
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1">
       <BackgroundRays />
       <Header />
       <main className="flex-1 overflow-auto px-4 py-8">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
           <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
@@ -749,806 +788,913 @@ export default function TenantAdminPage() {
           ) : null}
 
           {supported && authenticated ? (
-            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="space-y-6">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                      Admin password
+            <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+              <aside className="xl:sticky xl:top-24 xl:self-start">
+                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-5 shadow-sm">
+                  <div className="text-xs uppercase tracking-[0.18em] text-bolt-elements-textTertiary">
+                    Operator console
+                  </div>
+                  <div className="mt-3 text-lg font-semibold text-bolt-elements-textPrimary">{admin.username}</div>
+                  <div className="mt-1 text-sm text-bolt-elements-textSecondary">
+                    Control plane for tenants, Cloudflare instances, and outreach.
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3">
+                      <div className="text-[11px] uppercase tracking-wide text-bolt-elements-textTertiary">Tenants</div>
+                      <div className="mt-1 text-base font-semibold text-bolt-elements-textPrimary">
+                        {tenants.length}
+                      </div>
+                      <div className="text-xs text-bolt-elements-textSecondary">{activeTenantCount} active</div>
                     </div>
-                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
-                      {admin.mustChangePassword ? 'Rotation required' : 'Rotated'}
-                    </div>
-                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      {admin.passwordUpdatedAt
-                        ? `Updated ${new Date(admin.passwordUpdatedAt).toLocaleString()}`
-                        : 'Still using the bootstrap password.'}
+                    <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3">
+                      <div className="text-[11px] uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Instances
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-bolt-elements-textPrimary">
+                        {liveManagedCount}
+                      </div>
+                      <div className="text-xs text-bolt-elements-textSecondary">live now</div>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Tenants</div>
-                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{tenants.length}</div>
-                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      {tenants.filter((tenant) => tenant.status === 'active').length} active ·{' '}
-                      {tenants.filter((tenant) => tenant.status === 'pending').length} pending ·{' '}
-                      {tenants.filter((tenant) => tenant.status === 'disabled').length} disabled
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Audit trail</div>
-                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">{auditTrail.length}</div>
-                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      Latest server-side tenant lifecycle events for this instance.
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                      Client profiles
-                    </div>
-                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
-                      {clientProfiles.length}
-                    </div>
-                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      {clientProfiles.filter((profile) => profile.lastInstanceSlug).length} mapped to a managed
-                      instance.
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                      Managed instances
-                    </div>
-                    <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
-                      {managedInstances.length}
-                    </div>
-                    <div className="mt-1 text-xs text-bolt-elements-textSecondary">
-                      {managedSupport.supported
-                        ? `${managedInstances.filter((instance) => ['active', 'updating', 'provisioning', 'failed'].includes(instance.status)).length} currently live on ${managedSupport.rootDomain}.`
-                        : managedSupport.reason}
+                  <nav className="mt-5 space-y-2">
+                    {sidebarSections.map((section) => (
+                      <a
+                        key={section.id}
+                        href={`#${section.id}`}
+                        className="block rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-4 py-3 transition-colors hover:border-bolt-elements-focus"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-bolt-elements-textPrimary">{section.label}</span>
+                          <span className="text-[11px] text-bolt-elements-textTertiary">{section.count}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-bolt-elements-textSecondary">{section.description}</div>
+                      </a>
+                    ))}
+                  </nav>
+                  <div className="mt-5 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-xs text-bolt-elements-textSecondary">
+                    <div className="font-medium text-bolt-elements-textPrimary">Current state</div>
+                    <div className="mt-2 space-y-1">
+                      <div>{pendingTenantCount} tenants waiting for approval</div>
+                      <div>{disabledTenantCount} tenants currently disabled</div>
+                      <div>{mappedProfileCount} client profiles already mapped to live instances</div>
                     </div>
                   </div>
                 </div>
+              </aside>
 
-                <Form
-                  method="post"
+              <div className="space-y-6">
+                <section
+                  id="overview"
                   className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
                 >
-                  <input type="hidden" name="intent" value="create-tenant" />
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Create Tenant</h2>
-                  <div className="mt-4 grid gap-4">
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Tenant name
-                      <input
-                        name="name"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Admin email
-                      <input
-                        name="email"
-                        type="email"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                  </div>
-                  <p className="mt-3 text-xs text-bolt-elements-textTertiary">
-                    Each tenant starts in <span className="font-medium">pending</span>. Approve the tenant, then issue
-                    an onboarding invite so the tenant admin can set a password and access the isolated workspace.
-                  </p>
-                  {admin.mustChangePassword ? (
-                    <p className="mt-4 text-sm text-amber-300">
-                      Rotate the bootstrap admin password first. Tenant creation stays locked until the shared default
-                      login is replaced.
-                    </p>
-                  ) : null}
-                  <button
-                    disabled={admin.mustChangePassword}
-                    className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Create tenant
-                  </button>
-                </Form>
-
-                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Client Profiles</h2>
+                      <div className="text-xs uppercase tracking-[0.18em] text-bolt-elements-textTertiary">
+                        Overview
+                      </div>
+                      <h2 className="mt-2 text-xl font-semibold text-bolt-elements-textPrimary">
+                        Operator visibility and tenant access
+                      </h2>
                       <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                        Every Cloudflare managed-instance request must complete this profile before an instance can be
-                        provisioned.
+                        The panels below are grouped by the actual admin workflow: create or approve tenants, map
+                        registered clients to Cloudflare instances, configure outbound mail, and review delivery or
+                        lifecycle events.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                        {mailSupport.configured ? 'SMTP configured' : 'SMTP not configured'}
+                      </span>
+                      <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                        {managedSupport.supported
+                          ? `${managedSupport.rootDomain} control plane online`
+                          : 'Managed instances unavailable'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+                    <div className="space-y-6">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                        <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 shadow-sm">
+                          <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                            Admin password
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            {admin.mustChangePassword ? 'Rotation required' : 'Rotated'}
+                          </div>
+                          <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                            {admin.passwordUpdatedAt
+                              ? `Updated ${new Date(admin.passwordUpdatedAt).toLocaleString()}`
+                              : 'Still using the bootstrap password.'}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 shadow-sm">
+                          <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Tenants</div>
+                          <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            {tenants.length}
+                          </div>
+                          <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                            {activeTenantCount} active · {pendingTenantCount} pending · {disabledTenantCount} disabled
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 shadow-sm">
+                          <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                            Audit trail
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            {auditTrail.length}
+                          </div>
+                          <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                            Latest server-side tenant lifecycle events for this instance.
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 shadow-sm">
+                          <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                            Client profiles
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            {clientProfiles.length}
+                          </div>
+                          <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                            {mappedProfileCount} mapped to a managed instance.
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 shadow-sm">
+                          <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                            Managed instances
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            {managedInstances.length}
+                          </div>
+                          <div className="mt-1 text-xs text-bolt-elements-textSecondary">
+                            {managedSupport.supported
+                              ? `${liveManagedCount} currently live on ${managedSupport.rootDomain}.`
+                              : managedSupport.reason}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Form
+                        id="tenants"
+                        method="post"
+                        className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                      >
+                        <input type="hidden" name="intent" value="create-tenant" />
+                        <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Create Tenant</h2>
+                        <div className="mt-4 grid gap-4">
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            Tenant name
+                            <input
+                              name="name"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            Admin email
+                            <input
+                              name="email"
+                              type="email"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                        </div>
+                        <p className="mt-3 text-xs text-bolt-elements-textTertiary">
+                          Each tenant starts in <span className="font-medium">pending</span>. Approve the tenant, then
+                          issue an onboarding invite so the tenant admin can set a password and access the isolated
+                          workspace.
+                        </p>
+                        {admin.mustChangePassword ? (
+                          <p className="mt-4 text-sm text-amber-300">
+                            Rotate the bootstrap admin password first. Tenant creation stays locked until the shared
+                            default login is replaced.
+                          </p>
+                        ) : null}
+                        <button
+                          disabled={admin.mustChangePassword}
+                          className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Create tenant
+                        </button>
+                      </Form>
+
+                      <div
+                        id="profiles"
+                        className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Client Profiles</h2>
+                            <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                              Every Cloudflare managed-instance request must complete this profile before an instance
+                              can be provisioned.
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                            {filteredClientProfiles.length} of {clientProfiles.length} registered
+                          </span>
+                        </div>
+
+                        <Form
+                          method="get"
+                          className="mt-4 grid gap-3 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 lg:grid-cols-5"
+                        >
+                          <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-2">
+                            Search
+                            <input
+                              name="search"
+                              defaultValue={clientProfileFilters.search}
+                              placeholder="Name, email, company, use case"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                            Company
+                            <select
+                              name="company"
+                              defaultValue={clientProfileFilters.company}
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                            >
+                              <option value="">All companies</option>
+                              {clientProfileCompanies.map((company) => (
+                                <option key={company} value={company}>
+                                  {company}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                            Country
+                            <select
+                              name="country"
+                              defaultValue={clientProfileFilters.country}
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                            >
+                              <option value="">All countries</option>
+                              {clientProfileCountries.map((country) => (
+                                <option key={country} value={country}>
+                                  {country}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
+                            Assignment
+                            <select
+                              name="assignmentStatus"
+                              defaultValue={clientProfileFilters.assignmentStatus}
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                            >
+                              <option value="all">All clients</option>
+                              <option value="assigned">Assigned</option>
+                              <option value="unassigned">Awaiting assignment</option>
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-3">
+                            Use case contains
+                            <input
+                              name="useCase"
+                              defaultValue={clientProfileFilters.useCase}
+                              placeholder="Clinic scheduler, CRM, internal tools"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <div className="flex flex-wrap items-end gap-2 lg:col-span-2">
+                            <button className="rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
+                              Apply filters
+                            </button>
+                            <a
+                              href={`/tenant-admin?${new URLSearchParams({
+                                search: clientProfileFilters.search,
+                                company: clientProfileFilters.company,
+                                country: clientProfileFilters.country,
+                                useCase: clientProfileFilters.useCase,
+                                assignmentStatus: clientProfileFilters.assignmentStatus,
+                                export: 'profiles-csv',
+                              }).toString()}`}
+                              className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
+                            >
+                              Export CSV
+                            </a>
+                          </div>
+                        </Form>
+
+                        <div className="mt-4 space-y-3">
+                          {filteredClientProfiles.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                              No client profiles match the current filters.
+                            </div>
+                          ) : (
+                            filteredClientProfiles.map((profile) => (
+                              <div
+                                key={profile.id}
+                                className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                              >
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div>
+                                    <div className="font-medium text-bolt-elements-textPrimary">{profile.name}</div>
+                                    <div className="mt-1 text-sm text-bolt-elements-textSecondary">{profile.email}</div>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-bolt-elements-textTertiary">
+                                      {profile.company ? <span>Company {profile.company}</span> : null}
+                                      {profile.role ? <span>Role {profile.role}</span> : null}
+                                      {profile.country ? <span>Country {profile.country}</span> : null}
+                                      {profile.requestedSubdomain ? (
+                                        <span className="font-mono">Requested {profile.requestedSubdomain}</span>
+                                      ) : null}
+                                    </div>
+                                    {profile.useCase ? (
+                                      <div className="mt-2 text-xs text-bolt-elements-textSecondary">
+                                        {profile.useCase}
+                                      </div>
+                                    ) : null}
+                                    <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                                      Registered {new Date(profile.createdAt).toLocaleString()}
+                                      {profile.updatedAt
+                                        ? ` · Updated ${new Date(profile.updatedAt).toLocaleString()}`
+                                        : ''}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-start gap-2">
+                                    {profile.lastInstanceSlug ? (
+                                      <>
+                                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
+                                          {profile.lastInstanceStatus || 'assigned'}
+                                        </span>
+                                        <span className="font-mono text-xs text-bolt-elements-textSecondary">
+                                          {profile.lastInstanceSlug}
+                                        </span>
+                                        {profile.lastInstanceUrl ? (
+                                          <a
+                                            href={profile.lastInstanceUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-xs text-bolt-elements-item-contentAccent hover:underline"
+                                          >
+                                            Open instance
+                                          </a>
+                                        ) : null}
+                                      </>
+                                    ) : (
+                                      <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                        awaiting assignment
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <Form
+                        method="post"
+                        className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                      >
+                        <input type="hidden" name="intent" value="change-admin-password" />
+                        <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Rotate Admin Password</h2>
+                        <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                          Current admin: <span className="font-mono">{admin.username}</span>
+                          {admin.lastLoginAt ? (
+                            <>
+                              {' '}
+                              · Last sign-in <span className="font-mono">{admin.lastLoginAt}</span>
+                            </>
+                          ) : null}
+                        </p>
+                        <div className="mt-4 grid gap-4">
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            Current password
+                            <input
+                              name="currentPassword"
+                              type="password"
+                              defaultValue={admin.mustChangePassword ? defaultAdmin.password : ''}
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            New password
+                            <input
+                              name="nextPassword"
+                              type="password"
+                              minLength={10}
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                        </div>
+                        <button className="mt-5 rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
+                          Update admin password
+                        </button>
+                      </Form>
+                    </div>
+
+                    <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Registered Tenants</h2>
+                        <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                          {tenants.length} total
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {tenants.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                            No tenants created yet.
+                          </div>
+                        ) : (
+                          tenants.map((tenant) => (
+                            <div
+                              key={tenant.id}
+                              className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                            >
+                              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                  <div className="font-medium text-bolt-elements-textPrimary">{tenant.name}</div>
+                                  <div className="mt-1 text-sm text-bolt-elements-textSecondary">{tenant.email}</div>
+                                  {tenant.slug ? (
+                                    <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                      Slug <span className="font-mono">{tenant.slug}</span>
+                                    </div>
+                                  ) : null}
+                                  {tenant.workspaceDir ? (
+                                    <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                      Workspace <span className="font-mono">{tenant.workspaceDir}</span>
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                                    Created {new Date(tenant.createdAt).toLocaleString()}
+                                    {tenant.updatedAt
+                                      ? ` · Updated ${new Date(tenant.updatedAt).toLocaleString()}`
+                                      : ''}
+                                  </div>
+                                  {tenant.passwordUpdatedAt ? (
+                                    <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                      Password updated {new Date(tenant.passwordUpdatedAt).toLocaleString()}
+                                    </div>
+                                  ) : null}
+                                  {tenant.lastLoginAt ? (
+                                    <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                      Last tenant login {new Date(tenant.lastLoginAt).toLocaleString()}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                      tenant.status === 'pending'
+                                        ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                                        : tenant.status === 'disabled'
+                                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                          : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                    }`}
+                                  >
+                                    {tenant.status === 'pending'
+                                      ? 'pending'
+                                      : tenant.status === 'disabled'
+                                        ? 'disabled'
+                                        : 'active'}
+                                  </span>
+                                  {tenant.mustChangePassword ? (
+                                    <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                      password action required
+                                    </span>
+                                  ) : null}
+                                  {tenant.inviteExpiresAt ? (
+                                    <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                      invite live until {new Date(tenant.inviteExpiresAt).toLocaleString()}
+                                    </span>
+                                  ) : null}
+                                  {tenant.status === 'pending' ? (
+                                    <Form method="post">
+                                      <input type="hidden" name="intent" value="approve-tenant" />
+                                      <input type="hidden" name="tenantId" value={tenant.id} />
+                                      <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                        Approve tenant
+                                      </button>
+                                    </Form>
+                                  ) : null}
+                                  {tenant.status !== 'pending' ? (
+                                    <Form method="post">
+                                      <input type="hidden" name="intent" value="toggle-tenant-status" />
+                                      <input type="hidden" name="tenantId" value={tenant.id} />
+                                      <input
+                                        type="hidden"
+                                        name="status"
+                                        value={tenant.status === 'disabled' ? 'active' : 'disabled'}
+                                      />
+                                      <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                        {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
+                                      </button>
+                                    </Form>
+                                  ) : null}
+                                  {tenant.status === 'active' ? (
+                                    <Form method="post">
+                                      <input type="hidden" name="intent" value="issue-tenant-invite" />
+                                      <input type="hidden" name="tenantId" value={tenant.id} />
+                                      <input
+                                        type="hidden"
+                                        name="purpose"
+                                        value={tenant.lastLoginAt ? 'password-reset' : 'onboarding'}
+                                      />
+                                      <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                        {tenant.lastLoginAt ? 'Force reset via invite' : 'Issue onboarding invite'}
+                                      </button>
+                                    </Form>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {tenant.inviteToken ? (
+                                <div className="mt-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                                  Invite URL{' '}
+                                  <span className="font-mono text-bolt-elements-textPrimary">{`/tenant?invite=${tenant.inviteToken}`}</span>
+                                </div>
+                              ) : null}
+                              {tenant.approvedAt ? (
+                                <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                                  Approved {new Date(tenant.approvedAt).toLocaleString()}
+                                  {tenant.approvedBy ? ` by ${tenant.approvedBy}` : ''}
+                                </div>
+                              ) : null}
+                              {tenant.disabledAt ? (
+                                <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                  Disabled {new Date(tenant.disabledAt).toLocaleString()}
+                                  {tenant.disabledBy ? ` by ${tenant.disabledBy}` : ''}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {auditTrail.length > 0 ? (
+                        <div className="mt-6 border-t border-bolt-elements-borderColor pt-4">
+                          <div className="mb-2 text-sm font-medium text-bolt-elements-textPrimary">
+                            Recent admin activity
+                          </div>
+                          <div className="space-y-2">
+                            {auditTrail
+                              .slice(-8)
+                              .reverse()
+                              .map((event) => (
+                                <div
+                                  key={event.id}
+                                  className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary"
+                                >
+                                  <div className="font-medium text-bolt-elements-textPrimary">
+                                    {event.action} · {event.target}
+                                  </div>
+                                  <div className="mt-1">
+                                    {new Date(event.timestamp).toLocaleString()} · actor {event.actor}
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section
+                  id="instances"
+                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">
+                        Managed Cloudflare Instances
+                      </h2>
+                      <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                        Operator view of live managed instances. Actions run server-side through the managed control
+                        plane and are matched to the registered client that requested them. Cloudflare credentials
+                        remain on the runtime service and are never sent to the browser.
                       </p>
                     </div>
                     <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                      {filteredClientProfiles.length} of {clientProfiles.length} registered
+                      {managedSupport.supported
+                        ? managedSupport.trialDays > 0
+                          ? `${managedSupport.trialDays}-day trials on ${managedSupport.rootDomain}`
+                          : `Indefinite managed instances on ${managedSupport.rootDomain}`
+                        : 'Instances unavailable'}
                     </span>
                   </div>
 
-                  <Form
-                    method="get"
-                    className="mt-4 grid gap-3 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 lg:grid-cols-5"
-                  >
-                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-2">
-                      Search
-                      <input
-                        name="search"
-                        defaultValue={clientProfileFilters.search}
-                        placeholder="Name, email, company, use case"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
-                      Company
-                      <select
-                        name="company"
-                        defaultValue={clientProfileFilters.company}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                      >
-                        <option value="">All companies</option>
-                        {clientProfileCompanies.map((company) => (
-                          <option key={company} value={company}>
-                            {company}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
-                      Country
-                      <select
-                        name="country"
-                        defaultValue={clientProfileFilters.country}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                      >
-                        <option value="">All countries</option>
-                        {clientProfileCountries.map((country) => (
-                          <option key={country} value={country}>
-                            {country}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary">
-                      Assignment
-                      <select
-                        name="assignmentStatus"
-                        defaultValue={clientProfileFilters.assignmentStatus}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                      >
-                        <option value="all">All clients</option>
-                        <option value="assigned">Assigned</option>
-                        <option value="unassigned">Awaiting assignment</option>
-                      </select>
-                    </label>
-                    <label className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:col-span-3">
-                      Use case contains
-                      <input
-                        name="useCase"
-                        defaultValue={clientProfileFilters.useCase}
-                        placeholder="Clinic scheduler, CRM, internal tools"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <div className="flex flex-wrap items-end gap-2 lg:col-span-2">
-                      <button className="rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
-                        Apply filters
-                      </button>
-                      <a
-                        href={`/tenant-admin?${new URLSearchParams({
-                          search: clientProfileFilters.search,
-                          company: clientProfileFilters.company,
-                          country: clientProfileFilters.country,
-                          useCase: clientProfileFilters.useCase,
-                          assignmentStatus: clientProfileFilters.assignmentStatus,
-                          export: 'profiles-csv',
-                        }).toString()}`}
-                        className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
-                      >
-                        Export CSV
-                      </a>
+                  {!managedSupport.supported ? (
+                    <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-bolt-elements-textPrimary">
+                      {managedSupport.reason}
                     </div>
-                  </Form>
-
-                  <div className="mt-4 space-y-3">
-                    {filteredClientProfiles.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                        No client profiles match the current filters.
-                      </div>
-                    ) : (
-                      filteredClientProfiles.map((profile) => (
-                        <div
-                          key={profile.id}
-                          className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
-                        >
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div>
-                              <div className="font-medium text-bolt-elements-textPrimary">{profile.name}</div>
-                              <div className="mt-1 text-sm text-bolt-elements-textSecondary">{profile.email}</div>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-bolt-elements-textTertiary">
-                                {profile.company ? <span>Company {profile.company}</span> : null}
-                                {profile.role ? <span>Role {profile.role}</span> : null}
-                                {profile.country ? <span>Country {profile.country}</span> : null}
-                                {profile.requestedSubdomain ? (
-                                  <span className="font-mono">Requested {profile.requestedSubdomain}</span>
-                                ) : null}
-                              </div>
-                              {profile.useCase ? (
-                                <div className="mt-2 text-xs text-bolt-elements-textSecondary">{profile.useCase}</div>
-                              ) : null}
-                              <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                                Registered {new Date(profile.createdAt).toLocaleString()}
-                                {profile.updatedAt ? ` · Updated ${new Date(profile.updatedAt).toLocaleString()}` : ''}
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-start gap-2">
-                              {profile.lastInstanceSlug ? (
-                                <>
-                                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
-                                    {profile.lastInstanceStatus || 'assigned'}
-                                  </span>
-                                  <span className="font-mono text-xs text-bolt-elements-textSecondary">
-                                    {profile.lastInstanceSlug}
-                                  </span>
-                                  {profile.lastInstanceUrl ? (
-                                    <a
-                                      href={profile.lastInstanceUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-bolt-elements-item-contentAccent hover:underline"
-                                    >
-                                      Open instance
-                                    </a>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                                  awaiting assignment
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <Form
-                  method="post"
-                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
-                >
-                  <input type="hidden" name="intent" value="change-admin-password" />
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Rotate Admin Password</h2>
-                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                    Current admin: <span className="font-mono">{admin.username}</span>
-                    {admin.lastLoginAt ? (
-                      <>
-                        {' '}
-                        · Last sign-in <span className="font-mono">{admin.lastLoginAt}</span>
-                      </>
-                    ) : null}
-                  </p>
-                  <div className="mt-4 grid gap-4">
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Current password
-                      <input
-                        name="currentPassword"
-                        type="password"
-                        defaultValue={admin.mustChangePassword ? defaultAdmin.password : ''}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      New password
-                      <input
-                        name="nextPassword"
-                        type="password"
-                        minLength={10}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                  </div>
-                  <button className="mt-5 rounded-lg border border-bolt-elements-focus px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary">
-                    Update admin password
-                  </button>
-                </Form>
-              </div>
-
-              <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Registered Tenants</h2>
-                  <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                    {tenants.length} total
-                  </span>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {tenants.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                      No tenants created yet.
+                  ) : managedInstances.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                      No managed instances have been provisioned yet.
                     </div>
                   ) : (
-                    tenants.map((tenant) => (
-                      <div
-                        key={tenant.id}
-                        className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
-                      >
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <div className="font-medium text-bolt-elements-textPrimary">{tenant.name}</div>
-                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{tenant.email}</div>
-                            {tenant.slug ? (
-                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                Slug <span className="font-mono">{tenant.slug}</span>
-                              </div>
-                            ) : null}
-                            {tenant.workspaceDir ? (
-                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                Workspace <span className="font-mono">{tenant.workspaceDir}</span>
-                              </div>
-                            ) : null}
-                            <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                              Created {new Date(tenant.createdAt).toLocaleString()}
-                              {tenant.updatedAt ? ` · Updated ${new Date(tenant.updatedAt).toLocaleString()}` : ''}
-                            </div>
-                            {tenant.passwordUpdatedAt ? (
-                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                Password updated {new Date(tenant.passwordUpdatedAt).toLocaleString()}
-                              </div>
-                            ) : null}
-                            {tenant.lastLoginAt ? (
-                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                Last tenant login {new Date(tenant.lastLoginAt).toLocaleString()}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                                tenant.status === 'pending'
-                                  ? 'border-sky-500/40 bg-sky-500/10 text-sky-200'
-                                  : tenant.status === 'disabled'
-                                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-                                    : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                              }`}
-                            >
-                              {tenant.status === 'pending'
-                                ? 'pending'
-                                : tenant.status === 'disabled'
-                                  ? 'disabled'
-                                  : 'active'}
-                            </span>
-                            {tenant.mustChangePassword ? (
-                              <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                                password action required
-                              </span>
-                            ) : null}
-                            {tenant.inviteExpiresAt ? (
-                              <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                                invite live until {new Date(tenant.inviteExpiresAt).toLocaleString()}
-                              </span>
-                            ) : null}
-                            {tenant.status === 'pending' ? (
-                              <Form method="post">
-                                <input type="hidden" name="intent" value="approve-tenant" />
-                                <input type="hidden" name="tenantId" value={tenant.id} />
-                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                  Approve tenant
-                                </button>
-                              </Form>
-                            ) : null}
-                            {tenant.status !== 'pending' ? (
-                              <Form method="post">
-                                <input type="hidden" name="intent" value="toggle-tenant-status" />
-                                <input type="hidden" name="tenantId" value={tenant.id} />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={tenant.status === 'disabled' ? 'active' : 'disabled'}
-                                />
-                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                  {tenant.status === 'disabled' ? 'Re-enable tenant' : 'Disable tenant'}
-                                </button>
-                              </Form>
-                            ) : null}
-                            {tenant.status === 'active' ? (
-                              <Form method="post">
-                                <input type="hidden" name="intent" value="issue-tenant-invite" />
-                                <input type="hidden" name="tenantId" value={tenant.id} />
-                                <input
-                                  type="hidden"
-                                  name="purpose"
-                                  value={tenant.lastLoginAt ? 'password-reset' : 'onboarding'}
-                                />
-                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                  {tenant.lastLoginAt ? 'Force reset via invite' : 'Issue onboarding invite'}
-                                </button>
-                              </Form>
-                            ) : null}
-                          </div>
-                        </div>
-                        {tenant.inviteToken ? (
-                          <div className="mt-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
-                            Invite URL{' '}
-                            <span className="font-mono text-bolt-elements-textPrimary">{`/tenant?invite=${tenant.inviteToken}`}</span>
-                          </div>
-                        ) : null}
-                        {tenant.approvedAt ? (
-                          <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                            Approved {new Date(tenant.approvedAt).toLocaleString()}
-                            {tenant.approvedBy ? ` by ${tenant.approvedBy}` : ''}
-                          </div>
-                        ) : null}
-                        {tenant.disabledAt ? (
-                          <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                            Disabled {new Date(tenant.disabledAt).toLocaleString()}
-                            {tenant.disabledBy ? ` by ${tenant.disabledBy}` : ''}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))
-                  )}
-                </div>
-                {auditTrail.length > 0 ? (
-                  <div className="mt-6 border-t border-bolt-elements-borderColor pt-4">
-                    <div className="mb-2 text-sm font-medium text-bolt-elements-textPrimary">Recent admin activity</div>
-                    <div className="space-y-2">
-                      {auditTrail
-                        .slice(-8)
-                        .reverse()
-                        .map((event) => (
+                    <div className="mt-5 space-y-3">
+                      {managedInstances.map((instance) => {
+                        const isLive = ['active', 'updating', 'provisioning', 'failed'].includes(instance.status);
+
+                        return (
                           <div
-                            key={event.id}
-                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary"
+                            key={instance.id}
+                            className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
                           >
-                            <div className="font-medium text-bolt-elements-textPrimary">
-                              {event.action} · {event.target}
-                            </div>
-                            <div className="mt-1">
-                              {new Date(event.timestamp).toLocaleString()} · actor {event.actor}
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <div className="font-medium text-bolt-elements-textPrimary">{instance.name}</div>
+                                <div className="mt-1 text-sm text-bolt-elements-textSecondary">{instance.email}</div>
+                                <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                  Project <span className="font-mono">{instance.projectName}</span> · Host{' '}
+                                  <span className="font-mono">{instance.routeHostname}</span>
+                                </div>
+                                <div className="mt-2 text-xs text-bolt-elements-textTertiary">
+                                  {instance.trialEndsAt
+                                    ? `Availability until ${new Date(instance.trialEndsAt).toLocaleString()}`
+                                    : 'No scheduled expiry'}{' '}
+                                  · Updated {new Date(instance.updatedAt).toLocaleString()}
+                                </div>
+                                {instance.lastDeploymentUrl ? (
+                                  <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                    Last deploy <span className="font-mono">{instance.lastDeploymentUrl}</span>
+                                  </div>
+                                ) : null}
+                                {instance.lastError ? (
+                                  <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                    {instance.lastError}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                    instance.status === 'active'
+                                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                      : instance.status === 'failed'
+                                        ? 'border-red-400/40 bg-red-500/10 text-red-200'
+                                        : instance.status === 'suspended'
+                                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                          : instance.status === 'expired'
+                                            ? 'border-slate-500/40 bg-slate-500/10 text-slate-200'
+                                            : 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                                  }`}
+                                >
+                                  {instance.status}
+                                </span>
+                                <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                                  {instance.sourceBranch}
+                                </span>
+                                <Form method="post">
+                                  <input type="hidden" name="intent" value="refresh-managed-instance" />
+                                  <input type="hidden" name="slug" value={instance.projectName} />
+                                  <button
+                                    disabled={instance.status === 'expired'}
+                                    className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Refresh deployment
+                                  </button>
+                                </Form>
+                                {isLive ? (
+                                  <Form method="post">
+                                    <input type="hidden" name="intent" value="suspend-managed-instance" />
+                                    <input type="hidden" name="slug" value={instance.projectName} />
+                                    <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                                      Suspend instance
+                                    </button>
+                                  </Form>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                     </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+                  )}
+                </section>
 
-          {supported && authenticated ? (
-            <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Managed Cloudflare Instances</h2>
-                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                    Operator view of live managed instances. Actions run server-side through the managed control plane
-                    and are matched to the registered client that requested them. Cloudflare credentials remain on the
-                    runtime service and are never sent to the browser.
-                  </p>
-                </div>
-                <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                  {managedSupport.supported
-                    ? managedSupport.trialDays > 0
-                      ? `${managedSupport.trialDays}-day trials on ${managedSupport.rootDomain}`
-                      : `Indefinite managed instances on ${managedSupport.rootDomain}`
-                    : 'Instances unavailable'}
-                </span>
-              </div>
-
-              {!managedSupport.supported ? (
-                <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-bolt-elements-textPrimary">
-                  {managedSupport.reason}
-                </div>
-              ) : managedInstances.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                  No managed instances have been provisioned yet.
-                </div>
-              ) : (
-                <div className="mt-5 space-y-3">
-                  {managedInstances.map((instance) => {
-                    const isLive = ['active', 'updating', 'provisioning', 'failed'].includes(instance.status);
-
-                    return (
-                      <div
-                        key={instance.id}
-                        className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
-                      >
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <section id="outreach" className="space-y-6">
+                  <section className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
+                    <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="configure-smtp" />
+                        <div className="flex items-center justify-between gap-4">
                           <div>
-                            <div className="font-medium text-bolt-elements-textPrimary">{instance.name}</div>
-                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{instance.email}</div>
-                            <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                              Project <span className="font-mono">{instance.projectName}</span> · Host{' '}
-                              <span className="font-mono">{instance.routeHostname}</span>
-                            </div>
-                            <div className="mt-2 text-xs text-bolt-elements-textTertiary">
-                              {instance.trialEndsAt
-                                ? `Availability until ${new Date(instance.trialEndsAt).toLocaleString()}`
-                                : 'No scheduled expiry'}{' '}
-                              · Updated {new Date(instance.updatedAt).toLocaleString()}
-                            </div>
-                            {instance.lastDeploymentUrl ? (
-                              <div className="mt-1 text-xs text-bolt-elements-textTertiary">
-                                Last deploy <span className="font-mono">{instance.lastDeploymentUrl}</span>
-                              </div>
-                            ) : null}
-                            {instance.lastError ? (
-                              <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                                {instance.lastError}
-                              </div>
-                            ) : null}
+                            <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">SMTP Configuration</h2>
+                            <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                              Save the outgoing mail transport directly from the admin panel. Credentials stay on the
+                              server runtime only and are never echoed back to the browser.
+                            </p>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                                instance.status === 'active'
-                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                                  : instance.status === 'failed'
-                                    ? 'border-red-400/40 bg-red-500/10 text-red-200'
-                                    : instance.status === 'suspended'
-                                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-                                      : instance.status === 'expired'
-                                        ? 'border-slate-500/40 bg-slate-500/10 text-slate-200'
-                                        : 'border-sky-500/40 bg-sky-500/10 text-sky-200'
-                              }`}
-                            >
-                              {instance.status}
-                            </span>
-                            <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                              {instance.sourceBranch}
-                            </span>
-                            <Form method="post">
-                              <input type="hidden" name="intent" value="refresh-managed-instance" />
-                              <input type="hidden" name="slug" value={instance.projectName} />
-                              <button
-                                disabled={instance.status === 'expired'}
-                                className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                Refresh deployment
-                              </button>
-                            </Form>
-                            {isLive ? (
-                              <Form method="post">
-                                <input type="hidden" name="intent" value="suspend-managed-instance" />
-                                <input type="hidden" name="slug" value={instance.projectName} />
-                                <button className="rounded-lg border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                                  Suspend instance
-                                </button>
-                              </Form>
-                            ) : null}
-                          </div>
+                          <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                            {mailSupport.configured ? 'configured' : 'not configured'}
+                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          ) : null}
+                        <div className="mt-4 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-xs text-bolt-elements-textSecondary">
+                          {mailSupport.configured
+                            ? `Current transport: ${mailSupport.transportLabel}. From ${mailSupport.fromAddress}.`
+                            : mailSupport.reason}
+                        </div>
+                        <div className="mt-4 grid gap-4">
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            SMTP host
+                            <input
+                              name="smtpHost"
+                              defaultValue={mailSupport.host || ''}
+                              placeholder="smtp.example.com"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                              SMTP port
+                              <input
+                                name="smtpPort"
+                                type="number"
+                                min={1}
+                                max={65535}
+                                defaultValue={mailSupport.port || 587}
+                                className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                              />
+                            </label>
+                            <label className="flex items-center gap-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary">
+                              <input
+                                name="smtpSecure"
+                                type="checkbox"
+                                defaultChecked={Boolean(mailSupport.secure)}
+                                className="h-4 w-4 rounded border-bolt-elements-borderColor bg-bolt-elements-background-depth-1"
+                              />
+                              Use secure SMTP / SMTPS
+                            </label>
+                          </div>
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            Username
+                            <input
+                              name="smtpUser"
+                              defaultValue={mailSupport.user || ''}
+                              placeholder="mailer@example.com"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            Password
+                            <input
+                              name="smtpPassword"
+                              type="password"
+                              placeholder={
+                                mailSupport.hasPassword ? 'Leave blank to keep the stored password' : 'SMTP password'
+                              }
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                          <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                            From address
+                            <input
+                              name="smtpFromAddress"
+                              type="email"
+                              defaultValue={mailSupport.fromAddress || ''}
+                              placeholder="hello@example.com"
+                              className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <button className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                            Save SMTP settings
+                          </button>
+                        </div>
+                      </Form>
+                      <Form method="post" className="mt-3">
+                        <input type="hidden" name="intent" value="clear-smtp" />
+                        <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                          Clear SMTP settings
+                        </button>
+                      </Form>
+                    </div>
 
-          {supported && authenticated ? (
-            <>
-              <section className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="configure-smtp" />
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">SMTP Configuration</h2>
-                        <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                          Save the outgoing mail transport directly from the admin panel. Credentials stay on the server
-                          runtime only and are never echoed back to the browser.
-                        </p>
+                    <Form
+                      method="post"
+                      className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                    >
+                      <input type="hidden" name="intent" value="send-client-email" />
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
+                          <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                            Compose a message for one client or for the currently filtered audience. Messages are always
+                            logged; delivery only occurs when SMTP is configured on the runtime service.
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                          {mailSupport.configured ? mailSupport.transportLabel : 'draft-only'}
+                        </span>
                       </div>
-                      <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                        {mailSupport.configured ? 'configured' : 'not configured'}
-                      </span>
-                    </div>
-                    <div className="mt-4 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-xs text-bolt-elements-textSecondary">
-                      {mailSupport.configured
-                        ? `Current transport: ${mailSupport.transportLabel}. From ${mailSupport.fromAddress}.`
-                        : mailSupport.reason}
-                    </div>
-                    <div className="mt-4 grid gap-4">
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                        SMTP host
-                        <input
-                          name="smtpHost"
-                          defaultValue={mailSupport.host || ''}
-                          placeholder="smtp.example.com"
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                        />
-                      </label>
-                      <div className="grid gap-4 md:grid-cols-2">
+                      {!mailSupport.configured && mailSupport.reason ? (
+                        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+                          {mailSupport.reason}
+                        </div>
+                      ) : null}
+                      <div className="mt-4 grid gap-4">
                         <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                          SMTP port
+                          Audience
+                          <select
+                            name="audienceMode"
+                            defaultValue="single"
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          >
+                            <option value="single">One client</option>
+                            <option value="filtered">Filtered audience</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Client email
                           <input
-                            name="smtpPort"
-                            type="number"
-                            min={1}
-                            max={65535}
-                            defaultValue={mailSupport.port || 587}
+                            name="profileEmail"
+                            type="email"
+                            placeholder="Required for one-client sends"
                             className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                           />
                         </label>
-                        <label className="flex items-center gap-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary">
+                        <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                          Current filtered audience:{' '}
+                          <span className="text-bolt-elements-textPrimary">{clientProfileAudienceLabel}</span>
+                        </div>
+                        <input type="hidden" name="search" value={clientProfileFilters.search} />
+                        <input type="hidden" name="company" value={clientProfileFilters.company} />
+                        <input type="hidden" name="country" value={clientProfileFilters.country} />
+                        <input type="hidden" name="useCase" value={clientProfileFilters.useCase} />
+                        <input type="hidden" name="assignmentStatus" value={clientProfileFilters.assignmentStatus} />
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Subject
                           <input
-                            name="smtpSecure"
-                            type="checkbox"
-                            defaultChecked={Boolean(mailSupport.secure)}
-                            className="h-4 w-4 rounded border-bolt-elements-borderColor bg-bolt-elements-background-depth-1"
+                            name="subject"
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                           />
-                          Use secure SMTP / SMTPS
+                        </label>
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          Message
+                          <textarea
+                            name="body"
+                            rows={8}
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
                         </label>
                       </div>
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                        Username
-                        <input
-                          name="smtpUser"
-                          defaultValue={mailSupport.user || ''}
-                          placeholder="mailer@example.com"
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                        />
-                      </label>
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                        Password
-                        <input
-                          name="smtpPassword"
-                          type="password"
-                          placeholder={
-                            mailSupport.hasPassword ? 'Leave blank to keep the stored password' : 'SMTP password'
-                          }
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                        />
-                      </label>
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                        From address
-                        <input
-                          name="smtpFromAddress"
-                          type="email"
-                          defaultValue={mailSupport.fromAddress || ''}
-                          placeholder="hello@example.com"
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-5 flex flex-wrap gap-3">
-                      <button className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
-                        Save SMTP settings
+                      <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                        {mailSupport.configured ? 'Send email' : 'Save draft'}
                       </button>
-                    </div>
-                  </Form>
-                  <Form method="post" className="mt-3">
-                    <input type="hidden" name="intent" value="clear-smtp" />
-                    <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
-                      Clear SMTP settings
-                    </button>
-                  </Form>
-                </div>
+                    </Form>
+                  </section>
 
-                <Form
-                  method="post"
-                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
-                >
-                  <input type="hidden" name="intent" value="send-client-email" />
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
-                      <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                        Compose a message for one client or for the currently filtered audience. Messages are always
-                        logged; delivery only occurs when SMTP is configured on the runtime service.
-                      </p>
+                  <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Recent Email Activity</h2>
+                      <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                        {emailMessages.length} logged
+                      </span>
                     </div>
-                    <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                      {mailSupport.configured ? mailSupport.transportLabel : 'draft-only'}
-                    </span>
-                  </div>
-                  {!mailSupport.configured && mailSupport.reason ? (
-                    <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-                      {mailSupport.reason}
-                    </div>
-                  ) : null}
-                  <div className="mt-4 grid gap-4">
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Audience
-                      <select
-                        name="audienceMode"
-                        defaultValue="single"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      >
-                        <option value="single">One client</option>
-                        <option value="filtered">Filtered audience</option>
-                      </select>
-                    </label>
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Client email
-                      <input
-                        name="profileEmail"
-                        type="email"
-                        placeholder="Required for one-client sends"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
-                      Current filtered audience:{' '}
-                      <span className="text-bolt-elements-textPrimary">{clientProfileAudienceLabel}</span>
-                    </div>
-                    <input type="hidden" name="search" value={clientProfileFilters.search} />
-                    <input type="hidden" name="company" value={clientProfileFilters.company} />
-                    <input type="hidden" name="country" value={clientProfileFilters.country} />
-                    <input type="hidden" name="useCase" value={clientProfileFilters.useCase} />
-                    <input type="hidden" name="assignmentStatus" value={clientProfileFilters.assignmentStatus} />
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Subject
-                      <input
-                        name="subject"
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                      Message
-                      <textarea
-                        name="body"
-                        rows={8}
-                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                      />
-                    </label>
-                  </div>
-                  <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
-                    {mailSupport.configured ? 'Send email' : 'Save draft'}
-                  </button>
-                </Form>
-              </section>
-
-              <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Recent Email Activity</h2>
-                  <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                    {emailMessages.length} logged
-                  </span>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {emailMessages.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
-                      No admin emails have been logged yet.
-                    </div>
-                  ) : (
-                    emailMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
-                      >
-                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                          <div>
-                            <div className="font-medium text-bolt-elements-textPrimary">{message.subject}</div>
-                            <div className="mt-1 text-sm text-bolt-elements-textSecondary">{message.profileEmail}</div>
-                            <div className="mt-2 whitespace-pre-wrap text-xs text-bolt-elements-textSecondary">
-                              {message.body}
+                    <div className="mt-4 space-y-3">
+                      {emailMessages.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                          No admin emails have been logged yet.
+                        </div>
+                      ) : (
+                        emailMessages.map((message) => (
+                          <div
+                            key={message.id}
+                            className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                          >
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <div className="font-medium text-bolt-elements-textPrimary">{message.subject}</div>
+                                <div className="mt-1 text-sm text-bolt-elements-textSecondary">
+                                  {message.profileEmail}
+                                </div>
+                                <div className="mt-2 whitespace-pre-wrap text-xs text-bolt-elements-textSecondary">
+                                  {message.body}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-start gap-1 text-xs text-bolt-elements-textTertiary">
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 ${
+                                    message.status === 'sent'
+                                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                      : message.status === 'failed'
+                                        ? 'border-red-400/40 bg-red-500/10 text-red-200'
+                                        : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                  }`}
+                                >
+                                  {message.status}
+                                </span>
+                                <span>Actor {message.actor}</span>
+                                <span>{new Date(message.createdAt).toLocaleString()}</span>
+                                {message.sentAt ? <span>Sent {new Date(message.sentAt).toLocaleString()}</span> : null}
+                                {message.transport ? <span>{message.transport}</span> : null}
+                                {message.error ? <span className="text-red-300">{message.error}</span> : null}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex flex-col items-start gap-1 text-xs text-bolt-elements-textTertiary">
-                            <span
-                              className={`rounded-full border px-2 py-0.5 ${
-                                message.status === 'sent'
-                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                                  : message.status === 'failed'
-                                    ? 'border-red-400/40 bg-red-500/10 text-red-200'
-                                    : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-                              }`}
-                            >
-                              {message.status}
-                            </span>
-                            <span>Actor {message.actor}</span>
-                            <span>{new Date(message.createdAt).toLocaleString()}</span>
-                            {message.sentAt ? <span>Sent {new Date(message.sentAt).toLocaleString()}</span> : null}
-                            {message.transport ? <span>{message.transport}</span> : null}
-                            {message.error ? <span className="text-red-300">{message.error}</span> : null}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-            </>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </section>
+              </div>
+            </div>
           ) : null}
         </div>
       </main>

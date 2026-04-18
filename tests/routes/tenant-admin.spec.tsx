@@ -159,7 +159,10 @@ describe('TenantAdminPage', () => {
     render(<TenantAdminPage />);
 
     expect(screen.getByText('Admin Panel')).toBeTruthy();
-    expect(screen.getByText('Client Profiles')).toBeTruthy();
+    expect(screen.getByText('Operator console')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Overview/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Managed Instances/i })).toBeTruthy();
+    expect(screen.getAllByText('Client Profiles').length).toBeGreaterThan(0);
     expect(screen.getByText('Owner Example')).toBeTruthy();
     expect(screen.getByText('Managed Cloudflare Instances')).toBeTruthy();
     expect(screen.getByText('SMTP Configuration')).toBeTruthy();
