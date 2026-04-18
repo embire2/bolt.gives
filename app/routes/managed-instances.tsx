@@ -252,6 +252,21 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function ManagedInstancesPage() {
   const { support, instance, sessionEmail, sessionProjectName } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const panelClass =
+    'rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-xl ring-1 ring-slate-950/5 backdrop-blur dark:border-bolt-elements-borderColor dark:bg-bolt-elements-background-depth-2/90 dark:ring-white/5';
+  const panelInsetClass =
+    'rounded-xl border border-slate-200 bg-slate-50/95 px-4 py-3 shadow-sm dark:border-bolt-elements-borderColor dark:bg-bolt-elements-background-depth-1';
+  const kickerClass =
+    'text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-bolt-elements-textTertiary';
+  const titleClass = 'text-slate-950 dark:text-bolt-elements-textPrimary';
+  const bodyClass = 'text-sm leading-6 text-slate-700 dark:text-bolt-elements-textSecondary';
+  const labelClass = 'grid gap-2 text-sm font-medium text-slate-700 dark:text-bolt-elements-textSecondary';
+  const inputClass =
+    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 placeholder:text-slate-400 dark:border-bolt-elements-borderColor dark:bg-bolt-elements-background-depth-1 dark:text-bolt-elements-textPrimary dark:placeholder:text-bolt-elements-textTertiary';
+  const secondaryButtonClass =
+    'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 dark:border-bolt-elements-borderColor dark:bg-transparent dark:text-bolt-elements-textPrimary dark:hover:border-bolt-elements-focus dark:hover:bg-bolt-elements-background-depth-1';
+  const primaryButtonClass =
+    'rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50';
   const preferredHostname = instance ? `${instance.projectName}.${support.rootDomain}` : '';
   const assignedHostnameDiffers = Boolean(
     instance && instance.routeHostname && instance.routeHostname !== preferredHostname,
@@ -278,14 +293,10 @@ export default function ManagedInstancesPage() {
       <Header />
       <main className="modern-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-          <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-xl backdrop-blur">
-            <div className="text-xs font-semibold uppercase tracking-[0.25em] text-bolt-elements-textTertiary">
-              Experimental Cloudflare managed instances
-            </div>
-            <h1 className="mt-2 text-3xl font-semibold text-bolt-elements-textPrimary">
-              Spawn one managed bolt.gives instance
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm text-bolt-elements-textSecondary">
+          <section className={panelClass}>
+            <div className={kickerClass}>Experimental Cloudflare managed instances</div>
+            <h1 className={`mt-2 text-3xl font-semibold ${titleClass}`}>Spawn one managed bolt.gives instance</h1>
+            <p className={`mt-3 max-w-3xl ${bodyClass}`}>
               This control plane provisions one Pages-hosted managed instance per client, keeps it tied to your original
               browser session, and rolls updates forward from the current stable build. Choose your preferred subdomain
               on <span className="font-mono">{support.rootDomain}</span>; the final assigned hostname follows Cloudflare
@@ -294,13 +305,13 @@ export default function ManagedInstancesPage() {
           </section>
 
           {actionData?.error ? (
-            <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">
+            <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
               {actionData.error}
             </div>
           ) : null}
 
           {!support.supported ? (
-            <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-5 text-sm text-bolt-elements-textPrimary">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-bolt-elements-textPrimary">
               {support.reason}
             </div>
           ) : null}
@@ -309,27 +320,25 @@ export default function ManagedInstancesPage() {
             <div className="space-y-4">
               {instance ? (
                 <>
-                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-6 shadow-lg backdrop-blur">
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                  <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-6 shadow-lg backdrop-blur dark:border-emerald-400/30 dark:bg-emerald-500/10">
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-200">
                       Managed instance ready
                     </div>
-                    <h2 className="mt-2 text-2xl font-semibold text-bolt-elements-textPrimary">
-                      Your bolt.gives server is live
-                    </h2>
+                    <h2 className={`mt-2 text-2xl font-semibold ${titleClass}`}>Your bolt.gives server is live</h2>
                     <a
                       href={instance.pagesUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-4 block break-all rounded-xl border border-emerald-300/30 bg-bolt-elements-background-depth-1 px-4 py-4 text-lg font-semibold text-emerald-200 underline-offset-4 transition hover:text-white hover:underline"
+                      className="mt-4 block break-all rounded-xl border border-emerald-300 bg-white px-4 py-4 text-lg font-semibold text-emerald-800 underline decoration-emerald-600 underline-offset-4 transition hover:text-emerald-900 dark:border-emerald-300/30 dark:bg-bolt-elements-background-depth-1 dark:text-emerald-200 dark:hover:text-white"
                     >
                       {instance.pagesUrl}
                     </a>
-                    <p className="mt-4 text-sm text-bolt-elements-textSecondary">
+                    <p className={`mt-4 ${bodyClass}`}>
                       Bookmark the live URL above. This browser session is already linked to your active managed
                       instance, so you do not need to complete the registration form again.
                     </p>
                     {assignedHostnameDiffers ? (
-                      <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                      <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100">
                         Cloudflare assigned <span className="font-mono">{instance.routeHostname}</span> because the
                         preferred hostname <span className="font-mono">{preferredHostname}</span> was not available.
                         Always use the live URL shown above.
@@ -338,76 +347,58 @@ export default function ManagedInstancesPage() {
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-                    <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
-                      <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                        Server details
-                      </div>
+                    <div className={panelClass}>
+                      <div className={`text-xs uppercase tracking-wide ${kickerClass}`}>Server details</div>
                       <dl className="mt-4 grid gap-4 md:grid-cols-2">
                         {instanceDetails.map((detail) => (
-                          <div
-                            key={detail.label}
-                            className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-4 py-3"
-                          >
-                            <dt className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                              {detail.label}
-                            </dt>
-                            <dd className="mt-2 break-all text-sm font-medium text-bolt-elements-textPrimary">
-                              {detail.value}
-                            </dd>
+                          <div key={detail.label} className={panelInsetClass}>
+                            <dt className={`text-xs uppercase tracking-wide ${kickerClass}`}>{detail.label}</dt>
+                            <dd className={`mt-2 break-all text-sm font-medium ${titleClass}`}>{detail.value}</dd>
                           </div>
                         ))}
                       </dl>
                       {instance.lastError ? (
-                        <div className="mt-4 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
                           Last runtime error: {instance.lastError}
                         </div>
                       ) : null}
                     </div>
 
                     <div className="space-y-4">
-                      <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
-                        <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">Actions</div>
+                      <div className={panelClass}>
+                        <div className={`text-xs uppercase tracking-wide ${kickerClass}`}>Actions</div>
                         <div className="mt-4 flex flex-col gap-3">
                           <a
                             href={instance.pagesUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-center text-sm font-medium text-bolt-elements-button-primary-text"
+                            className={`${primaryButtonClass} text-center`}
                           >
                             Open live instance
                           </a>
                           <Form reloadDocument method="post">
                             <input type="hidden" name="intent" value="refresh" />
-                            <button className="w-full rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary">
-                              Refresh from current build
-                            </button>
+                            <button className={`w-full ${secondaryButtonClass}`}>Refresh from current build</button>
                           </Form>
                           <Form reloadDocument method="post">
                             <input type="hidden" name="intent" value="suspend" />
-                            <button className="w-full rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-200">
+                            <button className="w-full rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 dark:border-red-400/40 dark:bg-transparent dark:text-red-200 dark:hover:bg-red-500/10">
                               Suspend instance
                             </button>
                           </Form>
                         </div>
                       </div>
 
-                      <Form
-                        reloadDocument
-                        method="post"
-                        className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
-                      >
+                      <Form reloadDocument method="post" className={panelClass}>
                         <input type="hidden" name="intent" value="clear-session" />
-                        <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
+                        <div className={`text-xs uppercase tracking-wide ${kickerClass}`}>
                           Need a different instance?
                         </div>
-                        <p className="mt-3 text-sm text-bolt-elements-textSecondary">
+                        <p className={`mt-3 ${bodyClass}`}>
                           Clear the local session only if support has told you to restart the managed-instance flow or
                           switch to a different assigned instance.
                         </p>
-                        <button
-                          type="submit"
-                          className="mt-4 rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary"
-                        >
+                        <button type="submit" className={`mt-4 ${secondaryButtonClass}`}>
                           Clear local instance session
                         </button>
                       </Form>
@@ -416,16 +407,10 @@ export default function ManagedInstancesPage() {
                 </>
               ) : (
                 <>
-                  <Form
-                    reloadDocument
-                    method="post"
-                    className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-lg backdrop-blur"
-                  >
+                  <Form reloadDocument method="post" className={panelClass}>
                     <input type="hidden" name="intent" value="spawn" />
-                    <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">
-                      Request your managed instance
-                    </h2>
-                    <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                    <h2 className={`text-xl font-semibold ${titleClass}`}>Request your managed instance</h2>
+                    <p className={`mt-2 ${bodyClass}`}>
                       Registration is required before an instance can be provisioned. Your profile is stored in the
                       private admin panel and linked to the Cloudflare instance assigned to you. One client can hold one
                       managed instance. Repeating the request from the same browser session returns the same instance
@@ -433,18 +418,12 @@ export default function ManagedInstancesPage() {
                     </p>
 
                     <div className="mt-5 grid gap-4">
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      <label className={labelClass}>
                         Full name
-                        <input
-                          name="name"
-                          required
-                          minLength={2}
-                          placeholder="Ada Lovelace"
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                        />
+                        <input name="name" required minLength={2} placeholder="Ada Lovelace" className={inputClass} />
                       </label>
 
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      <label className={labelClass}>
                         Work email
                         <input
                           name="email"
@@ -452,99 +431,72 @@ export default function ManagedInstancesPage() {
                           required
                           defaultValue={sessionEmail}
                           placeholder="owner@example.com"
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          className={inputClass}
                         />
                       </label>
 
                       <div className="grid gap-4 md:grid-cols-2">
-                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        <label className={labelClass}>
                           Company
-                          <input
-                            name="company"
-                            placeholder="OpenWeb"
-                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                          />
+                          <input name="company" placeholder="OpenWeb" className={inputClass} />
                         </label>
 
-                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        <label className={labelClass}>
                           Role
-                          <input
-                            name="role"
-                            placeholder="Founder / Engineering Lead"
-                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                          />
+                          <input name="role" placeholder="Founder / Engineering Lead" className={inputClass} />
                         </label>
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2">
-                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        <label className={labelClass}>
                           Phone
-                          <input
-                            name="phone"
-                            placeholder="+27 ..."
-                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                          />
+                          <input name="phone" placeholder="+27 ..." className={inputClass} />
                         </label>
 
-                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        <label className={labelClass}>
                           Country
-                          <input
-                            name="country"
-                            placeholder="South Africa"
-                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                          />
+                          <input name="country" placeholder="South Africa" className={inputClass} />
                         </label>
                       </div>
 
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      <label className={labelClass}>
                         Preferred subdomain
-                        <div className="flex items-center rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2">
+                        <div className="flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 dark:border-bolt-elements-borderColor dark:bg-bolt-elements-background-depth-1">
                           <input
                             name="subdomain"
                             required
                             minLength={3}
                             defaultValue={sessionProjectName}
                             placeholder="my-team-bolt"
-                            className="min-w-0 flex-1 bg-transparent text-bolt-elements-textPrimary outline-none"
+                            className="min-w-0 flex-1 bg-transparent text-slate-950 outline-none placeholder:text-slate-400 dark:text-bolt-elements-textPrimary dark:placeholder:text-bolt-elements-textTertiary"
                           />
-                          <span className="pl-3 text-xs font-mono text-bolt-elements-textSecondary">
+                          <span className="pl-3 text-xs font-mono text-slate-500 dark:text-bolt-elements-textSecondary">
                             .{support.rootDomain}
                           </span>
                         </div>
                       </label>
 
-                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      <label className={labelClass}>
                         What are you building?
                         <textarea
                           name="useCase"
                           rows={4}
                           placeholder="Describe the product, users, and what you need bolt.gives to help you build."
-                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          className={inputClass}
                         />
                       </label>
                     </div>
 
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <button
-                        type="submit"
-                        disabled={!support.supported}
-                        className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text disabled:opacity-50"
-                      >
+                      <button type="submit" disabled={!support.supported} className={primaryButtonClass}>
                         Spawn managed instance
                       </button>
                     </div>
                   </Form>
 
-                  <Form
-                    reloadDocument
-                    method="post"
-                    className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-4 shadow-lg backdrop-blur"
-                  >
+                  <Form reloadDocument method="post" className={panelClass}>
                     <input type="hidden" name="intent" value="clear-session" />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm text-bolt-elements-textPrimary"
-                    >
+                    <button type="submit" className={secondaryButtonClass}>
                       Clear local instance session
                     </button>
                   </Form>
@@ -553,11 +505,9 @@ export default function ManagedInstancesPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-5 shadow-lg backdrop-blur">
-                <div className="text-xs uppercase tracking-wide text-bolt-elements-textTertiary">
-                  Managed instance policy
-                </div>
-                <ul className="mt-3 space-y-2 text-sm text-bolt-elements-textSecondary">
+              <div className={panelClass}>
+                <div className={`text-xs uppercase tracking-wide ${kickerClass}`}>Managed instance policy</div>
+                <ul className={`mt-3 space-y-2 ${bodyClass}`}>
                   <li>One client gets one Pages-hosted experimental instance.</li>
                   <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                   <li>Updates follow the current stable branch: {support.sourceBranch}.</li>

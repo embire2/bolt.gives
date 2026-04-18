@@ -31,6 +31,11 @@ export type AdminMailMessageRecord = {
 
 export type AdminMailSupport = {
   configured: boolean;
+  host: string | null;
+  port: number;
+  secure: boolean;
+  user: string | null;
+  hasPassword: boolean;
   fromAddress: string | null;
   transportLabel: string | null;
   reason: string | null;

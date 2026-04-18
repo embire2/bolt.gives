@@ -36,7 +36,13 @@ import {
   upsertClientProfile,
   upsertManagedInstanceAssignment,
 } from './admin-db.mjs';
-import { buildAdminMailSupport, sendAdminEmail, sendAdminEmailBatch } from './admin-mailer.mjs';
+import {
+  buildAdminMailSupport,
+  resetAdminMailTransporter,
+  sendAdminEmail,
+  sendAdminEmailBatch,
+} from './admin-mailer.mjs';
+import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -109,8 +115,17 @@ const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
   process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
-const SHOUTBOX_MESSAGES_PATH = process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
+const SHOUTBOX_MESSAGES_PATH =
+  process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
 const MAX_SHOUTBOX_MESSAGES = Number(process.env.RUNTIME_SHOUTBOX_MAX_MESSAGES || '250');
+
+function normalizeBooleanInput(value) {
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(value || '')
+      .trim()
+      .toLowerCase(),
+  );
+}
 
 const sessions = new Map();
 const managedInstanceLocks = new Map();
@@ -135,7 +150,10 @@ function normalizeRuntimeSecret(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
-export function authorizeHostedFreeRelaySecret(providedSecret, expectedSecret = MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET) {
+export function authorizeHostedFreeRelaySecret(
+  providedSecret,
+  expectedSecret = MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
+) {
   const normalizedProvidedSecret = normalizeRuntimeSecret(providedSecret);
   const normalizedExpectedSecret = normalizeRuntimeSecret(expectedSecret);
 
@@ -441,7 +459,12 @@ async function resolveManagedRolloutGuardState({ force = false } = {}) {
     return managedRolloutGuardState;
   }
 
-  const fetchResult = await runManagedInstanceProcess('git', ['fetch', 'origin', MANAGED_INSTANCE_SOURCE_BRANCH, '--quiet']);
+  const fetchResult = await runManagedInstanceProcess('git', [
+    'fetch',
+    'origin',
+    MANAGED_INSTANCE_SOURCE_BRANCH,
+    '--quiet',
+  ]);
 
   if (fetchResult.code !== 0) {
     managedRolloutGuardState = {
@@ -775,7 +798,16 @@ async function ensureManagedInstanceProjectExists(instance) {
   const config = getManagedInstanceCloudflareConfig();
   const result = await runManagedInstanceProcess(
     'pnpm',
-    ['exec', 'wrangler', 'pages', 'project', 'create', instance.projectName, '--production-branch', config.sourceBranch],
+    [
+      'exec',
+      'wrangler',
+      'pages',
+      'project',
+      'create',
+      instance.projectName,
+      '--production-branch',
+      config.sourceBranch,
+    ],
     {
       env: {
         CLOUDFLARE_API_TOKEN: config.apiToken,
@@ -863,7 +895,10 @@ async function runManagedInstanceOperation(lockKey, operation) {
   const next = new Promise((resolve) => {
     release = resolve;
   });
-  managedInstanceLocks.set(lockKey, previous.finally(() => next));
+  managedInstanceLocks.set(
+    lockKey,
+    previous.finally(() => next),
+  );
 
   await previous;
 
@@ -935,7 +970,11 @@ async function maybeExpireManagedInstances(registry, { actor = 'system' } = {}) 
   return changed;
 }
 
-async function refreshManagedInstanceFromCurrentBuild(registry, instance, { actor = 'system', reason = 'refresh' } = {}) {
+async function refreshManagedInstanceFromCurrentBuild(
+  registry,
+  instance,
+  { actor = 'system', reason = 'refresh' } = {},
+) {
   return await runManagedInstanceOperation(getManagedInstanceLockKey(instance), async () => {
     instance.status = instance.currentGitSha ? 'updating' : 'provisioning';
     instance.updatedAt = new Date().toISOString();
@@ -1123,8 +1162,14 @@ async function listShoutboxMessages() {
 }
 
 async function appendShoutboxMessage({ author, content }) {
-  const normalizedAuthor = String(author || '').trim().slice(0, 80) || 'Anonymous';
-  const normalizedContent = String(content || '').replace(/\r\n/g, '\n').trim().slice(0, 600);
+  const normalizedAuthor =
+    String(author || '')
+      .trim()
+      .slice(0, 80) || 'Anonymous';
+  const normalizedContent = String(content || '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .slice(0, 600);
 
   if (!normalizedContent) {
     throw new Error('A shout-out message is required.');
@@ -1938,7 +1983,10 @@ export function collectMissingWorkspacePackages(entries, packageJson) {
 
 export function sanitizeLegacyTailwindCss(content) {
   const raw = String(content || '');
-  const withoutDirectives = raw.replace(LEGACY_TAILWIND_DIRECTIVE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+  const withoutDirectives = raw
+    .replace(LEGACY_TAILWIND_DIRECTIVE_RE, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
   if (withoutDirectives === raw.trim()) {
     return {
@@ -2040,7 +2088,8 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     }
   }
 
-  const shouldInstallDependencies = !hasNodeModules || session.lastPreparedDependencyFingerprint !== dependencyFingerprint;
+  const shouldInstallDependencies =
+    !hasNodeModules || session.lastPreparedDependencyFingerprint !== dependencyFingerprint;
 
   if (shouldInstallDependencies) {
     writeEvent?.({
@@ -2284,7 +2333,11 @@ function scheduleHostedAutoStartAfterSync(session) {
           healthy: false,
           alert: null,
         });
-        appendPreviewDiagnosticEntries(session, 'autostart', 'Hosted runtime started preview automatically after workspace sync.');
+        appendPreviewDiagnosticEntries(
+          session,
+          'autostart',
+          'Hosted runtime started preview automatically after workspace sync.',
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         appendPreviewDiagnosticEntries(session, 'autostart', `Hosted preview autostart failed: ${message}`);
@@ -3055,7 +3108,9 @@ export function createRuntimeServer() {
           .toLowerCase();
         const requestedSubdomain = slugifyManagedInstanceSubdomain(body.subdomain);
         const sessionToken = String(body.sessionToken || '').trim();
-        const sourceHost = String(body.sourceHost || '').trim().toLowerCase();
+        const sourceHost = String(body.sourceHost || '')
+          .trim()
+          .toLowerCase();
         const clientProfile = {
           name,
           email,
@@ -3245,7 +3300,10 @@ export function createRuntimeServer() {
           await syncManagedRegistryToAdminDatabase(managedRegistry);
           managedInstances = managedRegistry.instances
             .slice()
-            .sort((left, right) => Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt))
+            .sort(
+              (left, right) =>
+                Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt),
+            )
             .map((instance) => sanitizeManagedInstanceForOperator(instance));
         }
 
@@ -3353,6 +3411,83 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/mail/config') {
+      try {
+        const body = await readJsonBody(req);
+        const clear = normalizeBooleanInput(body.clear);
+
+        if (clear) {
+          await updateRuntimeEnvFile({
+            BOLT_ADMIN_SMTP_HOST: null,
+            BOLT_ADMIN_SMTP_PORT: null,
+            BOLT_ADMIN_SMTP_USER: null,
+            BOLT_ADMIN_SMTP_PASSWORD: null,
+            BOLT_ADMIN_SMTP_FROM: null,
+            BOLT_ADMIN_SMTP_SECURE: null,
+          });
+          resetAdminMailTransporter();
+          sendJson(res, 200, {
+            ok: true,
+            cleared: true,
+            mailSupport: buildAdminMailSupport(),
+          });
+          return;
+        }
+
+        const currentSupport = buildAdminMailSupport();
+        const host = String(body.host || '').trim();
+        const port = Number(String(body.port || '').trim() || '587');
+        const user = String(body.user || '').trim();
+        const password = String(body.password || '');
+        const fromAddress = String(body.fromAddress || '').trim();
+        const secure = normalizeBooleanInput(body.secure) || port === 465;
+
+        if (!host) {
+          sendText(res, 400, 'SMTP host is required.');
+          return;
+        }
+
+        if (!Number.isFinite(port) || port < 1 || port > 65535) {
+          sendText(res, 400, 'SMTP port must be between 1 and 65535.');
+          return;
+        }
+
+        if (!fromAddress || !isLikelyValidEmail(fromAddress)) {
+          sendText(res, 400, 'A valid SMTP from address is required.');
+          return;
+        }
+
+        if (!user && password.trim()) {
+          sendText(res, 400, 'Provide the SMTP username before saving a password.');
+          return;
+        }
+
+        if (user && !password && (!currentSupport.hasPassword || currentSupport.user !== user)) {
+          sendText(res, 400, 'Provide the SMTP password when saving a new SMTP username.');
+          return;
+        }
+
+        await updateRuntimeEnvFile({
+          BOLT_ADMIN_SMTP_HOST: host,
+          BOLT_ADMIN_SMTP_PORT: String(port),
+          BOLT_ADMIN_SMTP_USER: user || null,
+          BOLT_ADMIN_SMTP_PASSWORD: user ? (password.trim() ? password : undefined) : null,
+          BOLT_ADMIN_SMTP_FROM: fromAddress,
+          BOLT_ADMIN_SMTP_SECURE: secure ? 'true' : 'false',
+        });
+        resetAdminMailTransporter();
+
+        sendJson(res, 200, {
+          ok: true,
+          cleared: false,
+          mailSupport: buildAdminMailSupport(),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to save SMTP settings.');
+      }
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/runtime/tenant-admin/email/send') {
       try {
         const body = await readJsonBody(req);
@@ -3360,7 +3495,13 @@ export function createRuntimeServer() {
           .trim()
           .toLowerCase();
         const recipients = Array.isArray(body.recipients)
-          ? body.recipients.map((recipient) => String(recipient || '').trim().toLowerCase()).filter(Boolean)
+          ? body.recipients
+              .map((recipient) =>
+                String(recipient || '')
+                  .trim()
+                  .toLowerCase(),
+              )
+              .filter(Boolean)
           : [];
         const subject = String(body.subject || '').trim();
         const messageBody = String(body.body || '').trim();
@@ -3853,7 +3994,8 @@ export function createRuntimeServer() {
         tenant.inviteExpiresAt = null;
         appendTenantAuditEvent(registry, {
           actor: tenant.email,
-          action: tenant.invitePurpose === 'password-reset' ? 'tenant.password.reset.accepted' : 'tenant.invite.accepted',
+          action:
+            tenant.invitePurpose === 'password-reset' ? 'tenant.password.reset.accepted' : 'tenant.invite.accepted',
           target: tenant.email,
         });
         tenant.invitePurpose = null;

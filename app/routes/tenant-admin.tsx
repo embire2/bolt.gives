@@ -206,6 +206,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       emailMessages: authenticated ? status.emailMessages || [] : [],
       mailSupport: status.mailSupport || {
         configured: false,
+        host: null,
+        port: 587,
+        secure: false,
+        user: null,
+        hasPassword: false,
         fromAddress: null,
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',
@@ -243,6 +248,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       emailMessages: [] as AdminMailMessageRecord[],
       mailSupport: {
         configured: false,
+        host: null,
+        port: 587,
+        secure: false,
+        user: null,
+        hasPassword: false,
         fromAddress: null,
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',
@@ -333,7 +343,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/tenant-admin', { status: 303 });
   }
 
   if (intent === 'change-admin-password') {
@@ -362,7 +372,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/tenant-admin', { status: 303 });
   }
 
   if (intent === 'toggle-tenant-status') {
@@ -391,7 +401,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/tenant-admin', { status: 303 });
   }
 
   if (intent === 'approve-tenant') {
@@ -522,6 +532,44 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     return redirect('/tenant-admin');
+  }
+
+  if (intent === 'configure-smtp' || intent === 'clear-smtp') {
+    const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
+    const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
+
+    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
+      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    }
+
+    const payload =
+      intent === 'clear-smtp'
+        ? { clear: true }
+        : {
+            host: String(formData.get('smtpHost') || '').trim(),
+            port: String(formData.get('smtpPort') || '').trim(),
+            user: String(formData.get('smtpUser') || '').trim(),
+            password: String(formData.get('smtpPassword') || ''),
+            fromAddress: String(formData.get('smtpFromAddress') || '').trim(),
+            secure: String(formData.get('smtpSecure') || '') === 'on',
+          };
+
+    try {
+      await fetchRuntimeJson<{ ok: boolean }>('/tenant-admin/mail/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      return json(
+        { error: error instanceof Error ? error.message : 'Unable to save the SMTP settings right now.' },
+        { status: 400 },
+      );
+    }
+
+    return redirect('/tenant-admin', { status: 303 });
   }
 
   if (intent === 'send-client-email') {
@@ -1277,81 +1325,180 @@ export default function TenantAdminPage() {
           ) : null}
 
           {supported && authenticated ? (
-            <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-              <Form
-                method="post"
-                className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
-              >
-                <input type="hidden" name="intent" value="send-client-email" />
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
-                    <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                      Compose a message for one client or for the currently filtered audience. Messages are always
-                      logged; delivery only occurs when SMTP is configured on the runtime service.
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
-                    {mailSupport.configured ? mailSupport.transportLabel : 'draft-only'}
-                  </span>
+            <>
+              <section className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
+                <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="configure-smtp" />
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">SMTP Configuration</h2>
+                        <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                          Save the outgoing mail transport directly from the admin panel. Credentials stay on the server
+                          runtime only and are never echoed back to the browser.
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                        {mailSupport.configured ? 'configured' : 'not configured'}
+                      </span>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4 text-xs text-bolt-elements-textSecondary">
+                      {mailSupport.configured
+                        ? `Current transport: ${mailSupport.transportLabel}. From ${mailSupport.fromAddress}.`
+                        : mailSupport.reason}
+                    </div>
+                    <div className="mt-4 grid gap-4">
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        SMTP host
+                        <input
+                          name="smtpHost"
+                          defaultValue={mailSupport.host || ''}
+                          placeholder="smtp.example.com"
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                          SMTP port
+                          <input
+                            name="smtpPort"
+                            type="number"
+                            min={1}
+                            max={65535}
+                            defaultValue={mailSupport.port || 587}
+                            className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                          />
+                        </label>
+                        <label className="flex items-center gap-3 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary">
+                          <input
+                            name="smtpSecure"
+                            type="checkbox"
+                            defaultChecked={Boolean(mailSupport.secure)}
+                            className="h-4 w-4 rounded border-bolt-elements-borderColor bg-bolt-elements-background-depth-1"
+                          />
+                          Use secure SMTP / SMTPS
+                        </label>
+                      </div>
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        Username
+                        <input
+                          name="smtpUser"
+                          defaultValue={mailSupport.user || ''}
+                          placeholder="mailer@example.com"
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        Password
+                        <input
+                          name="smtpPassword"
+                          type="password"
+                          placeholder={
+                            mailSupport.hasPassword ? 'Leave blank to keep the stored password' : 'SMTP password'
+                          }
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+                      <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                        From address
+                        <input
+                          name="smtpFromAddress"
+                          type="email"
+                          defaultValue={mailSupport.fromAddress || ''}
+                          placeholder="hello@example.com"
+                          className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button className="rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                        Save SMTP settings
+                      </button>
+                    </div>
+                  </Form>
+                  <Form method="post" className="mt-3">
+                    <input type="hidden" name="intent" value="clear-smtp" />
+                    <button className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm font-medium text-bolt-elements-textPrimary hover:border-bolt-elements-focus">
+                      Clear SMTP settings
+                    </button>
+                  </Form>
                 </div>
-                {!mailSupport.configured && mailSupport.reason ? (
-                  <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-                    {mailSupport.reason}
-                  </div>
-                ) : null}
-                <div className="mt-4 grid gap-4">
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Audience
-                    <select
-                      name="audienceMode"
-                      defaultValue="single"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    >
-                      <option value="single">One client</option>
-                      <option value="filtered">Filtered audience</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Client email
-                    <input
-                      name="profileEmail"
-                      type="email"
-                      placeholder="Required for one-client sends"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                  <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
-                    Current filtered audience:{' '}
-                    <span className="text-bolt-elements-textPrimary">{clientProfileAudienceLabel}</span>
-                  </div>
-                  <input type="hidden" name="search" value={clientProfileFilters.search} />
-                  <input type="hidden" name="company" value={clientProfileFilters.company} />
-                  <input type="hidden" name="country" value={clientProfileFilters.country} />
-                  <input type="hidden" name="useCase" value={clientProfileFilters.useCase} />
-                  <input type="hidden" name="assignmentStatus" value={clientProfileFilters.assignmentStatus} />
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Subject
-                    <input
-                      name="subject"
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
-                    Message
-                    <textarea
-                      name="body"
-                      rows={8}
-                      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
-                    />
-                  </label>
-                </div>
-                <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
-                  {mailSupport.configured ? 'Send email' : 'Save draft'}
-                </button>
-              </Form>
 
-              <div className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
+                <Form
+                  method="post"
+                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                >
+                  <input type="hidden" name="intent" value="send-client-email" />
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Email Clients</h2>
+                      <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                        Compose a message for one client or for the currently filtered audience. Messages are always
+                        logged; delivery only occurs when SMTP is configured on the runtime service.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                      {mailSupport.configured ? mailSupport.transportLabel : 'draft-only'}
+                    </span>
+                  </div>
+                  {!mailSupport.configured && mailSupport.reason ? (
+                    <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+                      {mailSupport.reason}
+                    </div>
+                  ) : null}
+                  <div className="mt-4 grid gap-4">
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Audience
+                      <select
+                        name="audienceMode"
+                        defaultValue="single"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      >
+                        <option value="single">One client</option>
+                        <option value="filtered">Filtered audience</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Client email
+                      <input
+                        name="profileEmail"
+                        type="email"
+                        placeholder="Required for one-client sends"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                      Current filtered audience:{' '}
+                      <span className="text-bolt-elements-textPrimary">{clientProfileAudienceLabel}</span>
+                    </div>
+                    <input type="hidden" name="search" value={clientProfileFilters.search} />
+                    <input type="hidden" name="company" value={clientProfileFilters.company} />
+                    <input type="hidden" name="country" value={clientProfileFilters.country} />
+                    <input type="hidden" name="useCase" value={clientProfileFilters.useCase} />
+                    <input type="hidden" name="assignmentStatus" value={clientProfileFilters.assignmentStatus} />
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Subject
+                      <input
+                        name="subject"
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-sm text-bolt-elements-textSecondary">
+                      Message
+                      <textarea
+                        name="body"
+                        rows={8}
+                        className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
+                      />
+                    </label>
+                  </div>
+                  <button className="mt-5 rounded-lg bg-bolt-elements-button-primary-background px-4 py-2 text-sm font-medium text-bolt-elements-button-primary-text">
+                    {mailSupport.configured ? 'Send email' : 'Save draft'}
+                  </button>
+                </Form>
+              </section>
+
+              <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Recent Email Activity</h2>
                   <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
@@ -1400,8 +1547,8 @@ export default function TenantAdminPage() {
                     ))
                   )}
                 </div>
-              </div>
-            </section>
+              </section>
+            </>
           ) : null}
         </div>
       </main>

@@ -11,7 +11,11 @@ const remixMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@remix-run/react', () => ({
-  Form: ({ children, reloadDocument, ...props }: FormHTMLAttributes<HTMLFormElement> & { reloadDocument?: boolean }) => {
+  Form: ({
+    children,
+    reloadDocument,
+    ...props
+  }: FormHTMLAttributes<HTMLFormElement> & { reloadDocument?: boolean }) => {
     remixMocks.formProps.push({ ...props, reloadDocument });
     return <form {...props}>{children}</form>;
   },
@@ -102,6 +106,11 @@ describe('TenantAdminPage', () => {
       emailMessages: [],
       mailSupport: {
         configured: false,
+        host: null,
+        port: 587,
+        secure: false,
+        user: null,
+        hasPassword: false,
         fromAddress: null,
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',
@@ -153,8 +162,10 @@ describe('TenantAdminPage', () => {
     expect(screen.getByText('Client Profiles')).toBeTruthy();
     expect(screen.getByText('Owner Example')).toBeTruthy();
     expect(screen.getByText('Managed Cloudflare Instances')).toBeTruthy();
+    expect(screen.getByText('SMTP Configuration')).toBeTruthy();
     expect(screen.getByText('Clinic Trial')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save SMTP settings' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Refresh deployment' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Suspend instance' })).toBeTruthy();
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
@@ -194,6 +205,11 @@ describe('TenantAdminPage', () => {
       emailMessages: [],
       mailSupport: {
         configured: false,
+        host: null,
+        port: 587,
+        secure: false,
+        user: null,
+        hasPassword: false,
         fromAddress: null,
         transportLabel: null,
         reason: 'SMTP is not configured on the runtime service yet.',

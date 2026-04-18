@@ -2,43 +2,84 @@
 
 import nodemailer from 'nodemailer';
 import { recordAdminEmailMessage } from './admin-db.mjs';
+import { readMergedRuntimeEnv } from './runtime-env-file.mjs';
 
 let transporterPromise = null;
+let transporterCacheKey = null;
 
 function envValue(env, key) {
   return String(env?.[key] || '').trim();
 }
 
-export function buildAdminMailSupport(env = /** @type {Record<string, string | undefined>} */ (process.env)) {
-  const host = envValue(env, 'BOLT_ADMIN_SMTP_HOST');
-  const port = Number(envValue(env, 'BOLT_ADMIN_SMTP_PORT') || '587');
-  const user = envValue(env, 'BOLT_ADMIN_SMTP_USER');
-  const pass = envValue(env, 'BOLT_ADMIN_SMTP_PASSWORD');
-  const fromAddress = envValue(env, 'BOLT_ADMIN_SMTP_FROM');
-  const secure = envValue(env, 'BOLT_ADMIN_SMTP_SECURE') === 'true' || port === 465;
+/**
+ * @param {Record<string, string | undefined> | null} [env]
+ */
+function readAdminMailConfig(env = null) {
+  const effectiveEnv = env ? { ...env } : readMergedRuntimeEnv();
+  const host = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_HOST');
+  const port = Number(envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_PORT') || '587');
+  const user = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_USER');
+  const pass = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_PASSWORD');
+  const fromAddress = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_FROM');
+  const secure = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_SECURE') === 'true' || port === 465;
   const configured = Boolean(host && fromAddress && ((user && pass) || (!user && !pass)));
 
   return {
     configured,
-    host,
+    host: host || null,
     port,
     secure,
     user: user || null,
     pass: pass || null,
+    hasPassword: Boolean(pass),
     fromAddress: fromAddress || null,
     transportLabel: configured ? `SMTP ${host}:${port}` : null,
     reason: configured ? null : 'SMTP is not configured on the runtime service yet.',
   };
 }
 
+/**
+ * @param {Record<string, string | undefined> | null} [env]
+ */
+export function buildAdminMailSupport(env = null) {
+  const config = readAdminMailConfig(env);
+
+  return {
+    configured: config.configured,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    user: config.user,
+    hasPassword: config.hasPassword,
+    fromAddress: config.fromAddress,
+    transportLabel: config.transportLabel,
+    reason: config.reason,
+  };
+}
+
+export function resetAdminMailTransporter() {
+  transporterPromise = null;
+  transporterCacheKey = null;
+}
+
 async function getTransporter() {
-  const config = buildAdminMailSupport();
+  const config = readAdminMailConfig();
 
   if (!config.configured) {
     return null;
   }
 
-  if (!transporterPromise) {
+  const cacheKey = JSON.stringify({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    user: config.user,
+    pass: config.pass,
+    fromAddress: config.fromAddress,
+  });
+
+  if (!transporterPromise || transporterCacheKey !== cacheKey) {
+    transporterCacheKey = cacheKey;
     transporterPromise = Promise.resolve(
       nodemailer.createTransport({
         host: config.host,
@@ -92,7 +133,9 @@ export async function sendAdminEmail({ profileEmail, subject, body, actor = 'adm
       text: normalizedBody,
       html: normalizedBody
         .split('\n')
-        .map((line) => line.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char])))
+        .map((line) =>
+          line.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]),
+        )
         .join('<br />'),
     });
 
@@ -119,9 +162,15 @@ export async function sendAdminEmail({ profileEmail, subject, body, actor = 'adm
 }
 
 export async function sendAdminEmailBatch({ recipients = [], subject, body, actor = 'admin' } = {}) {
-  const normalizedRecipients = [...new Set(recipients.map((recipient) => String(recipient || '').trim().toLowerCase()))].filter(
-    Boolean,
-  );
+  const normalizedRecipients = [
+    ...new Set(
+      recipients.map((recipient) =>
+        String(recipient || '')
+          .trim()
+          .toLowerCase(),
+      ),
+    ),
+  ].filter(Boolean);
 
   if (normalizedRecipients.length === 0) {
     throw new Error('At least one recipient is required.');

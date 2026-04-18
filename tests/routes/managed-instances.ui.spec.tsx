@@ -86,4 +86,13 @@ describe('ManagedInstancesPage', () => {
     expect(screen.getByText(/Cloudflare assigned/i)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open live instance' })).toBeTruthy();
   });
+
+  it('uses high-contrast call-to-action styling on the managed instance surface', () => {
+    render(<ManagedInstancesPage />);
+
+    const liveLink = screen.getByRole('link', { name: 'Open live instance' });
+    expect(liveLink.className).toContain('bg-sky-600');
+
+    expect(screen.getByText('Server details').parentElement?.className).toContain('bg-white/95');
+  });
 });

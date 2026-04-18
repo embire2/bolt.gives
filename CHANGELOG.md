@@ -2,11 +2,14 @@
 
 ## Unreleased (`v3.0.9` in progress)
 
+- `create.bolt.gives/managed-instances` now uses explicit high-contrast light-mode cards, form fields, policy text, and call-to-action styling so the registration flow stays readable on the live public create-domain surface.
+
 ### Added
 
 - `admin.bolt.gives` now includes filter and export controls for client profiles, so operators can segment users by search, company, country, use case, and assignment status before acting on the data.
 - Operator email sends can now target the currently filtered client audience instead of storing single-recipient draft/log entries only.
 - A deployment-wide `Shout Out Box` is now available from the header, with unread badge tracking and a per-user Settings toggle to mute/hide it.
+- `admin.bolt.gives` now includes a proper SMTP configuration surface, so operators can save or clear the outgoing mail transport from the admin panel while keeping the stored password server-side only.
 
 ### Changed
 
@@ -76,7 +79,6 @@
 - The admin Postgres integration no longer points at a non-existent database name on the live server.
 - Collaboration persistence and restore now work reliably across server restarts instead of intermittently syncing an empty document state.
 - The managed trial page now keeps showing the newly provisioned `Current instance` card even if the follow-up runtime session lookup lags behind the initial spawn response.
-
 
 ## v3.0.7 (2026-04-03)
 

@@ -27,7 +27,7 @@
 - [Review the roadmap](ROADMAP.md)
 - [Read the changelog](CHANGELOG.md)
 
-`create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
+`create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
 ## Roadmap to v3.0.9
 
@@ -66,6 +66,7 @@ Release verification now also includes a browser-level post-deploy asset health 
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.
+- `admin.bolt.gives` now also includes a real SMTP configuration form, so operators can save or clear the outgoing mail transport from the admin panel without editing server env files by hand. Stored credentials remain server-side only and the browser only ever sees masked transport metadata.
 - Header-level `Shout Out Box` messaging lets users on the same deployment broadcast short updates to other active users, with an unread badge and a per-user settings toggle.
 - Managed-instance rollout now refuses to start when the live runtime checkout is behind `origin/main`, which prevents silent stale-fleet refreshes from the wrong git SHA.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.

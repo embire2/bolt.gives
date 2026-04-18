@@ -14,6 +14,7 @@ describe('admin-mailer', () => {
 
     expect(support.configured).toBe(false);
     expect(support.reason).toContain('SMTP');
+    expect('pass' in support).toBe(false);
   });
 
   it('detects a configured smtp transport', () => {
@@ -27,6 +28,9 @@ describe('admin-mailer', () => {
 
     expect(support.configured).toBe(true);
     expect(support.transportLabel).toContain('smtp.example.com');
+    expect(support.host).toBe('smtp.example.com');
+    expect(support.hasPassword).toBe(true);
+    expect('pass' in support).toBe(false);
   });
 
   it('records one message per recipient when batching mail', async () => {
