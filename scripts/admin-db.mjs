@@ -143,6 +143,28 @@ export async function ensureAdminDatabaseSchema() {
           );
         `);
 
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_admin_bug_reports (
+            id TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            reporter_email TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            issue TEXT NOT NULL,
+            page_url TEXT NULL,
+            app_version TEXT NULL,
+            provider TEXT NULL,
+            model TEXT NULL,
+            browser TEXT NULL,
+            user_agent TEXT NULL,
+            status TEXT NOT NULL,
+            notification_status TEXT NOT NULL,
+            notification_transport TEXT NULL,
+            notification_error TEXT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            notified_at TIMESTAMPTZ NULL
+          );
+        `);
+
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_admin_client_profiles_email_idx ON bolt_admin_client_profiles (email);`,
         );
@@ -151,6 +173,12 @@ export async function ensureAdminDatabaseSchema() {
         );
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_admin_email_messages_profile_email_idx ON bolt_admin_email_messages (profile_email);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_admin_bug_reports_reporter_email_idx ON bolt_admin_bug_reports (reporter_email);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_admin_bug_reports_created_at_idx ON bolt_admin_bug_reports (created_at DESC);`,
         );
         await client.query(`
           ALTER TABLE bolt_admin_managed_instances
@@ -463,4 +491,125 @@ export async function listAdminEmailMessages(limit = 100) {
   );
 
   return result.rows.map(mapEmailMessageRow);
+}
+
+export function normalizeBugReportInput(input = {}) {
+  return {
+    fullName: String(input.fullName || '').trim(),
+    reporterEmail: String(input.reporterEmail || '')
+      .trim()
+      .toLowerCase(),
+    summary: String(input.summary || '').trim(),
+    issue: String(input.issue || '').trim(),
+    pageUrl: String(input.pageUrl || '').trim() || null,
+    appVersion: String(input.appVersion || '').trim() || null,
+    provider: String(input.provider || '').trim() || null,
+    model: String(input.model || '').trim() || null,
+    browser: String(input.browser || '').trim() || null,
+    userAgent: String(input.userAgent || '').trim() || null,
+    status: ['acknowledged', 'resolved'].includes(String(input.status || '').trim())
+      ? String(input.status).trim()
+      : 'new',
+    notificationStatus: ['sent', 'failed'].includes(String(input.notificationStatus || '').trim())
+      ? String(input.notificationStatus).trim()
+      : 'draft',
+    notificationTransport: String(input.notificationTransport || '').trim() || null,
+    notificationError: String(input.notificationError || '').trim() || null,
+    createdAt: String(input.createdAt || '').trim() || new Date().toISOString(),
+    notifiedAt: String(input.notifiedAt || '').trim() || null,
+  };
+}
+
+function mapBugReportRow(row) {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    reporterEmail: row.reporter_email,
+    summary: row.summary,
+    issue: row.issue,
+    pageUrl: row.page_url,
+    appVersion: row.app_version,
+    provider: row.provider,
+    model: row.model,
+    browser: row.browser,
+    userAgent: row.user_agent,
+    status: row.status,
+    notificationStatus: row.notification_status,
+    notificationTransport: row.notification_transport,
+    notificationError: row.notification_error,
+    createdAt: row.created_at,
+    notifiedAt: row.notified_at,
+  };
+}
+
+export async function recordBugReport(input = {}) {
+  if (!(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  const report = normalizeBugReportInput(input);
+
+  if (!report.fullName || !report.reporterEmail || !report.issue) {
+    throw new Error('Bug reports require full name, email, and issue details.');
+  }
+
+  const summary =
+    report.summary ||
+    report.issue
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean)
+      ?.slice(0, 120) ||
+    'User bug report';
+
+  const result = await getAdminDatabasePool().query(
+    `
+      INSERT INTO bolt_admin_bug_reports (
+        id, full_name, reporter_email, summary, issue, page_url, app_version, provider, model,
+        browser, user_agent, status, notification_status, notification_transport, notification_error,
+        created_at, notified_at
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      RETURNING *
+    `,
+    [
+      crypto.randomUUID(),
+      report.fullName,
+      report.reporterEmail,
+      summary,
+      report.issue,
+      report.pageUrl,
+      report.appVersion,
+      report.provider,
+      report.model,
+      report.browser,
+      report.userAgent,
+      report.status,
+      report.notificationStatus,
+      report.notificationTransport,
+      report.notificationError,
+      report.createdAt,
+      report.notifiedAt,
+    ],
+  );
+
+  return mapBugReportRow(result.rows[0]);
+}
+
+export async function listBugReports(limit = 100) {
+  if (!(await ensureAdminDatabaseSchema())) {
+    return [];
+  }
+
+  const result = await getAdminDatabasePool().query(
+    `
+      SELECT *
+      FROM bolt_admin_bug_reports
+      ORDER BY created_at DESC
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  return result.rows.map(mapBugReportRow);
 }

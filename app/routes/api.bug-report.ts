@@ -1,35 +1,19 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
-import { Octokit } from '@octokit/rest';
 import { z } from 'zod';
 
-// Rate limiting store (in production, use Redis or similar)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-// Input validation schema
 const bugReportSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(100, 'Title must be 100 characters or less'),
-  description: z
-    .string()
-    .min(10, 'Description must be at least 10 characters')
-    .max(2000, 'Description must be 2000 characters or less'),
-  stepsToReproduce: z.string().max(1000, 'Steps to reproduce must be 1000 characters or less').optional(),
-  expectedBehavior: z.string().max(1000, 'Expected behavior must be 1000 characters or less').optional(),
-  contactEmail: z.string().email('Invalid email address').optional().or(z.literal('')),
-  includeEnvironmentInfo: z.boolean().default(false),
-  environmentInfo: z
-    .object({
-      browser: z.string().optional(),
-      os: z.string().optional(),
-      screenResolution: z.string().optional(),
-      boltVersion: z.string().optional(),
-      aiProviders: z.string().optional(),
-      projectType: z.string().optional(),
-      currentModel: z.string().optional(),
-    })
-    .optional(),
+  fullName: z.string().min(2, 'Full name is required').max(120, 'Full name is too long'),
+  reporterEmail: z.string().email('A valid email address is required'),
+  issue: z.string().min(10, 'Issue details are required').max(4000, 'Issue details are too long'),
+  summary: z.string().max(160, 'Summary is too long').optional().or(z.literal('')),
+  pageUrl: z.string().max(500).optional().or(z.literal('')),
+  appVersion: z.string().max(50).optional().or(z.literal('')),
+  provider: z.string().max(100).optional().or(z.literal('')),
+  model: z.string().max(200).optional().or(z.literal('')),
+  browser: z.string().max(160).optional().or(z.literal('')),
 });
 
-// Sanitize input to prevent XSS
 function sanitizeInput(input: string): string {
   return input
     .replace(/</g, '&lt;')
@@ -39,30 +23,6 @@ function sanitizeInput(input: string): string {
     .replace(/\//g, '&#x2F;');
 }
 
-// Rate limiting check
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const key = ip;
-  const limit = rateLimitStore.get(key);
-
-  if (!limit || now > limit.resetTime) {
-    // Reset window (1 hour)
-    rateLimitStore.set(key, { count: 1, resetTime: now + 60 * 60 * 1000 });
-    return true;
-  }
-
-  if (limit.count >= 5) {
-    // Max 5 reports per hour per IP
-    return false;
-  }
-
-  limit.count += 1;
-  rateLimitStore.set(key, limit);
-
-  return true;
-}
-
-// Get client IP address
 function getClientIP(request: Request): string {
   const cfConnectingIP = request.headers.get('cf-connecting-ip');
   const xForwardedFor = request.headers.get('x-forwarded-for');
@@ -71,184 +31,127 @@ function getClientIP(request: Request): string {
   return cfConnectingIP || xForwardedFor?.split(',')[0] || xRealIP || 'unknown';
 }
 
-// Basic spam detection
-function isSpam(title: string, description: string): boolean {
-  const spamPatterns = [
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const limit = rateLimitStore.get(ip);
+
+  if (!limit || now > limit.resetTime) {
+    rateLimitStore.set(ip, { count: 1, resetTime: now + 30 * 60 * 1000 });
+    return true;
+  }
+
+  if (limit.count >= 5) {
+    return false;
+  }
+
+  limit.count += 1;
+  rateLimitStore.set(ip, limit);
+
+  return true;
+}
+
+function isSpam(issue: string): boolean {
+  return [
     /\b(viagra|casino|poker|loan|debt|credit)\b/i,
     /\b(click here|buy now|limited time)\b/i,
     /\b(make money|work from home|earn \$\$)\b/i,
-  ];
-
-  const content = title + ' ' + description;
-
-  return spamPatterns.some((pattern) => pattern.test(content));
+  ].some((pattern) => pattern.test(issue));
 }
 
-// Format GitHub issue body
-function formatIssueBody(data: z.infer<typeof bugReportSchema>): string {
-  let body = '**Bug Report** (User Submitted)\n\n';
+function normalizeRuntimeControlBaseUrl(context?: ActionFunctionArgs['context']) {
+  const rawValue =
+    (context?.cloudflare?.env as Record<string, string | undefined> | undefined)?.BOLT_RUNTIME_CONTROL_PUBLIC_URL ||
+    process.env.BOLT_RUNTIME_CONTROL_PUBLIC_URL ||
+    process.env.BOLT_RUNTIME_CONTROL_URL ||
+    'http://127.0.0.1:4321/runtime';
+  const trimmed = String(rawValue || '')
+    .trim()
+    .replace(/\/$/, '');
 
-  body += `**Description:**\n${data.description}\n\n`;
-
-  if (data.stepsToReproduce) {
-    body += `**Steps to Reproduce:**\n${data.stepsToReproduce}\n\n`;
+  if (!trimmed) {
+    return 'http://127.0.0.1:4321/runtime';
   }
 
-  if (data.expectedBehavior) {
-    body += `**Expected Behavior:**\n${data.expectedBehavior}\n\n`;
+  return trimmed.endsWith('/runtime') ? trimmed : `${trimmed}/runtime`;
+}
+
+async function parseRequestBody(request: Request) {
+  const contentType = request.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    return await request.json();
   }
 
-  if (data.includeEnvironmentInfo && data.environmentInfo) {
-    body += `**Environment Info:**\n`;
+  const formData = await request.formData();
 
-    if (data.environmentInfo.browser) {
-      body += `- Browser: ${data.environmentInfo.browser}\n`;
-    }
-
-    if (data.environmentInfo.os) {
-      body += `- OS: ${data.environmentInfo.os}\n`;
-    }
-
-    if (data.environmentInfo.screenResolution) {
-      body += `- Screen: ${data.environmentInfo.screenResolution}\n`;
-    }
-
-    if (data.environmentInfo.boltVersion) {
-      body += `- bolt.gives: ${data.environmentInfo.boltVersion}\n`;
-    }
-
-    if (data.environmentInfo.aiProviders) {
-      body += `- AI Providers: ${data.environmentInfo.aiProviders}\n`;
-    }
-
-    if (data.environmentInfo.projectType) {
-      body += `- Project Type: ${data.environmentInfo.projectType}\n`;
-    }
-
-    if (data.environmentInfo.currentModel) {
-      body += `- Current Model: ${data.environmentInfo.currentModel}\n`;
-    }
-
-    body += '\n';
-  }
-
-  if (data.contactEmail) {
-    body += `**Contact:** ${data.contactEmail}\n\n`;
-  }
-
-  body += '---\n*Submitted via bolt.gives bug report feature*';
-
-  return body;
+  return Object.fromEntries(formData.entries());
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-  // Only allow POST requests
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
 
   try {
-    // Rate limiting
     const clientIP = getClientIP(request);
 
     if (!checkRateLimit(clientIP)) {
-      return json({ error: 'Rate limit exceeded. Please wait before submitting another report.' }, { status: 429 });
+      return json({ error: 'Rate limit exceeded. Please wait before sending another bug report.' }, { status: 429 });
     }
 
-    // Parse and validate request body
-    const formData = await request.formData();
-    const rawData: any = Object.fromEntries(formData.entries());
-
-    // Parse environment info if provided
-    if (rawData.environmentInfo && typeof rawData.environmentInfo === 'string') {
-      try {
-        rawData.environmentInfo = JSON.parse(rawData.environmentInfo);
-      } catch {
-        rawData.environmentInfo = undefined;
-      }
-    }
-
-    // Convert boolean fields
-    rawData.includeEnvironmentInfo = rawData.includeEnvironmentInfo === 'true';
-
-    const validatedData = bugReportSchema.parse(rawData);
-
-    // Sanitize text inputs
-    const sanitizedData = {
-      ...validatedData,
-      title: sanitizeInput(validatedData.title),
-      description: sanitizeInput(validatedData.description),
-      stepsToReproduce: validatedData.stepsToReproduce ? sanitizeInput(validatedData.stepsToReproduce) : undefined,
-      expectedBehavior: validatedData.expectedBehavior ? sanitizeInput(validatedData.expectedBehavior) : undefined,
+    const rawData = await parseRequestBody(request);
+    const parsed = bugReportSchema.parse(rawData);
+    const sanitized = {
+      fullName: sanitizeInput(parsed.fullName),
+      reporterEmail: parsed.reporterEmail.trim().toLowerCase(),
+      issue: sanitizeInput(parsed.issue),
+      summary: parsed.summary ? sanitizeInput(parsed.summary) : '',
+      pageUrl: parsed.pageUrl ? sanitizeInput(parsed.pageUrl) : '',
+      appVersion: parsed.appVersion ? sanitizeInput(parsed.appVersion) : '',
+      provider: parsed.provider ? sanitizeInput(parsed.provider) : '',
+      model: parsed.model ? sanitizeInput(parsed.model) : '',
+      browser: parsed.browser ? sanitizeInput(parsed.browser) : '',
     };
 
-    // Spam detection
-    if (isSpam(sanitizedData.title, sanitizedData.description)) {
-      return json(
-        { error: 'Your report was flagged as potential spam. Please contact support if this is an error.' },
-        { status: 400 },
-      );
+    if (isSpam(`${sanitized.summary}\n${sanitized.issue}`)) {
+      return json({ error: 'Your report was flagged as potential spam.' }, { status: 400 });
     }
 
-    // Get GitHub configuration
-    const githubToken =
-      (context?.cloudflare?.env as any)?.GITHUB_BUG_REPORT_TOKEN || process.env.GITHUB_BUG_REPORT_TOKEN;
-    const targetRepo =
-      (context?.cloudflare?.env as any)?.BUG_REPORT_REPO || process.env.BUG_REPORT_REPO || 'embire2/bolt.gives';
+    const response = await fetch(`${normalizeRuntimeControlBaseUrl(context)}/bug-reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': clientIP,
+        'cf-connecting-ip': clientIP,
+        'user-agent': request.headers.get('user-agent') || '',
+      },
+      body: JSON.stringify(sanitized),
+    });
 
-    if (!githubToken) {
-      console.error('GitHub bug report token not configured');
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+      bugReport?: { id?: string | null } | null;
+      notification?: { status?: string | null } | null;
+    };
+
+    if (!response.ok) {
       return json(
-        { error: 'Bug reporting is not properly configured. Please contact the administrators.' },
-        { status: 500 },
+        { error: payload?.error || payload?.message || 'Failed to submit the bug report.' },
+        { status: response.status || 500 },
       );
     }
-
-    // Initialize GitHub client
-    const octokit = new Octokit({
-      auth: githubToken,
-      userAgent: 'bolt.gives-bug-reporter',
-    });
-
-    // Create GitHub issue
-    const [owner, repo] = targetRepo.split('/');
-    const issue = await octokit.rest.issues.create({
-      owner,
-      repo,
-      title: sanitizedData.title,
-      body: formatIssueBody(sanitizedData),
-      labels: ['bug', 'user-reported'],
-    });
 
     return json({
       success: true,
-      issueNumber: issue.data.number,
-      issueUrl: issue.data.html_url,
-      message: 'Bug report submitted successfully!',
+      bugReportId: payload?.bugReport?.id || null,
+      notificationStatus: payload?.notification?.status || 'draft',
     });
   } catch (error) {
-    console.error('Error creating bug report:', error);
-
-    // Handle validation errors
     if (error instanceof z.ZodError) {
-      return json({ error: 'Invalid input data', details: error.errors }, { status: 400 });
+      return json({ error: 'Invalid bug report details.', details: error.errors }, { status: 400 });
     }
 
-    // Handle GitHub API errors
-    if (error && typeof error === 'object' && 'status' in error) {
-      if (error.status === 401) {
-        return json({ error: 'GitHub authentication failed. Please contact administrators.' }, { status: 500 });
-      }
-
-      if (error.status === 403) {
-        return json({ error: 'GitHub rate limit reached. Please try again later.' }, { status: 503 });
-      }
-
-      if (error.status === 404) {
-        return json({ error: 'Target repository not found. Please contact administrators.' }, { status: 500 });
-      }
-    }
-
-    return json({ error: 'Failed to submit bug report. Please try again later.' }, { status: 500 });
+    return json({ error: 'Failed to submit the bug report. Please try again later.' }, { status: 500 });
   }
 }

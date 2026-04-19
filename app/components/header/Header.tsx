@@ -7,6 +7,7 @@ import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '~/lib/version';
 import { Shoutbox } from './Shoutbox.client';
+import { BugReportLauncher } from './BugReportLauncher.client';
 
 export function Header() {
   const chat = useStore(chatStore);
@@ -55,6 +56,7 @@ export function Header() {
       </span>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <ClientOnly>{() => <BugReportLauncher />}</ClientOnly>
         <ClientOnly>{() => <Shoutbox />}</ClientOnly>
         <a
           href="/tenant"

@@ -29,9 +29,11 @@ import {
 } from './managed-instances.mjs';
 import {
   buildAdminDatabaseConfig,
+  listBugReports,
   listAdminEmailMessages,
   listClientProfiles,
   listManagedInstanceAssignments,
+  recordBugReport,
   syncManagedInstanceAssignments,
   upsertClientProfile,
   upsertManagedInstanceAssignment,
@@ -41,6 +43,7 @@ import {
   resetAdminMailTransporter,
   sendAdminEmail,
   sendAdminEmailBatch,
+  sendBugReportNotification,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
 
@@ -118,6 +121,9 @@ const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https
 const SHOUTBOX_MESSAGES_PATH =
   process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
 const MAX_SHOUTBOX_MESSAGES = Number(process.env.RUNTIME_SHOUTBOX_MAX_MESSAGES || '250');
+const BUG_REPORTS_RATE_LIMIT = new Map();
+const BUG_REPORT_WINDOW_MS = 30 * 60 * 1000;
+const BUG_REPORT_MAX_PER_WINDOW = 5;
 
 function normalizeBooleanInput(value) {
   return ['1', 'true', 'yes', 'on'].includes(
@@ -125,6 +131,36 @@ function normalizeBooleanInput(value) {
       .trim()
       .toLowerCase(),
   );
+}
+
+function deriveBugReporterKey(req, reporterEmail = '') {
+  const forwardedFor = String(req.headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    ?.trim();
+  const connectingIp = String(req.headers['cf-connecting-ip'] || '').trim();
+  const remote = String(req.socket?.remoteAddress || '').trim();
+  return reporterEmail || connectingIp || forwardedFor || remote || 'unknown';
+}
+
+function consumeBugReportRateLimit(key) {
+  const now = Date.now();
+  const current = BUG_REPORTS_RATE_LIMIT.get(key);
+
+  if (!current || current.resetAt <= now) {
+    BUG_REPORTS_RATE_LIMIT.set(key, {
+      count: 1,
+      resetAt: now + BUG_REPORT_WINDOW_MS,
+    });
+    return true;
+  }
+
+  if (current.count >= BUG_REPORT_MAX_PER_WINDOW) {
+    return false;
+  }
+
+  current.count += 1;
+  BUG_REPORTS_RATE_LIMIT.set(key, current);
+  return true;
 }
 
 const sessions = new Map();
@@ -3292,6 +3328,7 @@ export function createRuntimeServer() {
         let managedInstances = [];
         let clientProfiles = [];
         let emailMessages = [];
+        let bugReports = [];
         const mailSupport = buildAdminMailSupport();
 
         if (managedSupport.supported) {
@@ -3310,6 +3347,7 @@ export function createRuntimeServer() {
         if (ADMIN_DB_CONFIG.enabled) {
           clientProfiles = await listClientProfiles();
           emailMessages = await listAdminEmailMessages(100);
+          bugReports = await listBugReports(100);
         }
 
         sendJson(res, 200, {
@@ -3320,6 +3358,7 @@ export function createRuntimeServer() {
           managedInstances,
           clientProfiles,
           emailMessages,
+          bugReports,
           mailSupport,
           adminPanelUrl: ADMIN_PANEL_PUBLIC_URL,
           defaultAdmin: { username: registry.admin?.username || 'admin' },
@@ -3558,6 +3597,93 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/runtime/bug-reports') {
+      try {
+        const body = await readJsonBody(req);
+        const fullName = String(body.fullName || '').trim();
+        const reporterEmail = String(body.reporterEmail || '')
+          .trim()
+          .toLowerCase();
+        const issue = String(body.issue || '').trim();
+        const summary = String(body.summary || '').trim();
+        const pageUrl = String(body.pageUrl || '').trim() || null;
+        const appVersion = String(body.appVersion || '').trim() || null;
+        const provider = String(body.provider || '').trim() || null;
+        const model = String(body.model || '').trim() || null;
+        const browser = String(body.browser || '').trim() || null;
+        const userAgent = String(req.headers['user-agent'] || '').trim() || null;
+
+        if (!fullName || !reporterEmail || !issue) {
+          sendText(res, 400, 'Full name, email address, and issue details are required.');
+          return;
+        }
+
+        if (!isLikelyValidEmail(reporterEmail)) {
+          sendText(res, 400, 'A valid reply email address is required.');
+          return;
+        }
+
+        if (issue.length < 10) {
+          sendText(res, 400, 'Bug reports must include enough detail to investigate the issue.');
+          return;
+        }
+
+        const rateLimitKey = deriveBugReporterKey(req, reporterEmail);
+
+        if (!consumeBugReportRateLimit(rateLimitKey)) {
+          sendText(res, 429, 'Too many bug reports from this session. Please wait before sending another one.');
+          return;
+        }
+
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Bug reporting requires the Postgres-backed admin database to be configured.');
+          return;
+        }
+
+        const notification = await sendBugReportNotification({
+          fullName,
+          reporterEmail,
+          summary,
+          issue,
+          pageUrl,
+          appVersion,
+          provider,
+          model,
+          browser,
+        });
+
+        const record = await recordBugReport({
+          fullName,
+          reporterEmail,
+          summary,
+          issue,
+          pageUrl,
+          appVersion,
+          provider,
+          model,
+          browser,
+          userAgent,
+          status: 'new',
+          notificationStatus: notification.status,
+          notificationTransport: notification.transport,
+          notificationError: notification.error,
+          notifiedAt: notification.sentAt,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          bugReport: record,
+          notification: {
+            status: notification.status,
+            recipient: notification.recipient,
+          },
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record the bug report.');
+      }
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/runtime/shout/messages') {
       try {
         sendJson(res, 200, {
@@ -3639,7 +3765,7 @@ export function createRuntimeServer() {
         const registry = await ensureTenantRegistry();
 
         if (registry.admin?.mustChangePassword !== false) {
-          sendText(res, 400, 'Rotate the bootstrap admin password before creating production tenants.');
+          sendText(res, 400, 'Rotate the operator password before creating production tenants.');
           return;
         }
 

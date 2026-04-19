@@ -190,3 +190,144 @@ export async function sendAdminEmailBatch({ recipients = [], subject, body, acto
     messages: results,
   };
 }
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]);
+}
+
+function buildBugReportNotification({ fullName, reporterEmail, summary, issue, pageUrl, appVersion, provider, model, browser }) {
+  const normalizedSummary = String(summary || '').trim() || 'User bug report';
+  const normalizedIssue = normalizeMessageBody(issue);
+  const lines = [
+    `Reporter: ${fullName}`,
+    `Reply-to: ${reporterEmail}`,
+    pageUrl ? `Page: ${pageUrl}` : '',
+    appVersion ? `Version: ${appVersion}` : '',
+    provider ? `Provider: ${provider}` : '',
+    model ? `Model: ${model}` : '',
+    browser ? `Browser: ${browser}` : '',
+  ].filter(Boolean);
+
+  const text = `${normalizedSummary}\n\n${lines.join('\n')}\n\nIssue details:\n${normalizedIssue}`;
+  const html = `
+    <div style="font-family:Inter,Segoe UI,system-ui,sans-serif;background:#f7f7fb;padding:24px;color:#141420;">
+      <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:20px;overflow:hidden;box-shadow:0 16px 50px rgba(15,23,42,0.08);">
+        <div style="padding:20px 24px;background:linear-gradient(135deg,#0f172a,#4f46e5);color:#ffffff;">
+          <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">bolt.gives bug report</div>
+          <h1 style="margin:10px 0 0;font-size:24px;line-height:1.2;">${escapeHtml(normalizedSummary)}</h1>
+        </div>
+        <div style="padding:24px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:20px;">
+            ${[
+              ['Reporter', fullName],
+              ['Reply-to', reporterEmail],
+              ['Page', pageUrl],
+              ['Version', appVersion],
+              ['Provider', provider],
+              ['Model', model],
+              ['Browser', browser],
+            ]
+              .filter(([, value]) => value)
+              .map(
+                ([label, value]) => `
+                  <div style="border:1px solid #e5e7eb;border-radius:14px;padding:12px 14px;background:#fafafa;">
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#6b7280;">${escapeHtml(label)}</div>
+                    <div style="margin-top:6px;font-size:14px;font-weight:600;color:#111827;word-break:break-word;">${escapeHtml(value)}</div>
+                  </div>
+                `,
+              )
+              .join('')}
+          </div>
+          <div style="border:1px solid #e5e7eb;border-radius:16px;padding:18px 20px;background:#ffffff;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.16em;color:#6b7280;">Issue details</div>
+            <div style="margin-top:12px;font-size:14px;line-height:1.65;color:#111827;white-space:pre-wrap;">${escapeHtml(normalizedIssue)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return { text, html };
+}
+
+export async function sendBugReportNotification({
+  fullName,
+  reporterEmail,
+  summary,
+  issue,
+  pageUrl = null,
+  appVersion = null,
+  provider = null,
+  model = null,
+  browser = null,
+} = {}) {
+  const support = buildAdminMailSupport();
+  const recipient = envValue(readMergedRuntimeEnv(), 'BOLT_BUG_REPORT_RECIPIENT') || 'wow@openweb.email';
+  const normalizedReporterEmail = String(reporterEmail || '')
+    .trim()
+    .toLowerCase();
+  const normalizedFullName = String(fullName || '').trim();
+
+  if (!normalizedFullName || !normalizedReporterEmail || !String(issue || '').trim()) {
+    throw new Error('Bug report notification requires full name, reporter email, and issue details.');
+  }
+
+  const normalizedSummary =
+    String(summary || '').trim() ||
+    String(issue || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean)
+      ?.slice(0, 120) ||
+    'User bug report';
+
+  if (!support.configured) {
+    return {
+      status: 'draft',
+      recipient,
+      transport: null,
+      error: support.reason,
+      sentAt: null,
+    };
+  }
+
+  try {
+    const transporter = await getTransporter();
+    const formatted = buildBugReportNotification({
+      fullName: normalizedFullName,
+      reporterEmail: normalizedReporterEmail,
+      summary: normalizedSummary,
+      issue,
+      pageUrl,
+      appVersion,
+      provider,
+      model,
+      browser,
+    });
+
+    await transporter.sendMail({
+      from: support.fromAddress,
+      to: recipient,
+      replyTo: normalizedReporterEmail,
+      subject: `[Bug Report] ${normalizedSummary}`,
+      text: formatted.text,
+      html: formatted.html,
+    });
+
+    return {
+      status: 'sent',
+      recipient,
+      transport: support.transportLabel,
+      error: null,
+      sentAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      recipient,
+      transport: support.transportLabel,
+      error: error instanceof Error ? error.message : 'SMTP send failed.',
+      sentAt: null,
+    };
+  }
+}

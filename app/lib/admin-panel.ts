@@ -40,3 +40,23 @@ export type AdminMailSupport = {
   transportLabel: string | null;
   reason: string | null;
 };
+
+export type BugReportRecord = {
+  id: string;
+  fullName: string;
+  reporterEmail: string;
+  summary: string;
+  issue: string;
+  pageUrl: string | null;
+  appVersion: string | null;
+  provider: string | null;
+  model: string | null;
+  browser: string | null;
+  userAgent: string | null;
+  status: 'new' | 'acknowledged' | 'resolved';
+  notificationStatus: 'sent' | 'draft' | 'failed';
+  notificationTransport: string | null;
+  notificationError: string | null;
+  createdAt: string;
+  notifiedAt: string | null;
+};

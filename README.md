@@ -66,6 +66,7 @@ Release verification now also includes a browser-level post-deploy asset health 
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.
+- The live console now includes an in-app `Report Bug` control that captures the reporter’s full name, reply email, and issue summary, stores the report privately in PostgreSQL, and routes a formatted operator notification without exposing server-side credentials.
 - `admin.bolt.gives` now also includes a real SMTP configuration form, so operators can save or clear the outgoing mail transport from the admin panel without editing server env files by hand. Stored credentials remain server-side only and the browser only ever sees masked transport metadata.
 - The admin surface is now structured as an operator dashboard with sticky sidebar navigation, section anchors, grouped KPI cards, and clearly separated panels for tenants, client profiles, managed instances, and outreach.
 - The operator dashboard uses stable UTC timestamp rendering, so the authenticated admin panel stays intact after hydration instead of collapsing on locale mismatches.

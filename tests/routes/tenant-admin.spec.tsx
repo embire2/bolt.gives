@@ -45,7 +45,6 @@ describe('TenantAdminPage', () => {
       adminPanelUrl: 'https://admin.bolt.gives',
       defaultAdmin: {
         username: 'admin',
-        password: 'admin',
       },
       admin: {
         username: 'admin',
@@ -104,6 +103,27 @@ describe('TenantAdminPage', () => {
       clientProfileCountries: ['South Africa'],
       clientProfileAudienceLabel: 'all registered clients · 1 recipients',
       emailMessages: [],
+      bugReports: [
+        {
+          id: 'bug-1',
+          fullName: 'Ada Operator',
+          reporterEmail: 'ada@example.com',
+          summary: 'Preview stalled after install',
+          issue: 'The workspace never moved beyond install after a dependency change.',
+          pageUrl: 'https://alpha1.bolt.gives',
+          appVersion: '3.0.8',
+          provider: 'FREE',
+          model: 'deepseek/deepseek-v3.2',
+          browser: 'Firefox',
+          userAgent: 'Mozilla/5.0',
+          status: 'new',
+          notificationStatus: 'sent',
+          notificationTransport: 'SMTP smtp.example.com:587',
+          notificationError: null,
+          createdAt: '2026-04-04T12:15:00.000Z',
+          notifiedAt: '2026-04-04T12:15:30.000Z',
+        },
+      ],
       mailSupport: {
         configured: false,
         host: null,
@@ -171,7 +191,10 @@ describe('TenantAdminPage', () => {
     expect(screen.getByRole('button', { name: 'Save SMTP settings' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Refresh deployment' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Suspend instance' })).toBeTruthy();
+    expect(screen.getByText('Recent Bug Reports')).toBeTruthy();
+    expect(screen.getByText('Preview stalled after install')).toBeTruthy();
     expect(screen.queryByText(/CLOUDFLARE_API_TOKEN/i)).toBeNull();
+    expect(screen.queryByText('admin / admin')).toBeNull();
   });
 
   it('forces full document auth submits so cookie-backed redirects stay outside the SPA', () => {
@@ -183,7 +206,6 @@ describe('TenantAdminPage', () => {
       adminPanelUrl: 'https://admin.bolt.gives',
       defaultAdmin: {
         username: 'admin',
-        password: 'admin',
       },
       admin: {
         username: 'admin',
@@ -206,6 +228,7 @@ describe('TenantAdminPage', () => {
       clientProfileCountries: [],
       clientProfileAudienceLabel: 'all registered clients · 0 recipients',
       emailMessages: [],
+      bugReports: [],
       mailSupport: {
         configured: false,
         host: null,

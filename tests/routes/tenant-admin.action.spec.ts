@@ -50,6 +50,7 @@ describe('tenant-admin action auth flow', () => {
           tenants: [],
           clientProfiles: [],
           emailMessages: [],
+          bugReports: [],
           managedInstances: [],
           managedSupport: { supported: false, trialDays: 0, rootDomain: 'pages.dev', sourceBranch: 'main' },
           mailSupport: {

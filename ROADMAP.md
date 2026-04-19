@@ -93,6 +93,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [ ] Add approval history, invite lifecycle, and auditable state transitions.
 - [ ] Add safer admin credential rotation and clearer operator session management.
 - [~] Keep operator email delivery self-serve: SMTP transport is now configurable in `admin.bolt.gives`, with the next step being test-delivery verification and stronger operator auth around transport changes.
+- [~] Keep the new in-console bug-report workflow durable: reports should persist to PostgreSQL, notify operators safely, and surface clean triage state inside `admin.bolt.gives` without leaking secrets.
 
 6. Self-host installer resilience
 

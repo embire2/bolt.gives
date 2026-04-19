@@ -4,6 +4,7 @@ import { useStore } from '@nanostores/react';
 import { classNames } from '~/utils/classNames';
 import { profileStore } from '~/lib/stores/profile';
 import type { TabType, Profile } from './types';
+import { openBugReportLauncher } from '~/components/header/BugReportLauncher.client';
 
 interface AvatarDropdownProps {
   onSelectTab: (tab: TabType) => void;
@@ -122,9 +123,7 @@ export const AvatarDropdown = ({ onSelectTab }: AvatarDropdownProps) => {
               'outline-none',
               'group',
             )}
-            onClick={() =>
-              window.open('https://github.com/embire2/bolt.gives/issues/new?template=bug_report.yml', '_blank')
-            }
+            onClick={() => openBugReportLauncher()}
           >
             <div className="i-ph:bug w-4 h-4 text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" />
             Report Bug

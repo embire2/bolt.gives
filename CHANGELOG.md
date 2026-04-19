@@ -12,6 +12,7 @@
 - `admin.bolt.gives` now includes a proper SMTP configuration surface, so operators can save or clear the outgoing mail transport from the admin panel while keeping the stored password server-side only.
 - `admin.bolt.gives` now uses a real operator shell with sticky sidebar navigation, anchored sections, and grouped tenant/profile/instance/outreach panels instead of one long stacked page.
 - The operator dashboard now renders timestamps with a deterministic UTC formatter so the live admin panel no longer tears down during hydration after sign-in.
+- The live console now includes a private `Report Bug` launcher that collects the reporter’s full name, reply email, and issue details, stores the report in the Postgres-backed admin database, and sends a formatted operator notification to `wow@openweb.email` when SMTP is configured.
 
 ### Changed
 
@@ -55,6 +56,7 @@
 - The live release smoke now prints stage-by-stage progress during long runs, making it obvious whether it is waiting for the prompt surface, commentary, preview readiness, or recovery.
 - A new post-deploy browser health check now fails release validation if the live app serves hashed asset `404`s or never exposes the prompt surface after deploy.
 - Managed-instance startup support and tenant-admin status views now surface the rollout-guard reason when the live runtime is stale, instead of silently advertising trial rollout as available.
+- Public operator wording no longer exposes the old shared bootstrap password in the shipped UI or release notes; deployments now present operator credentials as server-managed state only.
 
 ## v3.0.8 (2026-04-04)
 
@@ -206,7 +208,7 @@
 
 ### Added
 
-- Bootstrap `Tenant Admin` dashboard for server-hosted instances at `/tenant-admin`, with default bootstrap credentials `admin / admin`.
+- Server-hosted `Tenant Admin` dashboard is available at `/tenant-admin`, with operator credentials managed privately on each deployment.
 - Hosted preview health now includes a server-side `preview-status` path that tracks:
   - latest preview log lines
   - detected runtime alerts

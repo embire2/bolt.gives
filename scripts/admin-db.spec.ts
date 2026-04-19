@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAdminDatabaseConfig, normalizeClientProfileInput } from './admin-db.mjs';
+import { buildAdminDatabaseConfig, normalizeBugReportInput, normalizeClientProfileInput } from './admin-db.mjs';
 
 describe('admin-db', () => {
   it('treats discrete postgres settings as an enabled configuration', () => {
@@ -37,6 +37,28 @@ describe('admin-db', () => {
       useCase: null,
       requestedSubdomain: 'clinic-portal',
       registrationSource: null,
+    });
+  });
+
+  it('normalizes bug report input consistently', () => {
+    expect(
+      normalizeBugReportInput({
+        fullName: '  Ada Lovelace ',
+        reporterEmail: ' ADA@Example.COM ',
+        summary: '  Preview stalled  ',
+        issue: '  The preview never recovered.  ',
+        provider: ' FREE ',
+        model: ' deepseek/deepseek-v3.2 ',
+      }),
+    ).toMatchObject({
+      fullName: 'Ada Lovelace',
+      reporterEmail: 'ada@example.com',
+      summary: 'Preview stalled',
+      issue: 'The preview never recovered.',
+      provider: 'FREE',
+      model: 'deepseek/deepseek-v3.2',
+      status: 'new',
+      notificationStatus: 'draft',
     });
   });
 });

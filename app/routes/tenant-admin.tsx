@@ -9,7 +9,7 @@ import {
 import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
-import type { AdminMailMessageRecord, AdminMailSupport, ClientProfileRecord } from '~/lib/admin-panel';
+import type { AdminMailMessageRecord, AdminMailSupport, BugReportRecord, ClientProfileRecord } from '~/lib/admin-panel';
 import {
   buildClientProfileAudienceLabel,
   buildClientProfilesCsv,
@@ -60,6 +60,7 @@ type TenantAdminStatusPayload = {
   admin?: TenantAdminRecord;
   clientProfiles?: ClientProfileRecord[];
   emailMessages?: AdminMailMessageRecord[];
+  bugReports?: BugReportRecord[];
   mailSupport?: AdminMailSupport;
   adminPanelUrl?: string;
   auditTrail?: Array<{
@@ -87,6 +88,7 @@ type TenantAdminLoaderPayload = {
   clientProfileCompanies: string[];
   clientProfileCountries: string[];
   emailMessages: AdminMailMessageRecord[];
+  bugReports: BugReportRecord[];
   mailSupport: AdminMailSupport;
   adminPanelUrl: string;
   auditTrail: NonNullable<TenantAdminStatusPayload['auditTrail']>;
@@ -95,7 +97,7 @@ type TenantAdminLoaderPayload = {
 
 export const meta: MetaFunction = () => [{ title: `Tenant Admin | bolt.gives v${APP_VERSION}` }];
 
-const DEFAULT_ADMIN = { username: 'admin', password: 'admin' };
+const DEFAULT_ADMIN = { username: 'admin' };
 
 function formatAdminTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -222,6 +224,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       clientProfileCountries,
       clientProfileAudienceLabel: buildClientProfileAudienceLabel(clientProfileFilters, filteredClientProfiles.length),
       emailMessages: authenticated ? status.emailMessages || [] : [],
+      bugReports: authenticated ? status.bugReports || [] : [],
       mailSupport: status.mailSupport || {
         configured: false,
         host: null,
@@ -264,6 +267,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       clientProfileCountries: [],
       clientProfileAudienceLabel: buildClientProfileAudienceLabel(clientProfileFilters, 0),
       emailMessages: [] as AdminMailMessageRecord[],
+      bugReports: [] as BugReportRecord[],
       mailSupport: {
         configured: false,
         host: null,
@@ -660,6 +664,7 @@ export default function TenantAdminPage() {
     clientProfileCountries,
     clientProfileAudienceLabel,
     emailMessages,
+    bugReports,
     mailSupport,
     adminPanelUrl,
     defaultAdmin,
@@ -707,6 +712,12 @@ export default function TenantAdminPage() {
       description: 'SMTP configuration, mail sends, and delivery log',
       count: `${emailMessages.length} messages`,
     },
+    {
+      id: 'bugs',
+      label: 'Bug Reports',
+      description: 'Incoming console issues and operator delivery state',
+      count: `${bugReports.length} logged`,
+    },
   ];
 
   return (
@@ -723,13 +734,12 @@ export default function TenantAdminPage() {
                 </h1>
                 <p className="mt-2 text-sm text-bolt-elements-textSecondary">
                   Manage client registrations, Cloudflare instance assignments, tenant access, and outbound mail from
-                  one server-backed admin surface. Default bootstrap login:{' '}
-                  <span className="font-mono">admin / admin</span>.
+                  one server-backed admin surface. Use the operator credentials configured on this server.
                 </p>
                 <p className="mt-2 text-xs text-bolt-elements-textTertiary">Primary operator URL: {adminPanelUrl}</p>
                 {admin.mustChangePassword ? (
                   <p className="mt-2 text-sm text-amber-300">
-                    The bootstrap admin password is still active. Rotate it before onboarding production tenants.
+                    The operator password has not been rotated yet. Change it before onboarding production tenants.
                   </p>
                 ) : null}
               </div>
@@ -780,7 +790,7 @@ export default function TenantAdminPage() {
                     <input
                       name="password"
                       type="password"
-                      defaultValue={defaultAdmin.password}
+                      placeholder="Enter the operator password"
                       className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                     />
                   </label>
@@ -794,12 +804,13 @@ export default function TenantAdminPage() {
                 <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">What this dashboard controls</h2>
                 <ul className="mt-4 space-y-2 text-sm text-bolt-elements-textSecondary">
                   <li>Postgres-backed client profile registrations for Cloudflare managed-instance requests.</li>
-                  <li>Bootstrap admin account with required password rotation after first sign-in.</li>
+                  <li>Operator account with required password rotation after first sign-in.</li>
                   <li>Tenant creation plus enable/disable lifecycle controls for isolated customer workspaces.</li>
                   <li>Managed Cloudflare instance assignments mapped to the client email that requested them.</li>
                   <li>
                     Outbound client email log, with SMTP sending enabled when runtime mail transport is configured.
                   </li>
+                  <li>Private bug reports from the live console, stored in PostgreSQL and routed to operators.</li>
                 </ul>
               </div>
             </div>
@@ -984,8 +995,8 @@ export default function TenantAdminPage() {
                         </p>
                         {admin.mustChangePassword ? (
                           <p className="mt-4 text-sm text-amber-300">
-                            Rotate the bootstrap admin password first. Tenant creation stays locked until the shared
-                            default login is replaced.
+                            Rotate the operator password first. Tenant creation stays locked until the shared default
+                            login is replaced.
                           </p>
                         ) : null}
                         <button
@@ -1184,7 +1195,6 @@ export default function TenantAdminPage() {
                             <input
                               name="currentPassword"
                               type="password"
-                              defaultValue={admin.mustChangePassword ? defaultAdmin.password : ''}
                               className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-bolt-elements-textPrimary"
                             />
                           </label>
@@ -1479,6 +1489,72 @@ export default function TenantAdminPage() {
                       })}
                     </div>
                   )}
+                </section>
+
+                <section
+                  id="bugs"
+                  className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-6 shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Recent Bug Reports</h2>
+                      <p className="mt-2 text-sm text-bolt-elements-textSecondary">
+                        Private reports submitted from the live console, including reporter contact details and whether
+                        the operator notification reached <span className="font-mono">wow@openweb.email</span>.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1 text-xs text-bolt-elements-textSecondary">
+                      {bugReports.length} logged
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {bugReports.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-4 text-sm text-bolt-elements-textSecondary">
+                        No bug reports have been submitted yet.
+                      </div>
+                    ) : (
+                      bugReports.map((report) => (
+                        <article
+                          key={report.id}
+                          className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-4"
+                        >
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <div className="font-medium text-bolt-elements-textPrimary">{report.summary}</div>
+                              <div className="mt-1 text-sm text-bolt-elements-textSecondary">
+                                {report.fullName} · {report.reporterEmail}
+                              </div>
+                              {report.pageUrl ? (
+                                <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                  Page <span className="font-mono break-all">{report.pageUrl}</span>
+                                </div>
+                              ) : null}
+                              <div className="mt-3 whitespace-pre-wrap text-sm text-bolt-elements-textSecondary">
+                                {report.issue}
+                              </div>
+                            </div>
+                            <div className="flex min-w-[220px] flex-col gap-2 text-xs text-bolt-elements-textSecondary lg:items-end">
+                              <span className="rounded-full border border-bolt-elements-borderColor px-3 py-1">
+                                {report.notificationStatus}
+                              </span>
+                              <span>{formatAdminTimestamp(report.createdAt)}</span>
+                              {report.appVersion ? <span>Version {report.appVersion}</span> : null}
+                              {report.provider || report.model ? (
+                                <span className="text-right">
+                                  {[report.provider, report.model].filter(Boolean).join(' / ')}
+                                </span>
+                              ) : null}
+                              {report.notificationTransport ? <span>{report.notificationTransport}</span> : null}
+                              {report.notificationError ? (
+                                <span className="text-right text-red-300">{report.notificationError}</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
                 </section>
 
                 <section id="outreach" className="space-y-6">
