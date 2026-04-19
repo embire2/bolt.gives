@@ -1,5 +1,21 @@
 import type { FileMap } from '~/lib/stores/files';
 import type { ActionAlert } from '~/types/actions';
+import { boundedFetch } from '~/lib/utils/reliability';
+
+/*
+ * Timeouts for the hosted runtime calls.
+ *
+ * `command` can legitimately take a long time (installs, builds), so it gets
+ * a generous 5-minute ceiling. Everything else should be quick: previews,
+ * snapshots, and sync are sub-second in the normal case. Unbounded fetches
+ * were the top stability risk here — a stalled edge connection would
+ * silently park a Remix request forever.
+ */
+const HOSTED_SYNC_TIMEOUT_MS = 30_000;
+const HOSTED_COMMAND_TIMEOUT_MS = 5 * 60_000;
+const HOSTED_STATUS_TIMEOUT_MS = 10_000;
+const HOSTED_SNAPSHOT_TIMEOUT_MS = 30_000;
+const HOSTED_ALERT_TIMEOUT_MS = 10_000;
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const PAGES_RUNTIME_BASE_URL = 'https://alpha1.bolt.gives/runtime';
@@ -149,12 +165,14 @@ export function isHostedRuntimeEnabled() {
 
 export async function syncHostedRuntimeWorkspace(options: { sessionId: string; files: FileMap; prune?: boolean }) {
   const { sessionId, files, prune = false } = options;
-  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/sync`, {
+  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ files, prune }),
+    timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+    label: 'hosted-runtime/sync',
   });
 
   if (!response.ok) {
@@ -170,12 +188,14 @@ export async function runHostedRuntimeCommand(options: {
   onEvent?: (event: HostedRuntimeEvent) => void;
 }): Promise<HostedRuntimeCommandResult> {
   const { sessionId, command, kind, onEvent } = options;
-  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`, {
+  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ command, kind }),
+    timeoutMs: HOSTED_COMMAND_TIMEOUT_MS,
+    label: 'hosted-runtime/command',
   });
 
   if (!response.ok || !response.body) {
@@ -239,13 +259,15 @@ export async function runHostedRuntimeCommand(options: {
 }
 
 export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promise<HostedRuntimePreviewStatus> {
-  const response = await fetch(
+  const response = await boundedFetch(
     `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-status`,
     {
       method: 'GET',
       headers: {
         Accept: 'application/json',
       },
+      timeoutMs: HOSTED_STATUS_TIMEOUT_MS,
+      label: 'hosted-runtime/preview-status',
     },
   );
 
@@ -293,11 +315,13 @@ export function subscribeHostedRuntimePreview(
 }
 
 export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {
-  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`, {
+  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
     },
+    timeoutMs: HOSTED_SNAPSHOT_TIMEOUT_MS,
+    label: 'hosted-runtime/snapshot',
   });
 
   if (!response.ok) {
@@ -311,12 +335,14 @@ export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<Fil
 }
 
 export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: ActionAlert) {
-  const response = await fetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`, {
+  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ alert }),
+    timeoutMs: HOSTED_ALERT_TIMEOUT_MS,
+    label: 'hosted-runtime/preview-alert',
   });
 
   if (!response.ok) {

@@ -802,7 +802,7 @@ describe('ActionRunner start actions', () => {
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
 
     const nonCleanupHostedCommands = hostedRuntimeMocks.runHostedRuntimeCommand.mock.calls.filter(
-      ([payload]) => payload.command !== 'pkill -9 -f "(node|npm|pnpm|yarn|vite|next|webpack)" || true',
+      ([payload]) => payload.command !== 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true',
     );
 
     expect(nonCleanupHostedCommands).toHaveLength(2);
