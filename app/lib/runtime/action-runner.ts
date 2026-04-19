@@ -926,6 +926,11 @@ export class ActionRunner {
       webcontainer.workdir,
     );
     const relativePath = nodePath.relative(webcontainer.workdir, normalizedFilePath);
+
+    if (!relativePath || relativePath.startsWith('..') || nodePath.isAbsolute(relativePath)) {
+      throw new Error(`EINVAL: invalid file path outside workdir: ${action.filePath}`);
+    }
+
     const existingFile = this.#getFilesSnapshot?.()[normalizedFilePath];
     const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
@@ -1254,6 +1259,15 @@ export class ActionRunner {
     applyRewrite(makeFileChecksPortable(trimmedCommand));
     applyRewrite(rewriteAllPackageManagersToPnpm(trimmedCommand));
     applyRewrite(rewritePythonCommands(trimmedCommand));
+
+    const blockedAfterRewrite = getBlockedShellMutationReason(trimmedCommand);
+
+    if (blockedAfterRewrite) {
+      return {
+        shouldModify: false,
+        blockedReason: blockedAfterRewrite,
+      };
+    }
 
     if (hasCommandRewrite) {
       return {
