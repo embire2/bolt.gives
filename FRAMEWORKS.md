@@ -1,100 +1,77 @@
-# Multi-Framework Support for bolt.gives
+# Desktop Framework Support for bolt.gives
 
-This document describes how to build bolt.gives as a desktop application using different frameworks.
+bolt.gives ships as a web app and as two desktop wrappers:
 
-## Supported Frameworks
+1. **Electron** (default) — broad-compatibility desktop app with auto-update and crash recovery.
+2. **Tauri** (opt-in) — Rust-native lightweight desktop app with tight CSP and a signed updater.
 
-1. **Electron** (default) - Classic desktop app framework
-2. **Tauri** - Rust-based lightweight desktop app framework
-3. **Neutralino.js** - Ultra-lightweight desktop app framework
+> **Neutralino was removed.** The third wrapper caused build drift, duplicated window/menu/cookie code, and an unpatched update path. Electron remains the default; Tauri is the high-security / small-footprint option.
 
-## Environment Variables
+## Environment flags
 
-You can control which framework(s) to build using environment variables:
+| Flag               | Default | Effect                                                |
+| ------------------ | ------- | ----------------------------------------------------- |
+| `ENABLE_ELECTRON`  | `true`  | Set `false` to skip Electron in multi-target scripts. |
+| `ENABLE_TAURI`     | `false` | Set `true` to include Tauri in multi-target scripts.  |
+
+Accepted values: `1 / true / yes / on` and `0 / false / no / off` (case-insensitive).
+
+## Build commands
+
+### Electron
 
 ```bash
-# Enable specific frameworks (default: electron is enabled by default)
-ENABLE_ELECTRON=true pnpm electron:build:dist
-ENABLE_TAURI=true pnpm tauri:build
-ENABLE_NEUTRALINO=true pnpm neutralino:build
-
-# Disable a framework (e.g., disable Electron to only build Tauri)
-ENABLE_ELECTRON=false ENABLE_TAURI=true pnpm tauri:build
-```
-
-## Build Commands
-
-### Electron (Default)
-```bash
-# Development
+# Dev
 pnpm electron:dev
 
-# Build for distribution
-pnpm electron:build:dist
+# Platform-specific release bundles
+pnpm electron:build:mac
+pnpm electron:build:win
+pnpm electron:build:linux
 
-# Platform-specific builds
-pnpm electron:build:mac    # macOS DMG
-pnpm electron:build:win    # Windows NSIS
-pnpm electron:build:linux  # Linux AppImage/DEB
+# All three (CI-only; produces .dmg / .exe / .AppImage / .deb / .rpm)
+pnpm electron:build:dist
 ```
 
+Outputs land in `./dist/`.
+
 ### Tauri
+
+Prerequisites: [Rust toolchain](https://tauri.app/start/prerequisites/) (`cargo`, `rustc`) and the Tauri CLI (`pnpm dlx @tauri-apps/cli@latest`).
+
 ```bash
-# Development (requires Rust and Tauri CLI)
+# Dev
 pnpm tauri:dev
 
-# Build for distribution
+# Release bundle
 pnpm tauri:build
 ```
 
-### Neutralino.js
-```bash
-# Development
-pnpm neutralino:dev
+Outputs land in `./src-tauri/target/release/bundle/`.
 
-# Build for distribution
-pnpm neutralino:build
-```
+## Security posture
 
-## Framework-Specific Notes
+| Surface        | Electron                                              | Tauri                                                  |
+| -------------- | ----------------------------------------------------- | ------------------------------------------------------ |
+| Context iso.   | `contextIsolation: true`, `nodeIntegration: false`    | `withGlobalTauri: false`                               |
+| Sandbox        | `sandbox: true` on BrowserWindow                      | Tauri default sandbox + capability scopes              |
+| CSP            | Injected via `onHeadersReceived` (prod)               | `tauri.conf.json` `security.csp`                       |
+| Updater        | `electron-updater` — signed via `electron-builder` config; fail-closed if no pubkey | `tauri-plugin-updater` — Ed25519 signature, fail-closed if `pubkey` empty |
+| Crash recovery | `render-process-gone` + `child-process-gone` handlers respawn with backoff | Tauri native + `tauri-plugin-process` respawn          |
 
-### Tauri Requirements
-- Rust toolchain
-- Node.js and pnpm
-- System dependencies (see [Tauri Prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites))
+See the updater setup checklist in `docs/DESKTOP_UPDATER.md` (generated in Phase 5) for how to rotate keys.
 
-Install Rust:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+## Release artifacts
 
-### Neutralino.js Requirements
-- Node.js and pnpm
-- Neutralino CLI (optional, can use prebuilt binaries)
+GitHub Actions build both frameworks on tag push (`v*`):
 
-## Directory Structure
+- `.github/workflows/electron.yml` → `dist/*.{dmg,exe,AppImage,deb,zip}`
+- `.github/workflows/tauri.yml`    → `src-tauri/target/release/bundle/**/*`
 
-```
-/home/engine/project/
-├── src-tauri/              # Tauri configuration and Rust source
-│   ├── src/
-│   ├── icons/
-│   └── capabilities/
-├── neutralino/             # Neutralino configuration
-└── electron/               # Electron configuration (existing)
-```
+Both workflows publish to the same GitHub Release.
 
 ## Troubleshooting
 
-### Tauri Build Issues
-- Ensure Rust is properly installed and up to date
-- Check that all system dependencies are installed
-- Run `rustup update` to update Rust toolchain
-
-### Neutralino Build Issues
-- Ensure you have permission to create the output directory
-- Check that the build/client directory exists
-
-### Electron Build Issues
-- Clear node_modules and reinstall: `rm -rf node_modules && pnpm install`
-- Check that all platform-specific dependencies are installed
+- **Tauri build fails with "failed to find tauri-cli"** — run `pnpm dlx @tauri-apps/cli@latest` or install globally: `cargo install tauri-cli --version '^2.0'`.
+- **Electron updater silently does nothing** — that's intentional: builds without a valid `electron-update.yml` pubkey refuse to apply updates (fail-closed). See Phase 5 updater docs.
+- **macOS "app is damaged" after download** — unsigned dev build; ship through GitHub Releases for `electron-builder` / Tauri to add notarization metadata.
