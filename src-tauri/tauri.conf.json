@@ -10,29 +10,41 @@
     "frontendDist": "../build/client"
   },
   "app": {
-    "withGlobalTauri": true,
+    "// withGlobalTauri": "Disabled: exposing the global Tauri API on window is a security foot-gun (any script on the page can call native commands). The app uses the scoped @tauri-apps/api imports instead.",
+    "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "bolt.gives",
         "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
+        "height": 832,
+        "minWidth": 960,
+        "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
         "center": true,
         "decorations": true,
         "transparent": false,
-        "focus": true
+        "focus": true,
+        "visible": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* https://*; img-src 'self' data: blob: https:; font-src 'self' data:; frame-src 'self' blob:;"
+      "// csp": "Tight production CSP. 'unsafe-eval' is intentionally absent; Vite-HMR-mode uses tauri dev which bypasses this bundle. Inline styles stay allowed because Radix/Tailwind inject them at runtime. connect-src is https:/wss: only to block mixed-content downgrades. frame-src allows blob: for WebContainer preview iframes.",
+      "csp": "default-src 'self' tauri:; script-src 'self' tauri:; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss: ipc: http://ipc.localhost tauri:; worker-src 'self' blob:; frame-src 'self' blob: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**", "$APPCACHE/**"]
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "DeveloperTool",
+    "copyright": "Copyright © 2025 bolt.gives",
+    "shortDescription": "bolt.gives desktop",
+    "longDescription": "bolt.gives — AI coding agent desktop app with WebContainer + hosted runtime support.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -44,12 +56,19 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
+    },
+    "macOS": {
+      "// minimumSystemVersion": "Intentionally set — some Tauri 2 plugins require 10.15+.",
+      "minimumSystemVersion": "10.15"
     }
   },
   "plugins": {
+    "// updater": "pubkey MUST be filled before a production release. Empty pubkey triggers fail-closed behavior in main.rs (see docs/DESKTOP_UPDATER.md). Generate via: pnpm dlx @tauri-apps/cli signer generate -w ~/.tauri/bolt.gives.key",
     "updater": {
       "pubkey": "",
-      "endpoints": []
+      "endpoints": [
+        "https://github.com/embire2/bolt.gives/releases/latest/download/latest.json"
+      ]
     }
   }
 }
