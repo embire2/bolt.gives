@@ -153,22 +153,30 @@ export function BugReportLauncher() {
 
   return (
     <>
-      <motion.button
+      <button
         type="button"
         onClick={() => setOpen(true)}
         className="group relative inline-flex h-9 items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-medium text-rose-100 shadow-[0_0_0_1px_rgba(244,63,94,0.08)] transition-colors hover:border-rose-300/60 hover:bg-rose-500/15"
-        animate={{
-          y: [0, -1.5, 0],
-          boxShadow: ['0 0 0 rgba(244,63,94,0.08)', '0 10px 28px rgba(244,63,94,0.22)', '0 0 0 rgba(244,63,94,0.08)'],
-        }}
-        transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
         aria-label="Report a bug"
         title="Report a bug"
       >
         <span className="absolute -inset-1 rounded-[14px] border border-rose-400/20 opacity-60 transition-opacity group-hover:opacity-100" />
-        <div className="relative i-ph:bug-beetle-fill text-base text-rose-200" />
+        <motion.div
+          className="relative i-ph:bug-beetle-fill text-base text-rose-200"
+          animate={{
+            y: [0, -1, 0],
+            scale: [1, 1.06, 1],
+            rotate: [0, -4, 4, 0],
+            filter: [
+              'drop-shadow(0 0 0 rgba(244,63,94,0))',
+              'drop-shadow(0 0 10px rgba(251,113,133,0.35))',
+              'drop-shadow(0 0 0 rgba(244,63,94,0))',
+            ],
+          }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+        />
         <span className="relative hidden lg:inline">Report Bug</span>
-      </motion.button>
+      </button>
 
       <DialogRoot open={open} onOpenChange={setOpen}>
         {open ? (
