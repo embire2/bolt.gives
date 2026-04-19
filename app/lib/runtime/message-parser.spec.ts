@@ -153,6 +153,13 @@ describe('StreamingMessageParser', () => {
           callbacks: { onArtifactOpen: 1, onArtifactClose: 1, onActionOpen: 2, onActionClose: 2 },
         },
       ],
+      [
+        'Before <codyArtifact title="Some title" id="artifact_1"><codyAction type="shell">npm install</codyAction></codyArtifact> After',
+        {
+          output: 'Before  After',
+          callbacks: { onArtifactOpen: 1, onArtifactClose: 1, onActionOpen: 1, onActionClose: 1 },
+        },
+      ],
     ])('should correctly parse chunks and strip out bolt artifacts (%#)', (input, expected) => {
       runTest(input, expected);
     });

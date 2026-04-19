@@ -1,14 +1,24 @@
 {
   "identifier": "desktop",
-  "description": "permissions for desktop apps",
+  "description": "Capability set for the main bolt.gives desktop window. Permissions are kept as narrow as possible so a compromised renderer cannot reach beyond what the UI actually needs.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open",
     "window:default",
     "app:default",
     "path:default",
     "global-shortcut:default",
-    "updater:default"
+    "updater:default",
+    "process:default",
+    "log:default",
+    {
+      "identifier": "shell:allow-open",
+      "// allow": "shell:allow-open is restricted to external web URLs. Local file execution is intentionally denied — the desktop shell is never used to run bundled binaries.",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://localhost:*" },
+        { "url": "mailto:*" }
+      ]
+    }
   ]
 }

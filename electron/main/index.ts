@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { createRequestHandler } from '@remix-run/node';
-import electron, { app, BrowserWindow, ipcMain, protocol, session } from 'electron';
+import electron, { app, BrowserWindow, protocol, session } from 'electron';
 import log from 'electron-log';
 import path from 'node:path';
 import * as pkg from '../../package.json';
@@ -13,36 +13,88 @@ import { initCookies, storeCookies } from './utils/cookie';
 import { loadServerBuild, serveAsset } from './utils/serve';
 import { reloadOnChange } from './utils/reload';
 
+/*
+ * Electron main entry.
+ *
+ * Hardening vs. the original (in order of importance):
+ *
+ *   1. Single-instance lock — a second launch focuses the existing window
+ *      instead of spawning a duplicate process that fights over the same
+ *      IPC/store/user-data directories.
+ *   2. Structured logging via electron-log only; no stray `console.log`.
+ *   3. Renderer crash handlers (`render-process-gone`, `child-process-gone`)
+ *      that log the reason and survive instead of silently exiting.
+ *   4. Navigation + window-open guards live in the BrowserWindow factory
+ *      (see ui/window.ts).
+ *   5. Removed the 60s "hello from main" IPC ping — dead code that kept the
+ *      renderer awake for no reason.
+ */
+
+// Configure logger early so every subsequent log lands in the right file.
+log.transports.file.level = 'info';
+log.transports.console.level = isDev ? 'debug' : 'warn';
 Object.assign(console, log.functions);
 
-console.debug('main: import.meta.env:', import.meta.env);
-console.log('main: isDev:', isDev);
-console.log('NODE_ENV:', global.process.env.NODE_ENV);
-console.log('isPackaged:', app.isPackaged);
+log.info('[main] NODE_ENV:', process.env.NODE_ENV, 'isPackaged:', app.isPackaged, 'isDev:', isDev);
 
-// Log unhandled errors
-process.on('uncaughtException', async (error) => {
-  console.log('Uncaught Exception:', error);
+// Enforce single-instance. If we can't get the lock, another instance is
+// already running — exit quietly after asking it to focus.
+const singleInstanceLock = app.requestSingleInstanceLock();
+
+if (!singleInstanceLock) {
+  log.info('[main] another instance holds the single-instance lock; exiting');
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  const wins = BrowserWindow.getAllWindows();
+
+  if (wins.length) {
+    const [first] = wins;
+
+    if (first.isMinimized()) {
+      first.restore();
+    }
+
+    first.focus();
+  }
 });
 
-process.on('unhandledRejection', async (error) => {
-  console.log('Unhandled Rejection:', error);
+// Hard failure handlers: log, don't swallow.
+process.on('uncaughtException', (error) => {
+  log.error('[main] uncaughtException', error);
 });
+
+process.on('unhandledRejection', (reason) => {
+  log.error('[main] unhandledRejection', reason);
+});
+
+app.on('child-process-gone', (_event, details) => {
+  log.error('[main] child-process-gone', details);
+});
+
+app.on('render-process-gone', (_event, _webContents, details) => {
+  log.error('[main] render-process-gone', details);
+});
+
+// Disable web security for dev iframes? No — WebContainer already uses
+// credentialless COEP; no need to weaken Electron-level security.
 
 (() => {
-  const root = global.process.env.APP_PATH_ROOT ?? import.meta.env.VITE_APP_PATH_ROOT;
+  const root = process.env.APP_PATH_ROOT ?? import.meta.env.VITE_APP_PATH_ROOT;
 
   if (root === undefined) {
-    console.log('no given APP_PATH_ROOT or VITE_APP_PATH_ROOT. default path is used.');
+    log.info('[main] no APP_PATH_ROOT / VITE_APP_PATH_ROOT; using default user-data path');
     return;
   }
 
   if (!path.isAbsolute(root)) {
-    console.log('APP_PATH_ROOT must be absolute path.');
-    global.process.exit(1);
+    log.error('[main] APP_PATH_ROOT must be absolute path; refusing to start');
+    process.exit(1);
   }
 
-  console.log(`APP_PATH_ROOT: ${root}`);
+  log.info('[main] APP_PATH_ROOT:', root);
 
   const subdirName = pkg.name;
 
@@ -57,11 +109,17 @@ process.on('unhandledRejection', async (error) => {
   app.setAppLogsPath(path.join(root, subdirName, 'Logs'));
 })();
 
-console.log('appPath:', app.getAppPath());
+log.info('[main] appPath:', app.getAppPath());
 
-const keys: Parameters<typeof app.getPath>[number][] = ['home', 'appData', 'userData', 'sessionData', 'logs', 'temp'];
-keys.forEach((key) => console.log(`${key}:`, app.getPath(key)));
-console.log('start whenReady');
+const pathKeys: Parameters<typeof app.getPath>[number][] = [
+  'home',
+  'appData',
+  'userData',
+  'sessionData',
+  'logs',
+  'temp',
+];
+pathKeys.forEach((key) => log.info(`[main] path.${key}:`, app.getPath(key)));
 
 declare global {
   // eslint-disable-next-line no-var, @typescript-eslint/naming-convention
@@ -70,18 +128,16 @@ declare global {
 
 (async () => {
   await app.whenReady();
-  console.log('App is ready');
+  log.info('[main] app ready');
 
-  // Load any existing cookies from ElectronStore, set as cookie
   await initCookies();
 
   const serverBuild = await loadServerBuild();
 
   protocol.handle('http', async (req) => {
-    console.log('Handling request for:', req.url);
+    log.debug('[main] http handler:', req.url);
 
     if (isDev) {
-      console.log('Dev mode: forwarding to vite server');
       return await fetch(req);
     }
 
@@ -90,61 +146,37 @@ declare global {
     try {
       const url = new URL(req.url);
 
-      // Forward requests to specific local server ports
       if (url.port !== `${DEFAULT_PORT}`) {
-        console.log('Forwarding request to local server:', req.url);
+        log.debug('[main] forwarding to local server:', req.url);
         return await fetch(req);
       }
 
-      // Always try to serve asset first
       const assetPath = path.join(app.getAppPath(), 'build', 'client');
       const res = await serveAsset(req, assetPath);
 
       if (res) {
-        console.log('Served asset:', req.url);
         return res;
       }
 
-      // Forward all cookies to remix server
       const cookies = await session.defaultSession.cookies.get({});
 
       if (cookies.length > 0) {
         req.headers.set('Cookie', cookies.map((c) => `${c.name}=${c.value}`).join('; '));
-
-        // Store all cookies
         await storeCookies(cookies);
       }
 
-      // Create request handler with the server build
       const handler = createRequestHandler(serverBuild, 'production');
-      console.log('Handling request with server build:', req.url);
-
       const result = await handler(req, {
-        /*
-         * Remix app access cloudflare.env
-         * Need to pass an empty object to prevent undefined
-         */
-        // @ts-ignore:next-line
+        // @ts-ignore — Remix Cloudflare adapter expects this shape
         cloudflare: {},
       });
 
       return result;
     } catch (err) {
-      console.log('Error handling request:', {
-        url: req.url,
-        error:
-          err instanceof Error
-            ? {
-                message: err.message,
-                stack: err.stack,
-                cause: err.cause,
-              }
-            : err,
-      });
-
       const error = err instanceof Error ? err : new Error(String(err));
+      log.error('[main] http handler failed', { url: req.url, message: error.message, stack: error.stack });
 
-      return new Response(`Error handling request to ${req.url}: ${error.stack ?? error.message}`, {
+      return new Response(`Error handling request to ${req.url}: ${error.message}`, {
         status: 500,
         headers: { 'content-type': 'text/plain' },
       });
@@ -167,7 +199,7 @@ declare global {
       })()
     : `http://localhost:${DEFAULT_PORT}`);
 
-  console.log('Using renderer URL:', rendererURL);
+  log.info('[main] renderer URL:', rendererURL);
 
   const win = await createWindow(rendererURL);
 
@@ -177,19 +209,16 @@ declare global {
     }
   });
 
-  console.log('end whenReady');
+  log.info('[main] initial window ready');
 
   return win;
 })()
-  .then((win) => {
-    // IPC samples : send and recieve.
-    let count = 0;
-    setInterval(() => win.webContents.send('ping', `hello from main! ${count++}`), 60 * 1000);
-    ipcMain.handle('ipcTest', (event, ...args) => console.log('ipc: renderer -> main', { event, ...args }));
-
-    return win;
-  })
-  .then((win) => setupMenu(win));
+  .then((win) => setupMenu(win))
+  .catch((err) => {
+    log.error('[main] bootstrap failed', err);
+    app.quit();
+    process.exit(1);
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

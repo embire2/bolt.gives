@@ -7,10 +7,25 @@ const ARTIFACT_TAG_OPEN = '<boltArtifact';
 const ARTIFACT_TAG_CLOSE = '</boltArtifact>';
 const ARTIFACT_ACTION_TAG_OPEN = '<boltAction';
 const ARTIFACT_ACTION_TAG_CLOSE = '</boltAction>';
+const CODY_ARTIFACT_TAG_OPEN = '<codyArtifact';
+const CODY_ARTIFACT_TAG_CLOSE = '</codyArtifact>';
+const CODY_ACTION_TAG_OPEN = '<codyAction';
+const CODY_ACTION_TAG_CLOSE = '</codyAction>';
 const BOLT_QUICK_ACTIONS_OPEN = '<bolt-quick-actions>';
 const BOLT_QUICK_ACTIONS_CLOSE = '</bolt-quick-actions>';
 
 const logger = createScopedLogger('MessageParser');
+
+/**
+ * Returns true when `prefix` could be the start of a Bolt or Cody artifact
+ * opening tag. The streaming scanner uses this to avoid prematurely consuming
+ * partial Cody prefixes (e.g. "<c", "<co", "<codyArt") as plain text before
+ * `normalizeArtifactTags` has a chance to rewrite a later-arriving complete
+ * "<codyArtifact" into the canonical "<boltArtifact" form.
+ */
+function isPartialArtifactOpenPrefix(prefix: string) {
+  return ARTIFACT_TAG_OPEN.startsWith(prefix) || CODY_ARTIFACT_TAG_OPEN.startsWith(prefix);
+}
 
 export interface ArtifactCallbackData extends BoltArtifactData {
   messageId: string;
@@ -73,6 +88,15 @@ function cleanoutMarkdownSyntax(content: string) {
 function cleanEscapedTags(content: string) {
   return content.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 }
+
+function normalizeArtifactTags(input: string) {
+  return input
+    .replace(new RegExp(CODY_ARTIFACT_TAG_OPEN, 'g'), ARTIFACT_TAG_OPEN)
+    .replace(new RegExp(CODY_ARTIFACT_TAG_CLOSE, 'g'), ARTIFACT_TAG_CLOSE)
+    .replace(new RegExp(CODY_ACTION_TAG_OPEN, 'g'), ARTIFACT_ACTION_TAG_OPEN)
+    .replace(new RegExp(CODY_ACTION_TAG_CLOSE, 'g'), ARTIFACT_ACTION_TAG_CLOSE);
+}
+
 export class StreamingMessageParser {
   #messages = new Map<string, MessageState>();
   #artifactCounter = 0;
@@ -80,6 +104,8 @@ export class StreamingMessageParser {
   constructor(private _options: StreamingMessageParserOptions = {}) {}
 
   parse(messageId: string, input: string) {
+    input = normalizeArtifactTags(input);
+
     let state = this.#messages.get(messageId);
 
     if (!state) {
@@ -300,7 +326,7 @@ export class StreamingMessageParser {
             }
 
             break;
-          } else if (!ARTIFACT_TAG_OPEN.startsWith(potentialTag)) {
+          } else if (!isPartialArtifactOpenPrefix(potentialTag)) {
             output += input.slice(i, j + 1);
             i = j + 1;
             break;
@@ -309,7 +335,7 @@ export class StreamingMessageParser {
           j++;
         }
 
-        if (j === input.length && ARTIFACT_TAG_OPEN.startsWith(potentialTag)) {
+        if (j === input.length && isPartialArtifactOpenPrefix(potentialTag)) {
           break;
         }
       } else {

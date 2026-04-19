@@ -4,3 +4,17 @@ compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2025-03-28"
 pages_build_output_dir = "./build/client"
 send_metrics = false
+
+# Optional: KV namespace used by app/lib/security.ts for distributed
+# fixed-window rate limiting. When this binding is absent the security
+# middleware transparently falls back to an in-memory store (per-isolate),
+# which still catches bursts from a single client but is less effective
+# across Workers isolates.
+#
+# To enable:
+#   1. `wrangler kv:namespace create RATE_LIMIT_KV`
+#   2. Paste the returned `id` into the block below and uncomment it.
+#
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "<paste-namespace-id>"

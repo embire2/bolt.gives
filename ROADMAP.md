@@ -73,6 +73,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 3. Browser-weight reduction and server offload
 
 - [~] Continue cutting the remaining heavy browser chunks (`editor`, `pdf`, `git`, `terminal`).
+- [~] Runtime shell/build output capture is now bounded and stream shutdown paths are guarded, reducing memory spikes and freeze risk during long installs/builds.
 - [ ] Push more preview/log reconciliation state entirely to the server.
 - [ ] Keep browser runtime surfaces thin enough that longer sessions no longer degrade visibly on lower-end machines.
 
