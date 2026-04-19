@@ -26,6 +26,7 @@
 - The self-host installer now provisions a fuller VPS baseline: custom app/admin/create domains, local PostgreSQL for the private admin control plane, and Caddy-managed reverse proxy/TLS wiring.
 - The self-host installer now supports an interactive setup path when domain/PostgreSQL flags are omitted, and self-hosted trial links now fall back to the local app domain’s `/managed-instances` route instead of pointing back to the hosted `create.bolt.gives` domain.
 - The installer now installs PostgreSQL client tooling (`psql`) as part of the supported self-host baseline and keeps asking interactively for the local PostgreSQL database name, username, and password when those flags are omitted.
+- Fresh self-host installs now also prompt for the private operator/admin credentials and seed the local tenant registry with the chosen password hash, so self-hosted admin panels do not fall back to the insecure default `admin / admin` login.
 - Runtime startup now evaluates a managed-instance rollout guard against the live `/srv/bolt-gives` checkout, and refuses Cloudflare fleet rollout if that checkout is behind `origin/main`.
 
 ### Fixed

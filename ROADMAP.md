@@ -98,6 +98,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 6. Self-host installer resilience
 
 - [~] Keep self-host install interactive for domains and local PostgreSQL credentials.
+- [x] Fresh self-host installs now prompt for the private operator/admin password and seed the local tenant registry instead of falling back to `admin / admin`.
 - [ ] Install both PostgreSQL server and client tooling (`psql`) as part of the supported VPS baseline.
 - [ ] Recover automatically from common apt, dependency, build, and service-start failures instead of exiting on the first error.
 - [ ] Add a repeatable no-db and full-db installer smoke path to release validation.

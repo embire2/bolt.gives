@@ -138,7 +138,7 @@ chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
 
-If you run it without domain or PostgreSQL flags, the installer now prompts interactively for the missing values.
+If you run it without domain, PostgreSQL, or operator-credential flags, the installer now prompts interactively for the missing values.
 
 Fully explicit path:
 
@@ -173,6 +173,7 @@ The installer will:
   - `BOLT_ADMIN_DATABASE_PASSWORD`
   - `BOLT_ADMIN_DATABASE_SSL=disable`
 - generate a private `BOLT_TENANT_ADMIN_COOKIE_SECRET`
+- seed the private tenant registry with your chosen operator/admin username and password hash on first install
 - build the app with a **4 GB** Node heap (`NODE_OPTIONS=--max-old-space-size=4096`)
 - install and start these systemd services:
   - `bolt-gives-app`
@@ -189,6 +190,8 @@ If the domain or PostgreSQL flags are omitted, the installer now prompts interac
 - local PostgreSQL database name
 - local PostgreSQL user
 - optional local PostgreSQL password (blank = generated)
+- private operator/admin username
+- private operator/admin password
 
 If a recoverable step fails, the installer now retries and repairs the common failure paths before giving up:
 
@@ -224,6 +227,9 @@ After the installer finishes:
 - runtime control plane: `http://127.0.0.1:4321`
 - admin panel: `https://admin.example.com` (or whatever `--admin-domain` was set to)
 - trial registration: `https://create.example.com` (or `https://<app-domain>/managed-instances` if `--create-domain` was omitted)
+- operator login: `https://admin.example.com/tenant-admin` using the private username/password you chose during install
+
+The raw operator password is never committed and is not stored in browser code. The installer hashes it into the local tenant registry on your VPS so the self-hosted admin panel does not fall back to the insecure bootstrap `admin / admin` default.
 
 ### 2. Add your provider keys
 

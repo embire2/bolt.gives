@@ -15,6 +15,15 @@ describe('install.sh', () => {
     expect(installScript).toContain('Local PostgreSQL password (leave blank to generate)');
   });
 
+  it('prompts for private operator credentials and seeds the tenant registry locally', () => {
+    expect(installScript).toContain('--operator-username');
+    expect(installScript).toContain('--operator-password');
+    expect(installScript).toContain('Private operator/admin username');
+    expect(installScript).toContain('Private operator/admin password');
+    expect(installScript).toContain('tenant-registry.json');
+    expect(installScript).toContain('Fresh non-interactive installs require --operator-password');
+  });
+
   it('contains recovery paths for dependencies, builds, and first health check startup', () => {
     expect(installScript).toContain('repair_repo_dependencies');
     expect(installScript).toContain('Build failed on first attempt; clearing generated artifacts and retrying once');

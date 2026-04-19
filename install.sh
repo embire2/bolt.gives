@@ -19,9 +19,12 @@ CREATE_DOMAIN="${CREATE_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 DEFAULT_POSTGRES_DB="bolt_gives_admin"
 DEFAULT_POSTGRES_USER="bolt_gives_admin"
+DEFAULT_OPERATOR_USERNAME="admin"
 POSTGRES_DB="${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}"
 POSTGRES_USER="${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
+OPERATOR_USERNAME="${OPERATOR_USERNAME:-${DEFAULT_OPERATOR_USERNAME}}"
+OPERATOR_PASSWORD="${OPERATOR_PASSWORD:-}"
 INSTALL_DEPS=1
 INSTALL_SERVICE=1
 BUILD_APP=1
@@ -34,6 +37,8 @@ LETSENCRYPT_EMAIL_SET_BY_FLAG=0
 POSTGRES_DB_SET_BY_FLAG=0
 POSTGRES_USER_SET_BY_FLAG=0
 POSTGRES_PASSWORD_SET_BY_FLAG=0
+OPERATOR_USERNAME_SET_BY_FLAG=0
+OPERATOR_PASSWORD_SET_BY_FLAG=0
 
 APP_SERVICE="${SERVICE_PREFIX}-app"
 COLLAB_SERVICE="${SERVICE_PREFIX}-collab"
@@ -60,6 +65,10 @@ Options:
   --postgres-user NAME Local PostgreSQL user name (default: bolt_gives_admin)
   --postgres-password VALUE
                        Local PostgreSQL password (generated if omitted)
+  --operator-username NAME
+                       Private operator/admin username (default: admin)
+  --operator-password VALUE
+                       Private operator/admin password (required for non-interactive fresh installs)
   --letsencrypt-email VALUE
                        Contact email for Let's Encrypt / Caddy
   --skip-deps          Skip apt, Node.js, and pnpm installation
@@ -71,7 +80,7 @@ Environment overrides:
   INSTALL_DIR, BRANCH, REPO_URL, APP_PORT, COLLAB_PORT, WEBBROWSE_PORT, RUNTIME_PORT,
   SERVICE_PREFIX, NODE_MAJOR, PNPM_VERSION, NODE_HEAP_MB, RUNTIME_WORKSPACE_DIR,
   APP_DOMAIN, ADMIN_DOMAIN, CREATE_DOMAIN, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD,
-  LETSENCRYPT_EMAIL
+  OPERATOR_USERNAME, OPERATOR_PASSWORD, LETSENCRYPT_EMAIL
 
 Notes:
   - Supported target: Ubuntu 18.04+.
@@ -235,6 +244,16 @@ parse_args() {
         POSTGRES_PASSWORD_SET_BY_FLAG=1
         shift 2
         ;;
+      --operator-username)
+        OPERATOR_USERNAME="$2"
+        OPERATOR_USERNAME_SET_BY_FLAG=1
+        shift 2
+        ;;
+      --operator-password)
+        OPERATOR_PASSWORD="$2"
+        OPERATOR_PASSWORD_SET_BY_FLAG=1
+        shift 2
+        ;;
       --skip-deps)
         INSTALL_DEPS=0
         shift
@@ -316,6 +335,31 @@ prompt_secret_line() {
   read -r -s -p "${prompt}: " answer || true
   printf '\n' >&2
   printf '%s' "${answer}"
+}
+
+prompt_confirmed_secret_line() {
+  local prompt="$1"
+  local confirmation_prompt="${2:-Confirm ${prompt}}"
+  local answer=""
+  local confirmation=""
+
+  while true; do
+    answer="$(prompt_secret_line "${prompt}")"
+
+    if [[ -z "${answer}" ]]; then
+      printf 'A value is required.\n' >&2
+      continue
+    fi
+
+    confirmation="$(prompt_secret_line "${confirmation_prompt}")"
+
+    if [[ "${answer}" == "${confirmation}" ]]; then
+      printf '%s' "${answer}"
+      return
+    fi
+
+    printf 'Values did not match. Try again.\n' >&2
+  done
 }
 
 prompt_yes_no() {
@@ -406,6 +450,14 @@ validate_sql_identifier() {
   fi
 }
 
+validate_operator_username() {
+  local value="$1"
+
+  if [[ ! "${value}" =~ ^[A-Za-z0-9._@-]+$ ]]; then
+    fail "Invalid operator username '${value}'. Use only letters, numbers, dots, dashes, underscores, or @."
+  fi
+}
+
 normalize_config_inputs() {
   APP_DOMAIN="$(normalize_domain "${APP_DOMAIN}")"
   ADMIN_DOMAIN="$(normalize_domain "${ADMIN_DOMAIN}")"
@@ -419,6 +471,8 @@ normalize_config_inputs() {
     validate_sql_identifier "${POSTGRES_DB}"
     validate_sql_identifier "${POSTGRES_USER}"
   fi
+
+  validate_operator_username "${OPERATOR_USERNAME}"
 }
 
 need_cmd() {
@@ -567,6 +621,72 @@ for line in file_path.read_text(encoding="utf-8").splitlines():
 PY
 }
 
+hash_tenant_secret() {
+  python3 - "$1" <<'PY'
+import hashlib
+import sys
+
+print(hashlib.sha256(sys.argv[1].encode('utf-8')).hexdigest())
+PY
+}
+
+tenant_registry_requires_operator_setup() {
+  local registry_path="$1"
+
+  python3 - "${registry_path}" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[1])
+default_hash = hashlib.sha256(b'admin').hexdigest()
+
+if not registry_path.exists():
+    raise SystemExit(0)
+
+try:
+    data = json.loads(registry_path.read_text(encoding='utf-8'))
+except Exception:
+    raise SystemExit(0)
+
+admin = data.get('admin') or {}
+password_hash = str(admin.get('passwordHash') or '').strip()
+username = str(admin.get('username') or '').strip()
+
+if not password_hash or password_hash == default_hash or not username:
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+read_seeded_operator_username() {
+  local registry_path="$1"
+
+  python3 - "${registry_path}" <<'PY'
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[1])
+
+if not registry_path.exists():
+    raise SystemExit(0)
+
+try:
+    data = json.loads(registry_path.read_text(encoding='utf-8'))
+except Exception:
+    raise SystemExit(0)
+
+admin = data.get('admin') or {}
+username = str(admin.get('username') or '').strip()
+
+if username:
+    print(username)
+PY
+}
+
 prepare_env_file() {
   local env_file="${INSTALL_DIR}/.env.local"
 
@@ -610,6 +730,94 @@ prepare_env_file() {
   fi
 
   mkdir -p "${RUNTIME_WORKSPACE_DIR}"
+}
+
+seed_operator_registry() {
+  local registry_path="${RUNTIME_WORKSPACE_DIR}/tenant-registry.json"
+  local needs_operator_setup=0
+
+  if tenant_registry_requires_operator_setup "${registry_path}"; then
+    needs_operator_setup=1
+  fi
+
+  if [[ "${needs_operator_setup}" -eq 1 ]]; then
+    if is_interactive_install; then
+      if [[ "${OPERATOR_USERNAME_SET_BY_FLAG}" -eq 0 ]]; then
+        OPERATOR_USERNAME="$(prompt_required_line "Private operator/admin username" "${OPERATOR_USERNAME:-${DEFAULT_OPERATOR_USERNAME}}")"
+      fi
+
+      if [[ "${OPERATOR_PASSWORD_SET_BY_FLAG}" -eq 0 && -z "${OPERATOR_PASSWORD}" ]]; then
+        OPERATOR_PASSWORD="$(prompt_confirmed_secret_line "Private operator/admin password" "Confirm private operator/admin password")"
+      fi
+    elif [[ -z "${OPERATOR_PASSWORD}" ]]; then
+      fail "Fresh non-interactive installs require --operator-password so the private admin panel does not fall back to admin/admin."
+    fi
+  fi
+
+  if [[ -z "${OPERATOR_PASSWORD}" && "${needs_operator_setup}" -eq 0 && "${OPERATOR_PASSWORD_SET_BY_FLAG}" -eq 0 && "${OPERATOR_USERNAME_SET_BY_FLAG}" -eq 0 ]]; then
+    return
+  fi
+
+  if [[ -z "${OPERATOR_PASSWORD}" ]]; then
+    fail "Operator password was not provided."
+  fi
+
+  validate_operator_username "${OPERATOR_USERNAME}"
+
+  local operator_password_hash
+  operator_password_hash="$(hash_tenant_secret "${OPERATOR_PASSWORD}")"
+  unset OPERATOR_PASSWORD
+
+  python3 - "${registry_path}" "${OPERATOR_USERNAME}" "${operator_password_hash}" <<'PY'
+import datetime
+import hashlib
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[1])
+username = sys.argv[2].strip() or 'admin'
+password_hash = sys.argv[3].strip()
+default_hash = hashlib.sha256(b'admin').hexdigest()
+now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+
+try:
+    data = json.loads(registry_path.read_text(encoding='utf-8')) if registry_path.exists() else {}
+except Exception:
+    data = {}
+
+admin = data.get('admin') or {}
+tenants = data.get('tenants') if isinstance(data.get('tenants'), list) else []
+audit_trail = data.get('auditTrail') if isinstance(data.get('auditTrail'), list) else []
+current_hash = str(admin.get('passwordHash') or '').strip()
+current_username = str(admin.get('username') or '').strip()
+
+should_seed = not current_hash or current_hash == default_hash or current_username == username or not current_username
+
+if should_seed:
+    admin = {
+        'username': username,
+        'passwordHash': password_hash,
+        'mustChangePassword': False,
+        'updatedAt': now,
+        'passwordUpdatedAt': now,
+        'lastLoginAt': admin.get('lastLoginAt') if isinstance(admin.get('lastLoginAt'), str) else None,
+    }
+else:
+    admin.setdefault('mustChangePassword', False)
+    admin.setdefault('updatedAt', now)
+    admin.setdefault('passwordUpdatedAt', admin.get('updatedAt') or now)
+    admin.setdefault('lastLoginAt', None)
+
+data = {
+    'admin': admin,
+    'tenants': tenants,
+    'auditTrail': audit_trail[-200:],
+}
+
+registry_path.parent.mkdir(parents=True, exist_ok=True)
+registry_path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+PY
 }
 
 setup_local_postgres() {
@@ -911,6 +1119,7 @@ print_summary() {
   local admin_url="not configured"
   local trial_url="not configured"
   local trial_note=""
+  local operator_username_summary="not configured"
 
   if [[ -n "${APP_DOMAIN}" ]]; then
     app_url="https://${APP_DOMAIN}"
@@ -925,6 +1134,9 @@ print_summary() {
     trial_url="https://${CREATE_DOMAIN}"
     trial_note=" (root redirects to /managed-instances)"
   fi
+
+  operator_username_summary="$(read_seeded_operator_username "${RUNTIME_WORKSPACE_DIR}/tenant-registry.json")"
+  operator_username_summary="${operator_username_summary:-${OPERATOR_USERNAME:-${DEFAULT_OPERATOR_USERNAME}}}"
 
   cat <<EOF
 
@@ -956,6 +1168,11 @@ Public URLs:
   admin      ${admin_url}
   trials     ${trial_url}${trial_note}
 
+Private operator login:
+  panel      $(if [[ "${admin_url}" != "not configured" ]]; then printf '%s/tenant-admin' "${admin_url}"; else printf 'https://<admin-domain>/tenant-admin'; fi)
+  username   ${operator_username_summary}
+  password   chosen during install (not displayed again)
+
 Local PostgreSQL:
   enabled    $(if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then printf 'yes'; else printf 'no'; fi)
   database   $(if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then printf '%s' "${POSTGRES_DB}"; else printf 'n/a'; fi)
@@ -965,9 +1182,11 @@ Next steps:
   1. Ensure your DNS A records point the chosen app/admin/create domains at this VPS before relying on public HTTPS.
   2. Edit ${INSTALL_DIR}/.env.local and add any provider keys you want to use.
      Keep server-side secrets such as FREE_OPENROUTER_API_KEY private; never place them in browser code or commits.
-  3. Restart services after editing secrets:
+  3. Sign in to the private operator panel with the username above and the password you chose during install.
+     The installer seeds the local tenant registry with that private password and does not store the raw value in Git or browser code.
+  4. Restart services after editing secrets:
      sudo systemctl restart ${APP_SERVICE} ${COLLAB_SERVICE} ${WEBBROWSE_SERVICE} ${RUNTIME_SERVICE}
-  4. Check service health:
+  5. Check service health:
      sudo systemctl status ${APP_SERVICE} --no-pager
 EOF
 }
@@ -994,6 +1213,7 @@ main() {
 
   clone_or_update_repo
   prepare_env_file
+  seed_operator_registry
   setup_local_postgres
   install_dependencies
   write_launcher_scripts
