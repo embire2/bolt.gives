@@ -16,6 +16,17 @@ const BOLT_QUICK_ACTIONS_CLOSE = '</bolt-quick-actions>';
 
 const logger = createScopedLogger('MessageParser');
 
+/**
+ * Returns true when `prefix` could be the start of a Bolt or Cody artifact
+ * opening tag. The streaming scanner uses this to avoid prematurely consuming
+ * partial Cody prefixes (e.g. "<c", "<co", "<codyArt") as plain text before
+ * `normalizeArtifactTags` has a chance to rewrite a later-arriving complete
+ * "<codyArtifact" into the canonical "<boltArtifact" form.
+ */
+function isPartialArtifactOpenPrefix(prefix: string) {
+  return ARTIFACT_TAG_OPEN.startsWith(prefix) || CODY_ARTIFACT_TAG_OPEN.startsWith(prefix);
+}
+
 export interface ArtifactCallbackData extends BoltArtifactData {
   messageId: string;
   artifactId?: string;
@@ -315,7 +326,7 @@ export class StreamingMessageParser {
             }
 
             break;
-          } else if (!ARTIFACT_TAG_OPEN.startsWith(potentialTag)) {
+          } else if (!isPartialArtifactOpenPrefix(potentialTag)) {
             output += input.slice(i, j + 1);
             i = j + 1;
             break;
@@ -324,7 +335,7 @@ export class StreamingMessageParser {
           j++;
         }
 
-        if (j === input.length && ARTIFACT_TAG_OPEN.startsWith(potentialTag)) {
+        if (j === input.length && isPartialArtifactOpenPrefix(potentialTag)) {
           break;
         }
       } else {

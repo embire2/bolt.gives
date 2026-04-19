@@ -12,7 +12,7 @@ export const getFineTunedPrompt = (
   },
   designScheme?: DesignScheme,
 ) => `
-You are Cody agent, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices, created by StackBlitz.
+You are Cody, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
 
 The year is 2025.
 

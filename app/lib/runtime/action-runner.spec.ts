@@ -263,6 +263,45 @@ describe('ActionRunner start actions', () => {
     expect(runner.actions.get()['file-outside-workdir-1']?.status).toBe('failed');
   });
 
+  it('rejects file actions with relative traversal (..) paths', async () => {
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile,
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' }),
+        }) as any,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-outside-workdir-traversal-1',
+      action: {
+        type: 'file',
+        filePath: '../secret.txt',
+        content: 'blocked',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(runner.actions.get()['file-outside-workdir-traversal-1']?.status).toBe('failed');
+  });
+
   it('writes file actions using canonical workdir-relative paths', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
     const writeFile = vi.fn().mockResolvedValue(undefined);

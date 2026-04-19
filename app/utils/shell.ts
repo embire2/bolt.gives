@@ -68,8 +68,12 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
         },
       }),
     )
-    .catch(() => {
-      // ignore stream shutdown while terminal/process is being recycled
+    .catch((error: unknown) => {
+      // If the interactive OSC never arrived, unblock awaiters on jshReady
+      // instead of leaving jshReady.promise pending forever.
+      if (!isInteractive) {
+        jshReady.reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
   terminal.onData((data) => {
@@ -206,8 +210,12 @@ export class BoltShell {
           },
         }),
       )
-      .catch(() => {
-        // ignore stream shutdown while terminal/process is being recycled
+      .catch((error: unknown) => {
+        // If the interactive OSC never arrived, unblock awaiters on jshReady
+        // instead of leaving jshReady.promise pending forever.
+        if (!isInteractive) {
+          jshReady.reject(error instanceof Error ? error : new Error(String(error)));
+        }
       });
 
     terminal.onData((data) => {

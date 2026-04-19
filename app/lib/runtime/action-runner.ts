@@ -892,7 +892,7 @@ export class ActionRunner {
   }
 
   async #runZombieKiller(kind: 'shell' | 'start') {
-    const cleanupCommand = 'pkill -9 -f "(node|npm|pnpm|yarn|vite|next|webpack)" || true';
+    const cleanupCommand = 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true';
 
     try {
       if (isHostedRuntimeEnabled()) {
@@ -920,6 +920,18 @@ export class ActionRunner {
     }
 
     const webcontainer = await this.#webcontainer;
+
+    // Reject absolute paths and leading traversal segments before any rebasing.
+    const rawFilePath = action.filePath ?? '';
+
+    if (
+      !rawFilePath ||
+      nodePath.isAbsolute(rawFilePath) ||
+      nodePath.normalize(rawFilePath).replace(/\\/g, '/').startsWith('..')
+    ) {
+      throw new Error(`EINVAL: invalid file path outside workdir: ${rawFilePath}`);
+    }
+
     const normalizedFilePath = resolvePreferredArtifactFilePath(
       action.filePath,
       this.#getFilesSnapshot?.(),

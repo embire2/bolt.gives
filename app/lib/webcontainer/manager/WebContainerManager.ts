@@ -3,9 +3,9 @@ import type { FileMap } from '~/lib/stores/files';
 import { WORK_DIR_NAME } from '~/utils/constants';
 import { cleanStackTrace } from '~/utils/stacktrace';
 import { createScopedLogger } from '~/utils/logger';
-import { createHostedWebContainerStub } from '../hosted-stub';
-import { createBoltContainer } from '../bolt-container';
-import { getSelectedRuntime, type RuntimeType } from '../runtime';
+import { createHostedWebContainerStub } from '~/lib/webcontainer/hosted-stub';
+import { createBoltContainer } from '~/lib/webcontainer/bolt-container';
+import { getSelectedRuntime, type RuntimeType } from '~/lib/webcontainer/runtime';
 import { recoveryManager } from './recovery';
 
 const logger = createScopedLogger('WebContainerManager');
@@ -109,6 +109,7 @@ export interface WebContainerContext {
 
 export class WebContainerManager {
   #bootPromise: Promise<WebContainer> | null = null;
+  #rebootPromise: Promise<WebContainer> | null = null;
   #instance: WebContainer | null = null;
   #activeRuntime: RuntimeType | null = null;
   #heartbeatHandle: ReturnType<typeof setInterval> | null = null;
@@ -133,22 +134,53 @@ export class WebContainerManager {
 
   boot() {
     if (import.meta.env.SSR) {
-      return Promise.reject(
-        new Error('WebContainerManager.boot() cannot be called during SSR'),
-      );
+      // Cache a settled (rejected) promise so repeated calls from SSR paths
+      // like queueWebcontainerWrite fail fast instead of accumulating
+      // never-resolving promises.
+      if (!this.#bootPromise) {
+        const ssrRejection = Promise.reject(
+          new Error('WebContainerManager.boot() cannot be called during SSR'),
+        );
+
+        // Attach a no-op handler to suppress unhandled-rejection warnings for
+        // callers that never await the cached promise.
+        ssrRejection.catch(() => {});
+        this.#bootPromise = ssrRejection;
+      }
+
+      return this.#bootPromise;
     }
 
     if (this.#bootPromise) {
       return this.#bootPromise;
     }
 
+    let createdContainer: WebContainer | null = null;
+
     this.#bootPromise = this.#createRuntimeInstance()
       .then(async (webcontainer) => {
+        createdContainer = webcontainer;
         await this.#attachRuntime(webcontainer);
+
         return webcontainer;
       })
-      .catch((error) => {
+      .catch(async (error) => {
+        // Boot failed (either during creation or attach); make sure we don't
+        // leak a partially-initialized container, and reset state so a
+        // subsequent forceReboot/boot can start from scratch.
         this.#bootPromise = null;
+        this.#instance = null;
+
+        const container = createdContainer as (WebContainer & { teardown?: () => Promise<void> | void }) | null;
+
+        if (container?.teardown) {
+          try {
+            await container.teardown();
+          } catch (teardownError) {
+            logger.warn('Failed to teardown partially booted WebContainer', teardownError);
+          }
+        }
+
         throw error;
       });
 
@@ -163,9 +195,11 @@ export class WebContainerManager {
     });
   }
 
-  async forceReboot(reason: string) {
-    if (this.#isRecovering) {
-      return this.#bootPromise ?? this.boot();
+  forceReboot(reason: string): Promise<WebContainer> {
+    // Coalesce concurrent callers onto the same reboot so we don't kick off
+    // a second boot() while the first is mid-flight.
+    if (this.#rebootPromise) {
+      return this.#rebootPromise;
     }
 
     logger.warn('Initiating WebContainer auto-resurrection', { reason, runtime: this.#activeRuntime });
@@ -175,15 +209,19 @@ export class WebContainerManager {
     this._context.loaded = false;
     this._context.heartbeatHealthy = false;
 
-    const snapshot = await this.#captureWorkspaceSnapshot();
+    const runReboot = async (): Promise<WebContainer> => {
+      const snapshot = await this.#captureWorkspaceSnapshot();
 
-    try {
       this.#stopHealthMonitors();
 
       const currentContainer = this.#instance as (WebContainer & { teardown?: () => Promise<void> | void }) | null;
 
       if (currentContainer?.teardown) {
-        await currentContainer.teardown();
+        try {
+          await currentContainer.teardown();
+        } catch (teardownError) {
+          logger.warn('Failed to teardown existing WebContainer during reboot', teardownError);
+        }
       }
 
       this.#instance = null;
@@ -193,11 +231,22 @@ export class WebContainerManager {
       await this.#restoreWorkspaceSnapshot(snapshot);
 
       return rebootedContainer;
-    } finally {
-      this.#isRecovering = false;
-      this._context.recovering = false;
-      this._context.heartbeatHealthy = true;
-    }
+    };
+
+    this.#rebootPromise = runReboot()
+      .then((container) => {
+        // Only flip healthy state on a fully-successful reboot.
+        this._context.heartbeatHealthy = true;
+
+        return container;
+      })
+      .finally(() => {
+        this.#isRecovering = false;
+        this._context.recovering = false;
+        this.#rebootPromise = null;
+      });
+
+    return this.#rebootPromise;
   }
 
   async #createRuntimeInstance(): Promise<WebContainer> {
@@ -223,10 +272,6 @@ export class WebContainerManager {
   }
 
   async #attachRuntime(webcontainer: WebContainer) {
-    this.#instance = webcontainer;
-    this._context.loaded = this.#activeRuntime !== 'hosted';
-    this._context.lastBootedAt = Date.now();
-
     if (this.#activeRuntime === 'webcontainer') {
       try {
         const response = await fetch('/inspector-script.js');
@@ -236,6 +281,13 @@ export class WebContainerManager {
         // inspector script is optional
       }
     }
+
+    // Only publish the instance once the runtime has been attached
+    // successfully; if any of the steps above threw, we never leave a
+    // partially-initialized container on the manager.
+    this.#instance = webcontainer;
+    this._context.loaded = this.#activeRuntime !== 'hosted';
+    this._context.lastBootedAt = Date.now();
 
     recoveryManager.attach(webcontainer);
     this.#attachPreviewMessageListener(webcontainer);
@@ -306,17 +358,23 @@ export class WebContainerManager {
     try {
       const marker = `${Date.now()}`;
 
-      await withTimeout(container.fs.mkdir('.bolt-runtime', { recursive: true }), HEARTBEAT_TIMEOUT_MS, 'heartbeat mkdir');
-      await withTimeout(container.fs.writeFile(HEARTBEAT_FILE_PATH, marker), HEARTBEAT_TIMEOUT_MS, 'heartbeat write');
-      const readValue = await withTimeout(
-        container.fs.readFile(HEARTBEAT_FILE_PATH, 'utf-8') as Promise<string>,
-        HEARTBEAT_TIMEOUT_MS,
-        'heartbeat read',
-      );
+      // Wrap the whole mkdir/write/read+verify sequence in a single overall
+      // timeout so one slow step cannot consume the entire tick budget and
+      // cause back-to-back heartbeats to pile up beyond HEARTBEAT_INTERVAL_MS.
+      await withTimeout(
+        (async () => {
+          await container.fs.mkdir('.bolt-runtime', { recursive: true });
+          await container.fs.writeFile(HEARTBEAT_FILE_PATH, marker);
 
-      if (String(readValue).trim() !== marker) {
-        throw new Error('Heartbeat timestamp mismatch');
-      }
+          const readValue = (await container.fs.readFile(HEARTBEAT_FILE_PATH, 'utf-8')) as string;
+
+          if (String(readValue).trim() !== marker) {
+            throw new Error('Heartbeat timestamp mismatch');
+          }
+        })(),
+        HEARTBEAT_TIMEOUT_MS,
+        'fs-heartbeat',
+      );
 
       this.#heartbeatFailures = 0;
       this._context.heartbeatHealthy = true;

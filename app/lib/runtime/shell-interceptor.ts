@@ -1,7 +1,7 @@
 const ECHO_REDIRECTION_RE = /\becho\b[\s\S]*?(?:>>|>)/i;
 const CAT_REDIRECTION_RE = /\bcat\b[\s\S]*?(?:>>|>)/i;
 const SED_IN_PLACE_RE = /\bsed\b[^\n]*\s-i(?:\s|$)/i;
-const TEE_FILE_WRITE_RE = /(?:^|\s)tee(?:\s+-a)?\s+(?!\/dev\/null\b)([^\s|;&]+)/i;
+const TEE_FILE_WRITE_RE = /(?:^|\s)tee(?:\s+-a)?\s+([^\s|;&]+)/i;
 const REDIRECTION_TARGET_RE = /(^|[\s;|&])(\d*>>?)(?![=&])\s*([^\s;|&]+)/g;
 
 function isSafeRedirectionTarget(rawTarget: string) {
@@ -15,7 +15,7 @@ function isSafeRedirectionTarget(rawTarget: string) {
     return true;
   }
 
-  return target.startsWith('/dev/null');
+  return target === '/dev/null';
 }
 
 function hasUnsafeRedirection(command: string) {
@@ -30,6 +30,16 @@ function hasUnsafeRedirection(command: string) {
   return false;
 }
 
+function hasUnsafeTeeWrite(command: string) {
+  const match = command.match(TEE_FILE_WRITE_RE);
+
+  if (!match) {
+    return false;
+  }
+
+  return !isSafeRedirectionTarget(match[1] || '');
+}
+
 export function getBlockedShellMutationReason(command: string): string | null {
   const normalized = command.trim();
 
@@ -41,7 +51,7 @@ export function getBlockedShellMutationReason(command: string): string | null {
     return 'Shell redirection that writes to files is blocked. Use a file action for writes so changes stay atomic.';
   }
 
-  if (TEE_FILE_WRITE_RE.test(normalized)) {
+  if (hasUnsafeTeeWrite(normalized)) {
     return 'Shell-based file mutation via `tee` is blocked. Use a file action instead.';
   }
 
@@ -53,7 +63,5 @@ export function getBlockedShellMutationReason(command: string): string | null {
 }
 
 export function shouldRunZombieCleanup(command: string) {
-  return /\b(?:pnpm|npm|yarn|bun)\s+(?:install|i|run\s+dev|run\s+start|run\s+build|dev|start|build)\b/i.test(
-    command,
-  );
+  return /\b(?:pnpm|npm|yarn|bun)\s+(?:install|i|run\s+dev|run\s+start|run\s+build|dev|start|build)\b/i.test(command);
 }
