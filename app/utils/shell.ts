@@ -4,6 +4,16 @@ import { withResolvers } from './promises';
 import { atom } from 'nanostores';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 
+const MAX_EXECUTION_OUTPUT_CHARS = 180_000;
+
+function capOutputBuffer(value: string) {
+  if (value.length <= MAX_EXECUTION_OUTPUT_CHARS) {
+    return value;
+  }
+
+  return value.slice(-MAX_EXECUTION_OUTPUT_CHARS);
+}
+
 export async function newShellProcess(webcontainer: WebContainer, terminal: ITerminal) {
   const args: string[] = [];
 
@@ -21,42 +31,46 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
   const jshReady = withResolvers<void>();
 
   let isInteractive = false;
-  output.pipeTo(
-    new WritableStream({
-      write(data) {
-        if (!isInteractive) {
-          const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
+  output
+    .pipeTo(
+      new WritableStream({
+        write(data) {
+          if (!isInteractive) {
+            const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
 
-          if (osc === 'interactive') {
-            // wait until we see the interactive OSC
-            isInteractive = true;
+            if (osc === 'interactive') {
+              // wait until we see the interactive OSC
+              isInteractive = true;
 
-            jshReady.resolve();
+              jshReady.resolve();
+            }
           }
-        }
 
-        terminal.write(data);
+          terminal.write(data);
 
-        // Capture terminal output for debugging
-        try {
-          import('~/utils/debugLogger')
-            .then(({ captureTerminalLog }) => {
-              // Clean the data by removing ANSI escape sequences for logging
-              const cleanData = data.replace(/\x1b\[[0-9;]*[mG]/g, '').trim();
+          // Capture terminal output for debugging
+          try {
+            import('~/utils/debugLogger')
+              .then(({ captureTerminalLog }) => {
+                // Clean the data by removing ANSI escape sequences for logging
+                const cleanData = data.replace(/\x1b\[[0-9;]*[mG]/g, '').trim();
 
-              if (cleanData) {
-                captureTerminalLog(cleanData, 'output');
-              }
-            })
-            .catch(() => {
-              // Ignore if debug logger is not available
-            });
-        } catch {
-          // Ignore errors in debug logging
-        }
-      },
-    }),
-  );
+                if (cleanData) {
+                  captureTerminalLog(cleanData, 'output');
+                }
+              })
+              .catch(() => {
+                // Ignore if debug logger is not available
+              });
+          } catch {
+            // Ignore errors in debug logging
+          }
+        },
+      }),
+    )
+    .catch(() => {
+      // ignore stream shutdown while terminal/process is being recycled
+    });
 
   terminal.onData((data) => {
     // console.log('terminal onData', { data, isInteractive });
@@ -175,22 +189,26 @@ export class BoltShell {
 
     const jshReady = withResolvers<void>();
     let isInteractive = false;
-    streamA.pipeTo(
-      new WritableStream({
-        write(data) {
-          if (!isInteractive) {
-            const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
+    streamA
+      .pipeTo(
+        new WritableStream({
+          write(data) {
+            if (!isInteractive) {
+              const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
 
-            if (osc === 'interactive') {
-              isInteractive = true;
-              jshReady.resolve();
+              if (osc === 'interactive') {
+                isInteractive = true;
+                jshReady.resolve();
+              }
             }
-          }
 
-          terminal.write(data);
-        },
-      }),
-    );
+            terminal.write(data);
+          },
+        }),
+      )
+      .catch(() => {
+        // ignore stream shutdown while terminal/process is being recycled
+      });
 
     terminal.onData((data) => {
       if (isInteractive) {
@@ -210,28 +228,34 @@ export class BoltShell {
     let buffer = '';
     const expoUrlRegex = /(exp:\/\/[^\s]+)/;
 
-    while (true) {
-      const { value, done } = await reader.read();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
 
-      if (done) {
-        break;
+        if (done) {
+          break;
+        }
+
+        buffer += value || '';
+
+        const expoUrlMatch = buffer.match(expoUrlRegex);
+
+        if (expoUrlMatch) {
+          const cleanUrl = expoUrlMatch[1]
+            .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+            .replace(/[^\x20-\x7E]+$/g, '');
+          expoUrlAtom.set(cleanUrl);
+          buffer = buffer.slice(buffer.indexOf(expoUrlMatch[1]) + expoUrlMatch[1].length);
+        }
+
+        if (buffer.length > 2048) {
+          buffer = buffer.slice(-2048);
+        }
       }
-
-      buffer += value || '';
-
-      const expoUrlMatch = buffer.match(expoUrlRegex);
-
-      if (expoUrlMatch) {
-        const cleanUrl = expoUrlMatch[1]
-          .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-          .replace(/[^\x20-\x7E]+$/g, '');
-        expoUrlAtom.set(cleanUrl);
-        buffer = buffer.slice(buffer.indexOf(expoUrlMatch[1]) + expoUrlMatch[1].length);
-      }
-
-      if (buffer.length > 2048) {
-        buffer = buffer.slice(-2048);
-      }
+    } catch {
+      // stream can close unexpectedly during terminal resets
+    } finally {
+      reader.releaseLock();
     }
   }
 
@@ -324,8 +348,8 @@ export class BoltShell {
       }
 
       const text = value || '';
-      fullOutput += text;
-      buffer += text; // <-- Accumulate in buffer
+      fullOutput = capOutputBuffer(`${fullOutput}${text}`);
+      buffer = capOutputBuffer(`${buffer}${text}`); // <-- Accumulate in buffer
       onOutput?.(text);
 
       // Extract Expo URL from buffer and set store

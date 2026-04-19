@@ -114,6 +114,7 @@ export class WebContainerManager {
   #heartbeatHandle: ReturnType<typeof setInterval> | null = null;
   #memoryGuardHandle: ReturnType<typeof setInterval> | null = null;
   #heartbeatFailures = 0;
+  #heartbeatInFlight = false;
   #isRecovering = false;
   #memoryWarningCooldownUntil = 0;
   #writeQueue = new StrictWriteQueue();
@@ -296,9 +297,11 @@ export class WebContainerManager {
   async #runFsHeartbeat() {
     const container = this.#instance;
 
-    if (!container || this.#isRecovering) {
+    if (!container || this.#isRecovering || this.#heartbeatInFlight) {
       return;
     }
+
+    this.#heartbeatInFlight = true;
 
     try {
       const marker = `${Date.now()}`;
@@ -329,6 +332,8 @@ export class WebContainerManager {
         this.#heartbeatFailures = 0;
         await this.forceReboot('fs-heartbeat detected stalled filesystem activity');
       }
+    } finally {
+      this.#heartbeatInFlight = false;
     }
   }
 

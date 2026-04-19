@@ -35,6 +35,7 @@
 
 Recent hardening in this line includes safer hidden continuation dispatch: follow-up recovery prompts now wait until the active chat stream is genuinely idle before they are sent, which reduces mid-run disconnect/reconnect loops on longer builds.
 Another recent runtime fix now synthesizes preview handoff commands from the merged workspace state instead of the latest assistant delta only, which prevents broken follow-up runs from replaying dependency-only installs and stalling preview startup.
+Runtime stabilization now also enforces bounded shell/build output capture and guarded heartbeat probing, reducing memory pressure and duplicate recovery races during long-running installs/builds.
 Release verification now also includes a browser-level post-deploy asset health check so stale manifests and missing client bundles fail the release instead of leaving users on a non-interactive shell.
 
 ### Launch blockers

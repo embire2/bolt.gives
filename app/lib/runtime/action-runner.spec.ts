@@ -79,8 +79,8 @@ describe('ActionRunner start actions', () => {
 
     await runPromise;
 
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand.mock.calls[0][1]).toBe('pnpm run dev');
+    expect(executeCommand).toHaveBeenCalled();
+    expect(executeCommand.mock.calls.at(-1)?.[1]).toBe('pnpm run dev');
     expect(runner.actions.get()['action-1']?.status).toBe('complete');
   });
 

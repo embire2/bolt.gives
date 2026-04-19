@@ -144,7 +144,12 @@ export function getApiKeysFromCookies() {
     parsedKeys = apiKeyMemoizeCache[storedApiKeys];
 
     if (!parsedKeys) {
-      parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      try {
+        parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      } catch {
+        Cookies.remove(API_KEYS_COOKIE_NAME);
+        return {};
+      }
     }
 
     void persistEncryptedApiKeys(parsedKeys);
@@ -163,7 +168,12 @@ export function setApiKeysCookie(apiKeys: Record<string, string>, expiresDays: n
 export function removeApiKeysCookie() {
   Cookies.remove(API_KEYS_COOKIE_NAME);
 
+  for (const cacheKey of Object.keys(apiKeyMemoizeCache)) {
+    delete apiKeyMemoizeCache[cacheKey];
+  }
+
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem(API_KEYS_SECURE_STORAGE_KEY);
+    localStorage.removeItem(API_KEYS_KEYRING_STORAGE_KEY);
   }
 }

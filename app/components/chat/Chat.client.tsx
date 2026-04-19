@@ -39,7 +39,6 @@ import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import {
   LAST_CONFIGURED_PROVIDER_COOKIE_KEY,
   getRememberedProviderModel,
-  parseApiKeysCookie,
   pickPreferredProviderName,
   recordProviderHistory,
   readInstanceSelection,

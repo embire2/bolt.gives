@@ -11,7 +11,6 @@ import {
   setApiKeysCookie,
 } from '~/lib/runtime/api-key-storage';
 import { ChatBox } from './ChatBox';
-
 import * as Tooltip from '@radix-ui/react-tooltip';
 import styles from './BaseChat.module.scss';
 import { ImportButtons } from '~/components/chat/chatExportAndImport/ImportButtons';
@@ -505,42 +504,61 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     }, []);
 
     useEffect(() => {
-      if (typeof window !== 'undefined') {
-        let parsedApiKeys: Record<string, string> | undefined = {};
-
-        try {
-          parsedApiKeys = getApiKeysFromCookies();
-          setApiKeys(parsedApiKeys);
-
-          if (Object.keys(parsedApiKeys).length === 0) {
-            void loadApiKeysFromSecureStorage().then((secureApiKeys) => {
-              if (Object.keys(secureApiKeys).length === 0) {
-                return;
-              }
-
-              setApiKeys(secureApiKeys);
-              setApiKeysCookie(secureApiKeys);
-            });
-          }
-        } catch (error) {
-          console.error('Error loading API keys from cookies:', error);
-          removeApiKeysCookie();
-        }
-
-        setIsModelLoading('all');
-        fetch('/api/models')
-          .then((response) => response.json())
-          .then((data) => {
-            const typedData = data as { modelList: ModelInfo[] };
-            setModelList(typedData.modelList);
-          })
-          .catch((error) => {
-            console.error('Error fetching model list:', error);
-          })
-          .finally(() => {
-            setIsModelLoading(undefined);
-          });
+      if (typeof window === 'undefined') {
+        return;
       }
+
+      let disposed = false;
+      const modelsRequestController = new AbortController();
+      let parsedApiKeys: Record<string, string> | undefined = {};
+
+      try {
+        parsedApiKeys = getApiKeysFromCookies();
+        setApiKeys(parsedApiKeys);
+
+        if (Object.keys(parsedApiKeys).length === 0) {
+          void loadApiKeysFromSecureStorage().then((secureApiKeys) => {
+            if (disposed || Object.keys(secureApiKeys).length === 0) {
+              return;
+            }
+
+            setApiKeys(secureApiKeys);
+            setApiKeysCookie(secureApiKeys);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading API keys from cookies:', error);
+        removeApiKeysCookie();
+      }
+
+      setIsModelLoading('all');
+      fetch('/api/models', { signal: modelsRequestController.signal })
+        .then((response) => response.json())
+        .then((data) => {
+          if (disposed) {
+            return;
+          }
+
+          const typedData = data as { modelList: ModelInfo[] };
+          setModelList(typedData.modelList);
+        })
+        .catch((error) => {
+          if (error?.name === 'AbortError') {
+            return;
+          }
+
+          console.error('Error fetching model list:', error);
+        })
+        .finally(() => {
+          if (!disposed) {
+            setIsModelLoading(undefined);
+          }
+        });
+
+      return () => {
+        disposed = true;
+        modelsRequestController.abort();
+      };
     }, [providerListSignature]);
 
     const onApiKeysChange = async (providerName: string, apiKey: string) => {
