@@ -133,9 +133,9 @@ export class WebContainerManager {
 
   boot() {
     if (import.meta.env.SSR) {
-      return new Promise<WebContainer>(() => {
-        // no-op for ssr
-      });
+      return Promise.reject(
+        new Error('WebContainerManager.boot() cannot be called during SSR'),
+      );
     }
 
     if (this.#bootPromise) {
