@@ -4,9 +4,14 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
-import { getApiKeysFromCookies } from '~/lib/runtime/api-key-storage';
+import {
+  getApiKeysFromCookies,
+  loadApiKeysFromSecureStorage,
+  removeApiKeysCookie,
+  setApiKeysCookie,
+} from '~/lib/runtime/api-key-storage';
 import { ChatBox } from './ChatBox';
-import Cookies from 'js-cookie';
+
 import * as Tooltip from '@radix-ui/react-tooltip';
 import styles from './BaseChat.module.scss';
 import { ImportButtons } from '~/components/chat/chatExportAndImport/ImportButtons';
@@ -506,9 +511,20 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         try {
           parsedApiKeys = getApiKeysFromCookies();
           setApiKeys(parsedApiKeys);
+
+          if (Object.keys(parsedApiKeys).length === 0) {
+            void loadApiKeysFromSecureStorage().then((secureApiKeys) => {
+              if (Object.keys(secureApiKeys).length === 0) {
+                return;
+              }
+
+              setApiKeys(secureApiKeys);
+              setApiKeysCookie(secureApiKeys);
+            });
+          }
         } catch (error) {
           console.error('Error loading API keys from cookies:', error);
-          Cookies.remove('apiKeys');
+          removeApiKeysCookie();
         }
 
         setIsModelLoading('all');
@@ -531,7 +547,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       const normalizedApiKey = apiKey.trim();
       const newApiKeys = { ...apiKeys, [providerName]: normalizedApiKey };
       setApiKeys(newApiKeys);
-      Cookies.set('apiKeys', JSON.stringify(newApiKeys), { expires: 365 });
+      setApiKeysCookie(newApiKeys, 365);
 
       setIsModelLoading(providerName);
 

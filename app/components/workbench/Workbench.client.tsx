@@ -153,7 +153,7 @@ function buildWorkspaceSummary(args: {
       last:
         normalizeWorkspaceLine(latestCompletedStep?.output || latestCompletedStep?.description) ||
         'The last visible step completed successfully.',
-      next: 'Inspect the preview, review the files, or ask Bolt for the next change.',
+      next: 'Inspect the preview, review the files, or ask Cody agent for the next change.',
     };
   }
 
@@ -162,11 +162,11 @@ function buildWorkspaceSummary(args: {
     stateLabel: 'Standing by',
     current:
       normalizeWorkspaceLine(latestCommentary?.message || latestProgress?.message) ||
-      'Waiting for Bolt to write files or start the preview.',
+      'Waiting for Cody agent to write files or start the preview.',
     last:
       normalizeWorkspaceLine(latestCompletedStep?.description || latestCompletedStep?.output) ||
       'No completed workspace action yet.',
-    next: 'As soon as Bolt starts the app or edits files, the workspace will switch into an active state.',
+    next: 'As soon as Cody agent starts the app or edits files, the workspace will switch into an active state.',
   };
 }
 
@@ -818,7 +818,7 @@ export const Workbench = memo(
                 <div className="max-w-md">
                   <h3 className="text-lg font-semibold text-bolt-elements-textPrimary">Workspace standing by</h3>
                   <p className="mt-2 text-sm text-bolt-elements-textSecondary">
-                    The editor and preview will appear here as soon as Bolt writes files or starts the app.
+                    The editor and preview will appear here as soon as Cody agent writes files or starts the app.
                   </p>
                 </div>
               </div>

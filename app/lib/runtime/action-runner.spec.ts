@@ -110,6 +110,53 @@ describe('ActionRunner start actions', () => {
     expect(eventTypes).toContain('complete');
   });
 
+  it('blocks shell redirection and keeps file writes out of shell commands', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
+    const onAlert = vi.fn();
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile: vi.fn().mockResolvedValue(undefined),
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand,
+        }) as any,
+      undefined,
+      undefined,
+      undefined,
+      onAlert,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-blocked-shell-1',
+      action: {
+        type: 'shell',
+        content: 'echo "blocked" > src/App.tsx',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Blocked Shell Mutation',
+      }),
+    );
+  });
+
   it('writes file actions using canonical workdir-relative paths', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
     const writeFile = vi.fn().mockResolvedValue(undefined);

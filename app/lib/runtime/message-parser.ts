@@ -7,6 +7,10 @@ const ARTIFACT_TAG_OPEN = '<boltArtifact';
 const ARTIFACT_TAG_CLOSE = '</boltArtifact>';
 const ARTIFACT_ACTION_TAG_OPEN = '<boltAction';
 const ARTIFACT_ACTION_TAG_CLOSE = '</boltAction>';
+const CODY_ARTIFACT_TAG_OPEN = '<codyArtifact';
+const CODY_ARTIFACT_TAG_CLOSE = '</codyArtifact>';
+const CODY_ACTION_TAG_OPEN = '<codyAction';
+const CODY_ACTION_TAG_CLOSE = '</codyAction>';
 const BOLT_QUICK_ACTIONS_OPEN = '<bolt-quick-actions>';
 const BOLT_QUICK_ACTIONS_CLOSE = '</bolt-quick-actions>';
 
@@ -73,6 +77,15 @@ function cleanoutMarkdownSyntax(content: string) {
 function cleanEscapedTags(content: string) {
   return content.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 }
+
+function normalizeArtifactTags(input: string) {
+  return input
+    .replace(new RegExp(CODY_ARTIFACT_TAG_OPEN, 'g'), ARTIFACT_TAG_OPEN)
+    .replace(new RegExp(CODY_ARTIFACT_TAG_CLOSE, 'g'), ARTIFACT_TAG_CLOSE)
+    .replace(new RegExp(CODY_ACTION_TAG_OPEN, 'g'), ARTIFACT_ACTION_TAG_OPEN)
+    .replace(new RegExp(CODY_ACTION_TAG_CLOSE, 'g'), ARTIFACT_ACTION_TAG_CLOSE);
+}
+
 export class StreamingMessageParser {
   #messages = new Map<string, MessageState>();
   #artifactCounter = 0;
@@ -80,6 +93,8 @@ export class StreamingMessageParser {
   constructor(private _options: StreamingMessageParserOptions = {}) {}
 
   parse(messageId: string, input: string) {
+    input = normalizeArtifactTags(input);
+
     let state = this.#messages.get(messageId);
 
     if (!state) {

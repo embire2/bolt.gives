@@ -24,6 +24,7 @@ import {
   rewriteAllPackageManagersToPnpm,
   rewritePythonCommands,
 } from './shell-command-utils';
+import { getBlockedShellMutationReason, shouldRunZombieCleanup } from './shell-interceptor';
 import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath } from './file-paths';
 import type { FileMap } from '~/lib/stores/files';
 import {
@@ -538,9 +539,17 @@ export class ActionRunner {
     if (isHostedRuntimeEnabled()) {
       const validationResult = await this.#validateShellCommand(action.content);
 
+      if (validationResult.blockedReason) {
+        throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+      }
+
       if (validationResult.shouldModify && validationResult.modifiedCommand) {
         action.content = validationResult.modifiedCommand;
         this.#updateAction(actionId, { ...action } as any);
+      }
+
+      if (shouldRunZombieCleanup(action.content)) {
+        await this.#runZombieKiller('shell');
       }
 
       await this.#runHostedShellLikeCommand({
@@ -562,12 +571,20 @@ export class ActionRunner {
     // Pre-validate command for common issues
     const validationResult = await this.#validateShellCommand(action.content);
 
+    if (validationResult.blockedReason) {
+      throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+    }
+
     if (validationResult.shouldModify && validationResult.modifiedCommand) {
       logger.debug(`Modified command: ${action.content} -> ${validationResult.modifiedCommand}`);
       action.content = validationResult.modifiedCommand;
 
       // Persist the modified command so the UI and logs reflect what actually executed.
       this.#updateAction(actionId, { ...action } as any);
+    }
+
+    if (shouldRunZombieCleanup(action.content)) {
+      await this.#runZombieKiller('shell');
     }
 
     let finalOutput = '';
@@ -658,10 +675,18 @@ export class ActionRunner {
     if (isHostedRuntimeEnabled()) {
       const validationResult = await this.#validateShellCommand(action.content);
 
+      if (validationResult.blockedReason) {
+        throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+      }
+
       if (validationResult.shouldModify && validationResult.modifiedCommand) {
         logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
         action.content = validationResult.modifiedCommand;
         this.#updateAction(actionId, { ...action } as any);
+      }
+
+      if (shouldRunZombieCleanup(action.content)) {
+        await this.#runZombieKiller('start');
       }
 
       await this.#runHostedShellLikeCommand({
@@ -686,10 +711,18 @@ export class ActionRunner {
 
     const validationResult = await this.#validateShellCommand(action.content);
 
+    if (validationResult.blockedReason) {
+      throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+    }
+
     if (validationResult.shouldModify && validationResult.modifiedCommand) {
       logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
       action.content = validationResult.modifiedCommand;
       this.#updateAction(actionId, { ...action } as any);
+    }
+
+    if (shouldRunZombieCleanup(action.content)) {
+      await this.#runZombieKiller('start');
     }
 
     let finalOutput = '';
@@ -777,6 +810,29 @@ export class ActionRunner {
     } catch (error) {
       logger.warn('Unable to create step event socket', error);
       return undefined;
+    }
+  }
+
+  async #runZombieKiller(kind: 'shell' | 'start') {
+    const cleanupCommand = 'pkill -9 -f "(node|npm|pnpm|yarn|vite|next|webpack)" || true';
+
+    try {
+      if (isHostedRuntimeEnabled()) {
+        await this.#syncHostedRuntimeSnapshot();
+        await runHostedRuntimeCommand({
+          sessionId: this.#getHostedRuntimeSessionId(),
+          command: cleanupCommand,
+          kind,
+        });
+
+        return;
+      }
+
+      const shell = this.#shellTerminal();
+      await shell.ready();
+      await shell.executeCommand(this.runnerId.get(), cleanupCommand);
+    } catch (error) {
+      logger.debug('Zombie cleanup skipped (runtime may not expose pkill)', error);
     }
   }
 
@@ -1073,10 +1129,20 @@ export class ActionRunner {
     shouldModify: boolean;
     modifiedCommand?: string;
     warning?: string;
+    blockedReason?: string;
   }> {
     let trimmedCommand = command.trim();
     let hasCommandRewrite = false;
     const rewriteWarnings: string[] = [];
+
+    const blockedReason = getBlockedShellMutationReason(trimmedCommand);
+
+    if (blockedReason) {
+      return {
+        shouldModify: false,
+        blockedReason,
+      };
+    }
 
     const applyRewrite = (result: { shouldModify: boolean; modifiedCommand?: string; warning?: string }) => {
       if (!result.shouldModify || !result.modifiedCommand || result.modifiedCommand === trimmedCommand) {

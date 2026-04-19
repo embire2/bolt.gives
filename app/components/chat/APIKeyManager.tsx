@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '~/types/model';
-import Cookies from 'js-cookie';
-import { getApiKeysFromCookies } from '~/lib/runtime/api-key-storage';
+import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -66,7 +65,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
     // Save to cookies
     const currentKeys = getApiKeysFromCookies();
     const newKeys = { ...currentKeys, [provider.name]: normalizedKey };
-    Cookies.set('apiKeys', JSON.stringify(newKeys), { expires: 365 });
+    setApiKeysCookie(newKeys, 365);
 
     setIsEditing(false);
   };
