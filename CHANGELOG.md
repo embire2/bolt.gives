@@ -30,6 +30,13 @@
 
 ### Fixed
 
+- Runtime command capture now enforces bounded output buffers for shell/start/build flows, preventing long install/build logs from growing unbounded in memory and reducing browser freezes during heavy runs.
+- Terminal stream piping now safely swallows expected shutdown errors during process recycling, reducing unhandled stream rejection noise that previously appeared during rapid runtime resets.
+- Shell write guards now also evaluate normalized/rewritten commands (including JSON command envelopes), closing a bypass path where blocked redirections could slip through after command rewrites.
+- Shell write blocking now distinguishes harmless sink redirections (`/dev/null`) from real file writes, preserving portable runtime file checks without weakening mutation safeguards.
+- Artifact file writes now reject any path resolving outside the active workspace root, hardening runtime file actions against path traversal attempts.
+- WebContainer heartbeat checks now prevent overlapping probes, reducing race conditions that could trigger duplicate recovery attempts under heavy filesystem load.
+- Chat bootstrap model-fetch and secure API key hydration now cancel cleanly on unmount, eliminating stale async state updates during rapid navigation and provider switches.
 - Hidden continuation prompts now wait until the active chat stream has actually settled before dispatching, which prevents overlapping chat requests from racing each other and reduces disconnect/reconnect loops during long runs.
 - Hosted FREE preview verification no longer auto-restores an older starter snapshot just because the browser briefly reported the fallback placeholder while the generated app files were already synced; starter-placeholder reporting is now ignored once the active workspace no longer contains the starter text.
 - Generated app entry-file writes now resolve onto the active starter source file when the model picks a sibling JS/TS extension (`App.js` vs `App.tsx`, `main.jsx` vs `main.tsx`, etc.), which stops hosted Vite projects from leaving the real app in an inactive file while preview keeps showing the fallback starter.

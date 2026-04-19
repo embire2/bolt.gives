@@ -24,8 +24,8 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
           ? 'Architect has queued an automatic preview repair and will run it as soon as the current step finishes.'
           : 'Architect has queued an automatic terminal repair and will run it as soon as the current step finishes.'
         : isPreview
-          ? 'We encountered an error while running the preview. Would you like Bolt to analyze and help resolve this issue?'
-          : 'We encountered an error while running terminal commands. Would you like Bolt to analyze and help resolve this issue?';
+          ? 'We encountered an error while running the preview. Would you like Cody agent to analyze and help resolve this issue?'
+          : 'We encountered an error while running terminal commands. Would you like Cody agent to analyze and help resolve this issue?';
 
   return (
     <AnimatePresence>
@@ -96,7 +96,7 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
                   )}
                 >
                   <div className="i-ph:chat-circle-duotone"></div>
-                  {autoFixState === 'running' ? 'Auto-fixing' : autoFixState === 'queued' ? 'Queued' : 'Ask Bolt'}
+                  {autoFixState === 'running' ? 'Auto-fixing' : autoFixState === 'queued' ? 'Queued' : 'Ask Cody agent'}
                 </button>
                 <button
                   onClick={clearAlert}

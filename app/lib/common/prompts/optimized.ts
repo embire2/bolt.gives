@@ -3,7 +3,7 @@ import type { PromptOptions } from '~/lib/common/prompt-library';
 export default (options: PromptOptions) => {
   const { cwd, allowedHtmlElements, supabase } = options;
   return `
-You are Bolt, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
+You are Cody agent, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
 
 <system_constraints>
   - Operating in a bolt.gives runtime: prefer the managed hosted Node.js/Linux runtime when available, with WebContainer as the browser fallback, or BoltContainer + E2B for full Linux/Python/Django support

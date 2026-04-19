@@ -24,6 +24,7 @@ import {
   rewriteAllPackageManagersToPnpm,
   rewritePythonCommands,
 } from './shell-command-utils';
+import { getBlockedShellMutationReason, shouldRunZombieCleanup } from './shell-interceptor';
 import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath } from './file-paths';
 import type { FileMap } from '~/lib/stores/files';
 import {
@@ -38,6 +39,71 @@ const logger = createScopedLogger('ActionRunner');
 const NOISY_PACKAGE_PROGRESS_RE =
   /(?:progress:\s+resolved|packages:\s+\+|lockfile is up to date|already up to date|resolved \d+, reused \d+)/i;
 const HEAVY_COMMAND_RE = /\b(?:pnpm|npm|yarn|bun)\s+(?:install|i|run\s+build|build)\b/i;
+const LOW_PRIORITY_ASSET_FILE_RE =
+  /\.(?:png|jpe?g|gif|webp|ico|svg|mp4|mp3|wav|ogg|pdf|zip|gz|tar|woff2?|ttf|otf|eot|wasm)$/i;
+const MAX_CAPTURED_OUTPUT_CHARS = 120_000;
+
+function capCapturedOutput(output: string): string {
+  if (output.length <= MAX_CAPTURED_OUTPUT_CHARS) {
+    return output;
+  }
+
+  return output.slice(-MAX_CAPTURED_OUTPUT_CHARS);
+}
+
+type PendingWriteTask = {
+  priority: 'logic' | 'asset';
+  task: () => Promise<void>;
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+};
+
+const logicWriteTasks: PendingWriteTask[] = [];
+const assetWriteTasks: PendingWriteTask[] = [];
+let writeQueueRunning = false;
+
+function getWritePriority(filePath: string): 'logic' | 'asset' {
+  return LOW_PRIORITY_ASSET_FILE_RE.test(filePath) ? 'asset' : 'logic';
+}
+
+function enqueueActionRunnerFileWrite(priority: 'logic' | 'asset', task: () => Promise<void>) {
+  return new Promise<void>((resolve, reject) => {
+    const entry: PendingWriteTask = { priority, task, resolve, reject };
+
+    if (priority === 'logic') {
+      logicWriteTasks.push(entry);
+    } else {
+      assetWriteTasks.push(entry);
+    }
+
+    void drainActionRunnerWriteQueue();
+  });
+}
+
+async function drainActionRunnerWriteQueue() {
+  if (writeQueueRunning) {
+    return;
+  }
+
+  writeQueueRunning = true;
+
+  while (logicWriteTasks.length || assetWriteTasks.length) {
+    const next = logicWriteTasks.shift() ?? assetWriteTasks.shift();
+
+    if (!next) {
+      continue;
+    }
+
+    try {
+      await next.task();
+      next.resolve();
+    } catch (error) {
+      next.reject(error);
+    }
+  }
+
+  writeQueueRunning = false;
+}
 
 function normalizeShellChunkForTimeline(chunk: string): string {
   return chunk
@@ -330,13 +396,13 @@ export class ActionRunner {
             },
           });
 
-          finalOutput = resp.output;
+          finalOutput = capCapturedOutput(resp.output);
           finalExitCode = resp.exitCode;
 
           return {
             exitCode: resp.exitCode,
-            stdout: resp.output,
-            stderr: resp.exitCode === 0 ? '' : resp.output,
+            stdout: capCapturedOutput(resp.output),
+            stderr: resp.exitCode === 0 ? '' : capCapturedOutput(resp.output),
           };
         },
       },
@@ -538,9 +604,17 @@ export class ActionRunner {
     if (isHostedRuntimeEnabled()) {
       const validationResult = await this.#validateShellCommand(action.content);
 
+      if (validationResult.blockedReason) {
+        throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+      }
+
       if (validationResult.shouldModify && validationResult.modifiedCommand) {
         action.content = validationResult.modifiedCommand;
         this.#updateAction(actionId, { ...action } as any);
+      }
+
+      if (shouldRunZombieCleanup(action.content)) {
+        await this.#runZombieKiller('shell');
       }
 
       await this.#runHostedShellLikeCommand({
@@ -562,12 +636,20 @@ export class ActionRunner {
     // Pre-validate command for common issues
     const validationResult = await this.#validateShellCommand(action.content);
 
+    if (validationResult.blockedReason) {
+      throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+    }
+
     if (validationResult.shouldModify && validationResult.modifiedCommand) {
       logger.debug(`Modified command: ${action.content} -> ${validationResult.modifiedCommand}`);
       action.content = validationResult.modifiedCommand;
 
       // Persist the modified command so the UI and logs reflect what actually executed.
       this.#updateAction(actionId, { ...action } as any);
+    }
+
+    if (shouldRunZombieCleanup(action.content)) {
+      await this.#runZombieKiller('shell');
     }
 
     let finalOutput = '';
@@ -610,7 +692,7 @@ export class ActionRunner {
               context.onStdout(normalized);
             },
           );
-          const output = resp?.output || '';
+          const output = capCapturedOutput(resp?.output || '');
           const exitCode = resp?.exitCode ?? 1;
 
           finalOutput = output;
@@ -658,10 +740,18 @@ export class ActionRunner {
     if (isHostedRuntimeEnabled()) {
       const validationResult = await this.#validateShellCommand(action.content);
 
+      if (validationResult.blockedReason) {
+        throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+      }
+
       if (validationResult.shouldModify && validationResult.modifiedCommand) {
         logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
         action.content = validationResult.modifiedCommand;
         this.#updateAction(actionId, { ...action } as any);
+      }
+
+      if (shouldRunZombieCleanup(action.content)) {
+        await this.#runZombieKiller('start');
       }
 
       await this.#runHostedShellLikeCommand({
@@ -686,10 +776,18 @@ export class ActionRunner {
 
     const validationResult = await this.#validateShellCommand(action.content);
 
+    if (validationResult.blockedReason) {
+      throw new ActionCommandError('Blocked Shell Mutation', validationResult.blockedReason);
+    }
+
     if (validationResult.shouldModify && validationResult.modifiedCommand) {
       logger.debug(`Modified start command: ${action.content} -> ${validationResult.modifiedCommand}`);
       action.content = validationResult.modifiedCommand;
       this.#updateAction(actionId, { ...action } as any);
+    }
+
+    if (shouldRunZombieCleanup(action.content)) {
+      await this.#runZombieKiller('start');
     }
 
     let finalOutput = '';
@@ -716,7 +814,7 @@ export class ActionRunner {
               context.onStdout(normalized);
             },
           );
-          const output = resp?.output || '';
+          const output = capCapturedOutput(resp?.output || '');
           const exitCode = resp?.exitCode ?? 1;
 
           finalOutput = output;
@@ -771,12 +869,48 @@ export class ActionRunner {
     try {
       const base = getCollaborationServerUrl();
       const socket = new WebSocket(`${base.replace(/\/$/, '')}/events`);
+
+      socket.addEventListener('close', () => {
+        if (this.#stepEventSocket === socket) {
+          this.#stepEventSocket = undefined;
+        }
+      });
+
+      socket.addEventListener('error', () => {
+        if (this.#stepEventSocket === socket) {
+          this.#stepEventSocket = undefined;
+        }
+      });
+
       this.#stepEventSocket = socket;
 
       return socket;
     } catch (error) {
       logger.warn('Unable to create step event socket', error);
       return undefined;
+    }
+  }
+
+  async #runZombieKiller(kind: 'shell' | 'start') {
+    const cleanupCommand = 'pkill -9 -f "(node|npm|pnpm|yarn|vite|next|webpack)" || true';
+
+    try {
+      if (isHostedRuntimeEnabled()) {
+        await this.#syncHostedRuntimeSnapshot();
+        await runHostedRuntimeCommand({
+          sessionId: this.#getHostedRuntimeSessionId(),
+          command: cleanupCommand,
+          kind,
+        });
+
+        return;
+      }
+
+      const shell = this.#shellTerminal();
+      await shell.ready();
+      await shell.executeCommand(this.runnerId.get(), cleanupCommand);
+    } catch (error) {
+      logger.debug('Zombie cleanup skipped (runtime may not expose pkill)', error);
     }
   }
 
@@ -792,6 +926,11 @@ export class ActionRunner {
       webcontainer.workdir,
     );
     const relativePath = nodePath.relative(webcontainer.workdir, normalizedFilePath);
+
+    if (!relativePath || relativePath.startsWith('..') || nodePath.isAbsolute(relativePath)) {
+      throw new Error(`EINVAL: invalid file path outside workdir: ${action.filePath}`);
+    }
+
     const existingFile = this.#getFilesSnapshot?.()[normalizedFilePath];
     const hostedRuntimeEnabled = isHostedRuntimeEnabled();
 
@@ -820,7 +959,12 @@ export class ActionRunner {
     }
 
     try {
-      await webcontainer.fs.writeFile(relativePath, action.content);
+      const writePriority = getWritePriority(relativePath);
+      await enqueueActionRunnerFileWrite(writePriority, () => webcontainer.fs.writeFile(relativePath, action.content));
+
+      if (writePriority === 'asset') {
+        logger.debug(`Deferred low-priority asset write ${relativePath}`);
+      }
       logger.debug(`File written ${relativePath}`);
 
       await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
@@ -893,7 +1037,7 @@ export class ActionRunner {
     const outputPromise = buildProcess.output.pipeTo(
       new WritableStream({
         write(data) {
-          output += data;
+          output = capCapturedOutput(`${output}${data}`);
         },
       }),
     );
@@ -1073,10 +1217,20 @@ export class ActionRunner {
     shouldModify: boolean;
     modifiedCommand?: string;
     warning?: string;
+    blockedReason?: string;
   }> {
     let trimmedCommand = command.trim();
     let hasCommandRewrite = false;
     const rewriteWarnings: string[] = [];
+
+    const blockedReason = getBlockedShellMutationReason(trimmedCommand);
+
+    if (blockedReason) {
+      return {
+        shouldModify: false,
+        blockedReason,
+      };
+    }
 
     const applyRewrite = (result: { shouldModify: boolean; modifiedCommand?: string; warning?: string }) => {
       if (!result.shouldModify || !result.modifiedCommand || result.modifiedCommand === trimmedCommand) {
@@ -1105,6 +1259,15 @@ export class ActionRunner {
     applyRewrite(makeFileChecksPortable(trimmedCommand));
     applyRewrite(rewriteAllPackageManagersToPnpm(trimmedCommand));
     applyRewrite(rewritePythonCommands(trimmedCommand));
+
+    const blockedAfterRewrite = getBlockedShellMutationReason(trimmedCommand);
+
+    if (blockedAfterRewrite) {
+      return {
+        shouldModify: false,
+        blockedReason: blockedAfterRewrite,
+      };
+    }
 
     if (hasCommandRewrite) {
       return {

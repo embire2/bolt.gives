@@ -39,7 +39,6 @@ import { LOCAL_PROVIDERS } from '~/lib/stores/settings';
 import {
   LAST_CONFIGURED_PROVIDER_COOKIE_KEY,
   getRememberedProviderModel,
-  parseApiKeysCookie,
   pickPreferredProviderName,
   recordProviderHistory,
   readInstanceSelection,
@@ -66,6 +65,7 @@ import type {
 import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
+import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -161,7 +161,7 @@ function loadStoredProjectMemory(): StoredProjectMemory {
 }
 
 function getApiKeysFromCookiesSafe(): Record<string, string> {
-  return parseApiKeysCookie(Cookies.get('apiKeys'));
+  return getApiKeysFromCookies();
 }
 
 function getProviderSettingsFromCookiesSafe(): Record<string, IProviderSetting> {
@@ -2387,7 +2387,7 @@ Requirements:
 
             if (temResp) {
               const { assistantMessage, usingLocalFallback } = temResp;
-              const starterActionCount = (assistantMessage.match(/<boltAction\b/g) || []).length;
+              const starterActionCount = (assistantMessage.match(/<(?:boltAction|codyAction)\b/g) || []).length;
               logger.info('Starter template import prepared', {
                 template,
                 starterActionCount,
@@ -2771,7 +2771,7 @@ Requirements:
     const handleApiKeysUpdated = useCallback(
       async ({ apiKeys: updatedApiKeys, providerName, apiKey, providerModels }: ApiKeysUpdatePayload) => {
         setApiKeys(updatedApiKeys);
-        Cookies.set('apiKeys', JSON.stringify(updatedApiKeys), { expires: CHAT_SELECTION_COOKIE_EXPIRY_DAYS });
+        setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS);
 
         const normalizedKey = apiKey.trim();
 

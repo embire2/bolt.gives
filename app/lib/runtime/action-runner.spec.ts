@@ -79,8 +79,8 @@ describe('ActionRunner start actions', () => {
 
     await runPromise;
 
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand.mock.calls[0][1]).toBe('pnpm run dev');
+    expect(executeCommand).toHaveBeenCalled();
+    expect(executeCommand.mock.calls.at(-1)?.[1]).toBe('pnpm run dev');
     expect(runner.actions.get()['action-1']?.status).toBe('complete');
   });
 
@@ -108,6 +108,159 @@ describe('ActionRunner start actions', () => {
     expect(eventTypes).toContain('step-start');
     expect(eventTypes).toContain('step-end');
     expect(eventTypes).toContain('complete');
+  });
+
+  it('blocks shell redirection and keeps file writes out of shell commands', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
+    const onAlert = vi.fn();
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile: vi.fn().mockResolvedValue(undefined),
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand,
+        }) as any,
+      undefined,
+      undefined,
+      undefined,
+      onAlert,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-blocked-shell-1',
+      action: {
+        type: 'shell',
+        content: 'echo "blocked" > src/App.tsx',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Blocked Shell Mutation',
+      }),
+    );
+  });
+
+  it('blocks redirection even when hidden inside a JSON command envelope', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
+    const onAlert = vi.fn();
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile: vi.fn().mockResolvedValue(undefined),
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand,
+        }) as any,
+      undefined,
+      undefined,
+      undefined,
+      onAlert,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-blocked-shell-json-1',
+      action: {
+        type: 'shell',
+        content: JSON.stringify({ command: 'echo hidden > src/App.tsx' }),
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Blocked Shell Mutation',
+      }),
+    );
+  });
+
+  it('allows benign redirection to /dev/null for shell checks', async () => {
+    const { runner, executeCommand } = createRunnerHarness();
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-shell-devnull-1',
+      action: {
+        type: 'shell',
+        content: 'ls package.json >/dev/null 2>&1',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(executeCommand).toHaveBeenCalled();
+    expect(executeCommand.mock.calls.at(-1)?.[1]).toContain('/dev/null');
+    expect(runner.actions.get()['action-shell-devnull-1']?.status).toBe('complete');
+  });
+
+  it('rejects file actions that resolve outside the active workdir', async () => {
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile,
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' }),
+        }) as any,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-outside-workdir-1',
+      action: {
+        type: 'file',
+        filePath: '/etc/passwd',
+        content: 'blocked',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(runner.actions.get()['file-outside-workdir-1']?.status).toBe('failed');
   });
 
   it('writes file actions using canonical workdir-relative paths', async () => {
@@ -608,7 +761,12 @@ describe('ActionRunner start actions', () => {
     await secondRun;
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
-    expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledTimes(2);
+
+    const nonCleanupHostedCommands = hostedRuntimeMocks.runHostedRuntimeCommand.mock.calls.filter(
+      ([payload]) => payload.command !== 'pkill -9 -f "(node|npm|pnpm|yarn|vite|next|webpack)" || true',
+    );
+
+    expect(nonCleanupHostedCommands).toHaveLength(2);
   });
 
   it('flushes pending hosted file changes before executing a shell command', async () => {
