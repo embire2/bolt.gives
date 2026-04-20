@@ -1,73 +1,59 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
-import { fetchHostedRuntimeSnapshotForRequest, resolveHostedRuntimeBaseUrlForRequest } from './hosted-runtime-snapshot';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { waitForHostedRuntimePreviewVerificationForRequest } from './hosted-runtime-snapshot';
 
-describe('resolveHostedRuntimeBaseUrlForRequest', () => {
-  it('uses the local runtime for localhost', () => {
-    expect(resolveHostedRuntimeBaseUrlForRequest('http://127.0.0.1:5173/api/chat')).toBe(
-      'http://127.0.0.1:4321/runtime',
-    );
-  });
-
-  it('routes Pages requests to alpha1 runtime', () => {
-    expect(resolveHostedRuntimeBaseUrlForRequest('https://bolt-gives.pages.dev/api/chat')).toBe(
-      'https://alpha1.bolt.gives/runtime',
-    );
-  });
-
-  it('uses the same origin runtime for hosted domains', () => {
-    expect(resolveHostedRuntimeBaseUrlForRequest('https://alpha1.bolt.gives/api/chat')).toBe(
-      'https://alpha1.bolt.gives/runtime',
-    );
-  });
-});
-
-describe('fetchHostedRuntimeSnapshotForRequest', () => {
+describe('waitForHostedRuntimePreviewVerificationForRequest', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  it('returns hosted files when the runtime snapshot exists', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
+  it('emits poll updates until the hosted preview is ready', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          files: {
-            'src/App.tsx': {
-              type: 'file',
-              content: 'export default function App() { return null; }',
-              isBinary: false,
-            },
-          },
+          sessionId: 'session-1',
+          preview: null,
+          status: 'starting',
+          healthy: false,
+          updatedAt: new Date().toISOString(),
+          recentLogs: [],
+          alert: null,
+          recovery: null,
         }),
-      }),
-    );
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          sessionId: 'session-1',
+          preview: {
+            port: 4100,
+            baseUrl: 'https://example.com/runtime/preview/session-1/4100',
+          },
+          status: 'ready',
+          healthy: true,
+          updatedAt: new Date().toISOString(),
+          recentLogs: [],
+          alert: null,
+          recovery: null,
+        }),
+      });
 
-    await expect(
-      fetchHostedRuntimeSnapshotForRequest({
-        requestUrl: 'https://alpha1.bolt.gives/api/chat',
-        sessionId: 'session-123',
-      }),
-    ).resolves.toMatchObject({
-      'src/App.tsx': expect.objectContaining({
-        type: 'file',
-      }),
+    vi.stubGlobal('fetch', fetchMock);
+
+    const onPoll = vi.fn();
+    const result = await waitForHostedRuntimePreviewVerificationForRequest({
+      requestUrl: 'https://alpha1.bolt.gives/api/chat',
+      sessionId: 'session-1',
+      timeoutMs: 5_000,
+      pollIntervalMs: 0,
+      onPoll,
     });
-  });
 
-  it('returns null when the runtime snapshot is unavailable', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-      }),
-    );
-
-    await expect(
-      fetchHostedRuntimeSnapshotForRequest({
-        requestUrl: 'https://alpha1.bolt.gives/api/chat',
-        sessionId: 'session-123',
-      }),
-    ).resolves.toBeNull();
+    expect(result.outcome).toBe('ready');
+    expect(onPoll).toHaveBeenCalledTimes(2);
+    expect(onPoll.mock.calls[0][0]?.status).toBe('starting');
+    expect(onPoll.mock.calls[1][0]?.status).toBe('ready');
   });
 });

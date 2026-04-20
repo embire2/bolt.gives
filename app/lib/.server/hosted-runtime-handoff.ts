@@ -22,6 +22,10 @@ export interface HostedRuntimeServerHandoffResult {
   start: HostedRuntimeCommandReplayResult;
 }
 
+const STARTER_ENTRY_FILE_RE =
+  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
+const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
+
 function normalizeHostedRuntimeCommand(command: string, kind: 'shell' | 'start') {
   const sanitized = sanitizeShellCommand(command);
 
@@ -30,7 +34,9 @@ function normalizeHostedRuntimeCommand(command: string, kind: 'shell' | 'start')
   }
 
   if (kind === 'start') {
-    return sanitized.replace(/(^|&&\s*)(?:npm)\s+(?:run\s+)?(dev|start|preview)\b/gi, '$1pnpm run $2');
+    return sanitized
+      .replace(/(^|&&\s*)(?:npm)\s+(?:run\s+)?(dev|start|preview)\b/gi, '$1pnpm run $2')
+      .replace(/(^|&&\s*)(?:pnpm|bun)\s+(dev|start|preview)\b/gi, '$1pnpm run $2');
   }
 
   return sanitized;
@@ -100,10 +106,17 @@ function stripConflictingSourceVariants(currentFiles: FileMap, fileActions: Extr
 }
 
 function mergeHostedRuntimeFiles(currentFiles: FileMap, nextFiles: FileMap): FileMap {
-  return {
-    ...currentFiles,
-    ...nextFiles,
-  };
+  const mergedFiles: FileMap = {};
+
+  for (const [filePath, dirent] of Object.entries(currentFiles)) {
+    mergedFiles[normalizeArtifactFilePath(filePath)] = dirent;
+  }
+
+  for (const [filePath, dirent] of Object.entries(nextFiles)) {
+    mergedFiles[normalizeArtifactFilePath(filePath)] = dirent;
+  }
+
+  return mergedFiles;
 }
 
 function toProjectCommandFiles(files: FileMap) {
@@ -240,6 +253,73 @@ async function syncHostedRuntimeWorkspaceServer(options: { requestUrl: string; s
   }
 }
 
+function isStarterEntryFile(filePath: string) {
+  return STARTER_ENTRY_FILE_RE.test(normalizeArtifactFilePath(filePath));
+}
+
+function hasStarterPlaceholder(content: string) {
+  return STARTER_PLACEHOLDER_RE.test(content);
+}
+
+function shouldVerifyStarterReplacement(currentSnapshot: FileMap, fileActions: ExtractedFileAction[]) {
+  const currentStarterPaths = new Set(
+    Object.entries(currentSnapshot)
+      .filter(
+        ([filePath, dirent]) =>
+          dirent?.type === 'file' &&
+          !dirent.isBinary &&
+          typeof dirent.content === 'string' &&
+          isStarterEntryFile(filePath) &&
+          hasStarterPlaceholder(dirent.content),
+      )
+      .map(([filePath]) => normalizeArtifactFilePath(filePath)),
+  );
+
+  if (currentStarterPaths.size === 0) {
+    return false;
+  }
+
+  return fileActions.some(
+    (fileAction) =>
+      currentStarterPaths.has(normalizeArtifactFilePath(fileAction.path)) && !hasStarterPlaceholder(fileAction.content),
+  );
+}
+
+async function ensureHostedRuntimeFilesApplied(options: {
+  requestUrl: string;
+  sessionId: string;
+  expectedFiles: ExtractedFileAction[];
+  shouldVerifyStarter: boolean;
+}) {
+  if (!options.shouldVerifyStarter) {
+    return;
+  }
+
+  const snapshot = await fetchHostedRuntimeSnapshotForRequest({
+    requestUrl: options.requestUrl,
+    sessionId: options.sessionId,
+  });
+
+  if (!snapshot) {
+    throw new Error('Hosted runtime snapshot could not be loaded after sync.');
+  }
+
+  for (const expectedFile of options.expectedFiles) {
+    const normalizedPath = normalizeArtifactFilePath(expectedFile.path);
+    const snapshotEntry = snapshot[normalizedPath];
+
+    if (!snapshotEntry || snapshotEntry.type !== 'file' || snapshotEntry.isBinary) {
+      throw new Error(`Hosted runtime did not retain ${normalizedPath} after sync.`);
+    }
+
+    if (isStarterEntryFile(normalizedPath) && !hasStarterPlaceholder(expectedFile.content)) {
+      if (hasStarterPlaceholder(snapshotEntry.content || '')) {
+        throw new Error(`Hosted runtime kept the fallback starter in ${normalizedPath} after sync.`);
+      }
+    }
+  }
+}
+
 async function runHostedRuntimeCommandServer(options: {
   requestUrl: string;
   sessionId: string;
@@ -353,7 +433,13 @@ export async function applyHostedRuntimeAssistantActions(options: {
 
   const normalizedCurrentSnapshot = stripConflictingSourceVariants(currentSnapshot || {}, fileActions);
   const mergedFiles = sanitizeHostedRuntimeFileMap(mergeHostedRuntimeFiles(normalizedCurrentSnapshot, partialFiles));
-  const inferredCommands = await detectProjectCommands(toProjectCommandFiles(mergedFiles));
+  const projectCommandFiles = toProjectCommandFiles(mergedFiles);
+  const inferredCommands = await detectProjectCommands(projectCommandFiles);
+  const hasPackageJson = projectCommandFiles.some(({ path }) =>
+    normalizeArtifactFilePath(path).endsWith('package.json'),
+  );
+
+  const shouldVerifyStarter = shouldVerifyStarterReplacement(currentSnapshot || {}, fileActions);
 
   await syncHostedRuntimeWorkspaceServer({
     requestUrl: options.requestUrl,
@@ -361,29 +447,38 @@ export async function applyHostedRuntimeAssistantActions(options: {
     files: mergedFiles,
   });
 
-  let setupResult: HostedRuntimeCommandReplayResult | undefined;
-  const setupCommand = inferredCommands.setupCommand
-    ? normalizeHostedRuntimeCommand(inferredCommands.setupCommand, 'shell')
-    : options.synthesizedRunHandoff.setupCommand
-      ? normalizeHostedRuntimeCommand(options.synthesizedRunHandoff.setupCommand, 'shell')
-      : undefined;
-
-  if (setupCommand) {
-    setupResult = await runHostedRuntimeCommandServer({
+  try {
+    await ensureHostedRuntimeFilesApplied({
       requestUrl: options.requestUrl,
       sessionId,
-      kind: 'shell',
-      command: setupCommand,
+      expectedFiles: fileActions,
+      shouldVerifyStarter,
+    });
+  } catch {
+    await syncHostedRuntimeWorkspaceServer({
+      requestUrl: options.requestUrl,
+      sessionId,
+      files: mergedFiles,
     });
 
-    if (setupResult.exitCode !== 0) {
-      throw new Error(`Hosted runtime setup command failed with exit code ${setupResult.exitCode}`);
-    }
+    await ensureHostedRuntimeFilesApplied({
+      requestUrl: options.requestUrl,
+      sessionId,
+      expectedFiles: fileActions,
+      shouldVerifyStarter,
+    });
   }
 
-  const startCommand = inferredCommands.startCommand
-    ? normalizeHostedRuntimeCommand(inferredCommands.startCommand, 'start')
-    : normalizeHostedRuntimeCommand(options.synthesizedRunHandoff.startCommand, 'start');
+  const preferSynthesizedStartCommand =
+    !hasPackageJson &&
+    Boolean(options.synthesizedRunHandoff.startCommand) &&
+    inferredCommands.type === 'Static' &&
+    normalizeHostedRuntimeCommand(inferredCommands.startCommand || '', 'start') === 'npx --yes serve';
+  const startCommand = preferSynthesizedStartCommand
+    ? normalizeHostedRuntimeCommand(options.synthesizedRunHandoff.startCommand, 'start')
+    : inferredCommands.startCommand
+      ? normalizeHostedRuntimeCommand(inferredCommands.startCommand, 'start')
+      : normalizeHostedRuntimeCommand(options.synthesizedRunHandoff.startCommand, 'start');
   const startResult = await runHostedRuntimeCommandServer({
     requestUrl: options.requestUrl,
     sessionId,
@@ -397,7 +492,6 @@ export async function applyHostedRuntimeAssistantActions(options: {
 
   return {
     appliedFilePaths: fileActions.map((fileAction) => fileAction.path),
-    ...(setupResult ? { setup: setupResult } : {}),
     start: startResult,
   };
 }

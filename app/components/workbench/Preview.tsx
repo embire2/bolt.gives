@@ -65,8 +65,8 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: 'Desktop', width: 1920, height: 1080, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
-const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 45000;
-const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 25000;
+const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 5000;
+const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 3500;
 const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
 
 function normalizePreviewPath(value: string) {
@@ -378,7 +378,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       const previewSessionId =
         extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) ||
         workbenchStore.hostedRuntimeSessionId;
-      void inspectHostedPreviewIframe(previewSessionId, lastPreviewAlertSignatureRef.current);
+      void fetchHostedRuntimePreviewStatus(previewSessionId)
+        .then((status) => applyHostedPreviewStatus(status, { allowLogFallback: true }))
+        .catch(() => inspectHostedPreviewIframe(previewSessionId, lastPreviewAlertSignatureRef.current));
 
       return;
     }
@@ -408,7 +410,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     } catch {
       // Ignore iframe access failures on load and rely on the periodic local probe.
     }
-  }, [activePreview?.baseUrl, hostedRuntimeEnabled, inspectHostedPreviewIframe]);
+  }, [activePreview?.baseUrl, applyHostedPreviewStatus, hostedRuntimeEnabled, inspectHostedPreviewIframe]);
 
   useEffect(() => {
     if (!activePreview) {

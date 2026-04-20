@@ -1145,6 +1145,16 @@ export class WorkbenchStore {
       const doc = this.#editorStore.documents.get()[fullPath];
 
       if (isStreaming) {
+        const existingFile = this.files.get()[fullPath];
+
+        this.files.setKey(fullPath, {
+          type: 'file',
+          content: data.action.content,
+          isBinary: false,
+          isLocked: existingFile?.type === 'file' ? existingFile.isLocked : false,
+          lockedByFolder: existingFile?.type === 'file' ? existingFile.lockedByFolder : undefined,
+        });
+
         if (doc) {
           this.#editorStore.updateFile(fullPath, data.action.content);
         }

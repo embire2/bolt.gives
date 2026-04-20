@@ -67,6 +67,7 @@ import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/r
 import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
 import { classifyRecoverableStreamError } from '~/lib/runtime/recovery-errors';
+import { securedFetch } from '~/lib/hooks/useCsrf';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -537,6 +538,7 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
+      fetch: securedFetch,
       body: {
         apiKeys,
         providerSettings: getProviderSettingsFromCookiesSafe(),

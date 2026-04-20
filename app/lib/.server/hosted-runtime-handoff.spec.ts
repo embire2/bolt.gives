@@ -14,7 +14,7 @@ describe('applyHostedRuntimeAssistantActions', () => {
     vi.restoreAllMocks();
   });
 
-  it('syncs file actions and replays setup/start commands on the hosted runtime', async () => {
+  it('syncs file actions and replays the hosted start command without a redundant setup pass', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -27,12 +27,6 @@ describe('applyHostedRuntimeAssistantActions', () => {
         ),
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response('{"type":"stdout","chunk":"install ok\\n"}\n{"type":"exit","exitCode":0}\n', {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        }),
-      )
       .mockResolvedValueOnce(
         new Response(
           '{"type":"ready","preview":{"baseUrl":"https://alpha1.bolt.gives/runtime/preview/session123/4101"}}\n{"type":"exit","exitCode":0}\n',
@@ -60,11 +54,6 @@ describe('applyHostedRuntimeAssistantActions', () => {
 
     expect(result).toEqual({
       appliedFilePaths: ['/home/project/src/App.tsx'],
-      setup: {
-        exitCode: 0,
-        output: 'install ok\n',
-        previewBaseUrl: null,
-      },
       start: {
         exitCode: 0,
         output: '',
@@ -94,7 +83,7 @@ describe('applyHostedRuntimeAssistantActions', () => {
       'https://alpha1.bolt.gives/runtime/sessions/session123/command',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ kind: 'shell', command: 'pnpm install' }),
+        body: JSON.stringify({ kind: 'start', command: 'pnpm run dev -- --host 0.0.0.0 --port 4101' }),
       }),
     );
   });
@@ -189,12 +178,6 @@ describe('applyHostedRuntimeAssistantActions', () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response('{"type":"stdout","chunk":"install ok\\n"}\n{"type":"exit","exitCode":0}\n', {
-          status: 200,
-          headers: { 'Content-Type': 'application/x-ndjson' },
-        }),
-      )
-      .mockResolvedValueOnce(
         new Response(
           '{"type":"ready","preview":{"baseUrl":"https://alpha1.bolt.gives/runtime/preview/session123/4101"}}\n{"type":"exit","exitCode":0}\n',
           {
@@ -221,13 +204,11 @@ describe('applyHostedRuntimeAssistantActions', () => {
 
     const syncBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
     const syncedPackageJson = JSON.parse(syncBody.files['/home/project/package.json'].content);
-    const setupBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body));
-    const startBody = JSON.parse(String(fetchMock.mock.calls[3][1]?.body));
+    const startBody = JSON.parse(String(fetchMock.mock.calls[2][1]?.body));
 
     expect(syncedPackageJson.scripts.dev).toBe('vite --host 0.0.0.0 --port 5173');
     expect(syncedPackageJson.dependencies['react-scripts']).toBeUndefined();
     expect(syncedPackageJson.devDependencies.vite).toBe('^5.4.21');
-    expect(setupBody.command).toContain('pnpm install --no-frozen-lockfile');
     expect(startBody.command).toBe('pnpm run dev');
   });
 
@@ -299,5 +280,126 @@ describe('applyHostedRuntimeAssistantActions', () => {
     expect(syncBody.prune).toBe(true);
     expect(syncBody.files['/home/project/src/App.tsx'].content).toContain('FOLLOWUP_MARKER');
     expect(syncBody.files['/home/project/src/App.js']).toBeUndefined();
+  });
+
+  it('retries the hosted sync when the starter entry survives the first sync pass', async () => {
+    const generatedAssistantContent = `<boltArtifact id="clinic" title="Clinic Scheduler">
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <main>FOLLOWUP_MARKER</main>;}</boltAction>
+<boltAction type="file" filePath="src/main.tsx">import App from './App';\nconsole.log(App);</boltAction>
+</boltArtifact>`;
+    const starterSnapshot = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}\n',
+        isBinary: false,
+      },
+      '/home/project/src/main.tsx': {
+        type: 'file',
+        content: "import App from './App';\nconsole.log(App);\n",
+        isBinary: false,
+      },
+      '/home/project/package.json': {
+        type: 'file',
+        content: JSON.stringify(
+          {
+            name: 'clinic-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+            dependencies: {
+              react: '^18.2.0',
+              'react-dom': '^18.2.0',
+            },
+            devDependencies: {
+              vite: '^5.4.21',
+            },
+          },
+          null,
+          2,
+        ),
+        isBinary: false,
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: 'session123',
+            files: starterSnapshot,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: 'session123',
+            files: starterSnapshot,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: 'session123',
+            files: {
+              ...starterSnapshot,
+              '/home/project/src/App.tsx': {
+                type: 'file',
+                content: 'export default function App(){return <main>FOLLOWUP_MARKER</main>;}\n',
+                isBinary: false,
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          '{"type":"ready","preview":{"baseUrl":"https://alpha1.bolt.gives/runtime/preview/session123/4101"}}\n{"type":"exit","exitCode":0}\n',
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/x-ndjson' },
+          },
+        ),
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await applyHostedRuntimeAssistantActions({
+      requestUrl: 'https://alpha1.bolt.gives/api/chat',
+      sessionId: 'session123',
+      assistantContent: generatedAssistantContent,
+      synthesizedRunHandoff: {
+        reason: 'inferred-project-commands',
+        followupMessage: 'runtime handoff',
+        setupCommand: 'pnpm install',
+        startCommand: 'pnpm run dev',
+        assistantContent: '<boltArtifact id="runtime-handoff"></boltArtifact>',
+      },
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://alpha1.bolt.gives/runtime/sessions/session123/sync',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('FOLLOWUP_MARKER'),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      'https://alpha1.bolt.gives/runtime/sessions/session123/sync',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('FOLLOWUP_MARKER'),
+      }),
+    );
   });
 });

@@ -84,9 +84,11 @@ export function getCsrfToken(): string {
   return token;
 }
 
-/** Drop-in replacement for `fetch` that injects the CSRF header on
+/**
+ * Drop-in replacement for `fetch` that injects the CSRF header on
  *  non-GET/HEAD/OPTIONS requests and attaches credentials so the cookie
- *  rides along. */
+ *  rides along.
+ */
 export async function securedFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
   const needsCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method);

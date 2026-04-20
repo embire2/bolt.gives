@@ -48,7 +48,10 @@ import {
   resolvePreferredModelProvider,
   sanitizeSelectionWithApiKeys,
 } from '~/lib/.server/llm/message-selection';
-import { fetchHostedRuntimeSnapshotForRequest } from '~/lib/.server/hosted-runtime-snapshot';
+import {
+  fetchHostedRuntimeSnapshotForRequest,
+  waitForHostedRuntimePreviewVerificationForRequest,
+} from '~/lib/.server/hosted-runtime-snapshot';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 
 export async function action(args: ActionFunctionArgs) {
@@ -577,10 +580,10 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
           if (effectiveChatMode === 'build' && !previewCheckpointObserved) {
             writeCommentary(
               'next-step',
-              'Execution finished, but preview verification is still pending.',
+              'Preview startup is still being verified.',
               'warning',
-              `Key changes: Code generation completed, but no preview-ready checkpoint was observed yet.
-Next: Check the preview/start output before treating this run as complete.`,
+              `Key changes: Code generation completed, but the hosted preview has not emitted a verified ready checkpoint yet.
+Next: Keep the Workspace open while the preview retries and switches to the generated app.`,
             );
 
             return;
@@ -1229,6 +1232,137 @@ Next: I am waiting for the hosted preview to confirm the updated app is running.
                           previewBaseUrl: hostedHandoffResult.start.previewBaseUrl,
                         })}`,
                       );
+
+                      const hostedPreviewVerificationTimeoutMs = Number(
+                        envVars?.BOLT_HOSTED_PREVIEW_VERIFY_TIMEOUT_MS ||
+                          process?.env?.BOLT_HOSTED_PREVIEW_VERIFY_TIMEOUT_MS ||
+                          60_000,
+                      );
+                      const hostedPreviewVerificationPollIntervalMs = Number(
+                        envVars?.BOLT_HOSTED_PREVIEW_VERIFY_POLL_INTERVAL_MS ||
+                          process?.env?.BOLT_HOSTED_PREVIEW_VERIFY_POLL_INTERVAL_MS ||
+                          1_000,
+                      );
+                      let lastHostedPreviewVerificationCommentaryAt = 0;
+                      let lastHostedPreviewVerificationStatus = '';
+                      const hostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                        requestUrl: request.url,
+                        sessionId: hostedRuntimeSessionId,
+                        timeoutMs:
+                          Number.isFinite(hostedPreviewVerificationTimeoutMs) && hostedPreviewVerificationTimeoutMs > 0
+                            ? hostedPreviewVerificationTimeoutMs
+                            : 60_000,
+                        pollIntervalMs:
+                          Number.isFinite(hostedPreviewVerificationPollIntervalMs) &&
+                          hostedPreviewVerificationPollIntervalMs >= 0
+                            ? hostedPreviewVerificationPollIntervalMs
+                            : 1_000,
+                        onPoll: async (status, elapsedMs) => {
+                          const nextStatus = status?.status || 'starting';
+                          const shouldEmitCommentary =
+                            nextStatus !== lastHostedPreviewVerificationStatus ||
+                            elapsedMs - lastHostedPreviewVerificationCommentaryAt >= 5_000;
+
+                          if (!shouldEmitCommentary) {
+                            return;
+                          }
+
+                          lastHostedPreviewVerificationStatus = nextStatus;
+                          lastHostedPreviewVerificationCommentaryAt = elapsedMs;
+
+                          const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
+                          const previewBaseUrl =
+                            status?.preview?.baseUrl ||
+                            hostedHandoffResult.start.previewBaseUrl ||
+                            'the hosted preview';
+                          const progressMessage =
+                            nextStatus === 'ready'
+                              ? `Key changes: The runtime reports the preview as ready at ${previewBaseUrl}.
+Next: I am syncing the workspace and confirming the browser switches from the starter shell to the generated app.`
+                              : nextStatus === 'error'
+                                ? `Key changes: The preview reported an error while starting.
+Next: I am checking the recent preview output and will retry automatically if it is transient.`
+                                : `Key changes: The runtime is still warming the preview (${elapsedSeconds}s elapsed).
+Next: I am waiting for the hosted browser preview to switch from the starter shell to the generated app.`;
+
+                          writeCommentary(
+                            'verification',
+                            nextStatus === 'ready'
+                              ? 'Hosted preview is up. I am confirming the generated app is visible.'
+                              : nextStatus === 'error'
+                                ? 'Hosted preview reported a startup problem. I am checking it now.'
+                                : 'Hosted preview is still starting. I am waiting for the generated app to appear.',
+                            nextStatus === 'error' ? 'warning' : 'in-progress',
+                            progressMessage,
+                          );
+                        },
+                      });
+
+                      logger.info(
+                        `hosted runtime preview verification ${JSON.stringify({
+                          runId,
+                          provider,
+                          model,
+                          hostedRuntimeSessionId,
+                          outcome: hostedPreviewVerification.outcome,
+                          status: hostedPreviewVerification.status?.status ?? null,
+                          healthy: hostedPreviewVerification.status?.healthy ?? null,
+                          previewBaseUrl:
+                            hostedPreviewVerification.status?.preview?.baseUrl ??
+                            hostedHandoffResult.start.previewBaseUrl ??
+                            null,
+                          recoveryState: hostedPreviewVerification.status?.recovery?.state ?? null,
+                        })}`,
+                      );
+
+                      if (hostedPreviewVerification.outcome === 'ready') {
+                        previewCheckpointObserved = true;
+                        dataStream.writeData({
+                          type: 'checkpoint',
+                          checkpointType: 'preview-ready',
+                          status: 'complete',
+                          message: 'Preview ready and verified.',
+                          timestamp: new Date().toISOString(),
+                          command: synthesizedRunHandoff.startCommand,
+                          exitCode: hostedHandoffResult.start.exitCode,
+                        } satisfies CheckpointDataEvent);
+                        writeCommentary(
+                          'verification',
+                          'Hosted preview verified successfully.',
+                          'complete',
+                          `Key changes: The updated app responded successfully at ${
+                            hostedPreviewVerification.status?.preview?.baseUrl ||
+                            hostedHandoffResult.start.previewBaseUrl ||
+                            'the hosted preview URL'
+                          }.
+Next: I am returning the finished result with the verified preview ready for inspection.`,
+                        );
+                      } else if (hostedPreviewVerification.outcome === 'error') {
+                        const previewAlertMessage =
+                          hostedPreviewVerification.status?.alert?.description ||
+                          hostedPreviewVerification.status?.recentLogs?.find(Boolean) ||
+                          'The hosted preview reported an error after the runtime handoff.';
+                        writeCommentary(
+                          'verification',
+                          'Hosted preview reported an error after start.',
+                          'warning',
+                          `Key changes: The runtime replay finished, but preview verification failed.
+Next: Review the hosted preview output: ${previewAlertMessage}`,
+                        );
+                      } else {
+                        writeCommentary(
+                          'verification',
+                          'Preview startup is taking longer than expected.',
+                          'warning',
+                          `Key changes: The runtime handoff completed, but the hosted preview did not confirm readiness within ${
+                            Number.isFinite(hostedPreviewVerificationTimeoutMs) &&
+                            hostedPreviewVerificationTimeoutMs > 0
+                              ? Math.round(hostedPreviewVerificationTimeoutMs / 1000)
+                              : 60
+                          }s.
+Next: The workspace preview will keep retrying automatically while I return the current run state.`,
+                        );
+                      }
 
                       emitFinalNextStepCommentary();
 

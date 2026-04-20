@@ -31,6 +31,8 @@
 
 ### Fixed
 
+- The live chat client now sends the required same-origin CSRF header on `/api/chat`, which fixes the hosted `FREE` coding path on `alpha1`/`ahmad` where valid project requests were being rejected with `403 Forbidden` before generation ever started.
+- The live release smoke now detects the current prompt surface generically instead of depending on an outdated placeholder string, so startup verification continues to work when the visible prompt copy changes.
 - Runtime command capture now enforces bounded output buffers for shell/start/build flows, preventing long install/build logs from growing unbounded in memory and reducing browser freezes during heavy runs.
 - Terminal stream piping now safely swallows expected shutdown errors during process recycling, reducing unhandled stream rejection noise that previously appeared during rapid runtime resets.
 - Shell write guards now also evaluate normalized/rewritten commands (including JSON command envelopes), closing a bypass path where blocked redirections could slip through after command rewrites.
@@ -64,6 +66,8 @@
 - Hosted FREE relay requests are now verified against the local runtime service, so Pages-hosted surfaces and managed Cloudflare trials keep `DeepSeek V3.2` working even when the app worker itself does not carry the relay secret in-process.
 - Existing live managed trial instances have been refreshed onto the same runtime-verified relay path retroactively, so clients do not need to enter their own API key to keep using the built-in FREE model.
 - Hosted preview handoff no longer infers runtime commands from only the latest assistant delta; it now merges the active workspace snapshot before choosing setup/start commands, which prevents partial dependency installs like `npm install moment` from replacing the real project runtime and avoids stalled previews after stream interruptions.
+- Hosted preview verification now keeps emitting explicit startup progress while the server waits for the managed preview to become healthy, which reduces silent websocket disconnects and makes long preview warm-ups visible in both the chat stream and the workspace.
+- The Workspace preview now re-checks hosted preview state immediately when the iframe loads, instead of waiting for the old long reconcile interval, so generated apps replace the fallback starter much sooner on live domains.
 - The live release smoke now prints stage-by-stage progress during long runs, making it obvious whether it is waiting for the prompt surface, commentary, preview readiness, or recovery.
 - A new post-deploy browser health check now fails release validation if the live app serves hashed asset `404`s or never exposes the prompt surface after deploy.
 - Managed-instance startup support and tenant-admin status views now surface the rollout-guard reason when the live runtime is stale, instead of silently advertising trial rollout as available.

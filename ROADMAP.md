@@ -56,9 +56,11 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 
 1. Prompt-to-preview reliability
 
+- [~] Keep the live chat request path aligned with CSRF/security requirements so hosted builds cannot fail at request start because the browser omitted the protected `/api/chat` header.
 - [~] Keep `Chat` and `Workspace` status explicit during generation so users always know whether the system is scaffolding, installing, starting, ready, or repairing.
 - [~] Remove remaining starter/workspace hydration ambiguity on generated-app flows, including rejecting prose-only runtime handoffs on follow-up prompts and resolving generated entry-file writes onto the active starter file.
 - [~] Keep incomplete starter rewrites in the continuation path until the active entry file no longer contains fallback placeholder content, so “preview verification pending” only appears for genuinely runnable projects.
+- [~] Keep hosted preview verification visibly alive during long warm-ups and force the browser preview to reconcile quickly once the generated app is ready, so users do not get stranded on the fallback starter while the server already has a valid app.
 - [~] Ignore stale fallback-starter detections once the active workspace files no longer contain the starter placeholder, so hosted preview recovery does not roll back valid generated apps.
 - [~] Prevent hidden continuation/recovery prompts from overlapping an active stream, so transport retries do not cascade into browser-side reconnect loops.
 - [~] Infer setup/start handoff commands from the merged workspace snapshot instead of the latest assistant delta, so preview recovery reuses the real project runtime after a disconnected or interrupted stream.

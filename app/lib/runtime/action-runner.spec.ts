@@ -593,7 +593,7 @@ describe('ActionRunner start actions', () => {
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
   });
 
-  it('does not sync streamed file fragments and only syncs the final completed file content', async () => {
+  it('flushes hosted streamed file fragments and treats the final identical close as a no-op', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const writeFile = vi.fn().mockResolvedValue(undefined);
@@ -639,6 +639,7 @@ describe('ActionRunner start actions', () => {
 
     runner.addAction(actionData);
     await runner.runAction(actionData, true);
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
     await runner.runAction(
       {
         ...actionData,
@@ -649,8 +650,37 @@ describe('ActionRunner start actions', () => {
       },
       true,
     );
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
 
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(2);
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sessionId: 'shared-session-stream-batch',
+        prune: false,
+        files: {
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>initial</main>; }',
+            isBinary: false,
+          },
+        },
+      }),
+    );
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        sessionId: 'shared-session-stream-batch',
+        prune: false,
+        files: {
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>latest</main>; }',
+            isBinary: false,
+          },
+        },
+      }),
+    );
     expect(writeFile).not.toHaveBeenCalled();
 
     await runner.runAction(
@@ -664,24 +694,8 @@ describe('ActionRunner start actions', () => {
       false,
     );
 
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'shared-session-stream-batch',
-        prune: true,
-        files: expect.objectContaining({
-          '/home/project/src/App.jsx': {
-            type: 'file',
-            content: 'export default function App() { return <main>latest</main>; }',
-            isBinary: false,
-          },
-        }),
-      }),
-    );
-    expect(writeFile).toHaveBeenCalledWith(
-      'src/App.jsx',
-      'export default function App() { return <main>latest</main>; }',
-    );
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(2);
+    expect(writeFile).not.toHaveBeenCalled();
   });
 
   it('repairs a broken vite entrypoint layout before syncing the final hosted snapshot', async () => {
@@ -1011,12 +1025,15 @@ describe('ActionRunner start actions', () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     let resolveHostedStart: ((value: { exitCode: number; output: string }) => void) | undefined;
-    hostedRuntimeMocks.runHostedRuntimeCommand.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveHostedStart = resolve;
-        }),
-    );
+    hostedRuntimeMocks.runHostedRuntimeCommand.mockImplementation(async ({ command }) => {
+      if (command.includes('pkill -9 -f')) {
+        return { exitCode: 0, output: 'cleanup ok' };
+      }
+
+      return new Promise((resolve) => {
+        resolveHostedStart = resolve;
+      });
+    });
 
     const writeFile = vi.fn().mockResolvedValue(undefined);
     const runner = new ActionRunner(

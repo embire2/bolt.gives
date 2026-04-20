@@ -947,15 +947,24 @@ export class ActionRunner {
 
     const webcontainer = await this.#webcontainer;
 
-    // Reject absolute paths and leading traversal segments before any rebasing.
+    /*
+     * Reject leading traversal segments before any rebasing, and only allow
+     * absolute paths that remain inside the active workspace root.
+     */
     const rawFilePath = action.filePath ?? '';
+    const normalizedRawFilePath = nodePath.normalize(rawFilePath);
+    const normalizedTraversalPath = normalizedRawFilePath.replace(/\\/g, '/');
 
-    if (
-      !rawFilePath ||
-      nodePath.isAbsolute(rawFilePath) ||
-      nodePath.normalize(rawFilePath).replace(/\\/g, '/').startsWith('..')
-    ) {
+    if (!rawFilePath || normalizedTraversalPath.startsWith('..')) {
       throw new Error(`EINVAL: invalid file path outside workdir: ${rawFilePath}`);
+    }
+
+    if (nodePath.isAbsolute(normalizedRawFilePath)) {
+      const rawRelativePath = nodePath.relative(webcontainer.workdir, normalizedRawFilePath);
+
+      if (rawRelativePath.startsWith('..') || nodePath.isAbsolute(rawRelativePath)) {
+        throw new Error(`EINVAL: invalid file path outside workdir: ${rawFilePath}`);
+      }
     }
 
     const normalizedFilePath = resolvePreferredArtifactFilePath(
@@ -997,7 +1006,15 @@ export class ActionRunner {
     }
 
     if (isStreaming) {
+      if (hostedRuntimeEnabled) {
+        await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
+        await this.#hostedRuntimeFlushPromise;
+
+        return;
+      }
+
       logger.debug(`Skipping runnable workspace write for streaming file action ${relativePath}`);
+
       return;
     }
 
@@ -1008,6 +1025,7 @@ export class ActionRunner {
       if (writePriority === 'asset') {
         logger.debug(`Deferred low-priority asset write ${relativePath}`);
       }
+
       logger.debug(`File written ${relativePath}`);
 
       if (hostedRuntimeEnabled) {
