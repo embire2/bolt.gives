@@ -22,6 +22,8 @@ interface PackageScripts {
   build?: string;
 }
 
+const IRRELEVANT_PROJECT_PATH_RE = /(^|\/)(node_modules|\.pnpm|\.vite|coverage|\.turbo|\.cache)(\/|$)/i;
+
 // Helper function to make any command non-interactive
 function makeNonInteractive(command: string): string {
   // Set environment variables for non-interactive mode
@@ -51,8 +53,31 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
+function isProjectOwnedPath(path: string): boolean {
+  return !IRRELEVANT_PROJECT_PATH_RE.test(normalizePath(path));
+}
+
+function getProjectFiles(files: FileContent[]): FileContent[] {
+  return files.filter((file) => isProjectOwnedPath(file.path));
+}
+
+function getPreferredPackageJsonFile(files: FileContent[]): FileContent | undefined {
+  return getProjectFiles(files)
+    .filter((file) => normalizePath(file.path).endsWith('package.json'))
+    .sort((left, right) => {
+      const leftDepth = normalizePath(left.path).split('/').filter(Boolean).length;
+      const rightDepth = normalizePath(right.path).split('/').filter(Boolean).length;
+
+      if (leftDepth !== rightDepth) {
+        return leftDepth - rightDepth;
+      }
+
+      return normalizePath(left.path).localeCompare(normalizePath(right.path));
+    })[0];
+}
+
 function hasPathMatch(files: FileContent[], pattern: RegExp) {
-  return files.some((file) => pattern.test(normalizePath(file.path)));
+  return getProjectFiles(files).some((file) => pattern.test(normalizePath(file.path)));
 }
 
 function detectPackageManager(files: FileContent[], packageJsonContent: string): SupportedPackageManager {
@@ -82,17 +107,17 @@ function createSetupCommand(packageManager: SupportedPackageManager, isShadcnPro
 
   switch (packageManager) {
     case 'pnpm':
-      baseSetupCommand = 'npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile';
+      baseSetupCommand = 'pnpm install --no-frozen-lockfile';
       break;
     case 'yarn':
-      baseSetupCommand = 'npx update-browserslist-db@latest && yarn install --non-interactive';
+      baseSetupCommand = 'yarn install --non-interactive';
       break;
     case 'bun':
       baseSetupCommand = 'bun install';
       break;
     case 'npm':
     default:
-      baseSetupCommand = 'npx update-browserslist-db@latest && npm install';
+      baseSetupCommand = 'npm install';
       break;
   }
 
@@ -156,14 +181,15 @@ function inferProjectKind(files: FileContent[]) {
 }
 
 export async function detectProjectCommands(files: FileContent[]): Promise<ProjectCommands> {
+  const projectFiles = getProjectFiles(files);
   const hasFile = (name: string) => files.some((f) => f.path.endsWith(name));
   const hasFileContent = (name: string, content: string) =>
     files.some((f) => f.path.endsWith(name) && f.content.includes(content));
   const hasBuiltOutput = () =>
-    files.some((f) => /(^|\/)(dist|build|out)\/index\.html$/i.test(f.path) || /(^|\/)\.next\//i.test(f.path));
+    projectFiles.some((f) => /(^|\/)(dist|build|out)\/index\.html$/i.test(f.path) || /(^|\/)\.next\//i.test(f.path));
 
   if (hasFile('package.json')) {
-    const packageJsonFile = files.find((f) => f.path.endsWith('package.json'));
+    const packageJsonFile = getPreferredPackageJsonFile(files);
 
     if (!packageJsonFile) {
       return { type: '', setupCommand: '', followupMessage: '' };
@@ -173,7 +199,7 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
       const packageJson = JSON.parse(packageJsonFile.content);
       const scripts = packageJson?.scripts || {};
       const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
-      const packageManager = detectPackageManager(files, packageJsonFile.content);
+      const packageManager = detectPackageManager(projectFiles, packageJsonFile.content);
 
       // Check if this is a shadcn project
       const isShadcnProject =
@@ -214,8 +240,8 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
     }
 
     const fallbackScripts = extractScriptsFromPackageJson(packageJsonFile.content);
-    const fallbackPackageManager = detectPackageManager(files, packageJsonFile.content);
-    const inferredProjectKind = inferProjectKind(files);
+    const fallbackPackageManager = detectPackageManager(projectFiles, packageJsonFile.content);
+    const inferredProjectKind = inferProjectKind(projectFiles);
     const fallbackCommand =
       (['dev', 'start'] as const).find((cmd) => Boolean(fallbackScripts[cmd])) ||
       (fallbackScripts.preview && hasBuiltOutput() ? 'preview' : undefined) ||

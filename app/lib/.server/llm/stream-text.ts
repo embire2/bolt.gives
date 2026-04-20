@@ -291,7 +291,11 @@ export async function streamText(props: {
       },
     }) ?? getSystemPrompt();
 
-  systemPrompt = withDevelopmentCommentaryWorkstyle(systemPrompt);
+  const shouldInjectCommentaryWorkstyle = !(effectiveChatMode === 'build' && effectivePromptId === 'free-hosted');
+
+  if (shouldInjectCommentaryWorkstyle) {
+    systemPrompt = withDevelopmentCommentaryWorkstyle(systemPrompt);
+  }
 
   if (effectiveChatMode === 'build' && contextFiles && contextOptimization) {
     const codeContext = createFilesContext(contextFiles, true);
@@ -353,7 +357,7 @@ export async function streamText(props: {
     `;
   }
 
-  if (effectiveChatMode === 'build') {
+  if (effectiveChatMode === 'build' && effectivePromptId !== 'free-hosted') {
     systemPrompt = `${systemPrompt}
 
     EXECUTION OUTPUT CONTRACT (MANDATORY):

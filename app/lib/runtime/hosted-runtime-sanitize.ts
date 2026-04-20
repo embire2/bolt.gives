@@ -6,6 +6,62 @@ const DEFAULT_VITE_VERSION = '^5.4.21';
 const DEFAULT_VITE_REACT_PLUGIN_VERSION = '^4.7.0';
 const DEFAULT_REACT_VERSION = '^18.2.0';
 const DEFAULT_TYPES_REACT_VERSION = '^18.2.0';
+const ROOT_HTML_RE = /<div[^>]+id=(['"])root\1[^>]*><\/div>/i;
+const MODULE_SCRIPT_SRC_RE =
+  /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
+const HTML_CLOSE_RE = /<\/html>\s*$/i;
+const HEAD_CLOSE_RE = /<\/head>/i;
+const BODY_CLOSE_RE = /<\/body>/i;
+
+function createCanonicalViteIndexHtml(mainEntryPath: string) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bolt.gives app</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/${mainEntryPath}"></script>
+  </body>
+</html>
+`;
+}
+
+function createCanonicalViteMainEntry(extension: '.tsx' | '.jsx') {
+  const rootLookup = extension === '.tsx' ? "document.getElementById('root')!" : "document.getElementById('root')";
+
+  return `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(${rootLookup}).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+`;
+}
+
+function createCanonicalIndexCss() {
+  return `:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+`;
+}
 
 function getFileEntry(files: FileMap, filePath: string) {
   const normalizedPath = normalizeArtifactFilePath(filePath);
@@ -31,6 +87,120 @@ function parseJsonObject(content: string): Record<string, any> | null {
   }
 
   return null;
+}
+
+function getFileTextContent(files: FileMap, filePath: string): string | undefined {
+  const entry = getFileEntry(files, filePath);
+
+  if (!entry || entry.type !== 'file' || entry.isBinary) {
+    return undefined;
+  }
+
+  return entry.content;
+}
+
+function setFileTextContent(files: FileMap, filePath: string, content: string): FileMap {
+  return {
+    ...files,
+    [normalizeArtifactFilePath(filePath)]: {
+      type: 'file',
+      content,
+      isBinary: false,
+    },
+  };
+}
+
+function inferPreferredViteMainExtension(files: FileMap): '.tsx' | '.jsx' {
+  if (hasFile(files, 'src/main.tsx') || hasFile(files, 'src/App.tsx') || hasFile(files, 'tsconfig.app.json')) {
+    return '.tsx';
+  }
+
+  return '.jsx';
+}
+
+function looksLikeBrokenViteIndexHtml(content: string | undefined): boolean {
+  if (!content) {
+    return true;
+  }
+
+  if (!ROOT_HTML_RE.test(content) || !MODULE_SCRIPT_SRC_RE.test(content)) {
+    return true;
+  }
+
+  return !HEAD_CLOSE_RE.test(content) || !BODY_CLOSE_RE.test(content) || !HTML_CLOSE_RE.test(content);
+}
+
+function extractReferencedMainEntryPath(content: string | undefined): string | null {
+  if (!content) {
+    return null;
+  }
+
+  const match = content.match(MODULE_SCRIPT_SRC_RE);
+
+  return match?.[3]?.replace(/^\//, '') ?? null;
+}
+
+function looksLikeBrokenViteMainEntry(content: string | undefined): boolean {
+  if (!content) {
+    return true;
+  }
+
+  return !/createRoot/i.test(content) || !/from ['"]\.\/App['"]/i.test(content) || !/['"]root['"]/.test(content);
+}
+
+function ensureViteStarterInfrastructure(files: FileMap): FileMap {
+  const looksLikeViteWorkspace =
+    hasFile(files, 'vite.config.ts') ||
+    hasFile(files, 'vite.config.js') ||
+    hasFile(files, 'src/App.tsx') ||
+    hasFile(files, 'src/App.jsx') ||
+    hasFile(files, 'src/main.tsx') ||
+    hasFile(files, 'src/main.jsx');
+
+  if (!looksLikeViteWorkspace) {
+    return files;
+  }
+
+  const hasAppEntry = hasFile(files, 'src/App.tsx') || hasFile(files, 'src/App.jsx');
+
+  if (!hasAppEntry) {
+    return files;
+  }
+
+  const preferredExtension = inferPreferredViteMainExtension(files);
+  const preferredMainEntryPath = `src/main${preferredExtension}`;
+  const currentIndexHtml = getFileTextContent(files, 'index.html');
+  const referencedMainEntryPath = extractReferencedMainEntryPath(currentIndexHtml);
+  const referencedMainEntryContent = referencedMainEntryPath
+    ? getFileTextContent(files, referencedMainEntryPath)
+    : undefined;
+  const preferredMainEntryContent = getFileTextContent(files, preferredMainEntryPath);
+  const indexNeedsRepair =
+    looksLikeBrokenViteIndexHtml(currentIndexHtml) ||
+    !referencedMainEntryPath ||
+    !hasFile(files, referencedMainEntryPath) ||
+    normalizeArtifactFilePath(referencedMainEntryPath) !== normalizeArtifactFilePath(preferredMainEntryPath) ||
+    looksLikeBrokenViteMainEntry(referencedMainEntryContent);
+  const mainEntryNeedsRepair =
+    looksLikeBrokenViteMainEntry(preferredMainEntryContent) ||
+    (referencedMainEntryPath !== null &&
+      normalizeArtifactFilePath(referencedMainEntryPath) !== normalizeArtifactFilePath(preferredMainEntryPath));
+
+  let nextFiles = files;
+
+  if (indexNeedsRepair) {
+    nextFiles = setFileTextContent(nextFiles, 'index.html', createCanonicalViteIndexHtml(preferredMainEntryPath));
+  }
+
+  if (mainEntryNeedsRepair) {
+    nextFiles = setFileTextContent(nextFiles, preferredMainEntryPath, createCanonicalViteMainEntry(preferredExtension));
+  }
+
+  if (!hasFile(nextFiles, 'src/index.css')) {
+    nextFiles = setFileTextContent(nextFiles, 'src/index.css', createCanonicalIndexCss());
+  }
+
+  return nextFiles;
 }
 
 function coerceVitePackageJson(files: FileMap): FileMap {
@@ -159,5 +329,5 @@ function stripConflictingSourceVariants(files: FileMap): FileMap {
 }
 
 export function sanitizeHostedRuntimeFileMap(files: FileMap): FileMap {
-  return stripConflictingSourceVariants(coerceVitePackageJson(files));
+  return ensureViteStarterInfrastructure(stripConflictingSourceVariants(coerceVitePackageJson(files)));
 }

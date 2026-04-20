@@ -101,4 +101,39 @@ describe('detectProjectCommands', () => {
     expect(commands.setupCommand).toContain('pnpm install');
     expect(commands.startCommand).toBe('pnpm run dev');
   });
+
+  it('prefers the root package.json over node_modules package manifests', async () => {
+    const commands = await detectProjectCommands([
+      {
+        path: '/node_modules/react/package.json',
+        content: JSON.stringify({
+          name: 'react',
+          scripts: {
+            start: 'node index.js',
+          },
+        }),
+      },
+      {
+        path: '/package.json',
+        content: JSON.stringify({
+          name: 'doctor-scheduler',
+          scripts: {
+            dev: 'vite',
+            build: 'vite build',
+          },
+        }),
+      },
+      {
+        path: '/pnpm-lock.yaml',
+        content: "lockfileVersion: '9.0'\n",
+      },
+      {
+        path: '/src/main.tsx',
+        content: 'console.log("ready");',
+      },
+    ]);
+
+    expect(commands.setupCommand).toContain('pnpm install');
+    expect(commands.startCommand).toBe('pnpm run dev');
+  });
 });

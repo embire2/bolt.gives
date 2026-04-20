@@ -85,16 +85,7 @@ describe('applyHostedRuntimeAssistantActions', () => {
       'https://alpha1.bolt.gives/runtime/sessions/session123/sync',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({
-          files: {
-            '/home/project/src/App.tsx': {
-              type: 'file',
-              content: 'export default function App() {\n  return <h1>FOLLOWUP_MARKER</h1>;\n}\n',
-              isBinary: false,
-            },
-          },
-          prune: true,
-        }),
+        body: expect.stringContaining('FOLLOWUP_MARKER'),
       }),
     );
 

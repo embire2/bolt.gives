@@ -18,6 +18,7 @@ import { ScreenshotSelector } from './ScreenshotSelector';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
+import type { PreviewInfo } from '~/lib/stores/previews';
 import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
 import { hasFallbackStarterPlaceholder, isStarterPlaceholderAlert } from '~/lib/runtime/starter-placeholder';
 
@@ -92,6 +93,24 @@ function buildPreviewUrl(baseUrl: string, displayPath: string, revision = 0) {
   return target.toString();
 }
 
+function findPreferredHostedPreviewIndex(previews: PreviewInfo[], hostedSessionId: string | null) {
+  if (previews.length === 0) {
+    return -1;
+  }
+
+  if (hostedSessionId) {
+    const exactMatchIndex = previews.findIndex((preview) => {
+      return extractHostedRuntimeSessionIdFromPreviewBaseUrl(preview.baseUrl) === hostedSessionId;
+    });
+
+    if (exactMatchIndex >= 0) {
+      return exactMatchIndex;
+    }
+  }
+
+  return previews.findIndex((preview) => preview.baseUrl.includes('/runtime/preview/'));
+}
+
 export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -147,6 +166,12 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
 
     return !hasFallbackStarterPlaceholder(workbenchStore.files.get());
+  }, []);
+
+  const shouldReplaceStarterPlaceholder = useCallback((alert: ReturnType<typeof extractPreviewAlertFromText>) => {
+    return Boolean(
+      alert && isStarterPlaceholderAlert(alert) && !hasFallbackStarterPlaceholder(workbenchStore.files.get()),
+    );
   }, []);
 
   const inspectHostedPreviewIframe = useCallback(
@@ -277,6 +302,28 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
       const targetUrl = buildPreviewUrl(previewTarget.baseUrl, displayPath, previewTarget.revision);
 
+      try {
+        const previewDocument = iframeRef.current?.contentDocument;
+        const rawIframeAlert = previewDocument ? extractPreviewAlertFromDocument(previewDocument) : null;
+
+        if (shouldReplaceStarterPlaceholder(rawIframeAlert) && iframeRef.current) {
+          const starterReloadKey = `${targetUrl}::starter-replace::${status.updatedAt || 'pending'}::${status.recovery?.token || 0}`;
+
+          if (lastHostedPreviewReloadKeyRef.current !== starterReloadKey) {
+            lastHostedPreviewReloadKeyRef.current = starterReloadKey;
+            lastPreviewAlertSignatureRef.current = null;
+            lastReportedHostedPreviewAlertSignatureRef.current = null;
+            workbenchStore.clearPreviewAlert();
+            iframeRef.current.src = targetUrl;
+            setIframeUrl(targetUrl);
+
+            return;
+          }
+        }
+      } catch {
+        // Ignore transient iframe access failures and fall back to normal hosted preview reconciliation.
+      }
+
       if (
         status.recovery?.state === 'restored' &&
         lastAppliedHostedRecoveryTokenRef.current === status.recovery.token &&
@@ -317,7 +364,13 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         lastHostedPreviewReloadKeyRef.current = null;
       }
     },
-    [activePreview, displayPath, inspectHostedPreviewIframe, shouldIgnoreStarterPlaceholderAlert],
+    [
+      activePreview,
+      displayPath,
+      inspectHostedPreviewIframe,
+      shouldIgnoreStarterPlaceholderAlert,
+      shouldReplaceStarterPlaceholder,
+    ],
   );
 
   const handlePreviewFrameLoad = useCallback(() => {
@@ -513,11 +566,41 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   );
 
   useEffect(() => {
+    if (previews.length === 0) {
+      if (activePreviewIndex !== 0) {
+        setActivePreviewIndex(0);
+      }
+
+      return;
+    }
+
+    if (activePreviewIndex >= previews.length) {
+      setActivePreviewIndex(Math.max(0, previews.length - 1));
+
+      return;
+    }
+
+    if (hostedRuntimeEnabled) {
+      const preferredHostedPreviewIndex = findPreferredHostedPreviewIndex(
+        previews,
+        workbenchStore.hostedRuntimeSessionId,
+      );
+
+      if (preferredHostedPreviewIndex >= 0 && activePreviewIndex !== preferredHostedPreviewIndex) {
+        setActivePreviewIndex(preferredHostedPreviewIndex);
+      }
+
+      return;
+    }
+
     if (previews.length > 1 && !hasSelectedPreview.current) {
       const minPortIndex = previews.reduce(findMinPortIndex, 0);
-      setActivePreviewIndex(minPortIndex);
+
+      if (activePreviewIndex !== minPortIndex) {
+        setActivePreviewIndex(minPortIndex);
+      }
     }
-  }, [previews, findMinPortIndex]);
+  }, [activePreviewIndex, findMinPortIndex, hostedRuntimeEnabled, previews]);
 
   const reloadPreview = () => {
     if (iframeRef.current && activePreview) {

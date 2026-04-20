@@ -82,6 +82,20 @@ describe('runtime preview helpers', () => {
     expect(output).toContain('sourceMappingURL=/runtime/preview/session123/4101/src/main.jsx.map');
   });
 
+  it('does not corrupt JavaScript regex literals while rewriting import paths', () => {
+    const input = `
+      import thing from "/src/main.jsx";
+      const escapedStringRegExp = /^'([^]*?)'?$/;
+      const doubleQuoteRegExp = /''/g;
+    `;
+
+    const output = rewritePreviewAssetUrls(input, '/runtime/preview/session123/4101');
+
+    expect(output).toContain('import thing from "/runtime/preview/session123/4101/src/main.jsx";');
+    expect(output).toContain("const escapedStringRegExp = /^'([^]*?)'?$/;");
+    expect(output).toContain("const doubleQuoteRegExp = /''/g;");
+  });
+
   it('parses preview proxy request targets including query strings', () => {
     expect(parsePreviewProxyRequestTarget('/runtime/preview/session-1/4100')).toEqual({
       sessionId: 'session-1',

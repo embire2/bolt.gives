@@ -179,6 +179,10 @@ let managedRolloutGuardState = {
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
 const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cts']);
 const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
+const STARTER_ENTRY_FILE_RE =
+  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
+const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
+const SNAPSHOT_TEXT_FILE_BYTES_LIMIT = Number(process.env.RUNTIME_SNAPSHOT_TEXT_FILE_BYTES_LIMIT || '1048576');
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
 
@@ -1478,14 +1482,19 @@ function buildPreviewAlertFingerprint(alert) {
   return `${alert.title}\n${alert.description}\n${String(alert.content || '').slice(0, 2000)}`;
 }
 
-function markSessionMutationStart(session) {
+export function markSessionMutationStart(session) {
   cancelPendingPreviewAutoRestore(session);
   cancelPendingPreviewVerification(session);
   cancelPendingPreviewAutostart(session);
   session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
   session.lastAutoRestoreFingerprint = null;
 
-  if (session.previewDiagnostics.healthy && session.currentFileMap && Object.keys(session.currentFileMap).length > 0) {
+  const currentFileMap = session.currentFileMap;
+  const hasCurrentWorkspaceFiles = currentFileMap && Object.keys(currentFileMap).length > 0;
+  const currentWorkspaceIsStarter =
+    hasCurrentWorkspaceFiles && fileMapContainsStarterPlaceholder(currentFileMap);
+
+  if (session.previewDiagnostics.healthy && hasCurrentWorkspaceFiles && !currentWorkspaceIsStarter) {
     session.restorePointFileMap = cloneFileMap(session.currentFileMap);
   }
 
@@ -1931,6 +1940,143 @@ async function clearHostedWorkspaceDependencyCaches(session) {
   });
 }
 
+function stripTerminalSequences(text) {
+  return String(text || '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replace(/\u0000/g, '');
+}
+
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function shellEscapeSingleArgument(value) {
+  return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+}
+
+export function extractUnavailablePackageVersionRepair(stderr = '') {
+  const normalized = stripTerminalSequences(stderr);
+  const unavailableMatch = normalized.match(
+    /No matching version found for\s+(@?[^@\s]+(?:\/[^@\s]+)?)@([^\s'")]+)\.?/i,
+  );
+
+  if (!unavailableMatch) {
+    return null;
+  }
+
+  const packageName = unavailableMatch[1];
+  const requestedVersion = unavailableMatch[2];
+  const scopedLatestMatch = normalized.match(
+    new RegExp(`latest release of\\s+${escapeRegExp(packageName)}\\s+is\\s+["']([^"']+)["']`, 'i'),
+  );
+  const genericLatestMatch = normalized.match(
+    /latest release of\s+(@?[^"'\s]+(?:\/[^"'\s]+)?)\s+is\s+["']([^"']+)["']/i,
+  );
+  const latestVersion =
+    scopedLatestMatch?.[1] ||
+    (genericLatestMatch && genericLatestMatch[1] === packageName ? genericLatestMatch[2] : null) ||
+    null;
+
+  return {
+    packageName,
+    requestedVersion,
+    latestVersion,
+  };
+}
+
+async function resolveLatestPackageVersion(packageName, options = {}) {
+  const { cwd = REPO_ROOT, writeEvent = null } = options;
+
+  return await new Promise((resolve) => {
+    const child = spawn('bash', ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`], {
+      cwd,
+      env: {
+        ...process.env,
+        CI: '0',
+        FORCE_COLOR: '0',
+        NODE_OPTIONS,
+      },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('close', () => {
+      const normalized = stripTerminalSequences(stdout).trim();
+
+      if (!normalized) {
+        if (stderr.trim()) {
+          writeEvent?.({
+            type: 'stderr',
+            chunk: stderr.toString(),
+          });
+        }
+
+        resolve(null);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(normalized);
+        resolve(typeof parsed === 'string' && parsed.trim() ? parsed.trim() : null);
+      } catch {
+        resolve(normalized.replace(/^"+|"+$/g, '') || null);
+      }
+    });
+    child.on('error', () => resolve(null));
+  });
+}
+
+function preserveDependencyRangePrefix(requestedVersion, latestVersion) {
+  const prefixMatch = String(requestedVersion || '').match(/^([~^])/);
+  const prefix = prefixMatch?.[1] || '';
+
+  return `${prefix}${latestVersion}`;
+}
+
+export function applyUnavailablePackageVersionRepair(packageJson, repair) {
+  if (!packageJson || !repair?.packageName || !repair?.requestedVersion || !repair?.latestVersion) {
+    return {
+      changed: false,
+      nextVersion: null,
+    };
+  }
+
+  const nextVersion = preserveDependencyRangePrefix(repair.requestedVersion, repair.latestVersion);
+  const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+  let changed = false;
+
+  for (const section of dependencySections) {
+    const record = packageJson?.[section];
+
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      continue;
+    }
+
+    if (typeof record[repair.packageName] !== 'string') {
+      continue;
+    }
+
+    if (record[repair.packageName] === nextVersion) {
+      continue;
+    }
+
+    record[repair.packageName] = nextVersion;
+    changed = true;
+  }
+
+  return {
+    changed,
+    nextVersion: changed ? nextVersion : null,
+  };
+}
+
 export function inferHostedWorkspaceStartCommand(packageJson) {
   const scripts = packageJson?.scripts || {};
 
@@ -2081,7 +2227,7 @@ async function walkWorkspaceFiles(rootDir) {
 
 export async function prepareHostedWorkspaceForStart(session, options = {}) {
   const { writeEvent = null } = options;
-  const packageJsonRecord = await readWorkspacePackageJson(session);
+  let packageJsonRecord = await readWorkspacePackageJson(session);
 
   if (!packageJsonRecord) {
     return {
@@ -2094,7 +2240,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   const entries = await walkWorkspaceFiles(session.dir);
   const installedPackages = [];
   const sanitizedFiles = [];
-  const packageJson = packageJsonRecord.json;
+  let packageJson = packageJsonRecord.json;
   const lockfileRecord = await readWorkspaceLockfile(session);
   const dependencyFingerprint = createWorkspaceDependencyFingerprint(packageJsonRecord.raw, lockfileRecord?.raw || '');
   const hasNodeModules = await exists(path.join(session.dir, 'node_modules'));
@@ -2135,40 +2281,96 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
         : 'Installing workspace dependencies before starting preview',
     });
 
-    await new Promise((resolve, reject) => {
-      const child = spawn('bash', ['-lc', 'pnpm install --reporter=append-only --no-frozen-lockfile'], {
-        cwd: session.dir,
-        env: {
-          ...process.env,
-          CI: '0',
-          FORCE_COLOR: '0',
-          NODE_OPTIONS,
-        },
-      });
+    let installAttempts = 0;
 
-      let stderr = '';
-      child.stdout.on('data', (chunk) => {
-        writeEvent?.({ type: 'stdout', chunk: chunk.toString() });
-      });
-      child.stderr.on('data', (chunk) => {
-        const text = chunk.toString();
-        stderr += text;
-        writeEvent?.({ type: 'stderr', chunk: text });
-      });
-      child.on('close', (code) => {
-        if ((code ?? 1) === 0) {
-          resolve(null);
-          return;
+    while (true) {
+      installAttempts += 1;
+
+      try {
+        await new Promise((resolve, reject) => {
+          const child = spawn('bash', ['-lc', 'pnpm install --reporter=append-only --no-frozen-lockfile'], {
+            cwd: session.dir,
+            env: {
+              ...process.env,
+              CI: '0',
+              FORCE_COLOR: '0',
+              NODE_OPTIONS,
+            },
+          });
+
+          let stdout = '';
+          let stderr = '';
+          child.stdout.on('data', (chunk) => {
+            const text = chunk.toString();
+            stdout += text;
+            writeEvent?.({ type: 'stdout', chunk: text });
+          });
+          child.stderr.on('data', (chunk) => {
+            const text = chunk.toString();
+            stderr += text;
+            writeEvent?.({ type: 'stderr', chunk: text });
+          });
+          child.on('close', (code) => {
+            if ((code ?? 1) === 0) {
+              resolve(null);
+              return;
+            }
+
+            const combinedOutput = `${stdout}\n${stderr}`.trim();
+            reject(new Error(combinedOutput || `pnpm install failed with exit ${code ?? 1}`));
+          });
+          child.on('error', reject);
+        });
+
+        break;
+      } catch (error) {
+        if (installAttempts >= 4) {
+          throw error;
         }
 
-        reject(new Error(stderr.trim() || `pnpm install failed with exit ${code ?? 1}`));
-      });
-      child.on('error', reject);
-    });
+        const repair = extractUnavailablePackageVersionRepair(error instanceof Error ? error.message : String(error));
+
+        if (!repair) {
+          throw error;
+        }
+
+        if (!repair.latestVersion) {
+          repair.latestVersion = await resolveLatestPackageVersion(repair.packageName, {
+            cwd: session.dir,
+            writeEvent,
+          });
+        }
+
+        const appliedRepair = applyUnavailablePackageVersionRepair(packageJson, repair);
+
+        if (!appliedRepair.changed || !appliedRepair.nextVersion) {
+          throw error;
+        }
+
+        writeEvent?.({
+          type: 'status',
+          message: `Package ${repair.packageName}@${repair.requestedVersion} is unavailable. Retrying with ${appliedRepair.nextVersion}.`,
+        });
+        writeEvent?.({
+          type: 'stdout',
+          chunk: `Self-heal: updated ${repair.packageName} to ${appliedRepair.nextVersion} before retrying install.\n`,
+        });
+
+        packageJsonRecord = {
+          ...packageJsonRecord,
+          raw: `${JSON.stringify(packageJson, null, 2)}\n`,
+        };
+        await writeWorkspaceFileAtomic(packageJsonRecord.path, packageJsonRecord.raw);
+        await fs.rm(path.join(session.dir, 'pnpm-lock.yaml'), {
+          force: true,
+        });
+      }
+    }
 
     await clearHostedWorkspaceDependencyCaches(session);
     const refreshedPackageJsonRecord = await readWorkspacePackageJson(session);
     const refreshedLockfileRecord = await readWorkspaceLockfile(session);
+    packageJson = refreshedPackageJsonRecord?.json || packageJson;
     session.lastPreparedDependencyFingerprint = createWorkspaceDependencyFingerprint(
       refreshedPackageJsonRecord?.raw || packageJsonRecord.raw,
       refreshedLockfileRecord?.raw || '',
@@ -2421,6 +2623,105 @@ async function walkWorkspace(rootDir, relativeDir = '') {
   }
 
   return results;
+}
+
+function isBinaryWorkspaceBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    return false;
+  }
+
+  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
+
+  for (const value of sample) {
+    if (value === 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function fileMapContainsStarterPlaceholder(fileMap) {
+  if (!fileMap || typeof fileMap !== 'object') {
+    return false;
+  }
+
+  return Object.entries(fileMap).some(([filePath, dirent]) => {
+    if (dirent?.type !== 'file' || typeof dirent.content !== 'string' || dirent.isBinary) {
+      return false;
+    }
+
+    return STARTER_ENTRY_FILE_RE.test(filePath) && dirent.content.includes(STARTER_PLACEHOLDER_TEXT);
+  });
+}
+
+export async function buildWorkspaceFileMapFromDisk(session) {
+  const entries = await walkWorkspace(session.dir);
+  const nextFiles = {};
+
+  for (const entry of entries) {
+    const absolutePath = path.join(session.dir, entry.path);
+    const workbenchPath = path.posix.join(WORK_DIR, entry.path);
+
+    if (entry.type === 'dir') {
+      nextFiles[workbenchPath] = {
+        type: 'folder',
+      };
+      continue;
+    }
+
+    const buffer = await fs.readFile(absolutePath);
+    const isBinary = isBinaryWorkspaceBuffer(buffer);
+    const content = isBinary
+      ? buffer.toString('base64')
+      : buffer.subarray(0, SNAPSHOT_TEXT_FILE_BYTES_LIMIT).toString('utf8');
+
+    nextFiles[workbenchPath] = {
+      type: 'file',
+      content,
+      isBinary,
+    };
+  }
+
+  return nextFiles;
+}
+
+export async function resolveSessionSnapshotFiles(session) {
+  const currentFiles = session.currentFileMap || {};
+  const currentFileCount = Object.keys(currentFiles).length;
+  const currentHasStarterPlaceholder = fileMapContainsStarterPlaceholder(currentFiles);
+
+  let diskFiles = null;
+
+  try {
+    diskFiles = await buildWorkspaceFileMapFromDisk(session);
+  } catch {
+    diskFiles = null;
+  }
+
+  if (!diskFiles) {
+    return currentFiles;
+  }
+
+  const diskFileCount = Object.keys(diskFiles).length;
+
+  if (diskFileCount === 0) {
+    return currentFiles;
+  }
+
+  const diskHasStarterPlaceholder = fileMapContainsStarterPlaceholder(diskFiles);
+  const shouldUseDiskSnapshot =
+    currentFileCount === 0 ||
+    diskFileCount > currentFileCount ||
+    (currentHasStarterPlaceholder && !diskHasStarterPlaceholder);
+
+  if (!shouldUseDiskSnapshot) {
+    return currentFiles;
+  }
+
+  session.currentFileMap = cloneFileMap(diskFiles);
+
+  return diskFiles;
 }
 
 function toRelativeWorkspacePath(filePath) {
@@ -4237,9 +4538,10 @@ export function createRuntimeServer() {
       try {
         const requestedSessionId = normalizeSessionId(snapshotMatch[1]);
         const session = getSession(requestedSessionId);
+        const files = await resolveSessionSnapshotFiles(session);
         sendJson(res, 200, {
           sessionId: requestedSessionId,
-          files: session.currentFileMap || {},
+          files,
           recovery: session.previewRecovery,
         });
       } catch (error) {

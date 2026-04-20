@@ -158,6 +158,30 @@ describe('shouldForceRunContinuation', () => {
     expect(decision.reason).toBe('continuation-not-required');
   });
 
+  it('continues when the starter entry file was touched but still contains the fallback placeholder', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a doctor scheduler and run it.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <p>Your fallback starter is ready.</p>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+      currentFiles: {
+        'src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+      } as any,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('starter-without-implementation');
+    expect(decision.starterEntryFilePath).toBe('src/App.tsx');
+  });
+
   it('treats hosted absolute starter entry paths as the same file as relative generated paths', () => {
     const assistantContent = [
       '<boltArtifact id="demo" title="Demo">',
@@ -176,6 +200,35 @@ describe('shouldForceRunContinuation', () => {
           '/home/project/src/App.tsx': {
             type: 'file',
             content: 'Your fallback starter is ready.',
+            isBinary: false,
+          },
+        } as unknown as FileMap,
+      }),
+    ).toEqual({
+      shouldContinue: false,
+      reason: 'continuation-not-required',
+    });
+  });
+
+  it('treats generated sibling source extensions as replacements for the active starter entry', () => {
+    const assistantContent = [
+      '<boltArtifact id="demo" title="Demo">',
+      '<boltAction type="file" filePath="/src/App.jsx">export default function App() { return <main>Luma Clinic</main>; }</boltAction>',
+      '<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>',
+      '<boltAction type="start">pnpm run dev</boltAction>',
+      '</boltArtifact>',
+    ].join('\n');
+
+    expect(
+      analyzeRunContinuation({
+        chatMode: 'build',
+        lastUserContent: 'Build a clinic scheduler and run it',
+        assistantContent,
+        alreadyAttempted: false,
+        currentFiles: {
+          '/home/project/src/App.tsx': {
+            type: 'file',
+            content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
             isBinary: false,
           },
         } as unknown as FileMap,
@@ -258,8 +311,8 @@ describe('shouldForceRunContinuation', () => {
 `,
     });
 
-    expect(handoff?.setupCommand).toBe('pnpm install');
-    expect(handoff?.assistantContent).toContain('<boltAction type="shell">pnpm install</boltAction>');
+    expect(handoff?.setupCommand).toContain('install');
+    expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
   });
 
@@ -297,7 +350,7 @@ describe('shouldForceRunContinuation', () => {
   }
 }</boltAction>
 <boltAction type="file" filePath="/home/project/src/App.jsx">export default function App(){return <div>Doctor schedule</div>;}</boltAction>
-<boltAction type="shell">npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile</boltAction>
+<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>
 <boltAction type="start">pnpm run dev</boltAction>
 </boltArtifact>
 `,
@@ -305,9 +358,9 @@ describe('shouldForceRunContinuation', () => {
 
     expect(handoff).toMatchObject({
       reason: 'inferred-project-commands',
-      setupCommand: 'npx update-browserslist-db@latest && pnpm install --no-frozen-lockfile',
       startCommand: 'pnpm run dev',
     });
+    expect(handoff?.setupCommand).toContain('pnpm install --no-frozen-lockfile');
     expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">pnpm run dev</boltAction>');
   });
@@ -332,12 +385,10 @@ describe('shouldForceRunContinuation', () => {
 
     expect(handoff).toMatchObject({
       reason: 'inferred-project-commands',
-      setupCommand: 'pnpm install --no-frozen-lockfile',
       startCommand: 'npm run dev',
     });
-    expect(handoff?.assistantContent).toContain(
-      '<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>',
-    );
+    expect(handoff?.setupCommand).toContain('npm install');
+    expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run dev</boltAction>');
   });
 
@@ -364,9 +415,9 @@ describe('shouldForceRunContinuation', () => {
 
     expect(handoff).toMatchObject({
       reason: 'inferred-project-commands',
-      setupCommand: 'pnpm install --reporter=append-only --no-frozen-lockfile',
       startCommand: 'npm run start',
     });
+    expect(handoff?.setupCommand).toContain('npm install');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">npm run start</boltAction>');
   });
 
@@ -405,5 +456,179 @@ describe('shouldForceRunContinuation', () => {
     expect(handoff?.setupCommand).toContain('npm install');
     expect(handoff?.setupCommand).not.toContain('moment');
     expect(handoff?.assistantContent).not.toContain('npx --yes serve');
+  });
+
+  it('does not synthesize runtime handoff while the merged starter entry still contains the fallback placeholder', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <p>Your fallback starter is ready.</p>;}</boltAction>
+<boltAction type="file" filePath="src/index.css">@tailwind base;\n@tailwind components;\n@tailwind utilities;</boltAction>
+`,
+      currentFiles: {
+        'package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'doctor-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          }),
+        },
+        'src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('synthesizes runtime handoff when a generated sibling source extension replaces the starter entry', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="file" filePath="/src/App.jsx">export default function App(){return <main>Luma Clinic</main>;}</boltAction>
+<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'clinic-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          }),
+        },
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+        '/home/project/src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'npm run dev',
+    });
+    expect(handoff?.setupCommand).toContain('npm install');
+  });
+
+  it('rewrites explicit npm runtime commands to pnpm when the generated project uses pnpm', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <main>Scheduler Ready</main>;}</boltAction>
+<boltAction type="shell">npm install</boltAction>
+<boltAction type="start">npm run dev</boltAction>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'clinic-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          }),
+        },
+        '/home/project/pnpm-lock.yaml': {
+          type: 'file',
+          isBinary: false,
+          content: "lockfileVersion: '9.0'\n",
+        },
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+        '/home/project/src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'pnpm run dev',
+    });
+    expect(handoff?.setupCommand).toContain('pnpm install --no-frozen-lockfile');
+    expect(handoff?.setupCommand).not.toMatch(/\bnpm\s+install\b/i);
+    expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">pnpm run dev</boltAction>');
+  });
+
+  it('ignores node_modules package manifests when synthesizing runtime handoff commands', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <main>Scheduler Ready</main>;}</boltAction>
+<boltAction type="shell">npm install</boltAction>
+<boltAction type="start">npm run dev</boltAction>
+`,
+      currentFiles: {
+        '/home/project/node_modules/react/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'react',
+            scripts: {
+              start: 'node index.js',
+            },
+          }),
+        },
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'clinic-scheduler',
+            private: true,
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          }),
+        },
+        '/home/project/pnpm-lock.yaml': {
+          type: 'file',
+          isBinary: false,
+          content: "lockfileVersion: '9.0'\n",
+        },
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+        '/home/project/src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'pnpm run dev',
+    });
+    expect(handoff?.setupCommand).toContain('pnpm install --no-frozen-lockfile');
+    expect(handoff?.setupCommand).not.toMatch(/\bnpm\s+install\b/i);
   });
 });

@@ -132,6 +132,19 @@ function detectManualIntervention(messages: Messages): boolean {
   return hasContinueCue || partIntervention;
 }
 
+export function resolveContinuationFiles(options: {
+  requestFiles?: FileMap;
+  hostedRuntimeSnapshot?: FileMap | null;
+}): FileMap | undefined {
+  const { requestFiles, hostedRuntimeSnapshot } = options;
+
+  if (hostedRuntimeSnapshot && Object.keys(hostedRuntimeSnapshot).length > 0) {
+    return hostedRuntimeSnapshot;
+  }
+
+  return requestFiles;
+}
+
 function parseCookies(cookieHeader: string): Record<string, string> {
   const cookies: Record<string, string> = {};
 
@@ -1124,12 +1137,26 @@ Next: I am sending the final result now.`,
               return;
             }
 
+            const hostedRuntimeSnapshot =
+              effectiveChatMode === 'build' &&
+              typeof hostedRuntimeSessionId === 'string' &&
+              hostedRuntimeSessionId.trim().length > 0
+                ? await fetchHostedRuntimeSnapshotForRequest({
+                    requestUrl: request.url,
+                    sessionId: hostedRuntimeSessionId,
+                  }).catch(() => null)
+                : null;
+            const continuationFiles = resolveContinuationFiles({
+              requestFiles: files,
+              hostedRuntimeSnapshot,
+            });
+
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
               lastUserContent,
               assistantContent: content,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
-              currentFiles: files,
+              currentFiles: continuationFiles,
             });
             logger.info(
               `run continuation analysis ${JSON.stringify({
@@ -1143,6 +1170,8 @@ Next: I am sending the final result now.`,
                 previewCheckpointObserved,
                 hasExecutionFailures,
                 starterEntryFilePath: runContinuationDecision.starterEntryFilePath || null,
+                continuationFileSource:
+                  hostedRuntimeSnapshot && Object.keys(hostedRuntimeSnapshot).length > 0 ? 'hosted-runtime' : 'request',
               })}`,
             );
 
@@ -1161,7 +1190,7 @@ Next: I am sending the final result now.`,
                 runContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
               const synthesizedRunHandoff = await synthesizeRunHandoff({
                 assistantContent: content,
-                currentFiles: files,
+                currentFiles: continuationFiles,
               });
 
               if (

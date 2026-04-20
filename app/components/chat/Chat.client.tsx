@@ -66,6 +66,7 @@ import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
+import { classifyRecoverableStreamError } from '~/lib/runtime/recovery-errors';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -1546,16 +1547,14 @@ Requirements:
           ),
         });
 
-        const normalizedErrorMessage = errorInfo.message.toLowerCase();
-        const timeoutLikeError =
-          normalizedErrorMessage.includes('bolt_stream_timeout') ||
-          normalizedErrorMessage.includes('stream timed out') ||
-          normalizedErrorMessage.includes('generation stream timed out');
+        const { timeoutLike: timeoutLikeError, disconnectLike: disconnectLikeError } = classifyRecoverableStreamError(
+          errorInfo.message,
+        );
         let queuedAutoRecovery = false;
 
         if (
           context === 'chat' &&
-          timeoutLikeError &&
+          (timeoutLikeError || disconnectLikeError) &&
           latestUserRequestRef.current.trim().length > 0 &&
           !stallRecoveryTriggeredRef.current
         ) {
@@ -1566,9 +1565,11 @@ Requirements:
           const recoveryPrompt = buildModelSelectionEnvelope({
             model: activeRunContext.model,
             providerName: activeRunContext.providerName,
-            selectionReason: 'The previous run timed out before completing. Continuing from current workspace state.',
+            selectionReason: timeoutLikeError
+              ? 'The previous run timed out before completing. Continuing from current workspace state.'
+              : 'The previous run disconnected before completing. Continuing from current workspace state.',
             includeSelectionReason: true,
-            content: `The previous run timed out before completing.
+            content: `The previous run ${timeoutLikeError ? 'timed out' : 'disconnected'} before completing.
 Continue from the current project state without restarting from scratch.
 
 Original request:
@@ -1585,22 +1586,32 @@ Requirements:
           appendStepRunnerEvent({
             type: 'telemetry',
             timestamp: new Date().toISOString(),
-            description: 'Dispatching hidden continuation after timeout',
+            description: timeoutLikeError
+              ? 'Dispatching hidden continuation after timeout'
+              : 'Dispatching hidden continuation after stream disconnect',
             output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
           });
 
           dispatchAutoContinuation({
-            idSuffix: 'timeout-recovery',
+            idSuffix: timeoutLikeError ? 'timeout-recovery' : 'disconnect-recovery',
             content: recoveryPrompt,
-            failureDescription: 'Failed to dispatch timeout recovery continuation',
-            successDescription: 'Hidden timeout continuation dispatched',
+            failureDescription: timeoutLikeError
+              ? 'Failed to dispatch timeout recovery continuation'
+              : 'Failed to dispatch disconnect recovery continuation',
+            successDescription: timeoutLikeError
+              ? 'Hidden timeout continuation dispatched'
+              : 'Hidden disconnect continuation dispatched',
           });
         }
 
         // Create API error alert
         if (queuedAutoRecovery) {
           setLlmErrorAlert(undefined);
-          toast.info('The run timed out. Auto-recovery is continuing from the current workspace state.');
+          toast.info(
+            timeoutLikeError
+              ? 'The run timed out. Auto-recovery is continuing from the current workspace state.'
+              : 'The stream disconnected before completion. Auto-recovery is continuing from the current workspace state.',
+          );
         } else {
           setLlmErrorAlert({
             type: 'error',

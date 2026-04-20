@@ -2,6 +2,7 @@ import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
 import { getFineTunedPrompt } from './prompts/new-prompt';
 import { getSmallModelPrompt } from './prompts/small-model';
+import { getHostedFreeBuildPrompt } from './prompts/free-hosted-build';
 import type { DesignScheme } from '~/types/design-scheme';
 
 export interface PromptOptions {
@@ -47,6 +48,11 @@ export class PromptLibrary {
       label: 'Small Model Prompt',
       description: 'Compact prompt intended for smaller LLMs (more reliable artifact/actions)',
       get: (options) => getSmallModelPrompt(options.cwd, options.supabase, options.designScheme),
+    },
+    'free-hosted': {
+      label: 'Hosted FREE Build Prompt',
+      description: 'Lean hosted build prompt for the protected FREE provider path',
+      get: (options) => getHostedFreeBuildPrompt(options.cwd),
     },
   };
   static getList() {

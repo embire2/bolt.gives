@@ -251,6 +251,32 @@ export class ActionRunner {
     this.#emitHostedPreviewRefresh();
   }
 
+  async #syncHostedRuntimeSnapshotFromFiles(files: FileMap) {
+    if (!isHostedRuntimeEnabled()) {
+      return;
+    }
+
+    const sanitizedFiles = sanitizeHostedRuntimeFileMap(files);
+
+    await syncHostedRuntimeWorkspace({
+      sessionId: this.#getHostedRuntimeSessionId(),
+      files: sanitizedFiles,
+      prune: true,
+    });
+
+    this.#hostedRuntimeFullSyncPending = false;
+    this.#lastHostedRuntimeFileContents.clear();
+    this.#pendingHostedRuntimeFiles.clear();
+
+    for (const [filePath, dirent] of Object.entries(sanitizedFiles)) {
+      if (dirent?.type === 'file' && !dirent.isBinary) {
+        this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
+      }
+    }
+
+    this.#emitHostedPreviewRefresh();
+  }
+
   async #flushHostedRuntimePendingFiles() {
     if (!isHostedRuntimeEnabled() || this.#pendingHostedRuntimeFiles.size === 0) {
       return;
@@ -970,6 +996,11 @@ export class ActionRunner {
       }
     }
 
+    if (isStreaming) {
+      logger.debug(`Skipping runnable workspace write for streaming file action ${relativePath}`);
+      return;
+    }
+
     try {
       const writePriority = getWritePriority(relativePath);
       await enqueueActionRunnerFileWrite(writePriority, () => webcontainer.fs.writeFile(relativePath, action.content));
@@ -979,9 +1010,20 @@ export class ActionRunner {
       }
       logger.debug(`File written ${relativePath}`);
 
-      await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
+      if (hostedRuntimeEnabled) {
+        const snapshot = this.#getFilesSnapshot?.() || {};
+        const nextSnapshot: FileMap = {
+          ...snapshot,
+          [normalizedFilePath]: {
+            type: 'file',
+            content: action.content,
+            isBinary: false,
+          },
+        };
 
-      if (!isStreaming) {
+        await this.#syncHostedRuntimeSnapshotFromFiles(nextSnapshot);
+      } else {
+        await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
         await this.#hostedRuntimeFlushPromise;
       }
     } catch (error) {

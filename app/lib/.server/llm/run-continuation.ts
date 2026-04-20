@@ -1,8 +1,11 @@
 import {
   decodeHtmlCommandDelimiters,
+  makeInstallCommandsLowNoise,
   normalizeShellCommandSurface,
+  rewriteAllPackageManagersToPnpm,
   unwrapCommandJsonEnvelope,
 } from '~/lib/runtime/shell-command-utils';
+import { normalizeArtifactFilePath } from '~/lib/runtime/file-paths';
 import { detectProjectCommands } from '~/utils/projectCommands';
 import type { FileMap } from '~/lib/stores/files';
 import { WORK_DIR } from '~/utils/constants';
@@ -55,6 +58,8 @@ const STARTER_BOOTSTRAP_RE =
 const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
+const SOURCE_EXTENSION_PRIORITY = ['.tsx', '.ts', '.jsx', '.js'] as const;
+const SOURCE_PATH_HINT_RE = /(?:^|\/)(?:src|app|components?|pages)(?:\/|$)/i;
 const START_ACTION_RE = /<boltAction[^>]*type="start"/i;
 const START_ACTION_WITH_CONTENT_RE = /<boltAction[^>]*type="start"[^>]*>([\s\S]*?)<\/boltAction>/gi;
 const BOLT_ACTION_RE = /<boltAction\b/i;
@@ -74,6 +79,32 @@ const CD_OR_MKDIR_RE = /^(cd|mkdir\s+-p)\b/i;
 const START_AUXILIARY_SEGMENT_RE = /^(cd\b|mkdir\s+-p\b|export\b|set\s+-[a-z-]+\b|source\b|[A-Z_][A-Z0-9_]*=)/i;
 const NON_IMPLEMENTATION_FILE_RE =
   /(^|\/)(readme(\.[a-z0-9]+)?|changelog(\.[a-z0-9]+)?|package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb|tsconfig(\.[a-z0-9-]+)?\.json|vite\.config\.[a-z0-9]+|eslint\.config\.[a-z0-9]+|prettier\.config\.[a-z0-9]+|postcss\.config\.[a-z0-9]+|tailwind\.config\.[a-z0-9]+|index\.html|\.gitignore|\.npmrc|\.nvmrc|\.editorconfig|\.env(\.[a-z0-9-]+)?)$/i;
+const PNPM_LOCKFILE_RE = /(^|\/)pnpm-lock\.ya?ml$/i;
+const YARN_LOCKFILE_RE = /(^|\/)yarn\.lock$/i;
+const BUN_LOCKFILE_RE = /(^|\/)bun\.lockb?$/i;
+const IRRELEVANT_WORKSPACE_PATH_RE =
+  /(^|\/)(node_modules|\.pnpm|\.vite|dist|build|coverage|\.next|out|\.turbo|\.cache)(\/|$)/i;
+
+function isProjectOwnedPath(filePath: string): boolean {
+  return !IRRELEVANT_WORKSPACE_PATH_RE.test(normalizeFilePath(filePath));
+}
+
+function sortFilesByProjectPriority(fileActions: ExtractedFileAction[]): ExtractedFileAction[] {
+  return [...fileActions]
+    .filter((fileAction) => isProjectOwnedPath(fileAction.path))
+    .sort((left, right) => {
+      const normalizedLeft = normalizeFilePath(left.path);
+      const normalizedRight = normalizeFilePath(right.path);
+      const leftDepth = normalizedLeft.split('/').filter(Boolean).length;
+      const rightDepth = normalizedRight.split('/').filter(Boolean).length;
+
+      if (leftDepth !== rightDepth) {
+        return leftDepth - rightDepth;
+      }
+
+      return normalizedLeft.localeCompare(normalizedRight);
+    });
+}
 
 function splitCommandSegments(command: string): string[] {
   return command
@@ -179,9 +210,76 @@ function extractRunnableStartCommand(assistantContent: string): string | undefin
 }
 
 function extractPackageJsonContent(fileActions: ExtractedFileAction[]): string | undefined {
-  const packageJsonAction = fileActions.find((fileAction) => fileAction.path.endsWith('package.json'));
+  const packageJsonAction = sortFilesByProjectPriority(fileActions).find((fileAction) =>
+    normalizeFilePath(fileAction.path).endsWith('package.json'),
+  );
 
   return packageJsonAction?.content;
+}
+
+function detectPackageManagerForFiles(fileActions: ExtractedFileAction[]): 'npm' | 'pnpm' | 'yarn' | 'bun' {
+  const packageJsonContent = extractPackageJsonContent(fileActions);
+
+  if (packageJsonContent) {
+    const packageManagerMatch = packageJsonContent.match(/"packageManager"\s*:\s*"(pnpm|yarn|bun|npm)@/i);
+
+    if (packageManagerMatch?.[1]) {
+      return packageManagerMatch[1].toLowerCase() as 'npm' | 'pnpm' | 'yarn' | 'bun';
+    }
+  }
+
+  if (fileActions.some((fileAction) => PNPM_LOCKFILE_RE.test(normalizeFilePath(fileAction.path)))) {
+    if (
+      !fileActions.some(
+        (fileAction) =>
+          isProjectOwnedPath(fileAction.path) && PNPM_LOCKFILE_RE.test(normalizeFilePath(fileAction.path)),
+      )
+    ) {
+      return 'npm';
+    }
+
+    return 'pnpm';
+  }
+
+  if (
+    fileActions.some(
+      (fileAction) => isProjectOwnedPath(fileAction.path) && YARN_LOCKFILE_RE.test(normalizeFilePath(fileAction.path)),
+    )
+  ) {
+    return 'yarn';
+  }
+
+  if (
+    fileActions.some(
+      (fileAction) => isProjectOwnedPath(fileAction.path) && BUN_LOCKFILE_RE.test(normalizeFilePath(fileAction.path)),
+    )
+  ) {
+    return 'bun';
+  }
+
+  return 'npm';
+}
+
+function alignCommandToProjectPackageManager(
+  command: string | undefined,
+  fileActions: ExtractedFileAction[],
+): string | undefined {
+  if (!command) {
+    return undefined;
+  }
+
+  const preferredPackageManager = detectPackageManagerForFiles(fileActions);
+  let aligned = sanitizeShellCommand(command);
+
+  if (preferredPackageManager === 'pnpm') {
+    const pnpmRewrite = rewriteAllPackageManagersToPnpm(aligned);
+    aligned = pnpmRewrite.modifiedCommand || aligned;
+  }
+
+  const lowNoiseRewrite = makeInstallCommandsLowNoise(aligned);
+  aligned = lowNoiseRewrite.modifiedCommand || aligned;
+
+  return aligned;
 }
 
 function extractPackageScriptNames(fileActions: ExtractedFileAction[]): Set<string> {
@@ -225,6 +323,20 @@ function extractPackageScriptNameFromCommand(command: string): string | undefine
   }
 
   return undefined;
+}
+
+function extractLeadingPackageManager(command: string | undefined): 'npm' | 'pnpm' | 'yarn' | 'bun' | undefined {
+  if (!command) {
+    return undefined;
+  }
+
+  const leadingPackageManagerMatch = sanitizeShellCommand(command).match(/^(npm|pnpm|yarn|bun)\b/i);
+
+  if (!leadingPackageManagerMatch?.[1]) {
+    return undefined;
+  }
+
+  return leadingPackageManagerMatch[1].toLowerCase() as 'npm' | 'pnpm' | 'yarn' | 'bun';
 }
 
 function extractFilePaths(assistantContent: string): string[] {
@@ -304,14 +416,77 @@ function findStarterEntryFiles(filesSnapshot?: FileMap): string[] {
     .map(([filePath]) => filePath);
 }
 
-function touchesStarterEntryFile(filePaths: string[], starterEntryFiles: string[]): boolean {
+function resolveWorkspacePreferredPath(filePath: string, filesSnapshot?: FileMap): string {
+  const normalizedArtifactPath = normalizeArtifactFilePath(filePath, WORK_DIR);
+
+  if (!filesSnapshot) {
+    return normalizedArtifactPath;
+  }
+
+  const normalizedRelativePath = normalizeFilePath(filePath);
+  const extensionMatch = normalizedRelativePath.match(/\.[^.\\/]+$/);
+  const extension = extensionMatch?.[0]?.toLowerCase();
+
+  if (!extension || !SOURCE_EXTENSION_PRIORITY.includes(extension as (typeof SOURCE_EXTENSION_PRIORITY)[number])) {
+    return normalizedArtifactPath;
+  }
+
+  if (!SOURCE_PATH_HINT_RE.test(normalizedRelativePath) && !STARTER_ENTRY_FILE_RE.test(normalizedRelativePath)) {
+    return normalizedArtifactPath;
+  }
+
+  const stemPath = normalizedRelativePath.slice(0, -extension.length);
+  const snapshotPathByNormalizedPath = new Map(
+    Object.keys(filesSnapshot).map((snapshotPath) => [normalizeFilePath(snapshotPath), snapshotPath]),
+  );
+
+  for (const candidateExtension of SOURCE_EXTENSION_PRIORITY) {
+    const existingPath = snapshotPathByNormalizedPath.get(`${stemPath}${candidateExtension}`);
+
+    if (existingPath) {
+      return existingPath;
+    }
+  }
+
+  return normalizedArtifactPath;
+}
+
+function touchesStarterEntryFile(filePaths: string[], starterEntryFiles: string[], filesSnapshot?: FileMap): boolean {
   if (filePaths.length === 0 || starterEntryFiles.length === 0) {
     return false;
   }
 
   const normalizedStarterEntries = new Set(starterEntryFiles.map((filePath) => normalizeFilePath(filePath)));
 
-  return filePaths.some((filePath) => normalizedStarterEntries.has(normalizeFilePath(filePath)));
+  return filePaths.some((filePath) =>
+    normalizedStarterEntries.has(normalizeFilePath(resolveWorkspacePreferredPath(filePath, filesSnapshot))),
+  );
+}
+
+function replacesStarterEntryFile(
+  fileActions: ExtractedFileAction[],
+  starterEntryFiles: string[],
+  filesSnapshot?: FileMap,
+): boolean {
+  if (fileActions.length === 0 || starterEntryFiles.length === 0) {
+    return false;
+  }
+
+  const normalizedStarterEntries = new Set(starterEntryFiles.map((filePath) => normalizeFilePath(filePath)));
+
+  return fileActions.some((fileAction) => {
+    const preferredPath = resolveWorkspacePreferredPath(fileAction.path, filesSnapshot);
+
+    if (!normalizedStarterEntries.has(normalizeFilePath(preferredPath))) {
+      return false;
+    }
+
+    return !STARTER_PLACEHOLDER_RE.test(fileAction.content);
+  });
+}
+
+function hasStarterPlaceholderInFiles(files: ExtractedFileAction[]): boolean {
+  return files.some((file) => STARTER_ENTRY_FILE_RE.test(file.path) && STARTER_PLACEHOLDER_RE.test(file.content));
 }
 
 function hasImplementationFileAction(filePaths: string[]): boolean {
@@ -387,7 +562,7 @@ function extractProjectFilesFromSnapshot(filesSnapshot?: FileMap): ExtractedFile
   }
 
   return Object.entries(filesSnapshot)
-    .filter(([, dirent]) => dirent?.type === 'file' && !dirent.isBinary)
+    .filter(([path, dirent]) => dirent?.type === 'file' && !dirent.isBinary && isProjectOwnedPath(path))
     .map(([path, dirent]) => ({
       path,
       content: dirent && dirent.type === 'file' ? dirent.content || '' : '',
@@ -405,7 +580,12 @@ function mergeWorkspaceFiles(
   }
 
   for (const fileAction of fileActions) {
-    mergedFiles.set(normalizeFilePath(fileAction.path), fileAction);
+    const preferredPath = resolveWorkspacePreferredPath(fileAction.path, filesSnapshot);
+
+    mergedFiles.set(normalizeFilePath(preferredPath), {
+      ...fileAction,
+      path: preferredPath,
+    });
   }
 
   return Array.from(mergedFiles.values());
@@ -469,19 +649,44 @@ export async function synthesizeRunHandoff(options: {
     return null;
   }
 
-  const explicitStartCommand = extractRunnableStartCommand(assistantContent);
-  const explicitSetupCommand = extractSetupCommandFromShellCommandsUsingFiles(shellCommands, mergedFiles);
+  if (hasStarterPlaceholderInFiles(mergedFiles)) {
+    return null;
+  }
+
+  const projectPackageManager = detectPackageManagerForFiles(mergedFiles);
+  const rawExplicitStartCommand = extractRunnableStartCommand(assistantContent);
+  const rawExplicitSetupCommand = extractSetupCommandFromShellCommandsUsingFiles(shellCommands, mergedFiles);
+  const explicitStartCommand =
+    projectPackageManager === 'npm'
+      ? rawExplicitStartCommand
+      : alignCommandToProjectPackageManager(rawExplicitStartCommand, mergedFiles);
+  const explicitSetupCommand =
+    projectPackageManager === 'npm'
+      ? rawExplicitSetupCommand
+      : alignCommandToProjectPackageManager(rawExplicitSetupCommand, mergedFiles);
   const inferredCommands = await detectProjectCommands(mergedFiles);
   const packageScriptNames = extractPackageScriptNames(mergedFiles);
   const explicitScriptName = explicitStartCommand
     ? extractPackageScriptNameFromCommand(explicitStartCommand)
     : undefined;
   const explicitScriptExists = explicitScriptName ? packageScriptNames.has(explicitScriptName) : true;
-  const shouldUseExplicitStartCommand = explicitStartCommand && explicitScriptExists;
+  const explicitStartPackageManager = extractLeadingPackageManager(explicitStartCommand);
+  const explicitSetupPackageManager = extractLeadingPackageManager(explicitSetupCommand);
+  const explicitStartMatchesProject =
+    !explicitStartPackageManager ||
+    projectPackageManager === 'npm' ||
+    explicitStartPackageManager === projectPackageManager;
+  const explicitSetupMatchesProject =
+    !explicitSetupPackageManager ||
+    projectPackageManager === 'npm' ||
+    explicitSetupPackageManager === projectPackageManager;
+  const shouldUseExplicitStartCommand = explicitStartCommand && explicitScriptExists && explicitStartMatchesProject;
 
   if (shouldUseExplicitStartCommand) {
+    const setupCommandForExplicitStart =
+      explicitSetupCommand && explicitSetupMatchesProject ? explicitSetupCommand : inferredCommands.setupCommand;
     const actionBlocks = [
-      explicitSetupCommand ? `<boltAction type="shell">${explicitSetupCommand}</boltAction>` : null,
+      setupCommandForExplicitStart ? `<boltAction type="shell">${setupCommandForExplicitStart}</boltAction>` : null,
       `<boltAction type="start">${explicitStartCommand}</boltAction>`,
     ]
       .filter(Boolean)
@@ -489,7 +694,7 @@ export async function synthesizeRunHandoff(options: {
 
     return {
       reason: 'inferred-project-commands',
-      setupCommand: explicitSetupCommand,
+      setupCommand: setupCommandForExplicitStart,
       startCommand: explicitStartCommand,
       followupMessage:
         'The generated project already includes runtime commands. I am replaying them through the workspace runner so preview can start now.',
@@ -507,7 +712,7 @@ ${actionBlocks}
     return null;
   }
 
-  const setupCommand = explicitSetupCommand ?? commands.setupCommand;
+  const setupCommand = commands.setupCommand;
   const actionBlocks = [
     setupCommand ? `<boltAction type="shell">${setupCommand}</boltAction>` : null,
     `<boltAction type="start">${commands.startCommand}</boltAction>`,
@@ -560,12 +765,14 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
   const hasStartAction = START_ACTION_RE.test(assistantContent);
   const shellCommands = extractShellCommands(assistantContent);
   const filePaths = extractFilePaths(assistantContent);
+  const fileActions = extractFileActions(assistantContent);
   const starterEntryFiles = findStarterEntryFiles(options.currentFiles);
   const starterEntryFilePath = starterEntryFiles[0];
   const hasAnyBoltAction = BOLT_ACTION_RE.test(assistantContent);
   const hasFileAction = FILE_ACTION_RE.test(assistantContent);
   const hasImplementationFile = hasImplementationFileAction(filePaths);
-  const updatedStarterEntry = touchesStarterEntryFile(filePaths, starterEntryFiles);
+  const touchedStarterEntry = touchesStarterEntryFile(filePaths, starterEntryFiles, options.currentFiles);
+  const replacedStarterEntry = replacesStarterEntryFile(fileActions, starterEntryFiles, options.currentFiles);
   const mentionsScaffold = SCAFFOLD_RE.test(assistantContent);
   const starterPlaceholderDetected = STARTER_PLACEHOLDER_RE.test(assistantContent);
   const onlyInspectionCommands = hasOnlyInspectionCommands(shellCommands);
@@ -586,10 +793,10 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     };
   }
 
-  if (starterEntryFilePath && !updatedStarterEntry) {
+  if (starterEntryFilePath && !replacedStarterEntry) {
     return {
       shouldContinue: true,
-      reason: 'starter-entry-unchanged',
+      reason: touchedStarterEntry ? 'starter-without-implementation' : 'starter-entry-unchanged',
       starterEntryFilePath,
     };
   }

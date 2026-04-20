@@ -31,6 +31,10 @@ export function resolvePromptIdForModel(options: {
   const requested = promptId || 'default';
 
   // Only override for build mode, and only when using the default prompt selection.
+  if (chatMode === 'build' && requested === 'default' && model.provider.toLowerCase() === 'free') {
+    return 'free-hosted';
+  }
+
   if (chatMode === 'build' && requested === 'default' && isSmallModelForPrompting(model)) {
     return 'small';
   }

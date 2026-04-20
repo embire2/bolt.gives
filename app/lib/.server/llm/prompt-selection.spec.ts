@@ -39,16 +39,16 @@ describe('prompt selection', () => {
     expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'discuss' })).toBe('default');
   });
 
-  it('uses the small prompt for the hosted FREE provider', () => {
+  it('uses the hosted FREE build prompt for the hosted FREE provider', () => {
     const model: ModelInfo = {
-      name: 'openai/gpt-oss-120b:free',
-      label: 'OpenAI gpt-oss-120b (free)',
+      name: 'deepseek/deepseek-v3.2',
+      label: 'DeepSeek V3.2',
       provider: 'FREE',
       maxTokenAllowed: 131072,
       maxCompletionTokens: 8192,
     };
 
-    expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'build' })).toBe('small');
+    expect(resolvePromptIdForModel({ promptId: 'default', model, chatMode: 'build' })).toBe('free-hosted');
   });
 
   it('uses the small prompt for free-suffixed models even outside the FREE provider', () => {

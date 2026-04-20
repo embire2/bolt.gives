@@ -71,9 +71,12 @@ export function rewritePreviewAssetUrls(content, previewBasePath) {
   }
 
   return content
-    .replace(/(["'`])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
-    .replace(/url\(\s*\/(?!\/|runtime\/preview\/)/g, `url(${previewBasePath}/`)
-    .replace(/sourceMappingURL=\/(?!\/|runtime\/preview\/)/g, `sourceMappingURL=${previewBasePath}/`);
+    .replace(/((?:src|href)=["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
+    .replace(/(\bfrom\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
+    .replace(/(\bimport\s*\(\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
+    .replace(/(\bimport\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
+    .replace(/url\(\s*\/(?!\/|runtime\/preview\/)(?=[@A-Za-z0-9_.-])/g, `url(${previewBasePath}/`)
+    .replace(/sourceMappingURL=\/(?!\/|runtime\/preview\/)(?=[@A-Za-z0-9_.-])/g, `sourceMappingURL=${previewBasePath}/`);
 }
 
 export function parsePreviewProxyRequestTarget(requestUrl) {

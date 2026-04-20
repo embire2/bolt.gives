@@ -4,14 +4,18 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
+  applyUnavailablePackageVersionRepair,
   authorizeHostedFreeRelaySecret,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
+  buildWorkspaceFileMapFromDisk,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
   collectMissingWorkspacePackages,
+  extractUnavailablePackageVersionRepair,
   inferHostedWorkspaceStartCommand,
   mergeWorkspaceFileMap,
+  markSessionMutationStart,
   normalizeSessionId,
   normalizeIncomingPreviewAlert,
   normalizePackageImportSpecifier,
@@ -20,6 +24,7 @@ import {
   probeSessionPreviewHealth,
   recordPreviewResponse,
   resolveRuntimeWorkspaceRoot,
+  resolveSessionSnapshotFiles,
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
@@ -553,6 +558,38 @@ describe('runtime server workspace isolation', () => {
     await expect(fs.readFile(path.join(workspace, 'src', 'App.css'), 'utf8')).resolves.toBe('.card { color: red; }\n');
   });
 
+  it('extracts unavailable package version repairs from pnpm stderr', () => {
+    expect(
+      extractUnavailablePackageVersionRepair(`ERR_PNPM_NO_MATCHING_VERSION No matching version found for react-calendar@^4.9.0
+
+The latest release of react-calendar is "6.0.1".`),
+    ).toEqual({
+      packageName: 'react-calendar',
+      requestedVersion: '^4.9.0',
+      latestVersion: '6.0.1',
+    });
+  });
+
+  it('repairs declared dependency versions while preserving the range prefix', () => {
+    const packageJson = {
+      dependencies: {
+        'react-calendar': '^4.9.0',
+      },
+    };
+
+    expect(
+      applyUnavailablePackageVersionRepair(packageJson, {
+        packageName: 'react-calendar',
+        requestedVersion: '^4.9.0',
+        latestVersion: '6.0.1',
+      }),
+    ).toEqual({
+      changed: true,
+      nextVersion: '^6.0.1',
+    });
+    expect(packageJson.dependencies['react-calendar']).toBe('^6.0.1');
+  });
+
   it('installs workspace dependencies before preview start when node_modules is missing', async () => {
     const workspace = await makeTempDir('bolt-runtime-install-');
     await fs.writeFile(
@@ -588,6 +625,48 @@ describe('runtime server workspace isolation', () => {
     expect(result.changed).toBe(false);
     await expect(fs.access(path.join(workspace, 'node_modules'))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workspace, 'node_modules', '.bin', 'vite'))).resolves.toBeUndefined();
+  }, 120000);
+
+  it('self-heals unavailable dependency versions before preview start', async () => {
+    const workspace = await makeTempDir('bolt-runtime-install-repair-');
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        scripts: {
+          dev: 'vite',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+          kleur: '^999.0.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(path.join(workspace, 'src', 'main.jsx'), "import 'react';\n", 'utf8');
+
+    await prepareHostedWorkspaceForStart(
+      {
+        dir: workspace,
+      } as {
+        dir: string;
+      },
+      {},
+    );
+
+    const repairedPackageJson = JSON.parse(await fs.readFile(path.join(workspace, 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>;
+    };
+
+    expect(repairedPackageJson.dependencies.kleur).not.toBe('^999.0.0');
+    expect(repairedPackageJson.dependencies.kleur).toMatch(/^\^?\d+\.\d+\.\d+$/);
+    await expect(fs.access(path.join(workspace, 'node_modules', 'kleur'))).resolves.toBeUndefined();
   }, 120000);
 
   it('reinstalls workspace dependencies and clears stale vite cache when package.json changes', async () => {
@@ -693,6 +772,132 @@ describe('runtime server workspace isolation', () => {
     await syncWorkspaceSnapshot(session as { dir: string }, {}, { prune: true });
 
     await expect(fs.readFile(path.join(workspace, 'package.json'), 'utf8')).rejects.toThrow();
+  });
+
+  it('builds a hosted runtime snapshot from the real workspace on disk', async () => {
+    const workspace = await makeTempDir('bolt-runtime-snapshot-disk-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Doctor Scheduler</h1>; }\n',
+      'utf8',
+    );
+
+    const fileMap = (await buildWorkspaceFileMapFromDisk({ dir: workspace } as { dir: string })) as Record<string, any>;
+
+    expect(fileMap['/home/project/src/App.tsx']).toEqual({
+      type: 'file',
+      content: 'export default function App() { return <h1>Doctor Scheduler</h1>; }\n',
+      isBinary: false,
+    });
+  });
+
+  it('prefers the real workspace snapshot when in-memory state is empty', async () => {
+    const workspace = await makeTempDir('bolt-runtime-snapshot-empty-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Clinic Console</h1>; }\n',
+      'utf8',
+    );
+
+    const session: { dir: string; currentFileMap: Record<string, any> } = {
+      dir: workspace,
+      currentFileMap: {},
+    };
+
+    const resolvedSnapshot = (await resolveSessionSnapshotFiles(session)) as Record<string, any>;
+
+    expect(resolvedSnapshot['/home/project/src/App.tsx']).toEqual({
+      type: 'file',
+      content: 'export default function App() { return <h1>Clinic Console</h1>; }\n',
+      isBinary: false,
+    });
+    expect(session.currentFileMap['/home/project/src/App.tsx']).toBeDefined();
+  });
+
+  it('replaces a stale starter snapshot with the generated workspace snapshot from disk', async () => {
+    const workspace = await makeTempDir('bolt-runtime-snapshot-starter-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Generated Scheduler</h1>; }\n',
+      'utf8',
+    );
+
+    const session: { dir: string; currentFileMap: Record<string, any> } = {
+      dir: workspace,
+      currentFileMap: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content:
+            'export default function App() { return <><h1>Vite + React</h1><p>Your fallback starter is ready.</p></>; }\n',
+          isBinary: false,
+        },
+      },
+    };
+
+    const resolvedSnapshot = (await resolveSessionSnapshotFiles(session)) as Record<string, any>;
+
+    expect(resolvedSnapshot['/home/project/src/App.tsx']).toEqual({
+      type: 'file',
+      content: 'export default function App() { return <h1>Generated Scheduler</h1>; }\n',
+      isBinary: false,
+    });
+    expect(session.currentFileMap['/home/project/src/App.tsx']).toEqual({
+      type: 'file',
+      content: 'export default function App() { return <h1>Generated Scheduler</h1>; }\n',
+      isBinary: false,
+    });
+  });
+
+  it('does not overwrite the restore point with a starter placeholder snapshot', () => {
+    const generatedRestorePoint = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App() { return <h1>Generated Scheduler</h1>; }\n',
+        isBinary: false,
+      },
+    };
+    const starterSnapshot = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content:
+          'export default function App() { return <><h1>Vite + React</h1><p>Your fallback starter is ready.</p></>; }\n',
+        isBinary: false,
+      },
+    };
+    const session = {
+      previewDiagnostics: {
+        healthy: true,
+        status: 'ready',
+        updatedAt: null,
+        recentLogs: [],
+        alert: null,
+      },
+      previewRecovery: {
+        state: 'idle',
+        token: 0,
+        message: null,
+        updatedAt: null,
+      },
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/starter-restore-guard/4100',
+      },
+      currentFileMap: starterSnapshot,
+      restorePointFileMap: generatedRestorePoint,
+      workspaceMutationId: 0,
+      lastAutoRestoreFingerprint: 'keep-generated-restore-point',
+    };
+
+    markSessionMutationStart(session as any);
+
+    expect(session.restorePointFileMap).toBe(generatedRestorePoint);
+    expect(session.workspaceMutationId).toBe(1);
+    expect(session.previewRecovery.state).toBe('idle');
+    expect(session.previewDiagnostics.status).toBe('starting');
+    expect(session.previewDiagnostics.healthy).toBe(false);
   });
 
   it('serializes session operations so overlapping sync/command work cannot race the same workspace', async () => {

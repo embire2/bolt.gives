@@ -87,4 +87,82 @@ describe('sanitizeHostedRuntimeFileMap', () => {
     expect(sanitized['/home/project/src/main.tsx']).toBeTruthy();
     expect(sanitized['/home/project/src/index.js']).toBeUndefined();
   });
+
+  it('repairs broken Vite starter infrastructure without overwriting the generated app entry', () => {
+    const files: FileMap = {
+      '/home/project/package.json': {
+        type: 'file',
+        content: JSON.stringify(
+          {
+            name: 'clinic-app',
+            private: true,
+            type: 'module',
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+            dependencies: {
+              react: '^18.3.1',
+              'react-dom': '^18.3.1',
+            },
+            devDependencies: {
+              '@vitejs/plugin-react': '^4.7.0',
+              vite: '^5.4.19',
+              typescript: '^5.8.3',
+            },
+          },
+          null,
+          2,
+        ),
+        isBinary: false,
+      },
+      '/home/project/index.html': {
+        type: 'file',
+        content: '<!doctype html><html><head><title>Broken',
+        isBinary: false,
+      },
+      '/home/project/vite.config.ts': {
+        type: 'file',
+        content:
+          "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\nexport default defineConfig({ plugins: [react()] });\n",
+        isBinary: false,
+      },
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){return <main><h1>Luma Clinic</h1></main>}\n',
+        isBinary: false,
+      },
+      '/home/project/src/main.jsx': {
+        type: 'file',
+        content: "console.log('wrong entry');\n",
+        isBinary: false,
+      },
+    };
+
+    const sanitized = sanitizeHostedRuntimeFileMap(files);
+
+    expect(sanitized['/home/project/src/App.tsx']?.type).toBe('file');
+    expect(
+      String(
+        sanitized['/home/project/src/App.tsx']?.type === 'file' ? sanitized['/home/project/src/App.tsx'].content : '',
+      ),
+    ).toContain('Luma Clinic');
+    expect(
+      String(
+        sanitized['/home/project/index.html']?.type === 'file' ? sanitized['/home/project/index.html'].content : '',
+      ),
+    ).toContain('src="/src/main.tsx"');
+    expect(
+      String(
+        sanitized['/home/project/src/main.tsx']?.type === 'file' ? sanitized['/home/project/src/main.tsx'].content : '',
+      ),
+    ).toContain("import App from './App';");
+    expect(
+      String(
+        sanitized['/home/project/src/index.css']?.type === 'file'
+          ? sanitized['/home/project/src/index.css'].content
+          : '',
+      ),
+    ).toContain('font-family: Inter');
+  });
 });

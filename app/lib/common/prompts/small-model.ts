@@ -59,6 +59,11 @@ export const getSmallModelPrompt = (
     - If package.json already exists, do not run create-vite/create-react-app again.
     - If the project already contains a fallback starter, your first executable action must replace the active entry UI file with the requested app implementation.
     - For starter-based web apps, prefer replacing src/App.tsx, src/App.jsx, app/page.tsx, or the active equivalent entry file immediately.
+    - For starter-based Vite React apps, keep starter infrastructure intact unless the task explicitly requires otherwise.
+    - Do NOT rewrite index.html, src/main.tsx, src/main.jsx, or vite.config.* just to implement the requested UI.
+    - Only touch entry infrastructure files if they are already broken and the smallest safe fix is required to run the project.
+    - Prefer plain CSS or the project's existing styling stack by default.
+    - Do not introduce Tailwind, PostCSS, or new build tooling unless you also add every required dependency and configuration file in the same response.
     - Write the requested UI before starting the dev server.
     - Replace fallback placeholder UI with the requested product UI.
     - If the user asked to run or preview the app, include the install/start actions needed to make that happen.

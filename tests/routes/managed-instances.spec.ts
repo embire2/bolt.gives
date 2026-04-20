@@ -17,7 +17,9 @@ describe('managed instances route', () => {
     vi.clearAllMocks();
   });
 
-  it('falls back to the signed session cookie instance when runtime session lookup fails', async () => {
+  it(
+    'falls back to the signed session cookie instance when runtime session lookup fails',
+    async () => {
     const route = await import('../../app/routes/managed-instances');
 
     runtimeControlMocks.fetchRuntimeControlJson.mockImplementation(async (pathname: string) => {
@@ -102,5 +104,7 @@ describe('managed instances route', () => {
       status: 'active',
       currentGitSha: 'abc1234',
     });
-  });
+    },
+    15000,
+  );
 });

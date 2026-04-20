@@ -355,8 +355,6 @@ Examples:
     "vite": "^4.2.0"
   }
 }</boltAction>
-        <boltAction type="file" filePath="index.html">...</boltAction>
-        <boltAction type="file" filePath="src/main.jsx">...</boltAction>
         <boltAction type="file" filePath="src/index.css">...</boltAction>
         <boltAction type="file" filePath="src/App.jsx">...</boltAction>
         <boltAction type="start">npm run dev</boltAction>

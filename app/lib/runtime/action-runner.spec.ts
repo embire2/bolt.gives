@@ -393,7 +393,7 @@ describe('ActionRunner start actions', () => {
     );
   });
 
-  it('batches hosted file syncs for touched files instead of pushing a full snapshot on each write', async () => {
+  it('syncs a sanitized full hosted snapshot after a completed file action', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const writeFile = vi.fn().mockResolvedValue(undefined);
@@ -445,21 +445,24 @@ describe('ActionRunner start actions', () => {
     runner.addAction(actionData);
     await runner.runAction(actionData);
 
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
-
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
-      sessionId: 'shared-session-file-1',
-      prune: false,
-      files: {
-        '/home/project/src/App.jsx': {
-          type: 'file',
-          content: 'export default function App() { return <main>hosted</main>; }',
-          isBinary: false,
-        },
-      },
-    });
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'shared-session-file-1',
+        prune: true,
+        files: expect.objectContaining({
+          '/home/project/package.json': {
+            type: 'file',
+            content: '{"name":"runtime-test"}',
+            isBinary: false,
+          },
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>hosted</main>; }',
+            isBinary: false,
+          },
+        }),
+      }),
+    );
   });
 
   it('still syncs hosted file content when only the browser snapshot has the latest content', async () => {
@@ -513,21 +516,19 @@ describe('ActionRunner start actions', () => {
       'src/App.jsx',
       'export default function App() { return <main>same</main>; }',
     );
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
-
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
-      sessionId: 'shared-session-file-browser-only',
-      prune: false,
-      files: {
-        '/home/project/src/App.jsx': {
-          type: 'file',
-          content: 'export default function App() { return <main>same</main>; }',
-          isBinary: false,
-        },
-      },
-    });
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'shared-session-file-browser-only',
+        prune: true,
+        files: expect.objectContaining({
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>same</main>; }',
+            isBinary: false,
+          },
+        }),
+      }),
+    );
   });
 
   it('skips hosted file sync after the same content was already flushed to the server workspace', async () => {
@@ -592,7 +593,7 @@ describe('ActionRunner start actions', () => {
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
   });
 
-  it('flushes only the latest streamed hosted file content once after the debounce window', async () => {
+  it('does not sync streamed file fragments and only syncs the final completed file content', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const writeFile = vi.fn().mockResolvedValue(undefined);
@@ -617,7 +618,7 @@ describe('ActionRunner start actions', () => {
         ({
           '/home/project/src/App.jsx': {
             type: 'file',
-            content: 'stale',
+            content: 'export default function App() { return <main>latest</main>; }',
             isBinary: false,
           } as any,
         }) satisfies FileMap,
@@ -650,20 +651,115 @@ describe('ActionRunner start actions', () => {
     );
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
+    await runner.runAction(
+      {
+        ...actionData,
+        action: {
+          ...actionData.action,
+          content: 'export default function App() { return <main>latest</main>; }',
+        } as any,
+      },
+      false,
+    );
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
-      sessionId: 'shared-session-stream-batch',
-      prune: false,
-      files: {
-        '/home/project/src/App.jsx': {
-          type: 'file',
-          content: 'export default function App() { return <main>latest</main>; }',
-          isBinary: false,
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'shared-session-stream-batch',
+        prune: true,
+        files: expect.objectContaining({
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>latest</main>; }',
+            isBinary: false,
+          },
+        }),
+      }),
+    );
+    expect(writeFile).toHaveBeenCalledWith(
+      'src/App.jsx',
+      'export default function App() { return <main>latest</main>; }',
+    );
+  });
+
+  it('repairs a broken vite entrypoint layout before syncing the final hosted snapshot', async () => {
+    hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
+
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile: vi.fn().mockResolvedValue(undefined),
         },
-      },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand: vi.fn(),
+        }) as any,
+      () =>
+        ({
+          '/home/project/package.json': {
+            type: 'file',
+            content: '{"name":"doctor-scheduler","private":true,"type":"module","scripts":{"dev":"vite"}}',
+            isBinary: false,
+          } as any,
+          '/home/project/index.html': {
+            type: 'file',
+            content:
+              '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.jsx"></script>',
+            isBinary: false,
+          } as any,
+          '/home/project/src/main.tsx': {
+            type: 'file',
+            content: "import App from './App.jsx';\n",
+            isBinary: false,
+          } as any,
+          '/home/project/src/App.tsx': {
+            type: 'file',
+            content: 'export default function App(){return <main>Luma Clinic</main>}\n',
+            isBinary: false,
+          } as any,
+        }) satisfies FileMap,
+      undefined,
+      'shared-session-vite-repair',
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-hosted-vite-repair',
+      action: {
+        type: 'file',
+        filePath: '/home/project/src/App.tsx',
+        content: 'export default function App(){return <main>Luma Clinic</main>}\n',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
+      sessionId: 'shared-session-vite-repair',
+      prune: true,
+      files: expect.objectContaining({
+        '/home/project/index.html': expect.objectContaining({
+          content: expect.stringContaining('src="/src/main.tsx"'),
+        }),
+        '/home/project/src/main.tsx': expect.objectContaining({
+          content: expect.stringContaining("import App from './App';"),
+        }),
+        '/home/project/src/App.tsx': expect.objectContaining({
+          content: expect.stringContaining('Luma Clinic'),
+        }),
+      }),
     });
   });
 
@@ -872,7 +968,26 @@ describe('ActionRunner start actions', () => {
     runner.addAction(fileAction);
     await runner.runAction(fileAction);
 
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sessionId: 'shared-session-command-flush',
+        prune: true,
+        files: expect.objectContaining({
+          '/home/project/package.json': {
+            type: 'file',
+            content: '{"name":"runtime-test"}',
+            isBinary: false,
+          },
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>batched</main>; }',
+            isBinary: false,
+          },
+        }),
+      }),
+    );
 
     runner.addAction(shellAction);
 
@@ -880,33 +995,14 @@ describe('ActionRunner start actions', () => {
     await vi.advanceTimersByTimeAsync(2200);
     await shellRun;
 
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(1, {
-      sessionId: 'shared-session-command-flush',
-      files: {
-        '/home/project/package.json': {
-          type: 'file',
-          content: '{"name":"runtime-test"}',
-          isBinary: false,
-        },
-        '/home/project/src/App.jsx': {
-          type: 'file',
-          content: 'stale',
-          isBinary: false,
-        },
-      },
-      prune: true,
-    });
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(2, {
-      sessionId: 'shared-session-command-flush',
-      prune: false,
-      files: {
-        '/home/project/src/App.jsx': {
-          type: 'file',
-          content: 'export default function App() { return <main>batched</main>; }',
-          isBinary: false,
-        },
-      },
-    });
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
+    expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'shared-session-command-flush',
+        command: expect.stringContaining('pnpm install'),
+        kind: 'shell',
+      }),
+    );
   });
 
   it('keeps hosted start actions in order so later file writes wait for preview readiness', async () => {

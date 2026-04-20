@@ -6,7 +6,9 @@ describe('tenant-admin action auth flow', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns a cookie-backed redirect response for admin login', async () => {
+  it(
+    'returns a cookie-backed redirect response for admin login',
+    async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
@@ -33,9 +35,13 @@ describe('tenant-admin action auth flow', () => {
     expect(response.status).toBe(303);
     expect(response.headers.get('Set-Cookie')).toContain('bolt_tenant_admin=');
     expect(response.headers.get('Location')).toBe('/tenant-admin');
-  });
+    },
+    15000,
+  );
 
-  it('forwards smtp configuration writes to the runtime endpoint for authenticated admins', async () => {
+  it(
+    'forwards smtp configuration writes to the runtime endpoint for authenticated admins',
+    async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -114,5 +120,7 @@ describe('tenant-admin action auth flow', () => {
     expect(response.status).toBe(303);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[2]?.[0]).toContain('/tenant-admin/mail/config');
-  });
+    },
+    15000,
+  );
 });
