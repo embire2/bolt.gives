@@ -36,6 +36,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Generated entry-file writes resolve onto the active starter source file when models choose a sibling JS/TS extension.
 - [x] Browser E2E validates working projects strictly by requiring the requested token to appear inside preview, not just an iframe mount.
 - [x] Browser E2E now also verifies that generated and follow-up tokens persist in the hosted runtime snapshot after preview recovery settles.
+- [x] Browser E2E runtime snapshot checks enforce bounded fetch timeouts, so release validation reports stalled snapshot/status endpoints instead of hanging.
 - [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
 - [x] Hosted preview autostart consumes runtime command streams through the `ready` event, preventing healthy generated previews from staying stuck in `starting`.
 - [x] Header preview/deploy controls lazy-load after chat starts, preventing initial browser chunks from creating workbench initialization cycles.
@@ -65,6 +66,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Managed Cloudflare instances are registration-first, one-client / one-instance environments with private client profile capture.
 - [x] Active managed Cloudflare instances are refreshed from the current release SHA by the runtime rollout controller.
 - [x] New managed instances are provisioned from the current live build and protected hosted FREE relay secret.
+- [x] Managed instance registry writes use collision-proof atomic temp files, so overlapping startup/interval rollout writes cannot reuse the same temp path.
 - [x] `admin.bolt.gives` includes the private operator dashboard, client profile filtering/export, instance assignment state, SMTP configuration, and audience-based outbound email.
 - [x] Header-level `Shout Out Box` messaging is available with unread tracking and a user-side settings toggle.
 - [x] Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.

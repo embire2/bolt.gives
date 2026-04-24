@@ -12,6 +12,7 @@ const appToken = `CAL_${Date.now().toString(36)}`;
 const requireFollowUp = process.env.E2E_REQUIRE_FOLLOWUP === '1';
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}` : null;
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
+const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
 const started = Date.now();
 
 const events = [];
@@ -62,22 +63,54 @@ function fileMapContainsTokens(files, tokens) {
 }
 
 async function fetchRuntimeJson(page, sessionId, endpoint) {
-  return await page
+  let timeoutId;
+  const timeoutResult = new Promise((resolve) => {
+    timeoutId = setTimeout(
+      () =>
+        resolve({
+          ok: false,
+          status: 0,
+          payload: null,
+          error: `${endpoint} timed out after ${runtimeFetchTimeoutMs}ms`,
+        }),
+      runtimeFetchTimeoutMs + 1000,
+    );
+  });
+  const fetchResult = page
     .evaluate(
-      async ({ sessionId, endpoint }) => {
-        const response = await fetch(`/runtime/sessions/${encodeURIComponent(sessionId)}/${endpoint}`, {
-          headers: { Accept: 'application/json' },
-        });
+      async ({ sessionId, endpoint, timeoutMs }) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-        if (!response.ok) {
-          return { ok: false, status: response.status, payload: null };
+        try {
+          const response = await fetch(`/runtime/sessions/${encodeURIComponent(sessionId)}/${endpoint}`, {
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            return { ok: false, status: response.status, payload: null };
+          }
+
+          return { ok: true, status: response.status, payload: await response.json() };
+        } finally {
+          clearTimeout(timeout);
         }
-
-        return { ok: true, status: response.status, payload: await response.json() };
       },
-      { sessionId, endpoint },
+      { sessionId, endpoint, timeoutMs: runtimeFetchTimeoutMs },
     )
-    .catch((error) => ({ ok: false, status: 0, payload: null, error: error instanceof Error ? error.message : String(error) }));
+    .catch((error) => ({
+      ok: false,
+      status: 0,
+      payload: null,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+
+  try {
+    return await Promise.race([fetchResult, timeoutResult]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
@@ -93,6 +126,10 @@ async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
     status: status?.status || null,
     healthy: status?.healthy ?? null,
     recovery: status?.recovery?.state || null,
+    statusFetchOk: statusResponse.ok,
+    snapshotFetchOk: snapshotResponse.ok,
+    statusFetchError: statusResponse.error || null,
+    snapshotFetchError: snapshotResponse.error || null,
     tokens,
   };
   runtimeSnapshotChecks.push(result);

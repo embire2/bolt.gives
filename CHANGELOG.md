@@ -88,6 +88,8 @@
 - Hosted preview verification now waits through `restored` recovery states before deciding a run needs another model continuation, so a generated app that recovers to a healthy preview does not keep the first chat stream open and block follow-up prompts.
 - Hosted runtime sync now repairs raw JSX `<`/`>` text immediately after files land, before any scheduled or explicit preview start can compile the broken source.
 - Hosted preview handoff now requires a newly generated concrete implementation file before synthesizing setup/start commands, so scaffold-only `create-vite` responses and stale request snapshots stay in continuation instead of launching the fallback starter as if it were a finished project.
+- Managed instance registry writes now use collision-proof atomic temp files, preventing concurrent startup/interval refresh writes from tripping rollout with a lost temp-file rename.
+- Live calendar E2E runtime snapshot checks now enforce fetch timeouts, so validation fails with a concrete snapshot/status error instead of hanging indefinitely while testing follow-up prompts.
 - Local workbench preview startup now syncs shell-created Vite source files before applying pre-start React entry repairs, and commented-out `export default` text no longer fools the repair pass into skipping a missing default export.
 - Manual follow-up prompts now supersede queued Architect auto-heal attempts, and direct hosted-preview verification errors now trigger a repair continuation instead of letting an unhealthy follow-up run finish silently.
 - Hosted FREE now defers client-side starter/Architect recovery to the server-side preview verifier, preventing hidden client continuations from racing manual follow-up prompts after a preview becomes healthy.

@@ -43,6 +43,7 @@ import {
   syncWorkspaceSnapshot,
   updateSessionPreview,
   waitForProjectManifest,
+  writeJsonAtomically,
   workspaceHasOwnProjectManifest,
 } from './runtime-server.mjs';
 
@@ -1631,6 +1632,22 @@ The latest release of react-calendar is "6.0.1".`),
       '{"plugins":{"autoprefixer":{}}}',
     );
     await expect(fs.readdir(workspace)).resolves.not.toContainEqual(expect.stringMatching(/\.bolt-sync-.*\.tmp$/));
+  });
+
+  it('uses unique atomic temp paths when concurrent registry writes share the same millisecond', async () => {
+    const workspace = await makeTempDir('bolt-runtime-atomic-json-');
+    const target = path.join(workspace, 'managed-instance-registry.json');
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1777059934414);
+
+    try {
+      await Promise.all([writeJsonAtomically(target, '{"version":1}'), writeJsonAtomically(target, '{"version":2}')]);
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    const written = await fs.readFile(target, 'utf8');
+    expect(['{"version":1}', '{"version":2}']).toContain(written);
+    await expect(fs.readdir(workspace)).resolves.toEqual(['managed-instance-registry.json']);
   });
 
   it('merges incremental hosted sync payloads without dropping earlier files when prune is disabled', () => {

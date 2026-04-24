@@ -630,9 +630,9 @@ async function ensureManagedInstanceRegistry() {
   }
 }
 
-async function writeJsonAtomically(filePath, payload) {
+export async function writeJsonAtomically(filePath, payload) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
   await fs.writeFile(tempPath, payload, 'utf8');
   await fs.rename(tempPath, filePath);
 }

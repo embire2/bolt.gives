@@ -39,7 +39,7 @@ The browser startup path keeps preview/deploy controls out of the initial header
 
 Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory. If preview recovery rolls back a broken follow-up, verification treats that as unfinished unless the latest generated files still persist in the runtime snapshot.
 
-Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, and new instances are spawned from the same live build plus the protected hosted FREE relay secret.
+Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and registry writes use collision-proof atomic temp files during rollout.
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
@@ -300,6 +300,7 @@ Hosted-instance note:
 - Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V3.2` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
 - Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
+- Live browser E2E checks now require generated and follow-up tokens to persist in the hosted runtime snapshot, with bounded snapshot/status fetch timeouts so release validation cannot hang silently.
 
 ### 3. Verify the install
 
