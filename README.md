@@ -294,6 +294,8 @@ Hosted-instance note:
 - The hosted `FREE` coder is pinned to `deepseek/deepseek-v3.2`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
 - Managed Cloudflare instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 - Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V3.2` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
+- Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
+- Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
 
 ### 3. Verify the install
 

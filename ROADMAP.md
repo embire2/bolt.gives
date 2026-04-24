@@ -37,6 +37,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Browser E2E validates working projects strictly by requiring the requested token to appear inside preview, not just an iframe mount.
 - [x] Browser E2E now also verifies that generated and follow-up tokens persist in the hosted runtime snapshot after preview recovery settles.
 - [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
+- [x] Hosted preview autostart consumes runtime command streams through the `ready` event, preventing healthy generated previews from staying stuck in `starting`.
 
 2. History-aware iteration
 
@@ -54,6 +55,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] The Workspace preview reconciles quickly when the managed runtime reports a verified preview.
 - [x] Postdeploy browser health checks fail release validation on missing hashed assets or non-interactive prompt shells.
 - [x] Runtime startup blocks managed-instance rollout when `/srv/bolt-gives` is behind `origin/main`.
+- [x] Browser-only chat persistence is guarded from SSR so hosted Pages rendering does not emit IndexedDB errors.
 
 4. Operator, managed-instance, and self-host baseline
 

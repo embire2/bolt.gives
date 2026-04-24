@@ -12,6 +12,7 @@ import {
   buildWorkspaceFileMapFromDisk,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
+  consumeRuntimeCommandStreamForReady,
   collectMissingWorkspacePackages,
   ensureHostedWorkspaceProjectBootstrap,
   extractUnavailablePackageVersionRepair,
@@ -75,6 +76,45 @@ describe('runtime server workspace isolation', () => {
     expect(resolveRuntimeWorkspaceRoot({ RUNTIME_WORKSPACE_DIR: '/srv/custom-runtime' }, '/srv/bolt-gives')).toBe(
       '/srv/custom-runtime',
     );
+  });
+
+  it('detects ready events while draining hosted preview autostart streams', async () => {
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'status', message: 'starting' })}\n`));
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'ready', preview: { port: 4100 } })}\n`));
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'exit', exitCode: 0 })}\n`));
+          controller.close();
+        },
+      }),
+    );
+
+    await expect(consumeRuntimeCommandStreamForReady(response)).resolves.toEqual({
+      ready: true,
+      exitCode: 0,
+      stderr: '',
+    });
+  });
+
+  it('captures autostart stderr when the runtime stream exits before ready', async () => {
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'stderr', chunk: 'Preview failed\n' })}\n`));
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'exit', exitCode: 1 })}\n`));
+          controller.close();
+        },
+      }),
+    );
+
+    await expect(consumeRuntimeCommandStreamForReady(response)).resolves.toEqual({
+      ready: false,
+      exitCode: 1,
+      stderr: 'Preview failed',
+    });
   });
 
   it('defaults the runtime workspace root to a sibling path outside the repo', () => {

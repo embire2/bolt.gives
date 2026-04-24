@@ -3072,7 +3072,88 @@ export async function startHostedPreviewForSession(session) {
     throw new Error(`Hosted preview autostart failed with status ${response.status}`);
   }
 
+  const commandResult = await consumeRuntimeCommandStreamForReady(response);
+
+  if (!commandResult.ready) {
+    const detail =
+      commandResult.stderr ||
+      (Number.isFinite(Number(commandResult.exitCode))
+        ? `Runtime start command exited with code ${commandResult.exitCode}.`
+        : 'Runtime start command completed without emitting a ready preview event.');
+
+    throw new Error(`Hosted preview autostart did not reach ready state. ${detail}`);
+  }
+
   return true;
+}
+
+export async function consumeRuntimeCommandStreamForReady(response) {
+  if (!response?.body || typeof response.body.getReader !== 'function') {
+    return {
+      ready: false,
+      exitCode: null,
+      stderr: '',
+    };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let ready = false;
+  let exitCode = null;
+  let stderr = '';
+
+  const handleLine = (line) => {
+    const trimmed = String(line || '').trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    try {
+      const event = JSON.parse(trimmed);
+
+      if (event?.type === 'ready') {
+        ready = true;
+      }
+
+      if (event?.type === 'exit') {
+        exitCode = Number.isFinite(Number(event.exitCode)) ? Number(event.exitCode) : null;
+      }
+
+      if (event?.type === 'stderr' && typeof event.chunk === 'string') {
+        stderr = `${stderr}${event.chunk}`.slice(-2000);
+      }
+    } catch {
+      // Ignore non-NDJSON keepalive fragments.
+    }
+  };
+
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split('\n');
+    pending = lines.pop() || '';
+
+    for (const line of lines) {
+      handleLine(line);
+    }
+  }
+
+  pending += decoder.decode();
+  handleLine(pending);
+
+  return {
+    ready,
+    exitCode,
+    stderr: stderr.trim(),
+  };
 }
 
 function scheduleHostedAutoStartAfterSync(session) {

@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
 import type { JSONValue, Message } from 'ai';
 import { toast } from 'react-toastify';
-import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs'; // Import logStore
 import {
   getMessages,
@@ -38,12 +37,19 @@ export interface ChatHistoryItem {
 }
 
 const persistenceEnabled = !import.meta.env.VITE_DISABLE_PERSISTENCE;
+const browserPersistenceEnabled =
+  persistenceEnabled && !import.meta.env.SSR && typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
 
-export const db = persistenceEnabled ? await openDatabase() : undefined;
+export const db = browserPersistenceEnabled ? await openDatabase() : undefined;
 
 export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
+
+async function getWorkbenchStore() {
+  return (await import('~/lib/stores/workbench')).workbenchStore;
+}
+
 export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
@@ -220,6 +226,8 @@ export function useChatHistory() {
         return;
       }
 
+      const workbenchStore = await getWorkbenchStore();
+
       await workbenchStore.restoreSnapshot(validSnapshot.files);
 
       const runtimeArtifactId = 'restored-project-setup';
@@ -295,6 +303,7 @@ export function useChatHistory() {
         return;
       }
 
+      const workbenchStore = await getWorkbenchStore();
       const { firstArtifact } = workbenchStore;
       messages = messages.filter((m) => !m.annotations?.includes('no-store'));
 

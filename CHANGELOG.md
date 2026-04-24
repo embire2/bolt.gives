@@ -81,6 +81,9 @@
 - Hosted runtime no longer syncs partial streamed file fragments into the live Vite preview; source files now reach the hosted runtime only after the file action closes, preventing transient syntax errors from triggering rollback during follow-up prompts.
 - Hosted preview verification now treats a recovered rollback as unhealthy when the latest generated files are no longer present in the runtime snapshot, so follow-up prompts continue with a repair pass instead of falsely reporting success from a stale restored preview.
 - Browser calendar E2E now requires requested prompt and follow-up tokens to persist in the hosted runtime snapshot, not just appear briefly inside the preview iframe.
+- Browser chat persistence is now initialized only in browser contexts with IndexedDB available, avoiding server-side `indexedDB is not available` errors during hosted Pages rendering.
+- Hosted runtime preview autostart now consumes the managed command stream until a real `ready` event is emitted, so preview status cannot stay stuck at `starting` while the generated app is already serving.
+- A static `robots.txt` is now shipped with the app so crawler probes do not route through the worker fallback during live smoke runs.
 - Hosted preview handoff now requires a newly generated concrete implementation file before synthesizing setup/start commands, so scaffold-only `create-vite` responses and stale request snapshots stay in continuation instead of launching the fallback starter as if it were a finished project.
 - Local workbench preview startup now syncs shell-created Vite source files before applying pre-start React entry repairs, and commented-out `export default` text no longer fools the repair pass into skipping a missing default export.
 - Manual follow-up prompts now supersede queued Architect auto-heal attempts, and direct hosted-preview verification errors now trigger a repair continuation instead of letting an unhealthy follow-up run finish silently.
