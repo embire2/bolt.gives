@@ -2462,6 +2462,25 @@ export function repairUnsafeJsxTextEntities(content) {
   };
 }
 
+async function repairHostedWorkspaceUnsafeJsxTextEntities(session) {
+  const entries = await walkWorkspaceFiles(session.dir);
+  const repairedFiles = [];
+
+  for (const entry of entries.filter((candidate) => JSX_SOURCE_EXTENSIONS.has(candidate.extension))) {
+    const repaired = repairUnsafeJsxTextEntities(entry.content);
+
+    if (!repaired.changed) {
+      continue;
+    }
+
+    await writeWorkspaceFileAtomic(entry.absolutePath, repaired.content);
+    repairedFiles.push(entry.path);
+    entry.content = repaired.content;
+  }
+
+  return repairedFiles;
+}
+
 async function walkWorkspaceFiles(rootDir) {
   const results = [];
   const queue = ['.'];
@@ -2687,17 +2706,19 @@ export async function ensureHostedWorkspaceProjectBootstrap(session) {
 
 export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
   const generatedFiles = await ensureHostedWorkspaceViteSupportFiles(session);
+  const repairedFiles = await repairHostedWorkspaceUnsafeJsxTextEntities(session);
 
-  if (generatedFiles.length === 0) {
+  if (generatedFiles.length === 0 && repairedFiles.length === 0) {
     return {
       generatedFiles: [],
+      repairedFiles: [],
       fileMap: {},
     };
   }
 
   const fileMap = {};
 
-  for (const relativePath of generatedFiles) {
+  for (const relativePath of [...new Set([...generatedFiles, ...repairedFiles])]) {
     const absolutePath = path.join(session.dir, relativePath);
     const workbenchPath = path.posix.join(WORK_DIR, relativePath);
     const content = await fs.readFile(absolutePath, 'utf8');
@@ -2711,6 +2732,7 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 
   return {
     generatedFiles,
+    repairedFiles,
     fileMap,
   };
 }
@@ -2730,10 +2752,9 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     };
   }
 
-  const entries = await walkWorkspaceFiles(session.dir);
   const installedPackages = [];
   const sanitizedFiles = [];
-  const repairedFiles = [];
+  const repairedFiles = await repairHostedWorkspaceUnsafeJsxTextEntities(session);
   const generatedFiles = [...bootstrapRepair.generatedFiles, ...(await ensureHostedWorkspaceViteSupportFiles(session))];
   let packageJson = packageJsonRecord.json;
   const lockfileRecord = await readWorkspaceLockfile(session);
@@ -2756,17 +2777,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     (await exists(path.join(session.dir, 'postcss.config.cjs'))) ||
     (await exists(path.join(session.dir, 'postcss.config.mjs')));
 
-  for (const entry of entries.filter((candidate) => JSX_SOURCE_EXTENSIONS.has(candidate.extension))) {
-    const repaired = repairUnsafeJsxTextEntities(entry.content);
-
-    if (!repaired.changed) {
-      continue;
-    }
-
-    await writeWorkspaceFileAtomic(entry.absolutePath, repaired.content);
-    repairedFiles.push(entry.path);
-    entry.content = repaired.content;
-  }
+  const entries = await walkWorkspaceFiles(session.dir);
 
   if (!hasTailwindDependency && !hasTailwindConfig) {
     for (const entry of entries.filter((candidate) => STYLE_IMPORT_EXTENSIONS.has(candidate.extension))) {
@@ -5371,11 +5382,18 @@ export function createRuntimeServer() {
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
           const supportRepair = await repairHostedWorkspaceSupportFilesAfterSync(session);
-          if (Object.keys(supportRepair.fileMap).length > 0) {
+          if (supportRepair.generatedFiles.length > 0) {
             appendPreviewDiagnosticEntries(
               session,
               'architect',
               `Architect generated missing runtime support files after sync: ${supportRepair.generatedFiles.join(', ')}`,
+            );
+          }
+          if (supportRepair.repairedFiles.length > 0) {
+            appendPreviewDiagnosticEntries(
+              session,
+              'architect',
+              `Architect repaired unsafe JSX text entities after sync: ${supportRepair.repairedFiles.join(', ')}`,
             );
           }
           await refreshSessionCurrentFileMapFromDisk(session);

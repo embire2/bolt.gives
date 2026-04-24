@@ -1009,6 +1009,7 @@ describe('runtime server workspace isolation', () => {
     >;
 
     expect(repair.generatedFiles).toEqual(['tsconfig.app.json', 'tsconfig.node.json']);
+    expect(repair.repairedFiles).toEqual([]);
     expect(generatedFileMap).toMatchObject({
       '/home/project/tsconfig.app.json': {
         type: 'file',
@@ -1020,6 +1021,62 @@ describe('runtime server workspace isolation', () => {
       },
     });
     expect(generatedFileMap['/home/project/tsconfig.app.json'].content).toContain('"include": [\n    "src"\n  ]');
+  });
+
+  it('repairs unsafe JSX angle text immediately after a workspace sync', async () => {
+    const workspace = await makeTempDir('bolt-runtime-jsx-sync-repair-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        scripts: {
+          dev: 'vite',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.jsx'),
+      [
+        'export default function App(){',
+        '  return <div><button className="nav-button"><</button><button className="nav-button">></button></div>;',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const repair = await repairHostedWorkspaceSupportFilesAfterSync({
+      dir: workspace,
+    } as {
+      dir: string;
+    });
+    const repairedFileMap = repair.fileMap as Record<
+      string,
+      {
+        type: string;
+        isBinary: boolean;
+        content: string;
+      }
+    >;
+
+    expect(repair.generatedFiles).toEqual([]);
+    expect(repair.repairedFiles).toEqual(['src/App.jsx']);
+    expect(repairedFileMap['/home/project/src/App.jsx']?.content).toContain(
+      '<button className="nav-button">&lt;</button>',
+    );
+    await expect(fs.readFile(path.join(workspace, 'src', 'App.jsx'), 'utf8')).resolves.toContain(
+      '<button className="nav-button">&gt;</button>',
+    );
   });
 
   it('extracts unavailable package version repairs from pnpm stderr', () => {
