@@ -716,6 +716,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           dataStream.writeData({
             ...payload,
           });
+          markRunActivity();
         };
 
         const startCommentaryHeartbeat = () => {
@@ -1466,6 +1467,14 @@ Next: I am sending the final result now.`,
               synthesizedRunHandoff
             ) {
               try {
+                writeCommentary(
+                  'action',
+                  'Applying generated files to the hosted runtime before preview verification.',
+                  'in-progress',
+                  `Key changes: Code generation finished and the server is syncing the generated workspace into the hosted runtime.
+Next: I am starting the managed preview from that synced workspace before reporting the project as ready.`,
+                );
+
                 const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
                   requestUrl: request.url,
                   sessionId: hostedRuntimeSessionId!,

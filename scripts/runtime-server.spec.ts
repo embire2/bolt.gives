@@ -37,6 +37,7 @@ import {
   runSessionOperation,
   sanitizeLegacyTailwindCss,
   shouldRetryPreviewProxyResponse,
+  startReservedPreviewProbe,
   syncWorkspaceSnapshot,
   updateSessionPreview,
   waitForProjectManifest,
@@ -272,6 +273,47 @@ describe('runtime server workspace isolation', () => {
       baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-123/4110',
     });
     expect(session.preview?.port).toBe(4110);
+  });
+
+  it('starts probing the reserved preview port before dev-server stdout is parsed', () => {
+    const probedPorts: number[] = [];
+    const session = {
+      id: 'session-initial-probe',
+      preview: undefined as { port: number; baseUrl: string } | undefined,
+    };
+
+    const started = startReservedPreviewProbe(
+      session as {
+        id: string;
+        preview?: {
+          port: number;
+          baseUrl: string;
+        };
+      },
+      {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'alpha1.bolt.gives',
+        },
+      } as {
+        headers: Record<string, string>;
+      },
+      'start',
+      4130,
+      {
+        startProbe(port: number) {
+          probedPorts.push(port);
+        },
+      },
+    );
+
+    expect(started).toBe(true);
+    expect(probedPorts).toEqual([4130]);
+    expect(session.preview).toEqual({
+      port: 4130,
+      baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-initial-probe/4130',
+    });
+    releaseReservedPreviewPorts(session as { id: string });
   });
 
   it('releases stale preview paths when a session moves to a new port', () => {
@@ -1319,6 +1361,30 @@ The latest release of react-calendar is "6.0.1".`),
     } as any);
 
     expect(alert?.description).toContain('src/main.tsx');
+  });
+
+  it('builds a bootstrap alert when a vite package has no preview entry files yet', () => {
+    const alert = buildHostedWorkspaceBootstrapAlert({
+      '/home/project/package.json': {
+        type: 'file',
+        content: JSON.stringify({
+          scripts: {
+            dev: 'vite',
+          },
+          dependencies: {
+            react: '^18.2.0',
+            'react-dom': '^18.2.0',
+          },
+          devDependencies: {
+            vite: '^5.0.0',
+            '@vitejs/plugin-react': '^4.0.0',
+          },
+        }),
+        isBinary: false,
+      },
+    } as any);
+
+    expect(alert?.description).toContain('index.html');
   });
 
   it('does not overwrite the restore point with a starter placeholder snapshot', () => {

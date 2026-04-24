@@ -1486,6 +1486,32 @@ function getTextFileContent(fileMap, filePath) {
   return entry.content;
 }
 
+function fileMapPackageJsonLooksLikeVite(fileMap) {
+  const packageJsonContent = getTextFileContent(fileMap, '/home/project/package.json');
+
+  if (typeof packageJsonContent !== 'string') {
+    return false;
+  }
+
+  try {
+    const packageJson = JSON.parse(packageJsonContent);
+    const scripts = packageJson?.scripts && typeof packageJson.scripts === 'object' ? packageJson.scripts : {};
+    const dependencies =
+      packageJson?.dependencies && typeof packageJson.dependencies === 'object' ? packageJson.dependencies : {};
+    const devDependencies =
+      packageJson?.devDependencies && typeof packageJson.devDependencies === 'object' ? packageJson.devDependencies : {};
+
+    return (
+      Object.values(scripts).some((script) => typeof script === 'string' && /\bvite\b/i.test(script)) ||
+      typeof dependencies.vite === 'string' ||
+      typeof devDependencies.vite === 'string' ||
+      typeof devDependencies['@vitejs/plugin-react'] === 'string'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function inferExpectedViteMainEntryPath(fileMap) {
   const indexHtmlContent = getTextFileContent(fileMap, '/home/project/index.html');
 
@@ -1527,7 +1553,8 @@ export function buildHostedWorkspaceBootstrapAlert(fileMap) {
     hasTextFile(fileMap, '/home/project/src/App.tsx') ||
     hasTextFile(fileMap, '/home/project/src/App.jsx') ||
     hasTextFile(fileMap, '/home/project/src/main.tsx') ||
-    hasTextFile(fileMap, '/home/project/src/main.jsx');
+    hasTextFile(fileMap, '/home/project/src/main.jsx') ||
+    fileMapPackageJsonLooksLikeVite(fileMap);
 
   if (!looksLikeViteWorkspace) {
     return null;
@@ -3351,6 +3378,17 @@ export function updateSessionPreview(session, req, port) {
   return session.preview;
 }
 
+export function startReservedPreviewProbe(session, req, kind, previewPort, previewCoordinator) {
+  if (kind !== 'start' || !Number.isFinite(Number(previewPort)) || Number(previewPort) <= 0) {
+    return false;
+  }
+
+  updateSessionPreview(session, req, Number(previewPort));
+  previewCoordinator.startProbe(Number(previewPort));
+
+  return true;
+}
+
 export function releaseReservedPreviewPorts(session) {
   for (const [port, ownerSessionId] of reservedPreviewPorts.entries()) {
     if (ownerSessionId === session.id) {
@@ -3673,6 +3711,8 @@ async function handleRunCommand(req, res, session, body) {
     updateSessionPreview(session, req, detectedPort);
     previewCoordinator.startProbe(detectedPort);
   };
+
+  startReservedPreviewProbe(session, req, kind, previewPort, previewCoordinator);
 
   child.stdout.on('data', (chunk) => {
     const text = chunk.toString();

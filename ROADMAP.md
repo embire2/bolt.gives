@@ -73,6 +73,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [~] Keep hosted FREE starter/preview recovery server-owned after generation, so hidden client continuations do not race the user’s next follow-up prompt once preview is healthy.
 - [~] Apply hosted FREE file/start actions on the server before preview verification, so health checks evaluate the actual generated project instead of a partially synced runtime workspace.
 - [~] Finish hosted runtime command replay on the managed runtime `exit` event even when the transport remains open, so completed start commands cannot leave live chat streams idle.
+- [~] Probe the reserved hosted preview port immediately and classify package-only Vite workspaces as incomplete, so quiet dev-server starts cannot consume the full runtime command timeout.
 - [~] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified. Browser E2E now requires the requested token to appear inside preview, not just an iframe mount.
 - [~] Limit server-side “preview not verified” continuation loops to hosted-runtime sessions that the backend can actually verify, so local/self-host builds can settle on a runnable preview and accept follow-up prompts normally.
 - [~] Fail release verification when post-deploy browser health detects missing hashed assets or a non-interactive prompt shell after rollout.
