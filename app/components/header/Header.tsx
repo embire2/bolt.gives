@@ -1,13 +1,19 @@
 import { useStore } from '@nanostores/react';
 import { ClientOnly } from 'remix-utils/client-only';
+import { lazy, Suspense } from 'react';
 import { chatStore } from '~/lib/stores/chat';
 import { usePublicUrlConfig } from '~/lib/public-url-context';
 import { classNames } from '~/utils/classNames';
-import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '~/lib/version';
 import { Shoutbox } from './Shoutbox.client';
 import { BugReportLauncher } from './BugReportLauncher.client';
+
+const HeaderActionButtons = lazy(() =>
+  import('./HeaderActionButtons.client').then((module) => ({
+    default: module.HeaderActionButtons,
+  })),
+);
 
 export function Header() {
   const chat = useStore(chatStore);
@@ -87,7 +93,9 @@ export function Header() {
           <ClientOnly>
             {() => (
               <div className="hidden sm:block">
-                <HeaderActionButtons chatStarted={chat.started} />
+                <Suspense fallback={null}>
+                  <HeaderActionButtons chatStarted={chat.started} />
+                </Suspense>
               </div>
             )}
           </ClientOnly>

@@ -84,6 +84,7 @@
 - Browser chat persistence is now initialized only in browser contexts with IndexedDB available, avoiding server-side `indexedDB is not available` errors during hosted Pages rendering.
 - Hosted runtime preview autostart now consumes the managed command stream until a real `ready` event is emitted, so preview status cannot stay stuck at `starting` while the generated app is already serving.
 - A static `robots.txt` is now shipped with the app so crawler probes do not route through the worker fallback during live smoke runs.
+- Header preview/deploy controls now lazy-load after chat starts, preventing the initial browser chunk from importing `workbenchStore` before the workbench module has initialized.
 - Hosted preview handoff now requires a newly generated concrete implementation file before synthesizing setup/start commands, so scaffold-only `create-vite` responses and stale request snapshots stay in continuation instead of launching the fallback starter as if it were a finished project.
 - Local workbench preview startup now syncs shell-created Vite source files before applying pre-start React entry repairs, and commented-out `export default` text no longer fools the repair pass into skipping a missing default export.
 - Manual follow-up prompts now supersede queued Architect auto-heal attempts, and direct hosted-preview verification errors now trigger a repair continuation instead of letting an unhealthy follow-up run finish silently.

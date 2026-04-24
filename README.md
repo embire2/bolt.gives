@@ -35,6 +35,8 @@
 
 The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, rejects incomplete/prose-only handoffs, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
+The browser startup path keeps preview/deploy controls out of the initial header chunk until chat starts. This preserves deploy access once a preview exists without reintroducing workbench initialization cycles during landing-page hydration.
+
 Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory. If preview recovery rolls back a broken follow-up, verification treats that as unfinished unless the latest generated files still persist in the runtime snapshot.
 
 Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, and new instances are spawned from the same live build plus the protected hosted FREE relay secret.

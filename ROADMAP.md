@@ -38,6 +38,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Browser E2E now also verifies that generated and follow-up tokens persist in the hosted runtime snapshot after preview recovery settles.
 - [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
 - [x] Hosted preview autostart consumes runtime command streams through the `ready` event, preventing healthy generated previews from staying stuck in `starting`.
+- [x] Header preview/deploy controls lazy-load after chat starts, preventing initial browser chunks from creating workbench initialization cycles.
 
 2. History-aware iteration
 
