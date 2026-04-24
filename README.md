@@ -37,6 +37,7 @@ Recent hardening in this line includes safer hidden continuation dispatch: follo
 Another recent runtime fix now synthesizes preview handoff commands from the merged workspace state instead of the latest assistant delta only, which prevents broken follow-up runs from replaying dependency-only installs and stalling preview startup.
 Runtime handoff now also refuses scaffold-only `create-vite`/bootstrap responses unless the assistant produced a new concrete implementation file, and the local workbench syncs shell-created Vite files before React entry repairs so preview startup acts on the real current project.
 Follow-up prompts now take precedence over queued auto-heal attempts, and hosted preview verification errors force another repair pass instead of ending with an unhealthy project state.
+Hosted FREE now leaves starter and preview recovery to the server verifier instead of dispatching hidden client continuations, so manual follow-up prompts can improve the current project without racing another `/api/chat` request.
 Runtime stabilization now also enforces bounded shell/build output capture and guarded heartbeat probing, reducing memory pressure and duplicate recovery races during long-running installs/builds.
 Release verification now also includes a browser-level post-deploy asset health check so stale manifests and missing client bundles fail the release instead of leaving users on a non-interactive shell.
 The workspace shell now stays interactive during boot instead of crashing on the performance monitor token-usage subscription path.
@@ -85,6 +86,7 @@ Local follow-up repairs now keep the running dev server on a dedicated runtime s
 - Local workbench preview startup syncs shell-created Vite files before React entry repairs and ignores commented-out default exports, which keeps first preview starts and follow-up repairs aligned with the actual filesystem.
 - Manual follow-up prompts supersede queued Architect auto-heal work, so user-requested improvements do not race hidden recovery requests against the same runtime session.
 - Hosted preview verification errors now trigger a concrete repair continuation, keeping follow-up prompts history-aware and self-healing when the preview remains unhealthy.
+- Hosted runtime startup repairs common raw JSX angle text emitted by smaller models, so navigation buttons like `<` and `>` do not block Vite preview creation.
 - Local self-host CSP now allows the loopback preview/provider sockets that WebContainer-based runs actually use on `localhost` and `127.0.0.1`, while avoiding invalid `[::1]` policy entries that generated fresh browser console errors.
 - Hosted preview verification now streams visible startup progress while the server waits for the managed preview to turn healthy, which keeps long warm-ups readable instead of going silent and makes disconnect recovery less opaque.
 - The Workspace preview now re-checks hosted preview state immediately on iframe load, so generated apps replace the fallback starter much sooner on live domains.

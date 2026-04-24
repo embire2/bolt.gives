@@ -794,6 +794,31 @@ export const ChatImpl = memo(
       messagesRef.current = messages;
     }, [messages]);
 
+    const clearHostedFreeStarterContinuation = useCallback((reason: string) => {
+      const hadPendingStarterContinuation = Boolean(
+        pendingStarterContinuationRef.current ||
+        starterBootstrapCommandsRef.current ||
+        starterBootstrapQueuedAtRef.current !== null,
+      );
+
+      pendingStarterContinuationRef.current = null;
+      starterContinuationTriggeredRef.current = false;
+      starterBootstrapCommandsRef.current = null;
+      starterBootstrapQueuedAtRef.current = null;
+      starterStartRecoveryTriggeredRef.current = false;
+
+      if (!hadPendingStarterContinuation) {
+        return;
+      }
+
+      appendStepRunnerEvent({
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Hosted FREE server recovery owns starter continuation',
+        output: reason,
+      });
+    }, []);
+
     useEffect(() => {
       if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
         const isPreview = actionAlert.source === 'preview';
@@ -969,6 +994,14 @@ export const ChatImpl = memo(
           return false;
         }
 
+        if (hostedRuntimeEnabled && activeRunContext.providerName === 'FREE') {
+          clearHostedFreeStarterContinuation(
+            `Skipped ${reason} client starter continuation because hosted FREE uses server-side preview recovery.`,
+          );
+
+          return false;
+        }
+
         const normalizedRequest = pendingStarterContext.trim() || latestUserRequestRef.current.trim();
 
         if (!normalizedRequest) {
@@ -1041,7 +1074,7 @@ Requirements:
 
         return dispatched;
       },
-      [dispatchAutoContinuation],
+      [clearHostedFreeStarterContinuation, dispatchAutoContinuation, hostedRuntimeEnabled],
     );
 
     useEffect(() => {
@@ -1223,7 +1256,11 @@ Requirements:
         port: hostedPreviewCheckpoint.previewPort,
         baseUrl: hostedPreviewCheckpoint.previewBaseUrl,
       });
-    }, [boundedChatData]);
+
+      if (hostedRuntimeEnabled && runContextRef.current.providerName === 'FREE') {
+        clearHostedFreeStarterContinuation('Hosted preview was verified by server-side FREE recovery.');
+      }
+    }, [boundedChatData, clearHostedFreeStarterContinuation, hostedRuntimeEnabled]);
 
     useEffect(() => {
       const bootstrapCommands = starterBootstrapCommandsRef.current;
@@ -1407,7 +1444,8 @@ Requirements:
           if (
             meaningfulStallMs > stallPolicy.starterContinuationThresholdMs &&
             pendingStarterContinuationRef.current &&
-            !starterContinuationTriggeredRef.current
+            !starterContinuationTriggeredRef.current &&
+            !(hostedRuntimeEnabled && runContextRef.current.providerName === 'FREE')
           ) {
             appendStepRunnerEvent({
               type: 'error',
@@ -1533,6 +1571,12 @@ Requirements:
         return undefined;
       }
 
+      if (hostedRuntimeEnabled && runContextRef.current.providerName === 'FREE') {
+        clearHostedFreeStarterContinuation('Skipped idle client starter continuation after hosted FREE response.');
+
+        return undefined;
+      }
+
       let cancelled = false;
 
       const evaluateStarterContinuation = async () => {
@@ -1584,7 +1628,16 @@ Requirements:
       return () => {
         cancelled = true;
       };
-    }, [actionAlert?.source, dispatchStarterContinuation, fakeLoading, files, isLoading, stepRunnerEvents]);
+    }, [
+      actionAlert?.source,
+      clearHostedFreeStarterContinuation,
+      dispatchStarterContinuation,
+      fakeLoading,
+      files,
+      hostedRuntimeEnabled,
+      isLoading,
+      stepRunnerEvents,
+    ]);
 
     useEffect(() => {
       if (selectionBootstrapRef.current || activeProviders.length === 0) {

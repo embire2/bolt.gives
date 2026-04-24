@@ -27,6 +27,7 @@ import {
   probeSessionPreviewHealth,
   refreshSessionCurrentFileMapFromDisk,
   repairHostedWorkspaceSupportFilesAfterSync,
+  repairUnsafeJsxTextEntities,
   resolveStalePreviewRedirectPath,
   recordPreviewResponse,
   releaseReservedPreviewPorts,
@@ -728,6 +729,58 @@ describe('runtime server workspace isolation', () => {
       changed: true,
       content: '.card { color: red; }\n',
     });
+  });
+
+  it('repairs unsafe JSX angle text entities generated inside simple elements', () => {
+    expect(
+      repairUnsafeJsxTextEntities(
+        '<button onClick={prevMonth} className="nav-button"><</button><button>></button>',
+      ),
+    ).toEqual({
+      changed: true,
+      content:
+        '<button onClick={prevMonth} className="nav-button">&lt;</button><button>&gt;</button>',
+    });
+  });
+
+  it('prepares hosted workspaces by repairing unsafe JSX text before preview start', async () => {
+    const workspace = await makeTempDir('bolt-runtime-prepare-jsx-');
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        dependencies: {
+          react: '^19.0.0',
+          'react-dom': '^19.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'src', 'Calendar.tsx'),
+      'export function Calendar(){return <button className="nav-button"><</button>;}\n',
+      'utf8',
+    );
+
+    const result = await prepareHostedWorkspaceForStart(
+      {
+        dir: workspace,
+      } as {
+        dir: string;
+      },
+      {},
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.repairedFiles).toEqual(['src/Calendar.tsx']);
+    expect(result.sanitizedFiles).toEqual([]);
+    expect(result.installedPackages).toEqual([]);
+    expect(result.generatedFiles).toEqual([]);
+    await expect(fs.readFile(path.join(workspace, 'src', 'Calendar.tsx'), 'utf8')).resolves.toContain(
+      '<button className="nav-button">&lt;</button>',
+    );
   });
 
   it('prepares hosted workspaces by stripping legacy tailwind directives before preview start', async () => {

@@ -184,6 +184,7 @@ let managedRolloutGuardState = {
 
 const PROJECT_MANIFEST_FILES = ['package.json', 'package.json5', 'package.yaml'];
 const SOURCE_IMPORT_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cts']);
+const JSX_SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
 const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
@@ -2421,6 +2422,19 @@ export function sanitizeLegacyTailwindCss(content) {
   };
 }
 
+export function repairUnsafeJsxTextEntities(content) {
+  const raw = String(content || '');
+  const repaired = raw.replace(
+    /(<([A-Za-z][\w:.-]*)(?:\s[^<>]*?)?>)\s*([<>])\s*(<\/\2>)/g,
+    (_match, openTag, _tagName, text, closeTag) => `${openTag}${text === '<' ? '&lt;' : '&gt;'}${closeTag}`,
+  );
+
+  return {
+    changed: repaired !== raw,
+    content: repaired,
+  };
+}
+
 async function walkWorkspaceFiles(rootDir) {
   const results = [];
   const queue = ['.'];
@@ -2683,6 +2697,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     return {
       changed: bootstrapRepair.generatedFiles.length > 0,
       installedPackages: [],
+      repairedFiles: [],
       sanitizedFiles: [],
       generatedFiles: bootstrapRepair.generatedFiles,
     };
@@ -2691,6 +2706,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   const entries = await walkWorkspaceFiles(session.dir);
   const installedPackages = [];
   const sanitizedFiles = [];
+  const repairedFiles = [];
   const generatedFiles = [...bootstrapRepair.generatedFiles, ...(await ensureHostedWorkspaceViteSupportFiles(session))];
   let packageJson = packageJsonRecord.json;
   const lockfileRecord = await readWorkspaceLockfile(session);
@@ -2712,6 +2728,18 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     (await exists(path.join(session.dir, 'postcss.config.js'))) ||
     (await exists(path.join(session.dir, 'postcss.config.cjs'))) ||
     (await exists(path.join(session.dir, 'postcss.config.mjs')));
+
+  for (const entry of entries.filter((candidate) => JSX_SOURCE_EXTENSIONS.has(candidate.extension))) {
+    const repaired = repairUnsafeJsxTextEntities(entry.content);
+
+    if (!repaired.changed) {
+      continue;
+    }
+
+    await writeWorkspaceFileAtomic(entry.absolutePath, repaired.content);
+    repairedFiles.push(entry.path);
+    entry.content = repaired.content;
+  }
 
   if (!hasTailwindDependency && !hasTailwindConfig) {
     for (const entry of entries.filter((candidate) => STYLE_IMPORT_EXTENSIONS.has(candidate.extension))) {
@@ -2881,8 +2909,13 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   }
 
   return {
-    changed: sanitizedFiles.length > 0 || installedPackages.length > 0 || generatedFiles.length > 0,
+    changed:
+      sanitizedFiles.length > 0 ||
+      repairedFiles.length > 0 ||
+      installedPackages.length > 0 ||
+      generatedFiles.length > 0,
     installedPackages,
+    repairedFiles,
     sanitizedFiles,
     generatedFiles,
   };
@@ -3513,6 +3546,13 @@ async function handleRunCommand(req, res, session, body) {
         writeEvent({
           type: 'status',
           message: `Architect removed incompatible legacy Tailwind directives from ${preparation.sanitizedFiles.join(', ')}`,
+        });
+      }
+
+      if (preparation.repairedFiles.length > 0) {
+        writeEvent({
+          type: 'status',
+          message: `Architect repaired unsafe JSX text entities in ${preparation.repairedFiles.join(', ')}`,
         });
       }
 
