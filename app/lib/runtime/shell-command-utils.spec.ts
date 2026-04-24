@@ -5,7 +5,9 @@ import {
   makeFileChecksPortable,
   makeInstallCommandsLowNoise,
   makeInstallCommandsProjectAware,
+  makePreviewStartCommandsWebContainerFriendly,
   makeScaffoldCommandsProjectAware,
+  makeStartCommandsForeground,
   normalizeShellCommandSurface,
   rewriteAllPackageManagersToPnpm,
   unwrapCommandJsonEnvelope,
@@ -65,17 +67,28 @@ describe('makeCreateViteNonInteractive', () => {
     expect(res.modifiedCommand).toContain('pnpm dlx create-vite@latest');
     expect(res.modifiedCommand).toContain('--template react');
     expect(res.modifiedCommand).toContain('--no-interactive');
+    expect(res.modifiedCommand).toContain('--overwrite');
     expect(res.modifiedCommand).toContain('pnpm install');
 
     // Crucially: the --no-interactive flag must apply to create-vite, not the install step.
-    expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive\s+&&\s+pnpm install/i);
+    expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive.*--overwrite\s+&&\s+pnpm install/i);
   });
 
-  it('adds --no-interactive to direct create-vite invocations', () => {
+  it('adds non-interactive overwrite flags to direct current-directory create-vite invocations', () => {
     const input = 'pnpm dlx create-vite@latest . --template react';
     const res = makeCreateViteNonInteractive(input);
     expect(res.shouldModify).toBe(true);
     expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive/i);
+    expect(res.modifiedCommand).toMatch(/create-vite@latest.*--overwrite/i);
+  });
+
+  it('does not add overwrite for named create-vite project directories', () => {
+    const input = 'pnpm dlx create-vite@latest my-app --template react';
+    const res = makeCreateViteNonInteractive(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toMatch(/create-vite@latest.*--no-interactive/i);
+    expect(res.modifiedCommand).not.toContain('--overwrite');
   });
 
   it('does not modify unrelated commands', () => {
@@ -157,6 +170,14 @@ describe('makeInstallCommandsLowNoise', () => {
     expect(res.modifiedCommand).toBe('pnpm install --reporter=append-only --no-frozen-lockfile && pnpm run dev');
   });
 
+  it('removes npm-only peer dependency flags from pnpm install commands', () => {
+    const input = 'pnpm install --legacy-peer-deps --reporter=append-only';
+    const res = makeInstallCommandsLowNoise(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install --reporter=append-only --no-frozen-lockfile');
+  });
+
   it('adds quiet flags for npm install commands', () => {
     const input = 'npm install && npm run dev';
     const res = makeInstallCommandsLowNoise(input);
@@ -170,6 +191,113 @@ describe('makeInstallCommandsLowNoise', () => {
     const res = makeInstallCommandsLowNoise(input);
 
     expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makeStartCommandsForeground', () => {
+  it('strips detached background operators from package-manager start commands', () => {
+    const input = 'pnpm run dev &';
+    const res = makeStartCommandsForeground(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev');
+  });
+
+  it('does not modify unrelated background shell commands', () => {
+    const input = 'echo ready &';
+    const res = makeStartCommandsForeground(input);
+
+    expect(res.shouldModify).toBe(false);
+  });
+});
+
+describe('makePreviewStartCommandsWebContainerFriendly', () => {
+  it('adds host flags for Vite package scripts and removes detached backgrounding', () => {
+    const input = 'pnpm run dev &';
+    const res = makePreviewStartCommandsWebContainerFriendly(input, {
+      filesSnapshot: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            scripts: {
+              dev: 'vite',
+            },
+          }),
+        },
+      },
+    });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev --host 0.0.0.0 --port 5173');
+  });
+
+  it('keeps npm package script separators when adding preview flags', () => {
+    const input = 'npm run dev';
+    const res = makePreviewStartCommandsWebContainerFriendly(input, {
+      filesSnapshot: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            scripts: {
+              dev: 'vite',
+            },
+          }),
+        },
+      },
+    });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('npm run dev -- --host 0.0.0.0 --port 5173');
+  });
+
+  it('removes literal preview separators from pnpm package scripts', () => {
+    const input = 'pnpm run dev -- --host 0.0.0.0 --port 5173';
+    const res = makePreviewStartCommandsWebContainerFriendly(input, {
+      filesSnapshot: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            scripts: {
+              dev: 'vite',
+            },
+          }),
+        },
+      },
+    });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev --host 0.0.0.0 --port 5173');
+  });
+
+  it('adds host and port flags for direct next dev commands', () => {
+    const input = 'next dev';
+    const res = makePreviewStartCommandsWebContainerFriendly(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('next dev --hostname 0.0.0.0 --port 3000');
+  });
+
+  it('keeps previewable pnpm package scripts valid without duplicate host flags', () => {
+    const input = 'pnpm run dev -- --host 0.0.0.0 --port 5173';
+    const res = makePreviewStartCommandsWebContainerFriendly(input, {
+      filesSnapshot: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            scripts: {
+              dev: 'vite',
+            },
+          }),
+        },
+      },
+    });
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev --host 0.0.0.0 --port 5173');
   });
 });
 
@@ -201,6 +329,14 @@ describe('makeScaffoldCommandsProjectAware', () => {
 describe('rewriteAllPackageManagersToPnpm', () => {
   it('rewrites bare npm install with npm-only quiet flags to pnpm install', () => {
     const input = 'npm install --no-progress --silent && npm run dev';
+    const res = rewriteAllPackageManagersToPnpm(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm install && pnpm run dev');
+  });
+
+  it('strips npm-only peer dependency flags when rewriting npm install to pnpm install', () => {
+    const input = 'npm install --legacy-peer-deps --no-progress --silent && npm run dev';
     const res = rewriteAllPackageManagersToPnpm(input);
 
     expect(res.shouldModify).toBe(true);

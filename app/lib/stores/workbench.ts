@@ -25,6 +25,7 @@ import { createResilientExecutionQueue } from '~/lib/runtime/serial-execution-qu
 import { createScopedLogger } from '~/utils/logger';
 import { resolvePreferredArtifactFilePath } from '~/lib/runtime/file-paths';
 import { extractHostedRuntimeSessionIdFromPreviewBaseUrl } from '~/lib/runtime/hosted-runtime-client';
+import { WORK_DIR } from '~/utils/constants';
 
 const logger = createScopedLogger('WorkbenchStore');
 const hotData = import.meta.hot?.data ?? {};
@@ -34,6 +35,20 @@ const INTERACTIVE_EVENTS_FLUSH_MS = 220;
 const MAX_INTERACTIVE_EVENT_OUTPUT_CHARS = 1200;
 const ARTIFACT_READY_WAIT_TIMEOUT_MS = 5_000;
 const ARTIFACT_READY_POLL_INTERVAL_MS = 50;
+const RUNTIME_SOURCE_SYNC_PATHS = [
+  'package.json',
+  'index.html',
+  'vite.config.js',
+  'vite.config.ts',
+  'src/main.jsx',
+  'src/main.tsx',
+  'src/main.js',
+  'src/main.ts',
+  'src/App.jsx',
+  'src/App.tsx',
+  'src/App.js',
+  'src/App.ts',
+] as const;
 
 function resolveActionStreamSampleIntervalMs(): number {
   const rawValue = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
@@ -48,6 +63,295 @@ function resolveActionStreamSampleIntervalMs(): number {
 }
 
 const ACTION_STREAM_SAMPLE_INTERVAL_MS = resolveActionStreamSampleIntervalMs();
+
+type RuntimeBootstrapFile = {
+  filePath: string;
+  content: string;
+};
+
+type RuntimeBootstrapResult = {
+  files: RuntimeBootstrapFile[];
+  createdPackageManifest: boolean;
+};
+
+type RuntimeRepairFile = RuntimeBootstrapFile & {
+  reason: 'react-default-export' | 'react-dom-create-root';
+};
+
+function getTextFileContent(files: FileMap, filePath: string): string | undefined {
+  const entry = files[filePath];
+
+  return entry?.type === 'file' && !entry.isBinary ? entry.content : undefined;
+}
+
+function hasWorkspaceFile(files: FileMap, relativePath: string) {
+  return Boolean(files[`${WORK_DIR}/${relativePath}`]);
+}
+
+function findWorkspaceFile(files: FileMap, pattern: RegExp) {
+  return Object.keys(files).find((filePath) => pattern.test(filePath.replace(`${WORK_DIR}/`, '')));
+}
+
+function commandRequiresPackageManifest(command: string) {
+  const trimmed = command.trim();
+
+  if (/\b(?:create-vite|create-react-app|create-next-app|npm\s+create|pnpm\s+(?:create|dlx))\b/i.test(trimmed)) {
+    return false;
+  }
+
+  return /(?:^|&&|\|\||;)\s*(?:(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:npm|pnpm|yarn|bun)\s+(?:(?:run\s+)?(?:dev|start|preview)|install)\b/i.test(
+    trimmed,
+  );
+}
+
+function commandNeedsInstallAfterManifestBootstrap(command: string) {
+  return /(?:^|&&|\|\||;)\s*(?:(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|preview)\b/i.test(
+    command.trim(),
+  );
+}
+
+function inferInstallCommandForPackageCommand(command: string) {
+  const packageManagerMatch = command
+    .trim()
+    .match(/(?:^|&&|\|\||;)\s*(?:(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(npm|pnpm|yarn|bun)\b/i);
+  const packageManager = packageManagerMatch?.[1]?.toLowerCase();
+
+  switch (packageManager) {
+    case 'npm':
+      return 'npm install';
+    case 'yarn':
+      return 'yarn install --non-interactive';
+    case 'bun':
+      return 'bun install';
+    case 'pnpm':
+    default:
+      return 'pnpm install --reporter=append-only --no-frozen-lockfile';
+  }
+}
+
+function buildSyntheticViteBootstrapFiles(files: FileMap, command: string): RuntimeBootstrapResult {
+  if (!commandRequiresPackageManifest(command) || hasWorkspaceFile(files, 'package.json')) {
+    return { files: [], createdPackageManifest: false };
+  }
+
+  const appEntry =
+    findWorkspaceFile(files, /^src\/App\.(?:tsx|jsx|ts|js)$/i) ||
+    findWorkspaceFile(files, /^app\/(?:page|routes\/_?index)\.(?:tsx|jsx|ts|js)$/i);
+  const mainEntry = findWorkspaceFile(files, /^src\/main\.(?:tsx|jsx|ts|js)$/i);
+  const appContent = appEntry ? getTextFileContent(files, appEntry) || '' : '';
+  const mainContent = mainEntry ? getTextFileContent(files, mainEntry) || '' : '';
+  const looksLikeReact =
+    Boolean(appEntry || mainEntry) &&
+    (/\bfrom\s+['"]react['"]/.test(`${appContent}\n${mainContent}`) ||
+      /\bReactDOM\.createRoot\b/.test(mainContent) ||
+      /\buse(?:State|Effect|Memo|Callback|Reducer|Ref)\b/.test(appContent));
+
+  if (!looksLikeReact) {
+    return { files: [], createdPackageManifest: false };
+  }
+
+  const appExtension = appEntry?.match(/\.(tsx|jsx|ts|js)$/i)?.[1]?.toLowerCase();
+  const defaultMainPath = `src/main.${appExtension === 'tsx' || appExtension === 'ts' ? 'tsx' : 'jsx'}`;
+  const relativeMainPath = mainEntry ? mainEntry.replace(`${WORK_DIR}/`, '') : defaultMainPath;
+  const filesToCreate: RuntimeBootstrapFile[] = [
+    {
+      filePath: `${WORK_DIR}/package.json`,
+      content: `{
+  "name": "generated-react-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^5.4.19",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {}
+}
+`,
+    },
+    {
+      filePath: `${WORK_DIR}/index.html`,
+      content: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generated React App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/${relativeMainPath}"></script>
+  </body>
+</html>
+`,
+    },
+    {
+      filePath: `${WORK_DIR}/vite.config.js`,
+      content: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});
+`,
+    },
+  ];
+
+  if (!mainEntry && appEntry) {
+    const relativeAppImport = `./${
+      appEntry
+        .split('/')
+        .pop()
+        ?.replace(/\.(tsx|jsx|ts|js)$/i, '') || 'App'
+    }`;
+    filesToCreate.push({
+      filePath: `${WORK_DIR}/${relativeMainPath}`,
+      content: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from '${relativeAppImport}';
+${hasWorkspaceFile(files, 'src/index.css') ? "import './index.css';\n" : ''}
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+`,
+    });
+  }
+
+  const filesToBootstrap = filesToCreate.filter((file) => !files[file.filePath]);
+
+  return {
+    files: filesToBootstrap,
+    createdPackageManifest: filesToBootstrap.some((file) => file.filePath === `${WORK_DIR}/package.json`),
+  };
+}
+
+function commandMayCompileReactApp(command: string) {
+  return /(?:^|&&|\|\||;)\s*(?:(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:npm|pnpm|yarn|bun)\s+(?:(?:run\s+)?(?:dev|start|preview|build))|vite(?:\s|$))/i.test(
+    command.trim(),
+  );
+}
+
+function stripJavaScriptComments(content: string) {
+  return content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+function hasDefaultExport(content: string) {
+  const executableContent = stripJavaScriptComments(content);
+
+  return (
+    /\bexport\s+default\b/.test(executableContent) ||
+    /\bexport\s*\{[^}]*\bas\s+default\b[^}]*\}/.test(executableContent)
+  );
+}
+
+function extractReactDefaultImport(content: string) {
+  const match = content.match(/\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+['"]\.\/App(?:\.(?:tsx|jsx|ts|js))?['"]/);
+
+  return match?.[1];
+}
+
+function findDeclaredReactComponent(content: string, preferredName?: string) {
+  const candidates: string[] = [];
+  const declarationRegex =
+    /\b(?:export\s+)?(?:(?:async\s+)?function|class)\s+([A-Z][A-Za-z0-9_]*)\b|\b(?:export\s+)?(?:const|let|var)\s+([A-Z][A-Za-z0-9_]*)\s*=/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = declarationRegex.exec(content)) !== null) {
+    candidates.push(match[1] || match[2]);
+  }
+
+  if (preferredName && candidates.includes(preferredName)) {
+    return preferredName;
+  }
+
+  return (
+    candidates.find((name) => /^App$/i.test(name)) ||
+    candidates.find((name) => /(?:Calendar|Scheduler|Planner|Dashboard|App)$/i.test(name)) ||
+    candidates[0]
+  );
+}
+
+export function buildReactDefaultExportRepairFile(files: FileMap, command: string): RuntimeRepairFile | null {
+  if (!commandMayCompileReactApp(command)) {
+    return null;
+  }
+
+  const mainEntry = findWorkspaceFile(files, /^src\/main\.(?:tsx|jsx|ts|js)$/i);
+  const mainContent = mainEntry ? getTextFileContent(files, mainEntry) || '' : '';
+  const importedDefaultName = extractReactDefaultImport(mainContent);
+
+  if (!mainEntry || !importedDefaultName) {
+    return null;
+  }
+
+  const appEntry = findWorkspaceFile(files, /^src\/App\.(?:tsx|jsx|ts|js)$/i);
+  const appContent = appEntry ? getTextFileContent(files, appEntry) || '' : '';
+
+  if (!appEntry || !appContent || hasDefaultExport(appContent)) {
+    return null;
+  }
+
+  const componentName = findDeclaredReactComponent(appContent, importedDefaultName);
+
+  if (!componentName) {
+    return null;
+  }
+
+  return {
+    reason: 'react-default-export',
+    filePath: appEntry,
+    content: `${appContent.replace(/\s*$/, '')}\n\nexport default ${componentName};\n`,
+  };
+}
+
+export function buildReactDomCreateRootRepairFile(files: FileMap, command: string): RuntimeRepairFile | null {
+  if (!commandMayCompileReactApp(command)) {
+    return null;
+  }
+
+  const mainEntry = findWorkspaceFile(files, /^src\/main\.(?:tsx|jsx|ts|js)$/i);
+  const mainContent = mainEntry ? getTextFileContent(files, mainEntry) || '' : '';
+
+  if (!mainEntry || !/\bReactDOM\.render\s*\(/.test(mainContent)) {
+    return null;
+  }
+
+  const renderCallRe = /ReactDOM\.render\(\s*([\s\S]*?)\s*,\s*document\.getElementById\((['"])root\2\)\s*\);?/m;
+  const renderMatch = mainContent.match(renderCallRe);
+
+  if (!renderMatch?.[1]) {
+    return null;
+  }
+
+  let content = mainContent.replace(
+    /\bimport\s+ReactDOM\s+from\s+['"]react-dom(?:\/client)?['"];?\s*/m,
+    "import { createRoot } from 'react-dom/client';\n",
+  );
+
+  if (!/\bimport\s+\{\s*createRoot\s*\}\s+from\s+['"]react-dom\/client['"]/.test(content)) {
+    content = `import { createRoot } from 'react-dom/client';\n${content}`;
+  }
+
+  content = content.replace(
+    renderCallRe,
+    `createRoot(document.getElementById('root')).render(${renderMatch[1].trim()});`,
+  );
+
+  return {
+    reason: 'react-dom-create-root',
+    filePath: mainEntry,
+    content: content.endsWith('\n') ? content : `${content}\n`,
+  };
+}
 
 function createHostedRuntimeSessionId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -99,6 +403,7 @@ export class WorkbenchStore {
     logger.error('Workbench execution queue task failed', error);
   });
   #actionDecisions = new Map<string, 'approved' | 'rejected'>();
+  #pendingArtifacts = new Map<string, Promise<ArtifactState | undefined>>();
   #pendingInteractiveEvents: InteractiveStepRunnerEvent[] = [];
   #interactiveEventsFlushHandle: ReturnType<typeof setTimeout> | null = null;
   #readyPreviewSignatures = new Set<string>();
@@ -161,8 +466,8 @@ export class WorkbenchStore {
         this.#appendInteractiveStepEvent({
           type: 'telemetry',
           timestamp: new Date().toISOString(),
-          description: 'Preview ready',
-          output: `${preview.baseUrl} (port ${preview.port})`,
+          description: 'Preview session available',
+          output: `url=${preview.baseUrl} port=${preview.port}`,
         });
       }
 
@@ -276,6 +581,16 @@ export class WorkbenchStore {
       return existingArtifact;
     }
 
+    const pendingArtifact = this.#pendingArtifacts.get(id);
+
+    if (pendingArtifact) {
+      const resolvedArtifact = await pendingArtifact.catch(() => undefined);
+
+      if (resolvedArtifact) {
+        return resolvedArtifact;
+      }
+    }
+
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < timeoutMs) {
@@ -325,6 +640,9 @@ export class WorkbenchStore {
   get boltTerminal() {
     return this.#terminalStore.boltTerminal;
   }
+  get runtimeTerminal() {
+    return this.#terminalStore.runtimeTerminal;
+  }
   get alert() {
     return this.actionAlert;
   }
@@ -369,6 +687,18 @@ export class WorkbenchStore {
     } else {
       this.#previewsStore.setPreview(nextPreview);
     }
+
+    if (nextHostedSessionId && nextHostedSessionId !== this.#hostedRuntimeSessionId) {
+      this.#hostedRuntimeSessionId = nextHostedSessionId;
+
+      if (import.meta.hot) {
+        const hot = import.meta.hot as any;
+        hot.data ??= {};
+        hot.data.hostedRuntimeSessionId = this.#hostedRuntimeSessionId;
+      }
+    }
+
+    this.clearPreviewAlert();
 
     if (!existingPreview) {
       this.currentView.set('preview');
@@ -800,7 +1130,9 @@ export class WorkbenchStore {
     await this.#filesStore.restoreSnapshot(snapshotFiles);
     this.#editorStore.setDocuments(snapshotFiles);
     this.showWorkbench.set(true);
-    this.currentView.set('code');
+
+    const hasReadyPreview = this.#previewsStore.previews.get().some((preview) => preview.ready && preview.baseUrl);
+    this.currentView.set(hasReadyPreview ? 'preview' : 'code');
 
     const selectedFile = this.currentDocument.get()?.filePath;
 
@@ -849,72 +1181,95 @@ export class WorkbenchStore {
     const artifact = this.#getArtifact(id);
 
     if (artifact) {
-      return;
+      return artifact;
     }
 
-    if (!this.artifactIdList.includes(id)) {
-      this.artifactIdList.push(id);
+    const pendingArtifact = this.#pendingArtifacts.get(id);
+
+    if (pendingArtifact) {
+      return pendingArtifact;
     }
 
-    const actionRunnerModule = await import('~/lib/runtime/action-runner');
+    const artifactPromise = (async () => {
+      if (!this.artifactIdList.includes(id)) {
+        this.artifactIdList.push(id);
+      }
 
-    this.artifacts.setKey(id, {
-      id,
-      title,
-      closed: false,
-      type,
-      runner: new actionRunnerModule.ActionRunner(
-        webcontainer,
-        () => this.boltTerminal,
-        () => this.files.get(),
-        (preview) => {
-          const existingPreview = this.#previewsStore.previews
-            .get()
-            .find((candidate) => candidate.port === preview.port || candidate.baseUrl === preview.baseUrl);
+      const actionRunnerModule = await import('~/lib/runtime/action-runner');
 
-          this.#previewsStore.setPreview({
-            port: preview.port,
-            ready: true,
-            baseUrl: preview.baseUrl,
-            revision: preview.revision,
-          });
+      const nextArtifact: ArtifactState = {
+        id,
+        title,
+        closed: false,
+        type,
+        runner: new actionRunnerModule.ActionRunner(
+          webcontainer,
+          () => this.boltTerminal,
+          () => this.files.get(),
+          (preview) => {
+            const existingPreview = this.#previewsStore.previews
+              .get()
+              .find((candidate) => candidate.port === preview.port || candidate.baseUrl === preview.baseUrl);
 
-          if (!existingPreview) {
-            this.currentView.set('preview');
-            this.showWorkbench.set(true);
-          }
-        },
-        this.#hostedRuntimeSessionId,
-        (alert) => {
-          if (this.#reloadedMessages.has(messageId)) {
-            return;
-          }
+            this.#previewsStore.setPreview({
+              port: preview.port,
+              ready: true,
+              baseUrl: preview.baseUrl,
+              revision: preview.revision,
+            });
 
-          this.actionAlert.set(alert);
-        },
-        (alert) => {
-          if (this.#reloadedMessages.has(messageId)) {
-            return;
-          }
+            if (!existingPreview) {
+              this.currentView.set('preview');
+              this.showWorkbench.set(true);
+            }
+          },
+          this.#hostedRuntimeSessionId,
+          (alert) => {
+            if (this.#reloadedMessages.has(messageId)) {
+              return;
+            }
 
-          this.supabaseAlert.set(alert);
-        },
-        (alert) => {
-          if (this.#reloadedMessages.has(messageId)) {
-            return;
-          }
+            this.actionAlert.set(alert);
+          },
+          (alert) => {
+            if (this.#reloadedMessages.has(messageId)) {
+              return;
+            }
 
-          this.deployAlert.set(alert);
-        },
-        (event) => {
-          if (this.#reloadedMessages.has(messageId)) {
-            return;
-          }
+            this.supabaseAlert.set(alert);
+          },
+          (alert) => {
+            if (this.#reloadedMessages.has(messageId)) {
+              return;
+            }
 
-          this.#appendInteractiveStepEvent(event);
-        },
-      ),
-    });
+            this.deployAlert.set(alert);
+          },
+          (event) => {
+            if (this.#reloadedMessages.has(messageId)) {
+              return;
+            }
+
+            this.#appendInteractiveStepEvent(event);
+          },
+          () => this.runtimeTerminal,
+        ),
+      };
+
+      this.artifacts.setKey(id, nextArtifact);
+
+      return nextArtifact;
+    })();
+
+    this.#pendingArtifacts.set(id, artifactPromise);
+
+    try {
+      return await artifactPromise;
+    } finally {
+      if (this.#pendingArtifacts.get(id) === artifactPromise) {
+        this.#pendingArtifacts.delete(id);
+      }
+    }
   }
 
   updateArtifact({ artifactId }: ArtifactCallbackData, state: Partial<ArtifactUpdateState>) {
@@ -929,6 +1284,164 @@ export class WorkbenchStore {
     }
 
     this.artifacts.setKey(artifactId, { ...artifact, ...state });
+  }
+
+  #primeRuntimeBootstrapFile(file: RuntimeBootstrapFile) {
+    const existingFile = this.files.get()[file.filePath];
+
+    this.files.setKey(file.filePath, {
+      type: 'file',
+      content: file.content,
+      isBinary: false,
+      isLocked: existingFile?.type === 'file' ? existingFile.isLocked : false,
+      lockedByFolder: existingFile?.type === 'file' ? existingFile.lockedByFolder : undefined,
+    });
+  }
+
+  async #syncRuntimeSourceFilesForCommand(command: string) {
+    if (!commandMayCompileReactApp(command)) {
+      return;
+    }
+
+    const wc = await webcontainer;
+
+    for (const relativePath of RUNTIME_SOURCE_SYNC_PATHS) {
+      let content: string;
+
+      try {
+        const readValue = await wc.fs.readFile(relativePath, 'utf-8');
+        content = typeof readValue === 'string' ? readValue : new TextDecoder().decode(readValue);
+      } catch {
+        continue;
+      }
+
+      const filePath = `${WORK_DIR}/${relativePath}`;
+      const existingFile = this.files.get()[filePath];
+
+      if (existingFile?.type === 'file' && existingFile.content === content) {
+        continue;
+      }
+
+      this.files.setKey(filePath, {
+        type: 'file',
+        content,
+        isBinary: false,
+        isLocked: existingFile?.type === 'file' ? existingFile.isLocked : false,
+        lockedByFolder: existingFile?.type === 'file' ? existingFile.lockedByFolder : undefined,
+      });
+    }
+  }
+
+  async #ensureViteManifestBootstrapForPackageAction(artifact: ArtifactState, data: ActionCallbackData) {
+    if (data.action.type !== 'shell' && data.action.type !== 'start') {
+      return { files: [], createdPackageManifest: false };
+    }
+
+    const bootstrapResult = buildSyntheticViteBootstrapFiles(this.files.get(), data.action.content);
+
+    if (bootstrapResult.files.length === 0) {
+      return bootstrapResult;
+    }
+
+    this.#appendInteractiveStepEvent({
+      type: 'telemetry',
+      timestamp: new Date().toISOString(),
+      description: 'Workspace runtime bootstrap added missing Vite manifest files',
+      output: bootstrapResult.files.map((file) => file.filePath.replace(`${WORK_DIR}/`, '')).join(', '),
+    });
+
+    for (const [index, file] of bootstrapResult.files.entries()) {
+      const actionId = `${data.actionId}-vite-bootstrap-${index}`;
+      this.#primeRuntimeBootstrapFile(file);
+
+      const actionData: ActionCallbackData = {
+        artifactId: data.artifactId,
+        messageId: data.messageId,
+        actionId,
+        action: {
+          type: 'file',
+          filePath: file.filePath,
+          content: file.content,
+        },
+      };
+
+      await artifact.runner.addAction(actionData);
+      await this._runAction(actionData);
+    }
+
+    return bootstrapResult;
+  }
+
+  async #installAfterViteManifestBootstrap(artifact: ArtifactState, data: ActionCallbackData) {
+    if (data.action.type !== 'start' || !commandNeedsInstallAfterManifestBootstrap(data.action.content)) {
+      return;
+    }
+
+    const installCommand = inferInstallCommandForPackageCommand(data.action.content);
+    const actionId = `${data.actionId}-vite-bootstrap-install`;
+    const actionData: ActionCallbackData = {
+      artifactId: data.artifactId,
+      messageId: data.messageId,
+      actionId,
+      action: {
+        type: 'shell',
+        content: installCommand,
+      },
+    };
+
+    this.#appendInteractiveStepEvent({
+      type: 'telemetry',
+      timestamp: new Date().toISOString(),
+      description: 'Workspace runtime bootstrap installing generated Vite dependencies',
+      output: installCommand,
+    });
+
+    await artifact.runner.addAction(actionData);
+    await this._runAction(actionData);
+  }
+
+  async #applyRuntimeRepairFile(artifact: ArtifactState, data: ActionCallbackData, repairFile: RuntimeRepairFile) {
+    this.#appendInteractiveStepEvent({
+      type: 'telemetry',
+      timestamp: new Date().toISOString(),
+      description:
+        repairFile.reason === 'react-default-export'
+          ? 'Workspace runtime repair added missing React default export'
+          : 'Workspace runtime repair converted legacy ReactDOM.render entry',
+      output: repairFile.filePath.replace(`${WORK_DIR}/`, ''),
+    });
+
+    this.#primeRuntimeBootstrapFile(repairFile);
+
+    const actionData: ActionCallbackData = {
+      artifactId: data.artifactId,
+      messageId: data.messageId,
+      actionId: `${data.actionId}-${repairFile.reason}`,
+      action: {
+        type: 'file',
+        filePath: repairFile.filePath,
+        content: repairFile.content,
+      },
+    };
+
+    await artifact.runner.addAction(actionData);
+    await this._runAction(actionData);
+  }
+
+  async #ensureReactRuntimeRepairsForPackageAction(artifact: ArtifactState, data: ActionCallbackData) {
+    if (data.action.type !== 'shell' && data.action.type !== 'start') {
+      return;
+    }
+
+    await this.#syncRuntimeSourceFilesForCommand(data.action.content);
+
+    for (const buildRepairFile of [buildReactDefaultExportRepairFile, buildReactDomCreateRootRepairFile]) {
+      const repairFile = buildRepairFile(this.files.get(), data.action.content);
+
+      if (repairFile) {
+        await this.#applyRuntimeRepairFile(artifact, data, repairFile);
+      }
+    }
   }
 
   dispatchSyntheticRuntimeHandoff(options: {
@@ -971,10 +1484,28 @@ export class WorkbenchStore {
         output: `start=${options.startCommand}${options.setupCommand ? ` | setup=${options.setupCommand}` : ''}`,
       });
 
+      const bootstrapResult = buildSyntheticViteBootstrapFiles(this.files.get(), options.startCommand);
+      bootstrapResult.files.forEach((file) => this.#primeRuntimeBootstrapFile(file));
+
+      const bootstrapActions: BoltAction[] = bootstrapResult.files.map((file) => ({
+        type: 'file',
+        filePath: file.filePath,
+        content: file.content,
+      }));
       const actions: BoltAction[] = [
+        ...bootstrapActions,
         ...(options.setupCommand ? ([{ type: 'shell', content: options.setupCommand }] as const) : []),
         { type: 'start', content: options.startCommand },
       ];
+
+      if (bootstrapResult.files.length > 0) {
+        this.#appendInteractiveStepEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Workspace runtime handoff bootstrapped missing Vite manifest files',
+          output: bootstrapResult.files.map((file) => file.filePath.replace(`${WORK_DIR}/`, '')).join(', '),
+        });
+      }
 
       for (const [index, action] of actions.entries()) {
         const actionId = `${artifactId}-action-${index}`;
@@ -1110,6 +1641,13 @@ export class WorkbenchStore {
 
         this.#actionDecisions.set(decisionKey, 'approved');
       }
+    }
+
+    const bootstrapResult = await this.#ensureViteManifestBootstrapForPackageAction(artifact, data);
+    await this.#ensureReactRuntimeRepairsForPackageAction(artifact, data);
+
+    if (bootstrapResult.createdPackageManifest) {
+      await this.#installAfterViteManifestBootstrap(artifact, data);
     }
 
     if (data.action.type === 'file') {

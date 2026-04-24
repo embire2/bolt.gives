@@ -35,8 +35,16 @@
 
 Recent hardening in this line includes safer hidden continuation dispatch: follow-up recovery prompts now wait until the active chat stream is genuinely idle before they are sent, which reduces mid-run disconnect/reconnect loops on longer builds.
 Another recent runtime fix now synthesizes preview handoff commands from the merged workspace state instead of the latest assistant delta only, which prevents broken follow-up runs from replaying dependency-only installs and stalling preview startup.
+Runtime handoff now also refuses scaffold-only `create-vite`/bootstrap responses unless the assistant produced a new concrete implementation file, and the local workbench syncs shell-created Vite files before React entry repairs so preview startup acts on the real current project.
 Runtime stabilization now also enforces bounded shell/build output capture and guarded heartbeat probing, reducing memory pressure and duplicate recovery races during long-running installs/builds.
 Release verification now also includes a browser-level post-deploy asset health check so stale manifests and missing client bundles fail the release instead of leaving users on a non-interactive shell.
+The workspace shell now stays interactive during boot instead of crashing on the performance monitor token-usage subscription path.
+Local self-host loopback CSP now keeps preview/provider sockets open for `localhost` and `127.0.0.1` without adding fresh invalid-source browser errors.
+Generated-app browser smoke is now strict: the calendar E2E only passes once the requested unique token is visible inside preview, not merely when an iframe mounts.
+Follow-up project memory is now scoped per project/chat instead of shared across one browser-global slot, which keeps later prompts attached to the right workspace history.
+The server now supplies a deterministic current-workspace snapshot even when context optimization is off, so iterative prompts still know the project’s active files and structure.
+Server-side preview-verification continuations now only fire for hosted-runtime sessions, so local/self-host project generation can settle into a previewable result instead of looping through a false “preview not verified” recovery path.
+Local follow-up repairs now keep the running dev server on a dedicated runtime shell, so install/restart actions from later prompts can build on the same project state without trampling the active preview session.
 
 ### Launch blockers
 
@@ -61,13 +69,23 @@ Release verification now also includes a browser-level post-deploy asset health 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
 - The live chat request path now uses the same protected CSRF handshake as the rest of the control plane, so hosted `FREE` project requests do not die at request start with a silent `403` before generation begins.
+- The workspace shell now survives initial load reliably after the token-usage performance monitor was moved onto a stable external-store subscription instead of a hook path that could invalidate hydration.
 - Managed hosted runtime handles installs, builds, tests, preview hosting, and file sync on live instances by default.
 - Follow-up prompts on existing hosted projects now reuse validated runtime commands instead of stalling on prose-only model handoffs.
+- Follow-up prompts now also reuse a stable project-context id and project-scoped memory, so the model stays aware of the current project instead of leaking context between unrelated chats.
+- Current project files are now summarized deterministically even when context optimization is disabled, preserving “where am I in this codebase?” awareness on iterative edits and repair prompts.
+- Local follow-up prompts now keep preview startup on a dedicated runtime shell, so dependency installs and restart commands can iterate on the same workspace without colliding with the running dev server.
+- Local/self-host builds no longer trigger server-side “preview not verified” continuation loops after a valid generation, because that recovery path is now limited to hosted-runtime sessions the server can actually verify.
 - Hosted file actions now target the active starter entry file even when the model chooses the wrong JS/TS sibling extension, so generated apps replace the fallback starter instead of being written into an inactive file.
 - Hosted FREE preview verification now ignores stale fallback-starter detections once the synced workspace no longer contains the starter placeholder, which stops valid generated apps from being rolled back to an older starter snapshot.
 - Hosted preview handoff now blocks incomplete starter rewrites from being treated as runnable projects, so the app continues generating until the active entry file actually contains the requested implementation instead of stalling with “preview verification is still pending.”
+- Hosted preview handoff now also requires a concrete primary app entry file before setup/start commands are inferred, which stops starter-plus-support-file partial generations from being launched as if preview were ready.
+- Hosted preview handoff also requires the assistant’s latest response to include a new concrete implementation file before synthetic setup/start commands can run, so stale request snapshots cannot turn scaffold-only output into a false preview-ready state.
+- Local workbench preview startup syncs shell-created Vite files before React entry repairs and ignores commented-out default exports, which keeps first preview starts and follow-up repairs aligned with the actual filesystem.
+- Local self-host CSP now allows the loopback preview/provider sockets that WebContainer-based runs actually use on `localhost` and `127.0.0.1`, while avoiding invalid `[::1]` policy entries that generated fresh browser console errors.
 - Hosted preview verification now streams visible startup progress while the server waits for the managed preview to turn healthy, which keeps long warm-ups readable instead of going silent and makes disconnect recovery less opaque.
 - The Workspace preview now re-checks hosted preview state immediately on iframe load, so generated apps replace the fallback starter much sooner on live domains.
+- Browser E2E coverage now treats “working project” strictly: the generated app has to render the requested prompt token in preview before the smoke passes.
 - `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.

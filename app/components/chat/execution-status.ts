@@ -7,9 +7,8 @@ export function isPreviewReadyStepEvent(event: InteractiveStepRunnerEvent): bool
   }
 
   const description = event.description?.toLowerCase() || '';
-  const output = event.output?.toLowerCase() || '';
 
-  return description.includes('preview ready') || output.includes('(port ');
+  return description.includes('preview verified');
 }
 
 export function hasPreviewVerification(stepRunnerEvents: InteractiveStepRunnerEvent[]): boolean {

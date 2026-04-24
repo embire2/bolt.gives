@@ -188,15 +188,18 @@ export async function runHostedRuntimeCommand(options: {
   onEvent?: (event: HostedRuntimeEvent) => void;
 }): Promise<HostedRuntimeCommandResult> {
   const { sessionId, command, kind, onEvent } = options;
-  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ command, kind }),
+      timeoutMs: HOSTED_COMMAND_TIMEOUT_MS,
+      label: 'hosted-runtime/command',
     },
-    body: JSON.stringify({ command, kind }),
-    timeoutMs: HOSTED_COMMAND_TIMEOUT_MS,
-    label: 'hosted-runtime/command',
-  });
+  );
 
   if (!response.ok || !response.body) {
     const message = await response.text();
@@ -315,14 +318,17 @@ export function subscribeHostedRuntimePreview(
 }
 
 export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {
-  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeoutMs: HOSTED_SNAPSHOT_TIMEOUT_MS,
+      label: 'hosted-runtime/snapshot',
     },
-    timeoutMs: HOSTED_SNAPSHOT_TIMEOUT_MS,
-    label: 'hosted-runtime/snapshot',
-  });
+  );
 
   if (!response.ok) {
     const message = await response.text();
@@ -335,15 +341,18 @@ export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<Fil
 }
 
 export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: ActionAlert) {
-  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ alert }),
+      timeoutMs: HOSTED_ALERT_TIMEOUT_MS,
+      label: 'hosted-runtime/preview-alert',
     },
-    body: JSON.stringify({ alert }),
-    timeoutMs: HOSTED_ALERT_TIMEOUT_MS,
-    label: 'hosted-runtime/preview-alert',
-  });
+  );
 
   if (!response.ok) {
     const message = await response.text();

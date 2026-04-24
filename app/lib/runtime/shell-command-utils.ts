@@ -4,15 +4,28 @@ export type ShellCommandRewrite = {
   warning?: string;
 };
 
+type CommandFileSnapshot = Record<
+  string,
+  | {
+      type?: string;
+      content?: string;
+      isBinary?: boolean;
+    }
+  | undefined
+>;
+
 const NPM_CREATE_VITE_RE = /\bnpm\s+create\s+vite(?<ver>@[^\s]+)?\b/i;
 const CREATE_VITE_HINT_RE = /\bcreate-vite\b/i;
 const HAS_NO_INTERACTIVE_RE = /\B--no-interactive\b/;
+const HAS_OVERWRITE_RE = /\B--overwrite\b/;
+const CREATE_VITE_CURRENT_DIR_RE = /\bcreate-vite(?:@[^\s]+)?\b\s+(?:\.|\.\/)(?=\s|$)/i;
 const TEST_FILE_CHECK_RE = /^test\s+-f\s+(.+)$/i;
 const INSTALL_SEGMENT_RE = /^(npm|pnpm|yarn|bun)\s+(install|i)\b/i;
 const CD_SEGMENT_RE = /^cd\s+([^\s;&]+)\s*$/i;
 const MKDIR_P_SEGMENT_RE = /^mkdir\s+-p\s+([^\s;&]+)\s*$/i;
 const PNPM_REPORTER_FLAG_RE = /--reporter(?:=|\s+)(append-only|silent)\b/i;
 const PNPM_NO_FROZEN_LOCKFILE_RE = /--no-frozen-lockfile\b/i;
+const NPM_LEGACY_PEER_DEPS_FLAG_RE = /(?:^|\s)--legacy-peer-deps\b/gi;
 const NPM_PROGRESS_FLAG_RE = /--no-progress\b/i;
 const NPM_SILENT_FLAG_RE = /--silent\b|--loglevel(?:=|\s+)silent\b/i;
 const YARN_SILENT_FLAG_RE = /--silent\b/i;
@@ -21,6 +34,272 @@ const PROJECT_SCAFFOLD_SEGMENT_RE =
 const COMMAND_PREFIX_RE = /^\s*(?:run\s+shell\s+command\s*:|shell\s+command\s*:|command\s*:)\s*/i;
 const BULLET_PREFIX_RE = /^\s*(?:[-*]\s+|\d+\.\s+)/;
 const SHELL_FENCE_RE = /^```(?:bash|sh|shell|zsh)?\s*([\s\S]*?)\s*```$/i;
+const PACKAGE_SCRIPT_START_RE = /^(npm|pnpm|yarn|bun)\s+(?:run\s+)?(dev|start|preview)\b/i;
+const DIRECT_VITE_START_RE = /^vite(?:\s|$)/i;
+const DIRECT_NEXT_START_RE = /^next\s+(dev|start)\b/i;
+const DIRECT_ASTRO_START_RE = /^astro\s+(dev|preview)\b/i;
+const DIRECT_ANGULAR_START_RE = /^ng\s+serve\b/i;
+const HOST_FLAG_RE = /(?:^|\s)--host(?:name)?(?:\s|=)/i;
+const PORT_FLAG_RE = /(?:^|\s)--port(?:\s|=)/i;
+const TRAILING_BACKGROUND_RE = /\s*&\s*$/;
+
+type PreviewFramework = 'vite' | 'next' | 'astro' | 'angular';
+
+function normalizeCommandPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').toLowerCase();
+}
+
+function getProjectFileEntries(filesSnapshot?: CommandFileSnapshot): Array<{ path: string; content: string }> {
+  if (!filesSnapshot) {
+    return [];
+  }
+
+  return Object.entries(filesSnapshot)
+    .filter(([filePath, entry]) => {
+      if (!entry || entry.type !== 'file' || entry.isBinary) {
+        return false;
+      }
+
+      return !/(^|\/)(node_modules|\.pnpm|\.vite|dist|build|coverage|\.next|out|\.turbo|\.cache)(\/|$)/i.test(filePath);
+    })
+    .map(([filePath, entry]) => ({
+      path: filePath,
+      content: entry?.content || '',
+    }));
+}
+
+function getPreferredPackageJsonContent(filesSnapshot?: CommandFileSnapshot): string | undefined {
+  return getProjectFileEntries(filesSnapshot)
+    .filter((file) => normalizeCommandPath(file.path).endsWith('package.json'))
+    .sort((left, right) => {
+      const leftDepth = normalizeCommandPath(left.path).split('/').filter(Boolean).length;
+      const rightDepth = normalizeCommandPath(right.path).split('/').filter(Boolean).length;
+
+      if (leftDepth !== rightDepth) {
+        return leftDepth - rightDepth;
+      }
+
+      return normalizeCommandPath(left.path).localeCompare(normalizeCommandPath(right.path));
+    })[0]?.content;
+}
+
+function extractPackageScripts(packageJsonContent: string | undefined): Record<string, string> {
+  if (!packageJsonContent) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(packageJsonContent) as { scripts?: Record<string, unknown> };
+
+    if (!parsed?.scripts || typeof parsed.scripts !== 'object') {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed.scripts)
+        .filter(([, value]) => typeof value === 'string')
+        .map(([key, value]) => [key, String(value)]),
+    );
+  } catch {
+    const scripts: Record<string, string> = {};
+    const scriptRegex = /"(dev|start|preview)"\s*:\s*"([^"]+)"/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = scriptRegex.exec(packageJsonContent)) !== null) {
+      const [, key, value] = match;
+      scripts[key] = value;
+    }
+
+    return scripts;
+  }
+}
+
+function inferFrameworkFromScript(scriptCommand: string | undefined): PreviewFramework | null {
+  const normalized = scriptCommand?.trim().toLowerCase() || '';
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (/\bvite\b/.test(normalized) && !/\bvitest\b/.test(normalized)) {
+    return 'vite';
+  }
+
+  if (/\bnext\s+(dev|start)\b/.test(normalized)) {
+    return 'next';
+  }
+
+  if (/\bastro\s+(dev|preview)\b/.test(normalized)) {
+    return 'astro';
+  }
+
+  if (/\bng\s+serve\b/.test(normalized)) {
+    return 'angular';
+  }
+
+  return null;
+}
+
+function inferFrameworkFromFiles(filesSnapshot?: CommandFileSnapshot): PreviewFramework | null {
+  const paths = getProjectFileEntries(filesSnapshot).map((file) => normalizeCommandPath(file.path));
+
+  if (
+    paths.some((filePath) => /(^|\/)vite\.config\.(?:[cm]?[jt]sx?)$/i.test(filePath)) ||
+    paths.some((filePath) => /(^|\/)src\/main\.(?:[jt]sx?)$/i.test(filePath))
+  ) {
+    return 'vite';
+  }
+
+  if (
+    paths.some((filePath) => /(^|\/)next\.config\.(?:[cm]?[jt]s)$/i.test(filePath)) ||
+    paths.some((filePath) => /(^|\/)(app\/page|pages\/index)\.(?:[jt]sx?)$/i.test(filePath))
+  ) {
+    return 'next';
+  }
+
+  if (
+    paths.some((filePath) => /(^|\/)astro\.config\.(?:[cm]?[jt]s)$/i.test(filePath)) ||
+    paths.some((filePath) => /(^|\/)src\/pages\/index\.astro$/i.test(filePath))
+  ) {
+    return 'astro';
+  }
+
+  if (paths.some((filePath) => /(^|\/)angular\.json$/i.test(filePath))) {
+    return 'angular';
+  }
+
+  return null;
+}
+
+function inferFrameworkFromDirectCommand(command: string): PreviewFramework | null {
+  if (DIRECT_VITE_START_RE.test(command)) {
+    return 'vite';
+  }
+
+  if (DIRECT_NEXT_START_RE.test(command)) {
+    return 'next';
+  }
+
+  if (DIRECT_ASTRO_START_RE.test(command)) {
+    return 'astro';
+  }
+
+  if (DIRECT_ANGULAR_START_RE.test(command)) {
+    return 'angular';
+  }
+
+  return null;
+}
+
+function getMissingPreviewArgs(command: string, framework: PreviewFramework): string[] {
+  const args: string[] = [];
+
+  if (!HOST_FLAG_RE.test(command)) {
+    args.push(framework === 'next' ? '--hostname 0.0.0.0' : '--host 0.0.0.0');
+  }
+
+  if (!PORT_FLAG_RE.test(command)) {
+    switch (framework) {
+      case 'vite':
+        args.push('--port 5173');
+        break;
+      case 'next':
+        args.push('--port 3000');
+        break;
+      case 'astro':
+        args.push('--port 4321');
+        break;
+      case 'angular':
+        args.push('--port 4200');
+        break;
+    }
+  }
+
+  return args;
+}
+
+function removeUnsupportedPnpmInstallFlags(command: string): { command: string; modified: boolean } {
+  const normalized = command
+    .replace(NPM_LEGACY_PEER_DEPS_FLAG_RE, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return {
+    command: normalized,
+    modified: normalized !== command.trim(),
+  };
+}
+
+function packageManagerNeedsRunArgSeparator(packageManager: string): boolean {
+  return packageManager.toLowerCase() === 'npm';
+}
+
+function normalizePackageScriptPreviewArgSeparator(
+  command: string,
+  packageManager: string,
+): { command: string; modified: boolean } {
+  const trimmed = command.trim();
+
+  if (packageManagerNeedsRunArgSeparator(packageManager)) {
+    return { command: trimmed, modified: false };
+  }
+
+  const normalized = trimmed.replace(/\s+--\s+(?=--(?:host(?:name)?|port)\b)/i, ' ');
+
+  return {
+    command: normalized,
+    modified: normalized !== trimmed,
+  };
+}
+
+function appendPackageScriptArgs(command: string, args: string[], packageManager: string): string {
+  if (args.length === 0) {
+    return command.trim();
+  }
+
+  const trimmed = normalizePackageScriptPreviewArgSeparator(command, packageManager).command;
+
+  if (!packageManagerNeedsRunArgSeparator(packageManager)) {
+    return `${trimmed} ${args.join(' ')}`;
+  }
+
+  if (/\s--\s*$/.test(trimmed)) {
+    return `${trimmed}${args.join(' ')}`;
+  }
+
+  if (/\s--\s/.test(trimmed)) {
+    return `${trimmed} ${args.join(' ')}`;
+  }
+
+  return `${trimmed} -- ${args.join(' ')}`;
+}
+
+function appendDirectArgs(command: string, args: string[]): string {
+  if (args.length === 0) {
+    return command.trim();
+  }
+
+  return `${command.trim()} ${args.join(' ')}`;
+}
+
+function rewriteStartSegmentForForeground(segment: string): { segment: string; modified: boolean } {
+  const trimmed = segment.trim();
+
+  if (!trimmed || !TRAILING_BACKGROUND_RE.test(trimmed)) {
+    return { segment, modified: false };
+  }
+
+  const foreground = trimmed.replace(TRAILING_BACKGROUND_RE, '').trim();
+
+  if (!foreground || (!PACKAGE_SCRIPT_START_RE.test(foreground) && !inferFrameworkFromDirectCommand(foreground))) {
+    return { segment, modified: false };
+  }
+
+  return {
+    segment: foreground,
+    modified: foreground !== trimmed,
+  };
+}
 
 export function unwrapCommandJsonEnvelope(command: string): ShellCommandRewrite {
   const trimmed = command.trim();
@@ -143,6 +422,11 @@ function rewriteCreateViteSegment(segment: string): {
   // Ensure non-interactive scaffolding. Interactive CLIs frequently cancel in WebContainer.
   if (!HAS_NO_INTERACTIVE_RE.test(s)) {
     s = `${s} --no-interactive`;
+    modified = true;
+  }
+
+  if (CREATE_VITE_CURRENT_DIR_RE.test(s) && !HAS_OVERWRITE_RE.test(s)) {
+    s = `${s} --overwrite`;
     modified = true;
   }
 
@@ -382,8 +666,9 @@ function rewriteInstallSegmentForLowNoise(segment: string): { segment: string; m
   }
 
   if (/^pnpm\s+/i.test(trimmed)) {
-    let next = trimmed;
-    let modified = false;
+    const pnpmFlagsRewrite = removeUnsupportedPnpmInstallFlags(trimmed);
+    let next = pnpmFlagsRewrite.command;
+    let modified = pnpmFlagsRewrite.modified;
 
     if (!PNPM_REPORTER_FLAG_RE.test(next)) {
       next = `${next} --reporter=append-only`;
@@ -523,6 +808,7 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
       .replace(/(?:^|\s)--no-progress\b/gi, ' ')
       .replace(/(?:^|\s)--silent\b/gi, ' ')
       .replace(/(?:^|\s)--loglevel(?:=|\s+)silent\b/gi, ' ')
+      .replace(NPM_LEGACY_PEER_DEPS_FLAG_RE, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
 
@@ -668,6 +954,117 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
     shouldModify: true,
     modifiedCommand: rewrittenParts.join(' && '),
     warning: 'Rewrote npm/yarn/npx commands to pnpm equivalents for WebContainer compatibility.',
+  };
+}
+
+export function makeStartCommandsForeground(command: string): ShellCommandRewrite {
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  const normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const trimmed = normalizedCommand.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = false;
+
+  const rewrittenParts = parts.map((part) => {
+    const rewritten = rewriteStartSegmentForForeground(part);
+
+    if (rewritten.modified) {
+      modifiedAny = true;
+    }
+
+    return rewritten.segment.trim();
+  });
+
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning: 'Removed detached background operators from start commands so preview can stay attached to the runtime.',
+  };
+}
+
+export function makePreviewStartCommandsWebContainerFriendly(
+  command: string,
+  options?: { filesSnapshot?: CommandFileSnapshot },
+): ShellCommandRewrite {
+  const delimiterNormalization = decodeHtmlCommandDelimiters(command);
+  let normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const foregroundRewrite = makeStartCommandsForeground(normalizedCommand);
+
+  if (foregroundRewrite.shouldModify && foregroundRewrite.modifiedCommand) {
+    normalizedCommand = foregroundRewrite.modifiedCommand;
+  }
+
+  const trimmed = normalizedCommand.trim();
+
+  if (!trimmed) {
+    return { shouldModify: false };
+  }
+
+  const packageJsonContent = getPreferredPackageJsonContent(options?.filesSnapshot);
+  const scripts = extractPackageScripts(packageJsonContent);
+  const fallbackFramework = inferFrameworkFromFiles(options?.filesSnapshot);
+  const parts = trimmed.split(/\s*&&\s*/);
+  let modifiedAny = Boolean(foregroundRewrite.shouldModify);
+
+  const rewrittenParts = parts.map((part) => {
+    const segment = part.trim();
+
+    if (!segment) {
+      return part;
+    }
+
+    const packageScriptMatch = segment.match(PACKAGE_SCRIPT_START_RE);
+    const framework = packageScriptMatch
+      ? inferFrameworkFromScript(scripts[packageScriptMatch[2]]) || fallbackFramework
+      : inferFrameworkFromDirectCommand(segment);
+
+    if (!framework) {
+      return segment;
+    }
+
+    let previewSegment = segment;
+
+    if (packageScriptMatch) {
+      const separatorRewrite = normalizePackageScriptPreviewArgSeparator(segment, packageScriptMatch[1]);
+
+      if (separatorRewrite.modified) {
+        previewSegment = separatorRewrite.command;
+        modifiedAny = true;
+      }
+    }
+
+    const missingArgs = getMissingPreviewArgs(previewSegment, framework);
+
+    if (missingArgs.length === 0) {
+      return previewSegment;
+    }
+
+    modifiedAny = true;
+
+    if (packageScriptMatch) {
+      return appendPackageScriptArgs(previewSegment, missingArgs, packageScriptMatch[1]);
+    }
+
+    return appendDirectArgs(previewSegment, missingArgs);
+  });
+
+  if (!modifiedAny) {
+    return { shouldModify: false };
+  }
+
+  return {
+    shouldModify: true,
+    modifiedCommand: rewrittenParts.join(' && '),
+    warning:
+      'Normalized start commands for WebContainer preview by keeping them attached to the runtime and adding accessible host flags.',
   };
 }
 

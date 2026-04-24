@@ -297,19 +297,23 @@ export async function streamText(props: {
     systemPrompt = withDevelopmentCommentaryWorkstyle(systemPrompt);
   }
 
-  if (effectiveChatMode === 'build' && contextFiles && contextOptimization) {
+  if (effectiveChatMode === 'build' && contextFiles && Object.keys(contextFiles).length > 0) {
     const codeContext = createFilesContext(contextFiles, true);
 
     systemPrompt = `${systemPrompt}
 
-    Below is the artifact containing the context loaded into context buffer for you to have knowledge of and might need changes to fullfill current user request.
-    CONTEXT BUFFER:
+    ${
+      contextOptimization
+        ? 'Below is the artifact containing the context loaded into the context buffer for the current request.'
+        : 'Below is a deterministic snapshot of the current project. Continue from these files and preserve the existing project unless the user explicitly asks for a reset.'
+    }
+    ${contextOptimization ? 'CONTEXT BUFFER:' : 'CURRENT WORKSPACE SNAPSHOT:'}
     ---
     ${codeContext}
     ---
     `;
 
-    if (summary) {
+    if (summary && contextOptimization) {
       systemPrompt = `${systemPrompt}
       below is the chat history till now
       CHAT SUMMARY:

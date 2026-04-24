@@ -13,6 +13,21 @@ export function normalizeStartCommand(command, port) {
   const runDevTool = runDevMatch?.[1]?.toLowerCase();
   let hasExplicitHost = hasHostFlag(normalized);
   let hasExplicitPort = hasPortFlag(normalized);
+  const isStaticServeCommand = /(^|&&\s*)(?:npx\s+--yes\s+)?serve\b/i.test(normalized);
+
+  if (isStaticServeCommand) {
+    hasExplicitPort = Boolean(extractConfiguredStartPort(normalized));
+    normalized = normalized
+      .replace(/\s+--host(?:=|\s+)(?:0\.0\.0\.0|localhost|127\.0\.0\.1)\b/gi, '')
+      .replace(/\s+-H\s+(?:0\.0\.0\.0|localhost|127\.0\.0\.1)\b/gi, '')
+      .trim();
+
+    if (!hasExplicitPort) {
+      normalized += ` --port ${port}`;
+    }
+
+    return normalized.trim();
+  }
 
   if (/\bnext\s+dev\b/i.test(normalized)) {
     if (!/\b-H\b/i.test(normalized)) {
@@ -65,18 +80,74 @@ export function normalizeStartCommand(command, port) {
   return normalized;
 }
 
+export function extractConfiguredStartPort(command) {
+  if (typeof command !== 'string' || !command.trim()) {
+    return undefined;
+  }
+
+  const normalized = command.trim();
+  const portMatch =
+    normalized.match(/(?:^|\s)--port(?:=|\s+)(\d+)\b/i) ||
+    normalized.match(/(?:^|\s)-p\s+(\d+)\b/i) ||
+    normalized.match(/(?:^|\s)(?:--listen|-l)\s+tcp:\/\/[^:\s]+:(\d+)\b/i) ||
+    normalized.match(/(?:^|\s)(?:--listen|-l)\s+(\d+)\b/i);
+
+  const port = Number(portMatch?.[1]);
+
+  if (!Number.isFinite(port) || port <= 0) {
+    return undefined;
+  }
+
+  return port;
+}
+
 export function rewritePreviewAssetUrls(content, previewBasePath) {
   if (typeof content !== 'string' || !content || typeof previewBasePath !== 'string' || !previewBasePath) {
     return content;
   }
 
-  return content
+  let rewritten = content
     .replace(/((?:src|href)=["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/(\bfrom\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/(\bimport\s*\(\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/(\bimport\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/url\(\s*\/(?!\/|runtime\/preview\/)(?=[@A-Za-z0-9_.-])/g, `url(${previewBasePath}/`)
     .replace(/sourceMappingURL=\/(?!\/|runtime\/preview\/)(?=[@A-Za-z0-9_.-])/g, `sourceMappingURL=${previewBasePath}/`);
+
+  const looksLikeViteClient =
+    rewritten.includes('const importMetaUrl = new URL(import.meta.url);') &&
+    rewritten.includes('const socketHost =') &&
+    rewritten.includes('const directSocketHost =') &&
+    rewritten.includes('const base =');
+
+  if (!looksLikeViteClient) {
+    return rewritten;
+  }
+
+  rewritten = rewritten
+    .replace(
+      /const serverHost = .*?;/,
+      'const serverHost = `${importMetaUrl.host}${proxyPathPrefix}`;',
+    )
+    .replace(
+      /const socketHost = .*?;/,
+      'const socketHost = `${importMetaUrl.host}${proxyPathPrefix}`;',
+    )
+    .replace(
+      /const directSocketHost = .*?;/,
+      'const directSocketHost = `${importMetaUrl.host}${proxyPathPrefix}`;',
+    )
+    .replace(/const base = .*?;/, 'const base = proxyPathPrefix;');
+
+  if (!rewritten.includes('const proxyPathPrefix =')) {
+    rewritten = rewritten.replace(
+      'const importMetaUrl = new URL(import.meta.url);',
+      `const importMetaUrl = new URL(import.meta.url);
+const proxyPathPrefix = importMetaUrl.pathname.replace(/\\/@vite\\/client$/, "/");`,
+    );
+  }
+
+  return rewritten;
 }
 
 export function parsePreviewProxyRequestTarget(requestUrl) {

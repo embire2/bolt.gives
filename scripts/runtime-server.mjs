@@ -10,6 +10,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import {
   createPreviewProbeCoordinator,
+  extractConfiguredStartPort,
   extractPreviewPortFromOutput,
   normalizeStartCommand,
   parsePreviewProxyRequestTarget,
@@ -81,12 +82,16 @@ const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PRO
 const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
 const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500];
 const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
+const VITE_MAIN_ENTRY_SRC_RE =
+  /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
 const PREVIEW_ERROR_PATTERNS = [
   /\[plugin:vite:[^\]]+\]/i,
   /Pre-transform error/i,
   /Transform failed with \d+ error/i,
   /Failed to resolve import/i,
   /Failed to scan for dependencies from entries/i,
+  /Failed to load url/i,
+  /Could not resolve/i,
   /Unexpected token/i,
   /Expected [^\n]+ but found end of file/i,
   /PREVIEW_UNCAUGHT_EXCEPTION/i,
@@ -165,6 +170,7 @@ function consumeBugReportRateLimit(key) {
 
 const sessions = new Map();
 const managedInstanceLocks = new Map();
+const reservedPreviewPorts = new Map();
 let managedInstanceSyncTimer = null;
 let managedRolloutGuardState = {
   allowed: true,
@@ -185,6 +191,12 @@ const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
 const SNAPSHOT_TEXT_FILE_BYTES_LIMIT = Number(process.env.RUNTIME_SNAPSHOT_TEXT_FILE_BYTES_LIMIT || '1048576');
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
+const HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS = {
+  react: '^18.3.1',
+  reactDom: '^18.3.1',
+  vite: '^5.4.19',
+  pluginReact: '^4.7.0',
+};
 
 function normalizeRuntimeSecret(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
@@ -1245,6 +1257,19 @@ export function applyPreviewResponseHeaders(rawHeaders = {}) {
   };
 }
 
+function shouldInspectPreviewResponseForAlerts(upstreamPath, contentType = '') {
+  const normalizedPath = String(upstreamPath || '').split('?')[0] || '/';
+  const normalizedType = String(contentType || '').toLowerCase();
+  const isDocumentPath =
+    normalizedPath === '/' ||
+    normalizedPath === '/index.html' ||
+    normalizedPath.endsWith('.html') ||
+    normalizedPath.endsWith('.htm');
+  const isHtmlResponse = normalizedType.includes('text/html');
+
+  return isDocumentPath || isHtmlResponse;
+}
+
 export function shouldRetryPreviewProxyResponse({ method = 'GET', statusCode = 0, attempt = 0 } = {}) {
   const normalizedMethod = String(method || 'GET').toUpperCase();
 
@@ -1267,6 +1292,9 @@ function normalizePreviewText(value) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+const DEV_SERVER_READY_RE =
+  /\b(?:VITE v[\d.]+\s+ready in|ready - started server on|Local:\s+http:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):\d+)/i;
 
 function pickPreviewAlertDescription(combinedText) {
   const lines = combinedText
@@ -1304,10 +1332,28 @@ function pickPreviewAlertDescription(combinedText) {
   return lines[0] || 'Preview failed to compile or run.';
 }
 
+function isDetachedDevServerLifecycleNoise(combinedText) {
+  const hasLifecycleFailure = /\bELIFECYCLE\b/i.test(combinedText) || /\bCommand failed\b/i.test(combinedText);
+
+  if (!hasLifecycleFailure || !DEV_SERVER_READY_RE.test(combinedText)) {
+    return false;
+  }
+
+  const hardFailurePatterns = PREVIEW_ERROR_PATTERNS.filter(
+    (pattern) => !/\bELIFECYCLE\b/i.test(pattern.source) && !/\bCommand failed\b/i.test(pattern.source),
+  );
+
+  return !hardFailurePatterns.some((pattern) => pattern.test(combinedText));
+}
+
 function extractPreviewAlertFromText(rawText) {
   const combinedText = normalizePreviewText(rawText);
 
   if (!combinedText) {
+    return null;
+  }
+
+  if (isDetachedDevServerLifecycleNoise(combinedText)) {
     return null;
   }
 
@@ -1415,6 +1461,111 @@ function cloneFileMap(fileMap) {
   return JSON.parse(JSON.stringify(fileMap || {}));
 }
 
+function getFileMapEntry(fileMap, filePath) {
+  if (!fileMap || typeof fileMap !== 'object') {
+    return null;
+  }
+
+  return fileMap[filePath] || null;
+}
+
+function hasTextFile(fileMap, filePath) {
+  const entry = getFileMapEntry(fileMap, filePath);
+
+  return Boolean(entry && entry.type === 'file' && !entry.isBinary && typeof entry.content === 'string');
+}
+
+function getTextFileContent(fileMap, filePath) {
+  const entry = getFileMapEntry(fileMap, filePath);
+
+  if (!entry || entry.type !== 'file' || entry.isBinary || typeof entry.content !== 'string') {
+    return undefined;
+  }
+
+  return entry.content;
+}
+
+function inferExpectedViteMainEntryPath(fileMap) {
+  const indexHtmlContent = getTextFileContent(fileMap, '/home/project/index.html');
+
+  if (typeof indexHtmlContent === 'string') {
+    const referencedEntryMatch = indexHtmlContent.match(VITE_MAIN_ENTRY_SRC_RE);
+
+    if (referencedEntryMatch?.[3]) {
+      return path.posix.join(WORK_DIR, referencedEntryMatch[3].replace(/^\//, ''));
+    }
+  }
+
+  if (hasTextFile(fileMap, '/home/project/src/main.tsx')) {
+    return '/home/project/src/main.tsx';
+  }
+
+  if (hasTextFile(fileMap, '/home/project/src/main.jsx')) {
+    return '/home/project/src/main.jsx';
+  }
+
+  if (hasTextFile(fileMap, '/home/project/src/App.tsx') || hasTextFile(fileMap, '/home/project/tsconfig.app.json')) {
+    return '/home/project/src/main.tsx';
+  }
+
+  if (hasTextFile(fileMap, '/home/project/src/App.jsx')) {
+    return '/home/project/src/main.jsx';
+  }
+
+  return null;
+}
+
+export function buildHostedWorkspaceBootstrapAlert(fileMap) {
+  if (!fileMap || typeof fileMap !== 'object') {
+    return null;
+  }
+
+  const looksLikeViteWorkspace =
+    hasTextFile(fileMap, '/home/project/vite.config.ts') ||
+    hasTextFile(fileMap, '/home/project/vite.config.js') ||
+    hasTextFile(fileMap, '/home/project/src/App.tsx') ||
+    hasTextFile(fileMap, '/home/project/src/App.jsx') ||
+    hasTextFile(fileMap, '/home/project/src/main.tsx') ||
+    hasTextFile(fileMap, '/home/project/src/main.jsx');
+
+  if (!looksLikeViteWorkspace) {
+    return null;
+  }
+
+  if (!hasTextFile(fileMap, '/home/project/index.html')) {
+    return {
+      type: 'error',
+      title: 'Preview Error',
+      description: 'Hosted workspace is missing index.html.',
+      content: 'The hosted workspace does not contain index.html, so the Vite preview cannot boot.',
+      source: 'preview',
+    };
+  }
+
+  const expectedMainEntryPath = inferExpectedViteMainEntryPath(fileMap);
+
+  if (!expectedMainEntryPath || !hasTextFile(fileMap, expectedMainEntryPath)) {
+    const expectedLabel = expectedMainEntryPath ? expectedMainEntryPath.replace(`${WORK_DIR}/`, '') : 'src/main.tsx';
+
+    return {
+      type: 'error',
+      title: 'Preview Error',
+      description: `Hosted workspace is missing ${expectedLabel}.`,
+      content: `The hosted runtime cannot boot the Vite preview because ${expectedLabel} is missing from the synced workspace.`,
+      source: 'preview',
+    };
+  }
+
+  return null;
+}
+
+export async function refreshSessionCurrentFileMapFromDisk(session) {
+  const diskFiles = await buildWorkspaceFileMapFromDisk(session);
+  session.currentFileMap = cloneFileMap(diskFiles);
+
+  return session.currentFileMap;
+}
+
 export function mergeWorkspaceFileMap(currentFileMap, incomingFileMap, options = {}) {
   const { prune = false } = options;
   const nextFileMap = prune ? {} : cloneFileMap(currentFileMap || {});
@@ -1509,6 +1660,23 @@ export function markSessionMutationStart(session) {
 export async function probeSessionPreviewHealth(session, requestPath = '/') {
   const port = Number(session.preview?.port || 0);
   const existingAlert = requestPath === '/' ? session.previewDiagnostics?.alert || null : null;
+
+  if (requestPath === '/') {
+    try {
+      const diskFiles = await buildWorkspaceFileMapFromDisk(session);
+      const workspaceBootstrapAlert = buildHostedWorkspaceBootstrapAlert(diskFiles);
+
+      if (workspaceBootstrapAlert) {
+        return {
+          healthy: false,
+          statusCode: 0,
+          alert: existingAlert || workspaceBootstrapAlert,
+        };
+      }
+    } catch {
+      // Fall back to network probing when the workspace snapshot cannot be read.
+    }
+  }
 
   if (!Number.isFinite(port) || port <= 0) {
     return {
@@ -1800,10 +1968,11 @@ function recordPreviewLog(session, channel, chunk) {
   }
 }
 
-export function recordPreviewResponse(session, body, statusCode, upstreamPath) {
+export function recordPreviewResponse(session, body, statusCode, upstreamPath, contentType = '') {
   const normalizedBody = normalizePreviewText(body);
+  const shouldInspectForAlerts = shouldInspectPreviewResponseForAlerts(upstreamPath, contentType);
   const detectedAlert =
-    extractPreviewAlertFromText(normalizedBody) ||
+    (shouldInspectForAlerts ? extractPreviewAlertFromText(normalizedBody) : null) ||
     (statusCode >= 500
       ? {
           type: 'error',
@@ -1813,8 +1982,6 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath) {
           source: 'preview',
         }
       : null);
-
-  const existingAlert = session.previewDiagnostics.alert;
 
   if (detectedAlert) {
     touchPreviewDiagnostics(session, {
@@ -1830,17 +1997,9 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath) {
   if (
     statusCode >= 200 &&
     statusCode < 400 &&
-    (upstreamPath === '/' || upstreamPath === '/index.html' || upstreamPath.endsWith('.html'))
+    shouldInspectForAlerts &&
+    !(session.previewDiagnostics?.status === 'error' && session.previewDiagnostics?.alert)
   ) {
-    if (existingAlert) {
-      touchPreviewDiagnostics(session, {
-        status: 'error',
-        healthy: false,
-        alert: existingAlert,
-      });
-      return;
-    }
-
     touchPreviewDiagnostics(session, {
       status: session.preview ? 'ready' : 'idle',
       healthy: true,
@@ -1917,6 +2076,72 @@ async function readWorkspacePackageJson(session) {
     raw,
     json: JSON.parse(raw),
   };
+}
+
+function buildHostedWorkspaceBootstrapPackageJson() {
+  return `${JSON.stringify(
+    {
+      name: 'bolt-runtime-app',
+      private: true,
+      version: '0.0.0',
+      type: 'module',
+      scripts: {
+        dev: 'vite --host 0.0.0.0 --port 5173',
+        build: 'vite build',
+        preview: 'vite preview --host 0.0.0.0 --port 4173',
+      },
+      dependencies: {
+        react: HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS.react,
+        'react-dom': HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS.reactDom,
+      },
+      devDependencies: {
+        vite: HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS.vite,
+        '@vitejs/plugin-react': HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS.pluginReact,
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function buildHostedWorkspaceBootstrapIndexHtml(mainEntryPath) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bolt.gives app</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/${String(mainEntryPath || 'src/main.jsx').replace(/^\//, '')}"></script>
+  </body>
+</html>
+`;
+}
+
+function buildHostedWorkspaceBootstrapMainEntry(appImportPath) {
+  return `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from '${appImportPath}';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+`;
+}
+
+function buildHostedWorkspaceBootstrapViteConfig() {
+  return `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});
+`;
 }
 
 async function readWorkspaceLockfile(session) {
@@ -2095,6 +2320,19 @@ export function inferHostedWorkspaceStartCommand(packageJson) {
   return null;
 }
 
+function commandLikelyUsesWorkspaceDependencies(command = '') {
+  const normalized = String(command || '').trim().toLowerCase();
+
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    commandNeedsProjectManifest(normalized) ||
+    /\b(vite|next|astro|remix|react-scripts|webpack|parcel|nuxt|svelte-kit)\b/i.test(normalized)
+  );
+}
+
 export function normalizePackageImportSpecifier(specifier) {
   const value = String(specifier || '').trim();
 
@@ -2225,25 +2463,244 @@ async function walkWorkspaceFiles(rootDir) {
   return results;
 }
 
+async function ensureHostedWorkspaceViteSupportFiles(session) {
+  const packageJsonRecord = await readWorkspacePackageJson(session);
+
+  if (!packageJsonRecord?.json) {
+    return [];
+  }
+
+  const scripts = packageJsonRecord.json.scripts || {};
+  const usesVite = Boolean(
+    packageJsonRecord.json.dependencies?.vite ||
+      packageJsonRecord.json.devDependencies?.vite ||
+      Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
+  );
+
+  if (!usesVite) {
+    return [];
+  }
+
+  const tsconfigPath = path.join(session.dir, 'tsconfig.json');
+
+  if (!(await exists(tsconfigPath))) {
+    return [];
+  }
+
+  let tsconfig;
+
+  try {
+    tsconfig = JSON.parse(await fs.readFile(tsconfigPath, 'utf8'));
+  } catch {
+    return [];
+  }
+
+  const referencedPaths = Array.isArray(tsconfig?.references)
+    ? new Set(
+        tsconfig.references
+          .map((reference) => String(reference?.path || '').trim())
+          .filter(Boolean)
+          .map((referencePath) => referencePath.replace(/^[.][/\\]/, '')),
+      )
+    : new Set();
+
+  if (referencedPaths.size === 0) {
+    return [];
+  }
+
+  const generatedFiles = [];
+  const needsTsconfigApp = referencedPaths.has('tsconfig.app.json');
+  const needsTsconfigNode = referencedPaths.has('tsconfig.node.json');
+  const usesReact = Boolean(
+    packageJsonRecord.json.dependencies?.react ||
+      packageJsonRecord.json.devDependencies?.react ||
+      packageJsonRecord.json.dependencies?.['react-dom'] ||
+      packageJsonRecord.json.devDependencies?.['react-dom'],
+  );
+  const sourceEntries = await walkWorkspaceFiles(session.dir);
+  const usesJsSources = sourceEntries.some((entry) => entry.path.startsWith('src/') && /\.jsx?$/.test(entry.path));
+  const tsconfigAppPath = path.join(session.dir, 'tsconfig.app.json');
+  const tsconfigNodePath = path.join(session.dir, 'tsconfig.node.json');
+
+  if (needsTsconfigApp && !(await exists(tsconfigAppPath))) {
+    const tsconfigAppJson = {
+      compilerOptions: {
+        target: 'ES2020',
+        useDefineForClassFields: true,
+        lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+        module: 'ESNext',
+        skipLibCheck: true,
+        moduleResolution: 'Bundler',
+        allowImportingTsExtensions: true,
+        resolveJsonModule: true,
+        isolatedModules: true,
+        moduleDetection: 'force',
+        noEmit: true,
+        jsx: usesReact ? 'react-jsx' : 'preserve',
+        ...(usesJsSources ? { allowJs: true, checkJs: false } : {}),
+      },
+      include: ['src'],
+    };
+
+    await writeWorkspaceFileAtomic(tsconfigAppPath, `${JSON.stringify(tsconfigAppJson, null, 2)}\n`);
+    generatedFiles.push('tsconfig.app.json');
+  }
+
+  if (needsTsconfigNode && !(await exists(tsconfigNodePath))) {
+    const tsconfigNodeJson = {
+      compilerOptions: {
+        composite: true,
+        skipLibCheck: true,
+        module: 'ESNext',
+        moduleResolution: 'Bundler',
+        allowSyntheticDefaultImports: true,
+      },
+      include: ['vite.config.*'],
+    };
+
+    await writeWorkspaceFileAtomic(tsconfigNodePath, `${JSON.stringify(tsconfigNodeJson, null, 2)}\n`);
+    generatedFiles.push('tsconfig.node.json');
+  }
+
+  return generatedFiles;
+}
+
+export async function ensureHostedWorkspaceProjectBootstrap(session) {
+  if (await workspaceHasOwnProjectManifest(session.dir)) {
+    return {
+      generatedFiles: [],
+      inferredStartCommand: null,
+    };
+  }
+
+  const entries = await walkWorkspaceFiles(session.dir);
+  const sourcePaths = new Set(entries.map((entry) => entry.path));
+  const packageImports = new Set(extractWorkspacePackageImports(entries));
+  const hasReactImports = packageImports.has('react') || packageImports.has('react-dom');
+  const hasReactSource = entries.some((entry) => /\.(jsx|tsx)$/i.test(entry.path));
+
+  if (!hasReactImports && !hasReactSource) {
+    return {
+      generatedFiles: [],
+      inferredStartCommand: null,
+    };
+  }
+
+  const appEntry =
+    entries.find((entry) => /^src\/App\.tsx$/i.test(entry.path)) ||
+    entries.find((entry) => /^src\/App\.jsx$/i.test(entry.path));
+  const mainEntry =
+    entries.find((entry) => /^src\/main\.(?:tsx|jsx|ts|js)$/i.test(entry.path)) || null;
+  const indexHtmlPath = path.join(session.dir, 'index.html');
+  const viteConfigTsPath = path.join(session.dir, 'vite.config.ts');
+  const viteConfigJsPath = path.join(session.dir, 'vite.config.js');
+  const hasIndexHtml = await exists(indexHtmlPath);
+  const indexHtmlContent = hasIndexHtml ? await fs.readFile(indexHtmlPath, 'utf8') : '';
+  const referencedMainPath = indexHtmlContent.match(VITE_MAIN_ENTRY_SRC_RE)?.[3]?.replace(/^\//, '') || null;
+  const desiredMainPath =
+    referencedMainPath ||
+    mainEntry?.path ||
+    (appEntry ? `src/main${appEntry.path.endsWith('.tsx') ? '.tsx' : '.jsx'}` : null);
+
+  if (!desiredMainPath) {
+    return {
+      generatedFiles: [],
+      inferredStartCommand: null,
+    };
+  }
+
+  const generatedFiles = [];
+
+  if (!hasIndexHtml) {
+    await writeWorkspaceFileAtomic(indexHtmlPath, buildHostedWorkspaceBootstrapIndexHtml(desiredMainPath));
+    generatedFiles.push('index.html');
+  }
+
+  if (!sourcePaths.has(desiredMainPath) && appEntry) {
+    const mainAbsolutePath = path.join(session.dir, desiredMainPath);
+    await fs.mkdir(path.dirname(mainAbsolutePath), { recursive: true });
+    await writeWorkspaceFileAtomic(
+      mainAbsolutePath,
+      buildHostedWorkspaceBootstrapMainEntry(`./${path.posix.basename(appEntry.path).replace(/\.(tsx|jsx)$/i, '')}`),
+    );
+    generatedFiles.push(desiredMainPath);
+  }
+
+  if (!(await exists(viteConfigTsPath)) && !(await exists(viteConfigJsPath))) {
+    await writeWorkspaceFileAtomic(viteConfigJsPath, buildHostedWorkspaceBootstrapViteConfig());
+    generatedFiles.push('vite.config.js');
+  }
+
+  const packageJsonPath = path.join(session.dir, 'package.json');
+
+  if (!(await exists(packageJsonPath))) {
+    await writeWorkspaceFileAtomic(packageJsonPath, buildHostedWorkspaceBootstrapPackageJson());
+    generatedFiles.push('package.json');
+  }
+
+  return {
+    generatedFiles,
+    inferredStartCommand: generatedFiles.length > 0 ? 'pnpm run dev' : null,
+  };
+}
+
+export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
+  const generatedFiles = await ensureHostedWorkspaceViteSupportFiles(session);
+
+  if (generatedFiles.length === 0) {
+    return {
+      generatedFiles: [],
+      fileMap: {},
+    };
+  }
+
+  const fileMap = {};
+
+  for (const relativePath of generatedFiles) {
+    const absolutePath = path.join(session.dir, relativePath);
+    const workbenchPath = path.posix.join(WORK_DIR, relativePath);
+    const content = await fs.readFile(absolutePath, 'utf8');
+
+    fileMap[workbenchPath] = {
+      type: 'file',
+      content,
+      isBinary: false,
+    };
+  }
+
+  return {
+    generatedFiles,
+    fileMap,
+  };
+}
+
 export async function prepareHostedWorkspaceForStart(session, options = {}) {
-  const { writeEvent = null } = options;
+  const { writeEvent = null, startCommand = '' } = options;
+  const bootstrapRepair = await ensureHostedWorkspaceProjectBootstrap(session);
   let packageJsonRecord = await readWorkspacePackageJson(session);
 
   if (!packageJsonRecord) {
     return {
-      changed: false,
+      changed: bootstrapRepair.generatedFiles.length > 0,
       installedPackages: [],
       sanitizedFiles: [],
+      generatedFiles: bootstrapRepair.generatedFiles,
     };
   }
 
   const entries = await walkWorkspaceFiles(session.dir);
   const installedPackages = [];
   const sanitizedFiles = [];
+  const generatedFiles = [...bootstrapRepair.generatedFiles, ...(await ensureHostedWorkspaceViteSupportFiles(session))];
   let packageJson = packageJsonRecord.json;
   const lockfileRecord = await readWorkspaceLockfile(session);
   const dependencyFingerprint = createWorkspaceDependencyFingerprint(packageJsonRecord.raw, lockfileRecord?.raw || '');
   const hasNodeModules = await exists(path.join(session.dir, 'node_modules'));
+  const shouldPrepareDependenciesForStart = Boolean(
+    inferHostedWorkspaceStartCommand(packageJson) ||
+      bootstrapRepair.inferredStartCommand ||
+      commandLikelyUsesWorkspaceDependencies(startCommand),
+  );
   const hasTailwindDependency = Boolean(
     packageJson.dependencies?.tailwindcss || packageJson.devDependencies?.tailwindcss,
   );
@@ -2271,7 +2728,8 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   }
 
   const shouldInstallDependencies =
-    !hasNodeModules || session.lastPreparedDependencyFingerprint !== dependencyFingerprint;
+    shouldPrepareDependenciesForStart &&
+    (!hasNodeModules || session.lastPreparedDependencyFingerprint !== dependencyFingerprint);
 
   if (shouldInstallDependencies) {
     writeEvent?.({
@@ -2423,9 +2881,10 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   }
 
   return {
-    changed: sanitizedFiles.length > 0 || installedPackages.length > 0,
+    changed: sanitizedFiles.length > 0 || installedPackages.length > 0 || generatedFiles.length > 0,
     installedPackages,
     sanitizedFiles,
+    generatedFiles,
   };
 }
 
@@ -2839,7 +3298,14 @@ export function updateSessionPreview(session, req, port) {
   }
 
   const resolvedPort = Number(port);
+  const previousPort = Number(session.preview?.port || 0);
   const previewBaseUrl = `${getRequestOrigin(req)}/runtime/preview/${session.id}/${resolvedPort}`;
+
+  if (previousPort > 0 && previousPort !== resolvedPort && reservedPreviewPorts.get(previousPort) === session.id) {
+    reservedPreviewPorts.delete(previousPort);
+  }
+
+  reservedPreviewPorts.set(resolvedPort, session.id);
 
   session.preview = {
     ...(session.preview || {}),
@@ -2850,6 +3316,43 @@ export function updateSessionPreview(session, req, port) {
   broadcastPreviewState(session);
 
   return session.preview;
+}
+
+export function releaseReservedPreviewPorts(session) {
+  for (const [port, ownerSessionId] of reservedPreviewPorts.entries()) {
+    if (ownerSessionId === session.id) {
+      reservedPreviewPorts.delete(port);
+    }
+  }
+}
+
+export function isPreviewPortReserved(port, sessionId) {
+  const ownerSessionId = reservedPreviewPorts.get(Number(port));
+
+  if (!ownerSessionId) {
+    return false;
+  }
+
+  return sessionId ? ownerSessionId === sessionId : true;
+}
+
+export function resolveStalePreviewRedirectPath(session, requestUrl, pathname = requestUrl) {
+  const target = parsePreviewProxyRequestTarget(requestUrl || pathname);
+
+  if (!target) {
+    return null;
+  }
+
+  const currentPreviewPort = Number(session?.preview?.port || 0);
+
+  if (currentPreviewPort <= 0 || currentPreviewPort === Number(target.portRaw)) {
+    return null;
+  }
+
+  return String(requestUrl || pathname).replace(
+    `/runtime/preview/${target.sessionId}/${target.portRaw}`,
+    `/runtime/preview/${target.sessionId}/${currentPreviewPort}`,
+  );
 }
 
 export function normalizeIncomingPreviewAlert(input) {
@@ -2888,6 +3391,10 @@ function isPortAvailable(port) {
 
 async function allocatePreviewPort() {
   for (let port = PREVIEW_PORT_RANGE_START; port <= PREVIEW_PORT_RANGE_END; port++) {
+    if (reservedPreviewPorts.has(port)) {
+      continue;
+    }
+
     // eslint-disable-next-line no-await-in-loop
     if (await isPortAvailable(port)) {
       return port;
@@ -2930,6 +3437,7 @@ async function terminateSessionProcesses(session) {
   }
 
   session.processes.clear();
+  releaseReservedPreviewPorts(session);
   session.preview = undefined;
   clearPreviewDiagnostics(session);
   clearPreviewRecoveryState(session);
@@ -2944,13 +3452,40 @@ async function handleRunCommand(req, res, session, body) {
   }
 
   const writeEvent = createEventWriter(res);
-  const effectiveCommand =
-    kind === 'start'
-      ? normalizeStartCommand(command, session.preview?.port || (await allocatePreviewPort()))
-      : command.trim();
-  const previewPort =
-    kind === 'start' ? Number(effectiveCommand.match(/--port\s+(\d+)/i)?.[1] || session.preview?.port || 0) : undefined;
-  const needsManifest = commandNeedsProjectManifest(effectiveCommand);
+  const requestedPreviewPort = kind === 'start' ? session.preview?.port || (await allocatePreviewPort()) : undefined;
+  let effectiveCommand = kind === 'start' ? normalizeStartCommand(command, requestedPreviewPort) : command.trim();
+  let previewPort =
+    kind === 'start' ? extractConfiguredStartPort(effectiveCommand) || Number(requestedPreviewPort || 0) : undefined;
+  let needsManifest = commandNeedsProjectManifest(effectiveCommand);
+
+  if (needsManifest && !(await workspaceHasOwnProjectManifest(session.dir))) {
+    const bootstrapRepair = await ensureHostedWorkspaceProjectBootstrap(session);
+
+    if (bootstrapRepair.generatedFiles.length > 0) {
+      writeEvent({
+        type: 'status',
+        message: `Architect bootstrapped a runnable workspace manifest: ${bootstrapRepair.generatedFiles.join(', ')}`,
+      });
+    }
+  }
+
+  if (
+    kind === 'start' &&
+    /(^|&&\s*)(?:npx\s+--yes\s+)?serve\b/i.test(effectiveCommand) &&
+    (await workspaceHasOwnProjectManifest(session.dir))
+  ) {
+    const inferredStartCommand = await inferWorkspaceStartCommand(session);
+
+    if (inferredStartCommand) {
+      effectiveCommand = normalizeStartCommand(inferredStartCommand, requestedPreviewPort);
+      previewPort = extractConfiguredStartPort(effectiveCommand) || Number(requestedPreviewPort || 0);
+      needsManifest = commandNeedsProjectManifest(effectiveCommand);
+      writeEvent({
+        type: 'status',
+        message: `Architect upgraded the preview start command to "${effectiveCommand}" after bootstrapping the workspace runtime.`,
+      });
+    }
+  }
 
   if (needsManifest && !(await workspaceHasOwnProjectManifest(session.dir))) {
     writeEvent({
@@ -2972,12 +3507,19 @@ async function handleRunCommand(req, res, session, body) {
 
   if (kind === 'start') {
     try {
-      const preparation = await prepareHostedWorkspaceForStart(session, { writeEvent });
+      const preparation = await prepareHostedWorkspaceForStart(session, { writeEvent, startCommand: effectiveCommand });
 
       if (preparation.sanitizedFiles.length > 0) {
         writeEvent({
           type: 'status',
           message: `Architect removed incompatible legacy Tailwind directives from ${preparation.sanitizedFiles.join(', ')}`,
+        });
+      }
+
+      if (preparation.generatedFiles.length > 0) {
+        writeEvent({
+          type: 'status',
+          message: `Architect generated missing runtime support files: ${preparation.generatedFiles.join(', ')}`,
         });
       }
 
@@ -3011,6 +3553,10 @@ async function handleRunCommand(req, res, session, body) {
   if (kind === 'start') {
     await terminateSessionProcesses(session);
     clearPreviewDiagnostics(session, 'starting');
+
+    if (previewPort) {
+      reservedPreviewPorts.set(previewPort, session.id);
+    }
   }
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
@@ -3039,6 +3585,39 @@ async function handleRunCommand(req, res, session, body) {
   });
   const previewCoordinator = createPreviewProbeCoordinator(waitForPreview);
   previewProbePromise = previewCoordinator.readyPromise;
+  const attachPreviewProcessLivenessMonitor = () => {
+    if (kind !== 'start') {
+      return;
+    }
+
+    child.once('close', (exitCode) => {
+      const activeHandle = session.processes.get(processKey);
+
+      if (!activeHandle || activeHandle.process !== child) {
+        return;
+      }
+
+      session.processes.delete(processKey);
+      releaseReservedPreviewPorts(session);
+      session.preview = undefined;
+
+      const message = `Hosted preview process exited with code ${exitCode ?? 1}.`;
+
+      appendPreviewDiagnosticEntries(session, 'preview', message);
+      touchPreviewDiagnostics(session, {
+        status: 'error',
+        healthy: false,
+        alert: {
+          type: 'error',
+          title: 'Preview Error',
+          description: 'The hosted preview process exited unexpectedly.',
+          content: message,
+          source: 'preview',
+        },
+      });
+      scheduleHostedAutoStartAfterSync(session);
+    });
+  };
 
   const detectPreviewPort = (text) => {
     if (kind !== 'start') {
@@ -3085,11 +3664,18 @@ async function handleRunCommand(req, res, session, body) {
       ]);
       const resolvedPort = (await previewProbePromise).port;
       updateSessionPreview(session, req, resolvedPort);
+      const initialProbe = await probeSessionPreviewHealth(session);
+
+      if (initialProbe.alert || !initialProbe.healthy) {
+        throw new Error(initialProbe.alert?.description || 'Preview did not pass the initial boot verification.');
+      }
+
       touchPreviewDiagnostics(session, {
         status: 'ready',
         healthy: true,
         alert: null,
       });
+      attachPreviewProcessLivenessMonitor();
       writeEvent({
         type: 'ready',
         preview: session.preview,
@@ -3114,6 +3700,9 @@ async function handleRunCommand(req, res, session, body) {
       writeEvent({ type: 'stderr', chunk: `${error instanceof Error ? error.message : String(error)}\n` });
       child.kill('SIGTERM');
       const exitCode = await exitPromise.catch(() => 1);
+      session.processes.delete(processKey);
+      releaseReservedPreviewPorts(session);
+      session.preview = undefined;
       writeEvent({ type: 'exit', exitCode });
       clearTimeout(timeout);
       settled = true;
@@ -3167,6 +3756,17 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   }
 
   const port = Number(portRaw);
+  const nextPreviewPath = resolveStalePreviewRedirectPath(session, req.url || pathname, pathname);
+
+  if (nextPreviewPath) {
+    res.writeHead(307, {
+      Location: nextPreviewPath,
+      'Cache-Control': 'no-store',
+    });
+    res.end();
+    return;
+  }
+
   const method = String(req.method || 'GET').toUpperCase();
   const scheduleRetry = () => {
     if (res.writableEnded || res.destroyed) {
@@ -3232,7 +3832,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       upstreamRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         const rewritten = rewritePreviewAssetUrls(body, previewBasePath);
-        recordPreviewResponse(session, rewritten, statusCode, upstreamPath);
+        recordPreviewResponse(session, rewritten, statusCode, upstreamPath, contentType);
 
         delete headers['content-length'];
         delete headers['content-encoding'];
@@ -4596,7 +5196,15 @@ export function createRuntimeServer() {
           session.publicOrigin = getRequestOrigin(req);
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
-          session.currentFileMap = mergeWorkspaceFileMap(session.currentFileMap, incomingFiles, { prune });
+          const supportRepair = await repairHostedWorkspaceSupportFilesAfterSync(session);
+          if (Object.keys(supportRepair.fileMap).length > 0) {
+            appendPreviewDiagnosticEntries(
+              session,
+              'architect',
+              `Architect generated missing runtime support files after sync: ${supportRepair.generatedFiles.join(', ')}`,
+            );
+          }
+          await refreshSessionCurrentFileMapFromDisk(session);
           scheduleHostedAutoStartAfterSync(session);
           schedulePreviewVerificationAfterMutation(session, 'a workspace sync');
         });

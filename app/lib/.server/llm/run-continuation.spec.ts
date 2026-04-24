@@ -36,6 +36,21 @@ describe('shouldForceRunContinuation', () => {
     expect(shouldContinue).toBe(false);
   });
 
+  it('continues when the assistant emitted a non-runnable natural-language start action', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a calendar app and run it.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Calendar</div>;}</boltAction>
+<boltAction type="start">Starting the Vite dev server for the calendar app now.</boltAction>
+`,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('run-intent-without-start');
+  });
+
   it('continues when output is bootstrap-only even if start action exists', () => {
     const decision = analyzeRunContinuation({
       chatMode: 'build',
@@ -46,6 +61,34 @@ describe('shouldForceRunContinuation', () => {
 <boltAction type="shell">pnpm install</boltAction>
 <boltAction type="start">pnpm run dev</boltAction>
 `,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('bootstrap-only-shell-actions');
+  });
+
+  it('continues when a scaffold shell runs against an existing request snapshot without new implementation files', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent:
+        'Build a small single-page React calendar app that lets the user add and view events. Implement complete files and run it.',
+      assistantContent: `
+<boltAction type="shell">pnpm dlx create-vite@latest . --template react --no-interactive --overwrite && pnpm install --reporter=append-only --no-frozen-lockfile</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: '{"scripts":{"dev":"vite --host 0.0.0.0 --port 5173"}}',
+        },
+        '/home/project/src/App.jsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <main>Existing shell</main>;}',
+        },
+      } as FileMap,
     });
 
     expect(decision.shouldContinue).toBe(true);
@@ -82,6 +125,67 @@ describe('shouldForceRunContinuation', () => {
 
     expect(decision.shouldContinue).toBe(false);
     expect(decision.reason).toBe('continuation-not-required');
+  });
+
+  it('continues in build mode when implementation was written but no runnable start action exists yet', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a small calendar app for a clinic.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Calendar</div>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+`,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('run-intent-without-start');
+  });
+
+  it('continues when a follow-up build turn only verifies the app after replacing the starter entry', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a small calendar app for a clinic.',
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <div>Calendar</div>;}</boltAction>
+<boltAction type="shell">ps aux | grep -E "vite|5173" | grep -v grep</boltAction>
+<boltAction type="shell">curl -s -o /dev/null -w "%{http_code}\\n" http://127.0.0.1:5173</boltAction>
+`,
+      currentFiles: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+          isBinary: false,
+        },
+      } as unknown as FileMap,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('run-intent-without-start');
+  });
+
+  it('continues when support files exist but no concrete app entry was generated yet', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: "Create an appointment scheduling website for a doctor's office in React.",
+      assistantContent: `
+<boltAction type="file" filePath="package.json">{
+  "name": "doctor-scheduler",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="src/components/Header.tsx">export function Header(){return <header>Appointments</header>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+`,
+    });
+
+    expect(decision.shouldContinue).toBe(true);
+    expect(decision.reason).toBe('starter-without-implementation');
   });
 
   it('does not classify scaffold output as incomplete when implementation files are already present', () => {
@@ -289,6 +393,123 @@ describe('shouldForceRunContinuation', () => {
 <boltAction type="file" filePath="README.md"># starter</boltAction>
 </boltArtifact>
 `,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('does not synthesize a runtime handoff until a concrete primary entry file exists', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="artifact-1" title="doctor app">
+<boltAction type="file" filePath="package.json">{
+  "name": "doctor-scheduler",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173"
+  }
+}</boltAction>
+<boltAction type="file" filePath="src/components/Header.tsx">export function Header(){return <header>Appointments</header>;}</boltAction>
+<boltAction type="shell">pnpm install --no-frozen-lockfile</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('does not synthesize a runtime handoff from a stale source snapshot without a manifest or new file actions', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="runtime-only" title="Runtime">
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+      currentFiles: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <main>Existing app</main>;}',
+        },
+        '/home/project/src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('does not synthesize a runtime handoff from request snapshot files when the response added no implementation', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="runtime-only" title="Runtime">
+<boltAction type="shell">pnpm dlx create-vite@latest . --template react --no-interactive --overwrite && pnpm install --reporter=append-only --no-frozen-lockfile</boltAction>
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: '{"scripts":{"dev":"vite --host 0.0.0.0 --port 5173"}}',
+        },
+        '/home/project/src/App.jsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <main>Existing shell</main>;}',
+        },
+        '/home/project/src/main.jsx': {
+          type: 'file',
+          isBinary: false,
+          content:
+            "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App.jsx';\n",
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toBeNull();
+  });
+
+  it('does not synthesize a runtime handoff from the stock Vite React starter', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltArtifact id="runtime-only" title="Runtime">
+<boltAction type="start">pnpm run dev</boltAction>
+</boltArtifact>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: '{"scripts":{"dev":"vite --host 0.0.0.0 --port 5173"}}',
+        },
+        '/home/project/src/App.jsx': {
+          type: 'file',
+          isBinary: false,
+          content: `
+import { useState } from 'react';
+import reactLogo from './assets/react.svg';
+import viteLogo from '/vite.svg';
+
+function App() {
+  const [count, setCount] = useState(0);
+  return <><h1>Vite + React</h1><button onClick={() => setCount((count) => count + 1)}>count is {count}</button></>;
+}
+
+export default App;
+`,
+        },
+        '/home/project/src/main.jsx': {
+          type: 'file',
+          isBinary: false,
+          content:
+            "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App.jsx';\n",
+        },
+      } as FileMap,
     });
 
     expect(handoff).toBeNull();
@@ -574,6 +795,48 @@ describe('shouldForceRunContinuation', () => {
     expect(handoff?.setupCommand).not.toMatch(/\bnpm\s+install\b/i);
     expect(handoff?.assistantContent).toContain('<boltAction type="shell">');
     expect(handoff?.assistantContent).toContain('<boltAction type="start">pnpm run dev</boltAction>');
+  });
+
+  it('strips detached background operators from explicit runtime handoff start commands', async () => {
+    const handoff = await synthesizeRunHandoff({
+      assistantContent: `
+<boltAction type="file" filePath="src/App.tsx">export default function App(){return <main>Scheduler Ready</main>;}</boltAction>
+<boltAction type="shell">pnpm install</boltAction>
+<boltAction type="start">pnpm run dev &</boltAction>
+`,
+      currentFiles: {
+        '/home/project/package.json': {
+          type: 'file',
+          isBinary: false,
+          content: JSON.stringify({
+            name: 'clinic-scheduler',
+            private: true,
+            packageManager: 'pnpm@9.0.0',
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          }),
+        },
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'export default function App(){return <p>Your fallback starter is ready.</p>;}',
+        },
+        '/home/project/src/main.tsx': {
+          type: 'file',
+          isBinary: false,
+          content: 'import React from "react";',
+        },
+      } as FileMap,
+    });
+
+    expect(handoff).toMatchObject({
+      reason: 'inferred-project-commands',
+      startCommand: 'pnpm run dev',
+    });
+    expect(handoff?.assistantContent).toContain('<boltAction type="start">pnpm run dev</boltAction>');
+    expect(handoff?.assistantContent).not.toContain('pnpm run dev &');
   });
 
   it('ignores node_modules package manifests when synthesizing runtime handoff commands', async () => {

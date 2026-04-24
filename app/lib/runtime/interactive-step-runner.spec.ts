@@ -187,4 +187,19 @@ describe('InteractiveStepRunner', () => {
     expect(result.error).toBe('boom');
     expect(events).toEqual(['step-start', 'error']);
   });
+
+  it('turns an undefined executor result into a normal failed step', async () => {
+    const { runner, events } = createRunner({
+      async executeStep() {
+        return undefined as any;
+      },
+    });
+
+    const result = await runner.run([{ description: 'missing-result', command: ['echo', 'oops'] }]);
+
+    expect(result.status).toBe('error');
+    expect(result.failedStepIndex).toBe(0);
+    expect(result.error).toBe('Step executor returned no result.');
+    expect(events).toEqual(['step-start', 'error']);
+  });
 });

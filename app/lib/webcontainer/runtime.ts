@@ -11,9 +11,11 @@ export function getSelectedRuntime(): RuntimeType {
     typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function' ? localStorage : null;
   const stored = storage?.getItem('bolt_runtime');
 
-  // Explicit user preference always wins — honor persisted selection before
-  // consulting any runtime-feature flags so 'webcontainer' isn't overridden by
-  // a hosted-runtime default.
+  /*
+   * Explicit user preference always wins — honor persisted selection before
+   * consulting any runtime-feature flags so 'webcontainer' isn't overridden by
+   * a hosted-runtime default.
+   */
   if (stored === 'webcontainer' || stored === 'bolt-container' || stored === 'hosted') {
     return stored;
   }

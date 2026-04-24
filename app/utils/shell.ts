@@ -25,6 +25,10 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
     },
   });
 
+  if (!process?.input || !process.output) {
+    throw new Error('WebContainer shell process did not expose input/output streams');
+  }
+
   const input = process.input.getWriter();
   const output = process.output;
 
@@ -69,8 +73,10 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
       }),
     )
     .catch((error: unknown) => {
-      // If the interactive OSC never arrived, unblock awaiters on jshReady
-      // instead of leaving jshReady.promise pending forever.
+      /*
+       * If the interactive OSC never arrived, unblock awaiters on jshReady
+       * instead of leaving jshReady.promise pending forever.
+       */
       if (!isInteractive) {
         jshReady.reject(error instanceof Error ? error : new Error(String(error)));
       }
@@ -184,6 +190,10 @@ export class BoltShell {
       },
     });
 
+    if (!process?.input || !process.output) {
+      throw new Error('WebContainer shell process did not expose input/output streams');
+    }
+
     const input = process.input.getWriter();
     this.#shellInputStream = input;
 
@@ -211,8 +221,10 @@ export class BoltShell {
         }),
       )
       .catch((error: unknown) => {
-        // If the interactive OSC never arrived, unblock awaiters on jshReady
-        // instead of leaving jshReady.promise pending forever.
+        /*
+         * If the interactive OSC never arrived, unblock awaiters on jshReady
+         * instead of leaving jshReady.promise pending forever.
+         */
         if (!isInteractive) {
           jshReady.reject(error instanceof Error ? error : new Error(String(error)));
         }
@@ -287,19 +299,32 @@ export class BoltShell {
 
     const state = this.executionState.get();
 
-    if (state?.active && state.abort) {
-      state.abort();
-    }
-
     /*
-     * interrupt the current execution
-     *  this.#shellInputStream?.write('\x03');
+     * If another command is still running, interrupt it and wait for its own
+     * waitTillOscCode('prompt') to drain the shared output-stream reader before
+     * we start a new one. Kicking off our own waitTillOscCode here would race
+     * the previous call on the same ReadableStreamDefaultReader — chunks are
+     * handed out in arrival order to whichever `.read()` is queued, so one
+     * side can miss the OSC `prompt` signal and hang indefinitely, blocking
+     * every subsequent action (e.g. the starter's `pnpm run dev` blocking a
+     * follow-up `npm install` / `npm run dev`).
      */
-    this.terminal.input('\x03');
-    await this.waitTillOscCode('prompt');
+    if (state?.active) {
+      if (state.abort) {
+        state.abort();
+      }
 
-    if (state && state.executionPrms) {
-      await state.executionPrms;
+      this.terminal.input('\x03');
+
+      if (state.executionPrms) {
+        try {
+          await state.executionPrms;
+        } catch {
+          // previous call rejected; we still want to proceed
+        }
+      } else {
+        await this.waitTillOscCode('prompt');
+      }
     }
 
     //start a new execution

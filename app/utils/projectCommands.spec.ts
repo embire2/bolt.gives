@@ -98,7 +98,9 @@ describe('detectProjectCommands', () => {
       },
     ]);
 
-    expect(commands.setupCommand).toContain('pnpm install');
+    expect(commands.setupCommand).toBe(
+      'CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0 pnpm install --no-frozen-lockfile',
+    );
     expect(commands.startCommand).toBe('pnpm run dev');
   });
 
@@ -135,5 +137,29 @@ describe('detectProjectCommands', () => {
 
     expect(commands.setupCommand).toContain('pnpm install');
     expect(commands.startCommand).toBe('pnpm run dev');
+  });
+
+  it('bootstraps a Vite React workspace when source files exist without package.json', async () => {
+    const commands = await detectProjectCommands([
+      {
+        path: '/index.html',
+        content:
+          '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>',
+      },
+      {
+        path: '/src/main.jsx',
+        content:
+          "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nReactDOM.createRoot(document.getElementById('root')).render(<App />);\n",
+      },
+      {
+        path: '/src/App.jsx',
+        content: 'export default function App(){return <div>Doctor schedule</div>;}\n',
+      },
+    ]);
+
+    expect(commands.type).toBe('Node.js');
+    expect(commands.setupCommand).toContain('pnpm install');
+    expect(commands.startCommand).toBe('pnpm run dev');
+    expect(commands.followupMessage).toContain('Bootstrapping a minimal package manifest');
   });
 });

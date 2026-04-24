@@ -1,5 +1,4 @@
-import { useStore } from '@nanostores/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import { tokenUsageStore } from '~/lib/stores/performance';
 import { classNames } from '~/utils/classNames';
@@ -33,6 +32,23 @@ const DEFAULT_THRESHOLDS: PerformanceThresholds = {
   tokenTotal: 25000,
 };
 
+interface PerformanceSnapshot {
+  cpuPercent: number;
+  sample: NodePerformanceSample | null;
+}
+
+const EMPTY_PERFORMANCE_SNAPSHOT: PerformanceSnapshot = {
+  cpuPercent: 0,
+  sample: null,
+};
+
+const performanceListeners = new Set<() => void>();
+let performanceSnapshot: PerformanceSnapshot = EMPTY_PERFORMANCE_SNAPSHOT;
+let performancePreviousCpuSample: { total: number; timestamp: number } | null = null;
+let performancePollTimer: ReturnType<typeof setTimeout> | null = null;
+let performancePollController: AbortController | null = null;
+let performancePollInFlight = false;
+
 function readThresholds(): PerformanceThresholds {
   if (typeof window === 'undefined') {
     return DEFAULT_THRESHOLDS;
@@ -55,88 +71,149 @@ function formatMb(bytes = 0) {
   return (bytes / (1024 * 1024)).toFixed(0);
 }
 
+function useTokenUsageSnapshot() {
+  return useSyncExternalStore(
+    (onStoreChange) => tokenUsageStore.subscribe(onStoreChange),
+    () => tokenUsageStore.get(),
+    () => tokenUsageStore.get(),
+  );
+}
+
+function emitPerformanceSnapshot(nextSnapshot: PerformanceSnapshot) {
+  performanceSnapshot = nextSnapshot;
+  performanceListeners.forEach((listener) => listener());
+}
+
+function getNextPerformancePollDelay() {
+  const hidden = typeof document !== 'undefined' ? document.hidden : false;
+
+  if (isHostedRuntimeEnabled()) {
+    return hidden ? 120000 : 60000;
+  }
+
+  return hidden ? 30000 : 10000;
+}
+
+function clearPerformancePollTimer() {
+  if (performancePollTimer) {
+    clearTimeout(performancePollTimer);
+    performancePollTimer = null;
+  }
+}
+
+function schedulePerformancePoll(delayMs: number) {
+  clearPerformancePollTimer();
+
+  if (performanceListeners.size === 0) {
+    return;
+  }
+
+  performancePollTimer = setTimeout(() => {
+    void pollPerformanceSample();
+  }, delayMs);
+}
+
+async function pollPerformanceSample() {
+  if (performancePollInFlight || performanceListeners.size === 0) {
+    return;
+  }
+
+  performancePollInFlight = true;
+
+  const controller = new AbortController();
+  performancePollController = controller;
+
+  try {
+    const response = await fetch('/api/system/performance', {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const nextSample = (await response.json()) as NodePerformanceSample;
+
+    if (!nextSample.available || !nextSample.cpu) {
+      return;
+    }
+
+    const totalCpuMicros = nextSample.cpu.user + nextSample.cpu.system;
+    const previous = performancePreviousCpuSample;
+    let nextCpuPercent = performanceSnapshot.cpuPercent;
+
+    if (previous) {
+      const cpuDeltaMicros = totalCpuMicros - previous.total;
+      const timeDeltaMs = nextSample.timestamp - previous.timestamp;
+
+      if (timeDeltaMs > 0) {
+        const rawPercent = (cpuDeltaMicros / (timeDeltaMs * 1000)) * 100;
+        nextCpuPercent = Math.max(0, Math.min(100, rawPercent));
+      }
+    }
+
+    performancePreviousCpuSample = {
+      total: totalCpuMicros,
+      timestamp: nextSample.timestamp,
+    };
+
+    emitPerformanceSnapshot({
+      sample: nextSample,
+      cpuPercent: nextCpuPercent,
+    });
+  } catch (error) {
+    if ((error as { name?: string })?.name !== 'AbortError') {
+      // Best-effort widget; keep silent if endpoint is unavailable.
+    }
+  } finally {
+    if (performancePollController === controller) {
+      performancePollController = null;
+    }
+
+    performancePollInFlight = false;
+    schedulePerformancePoll(getNextPerformancePollDelay());
+  }
+}
+
+function subscribeToPerformanceSnapshot(listener: () => void) {
+  performanceListeners.add(listener);
+
+  if (performanceListeners.size === 1) {
+    schedulePerformancePoll(0);
+  }
+
+  return () => {
+    performanceListeners.delete(listener);
+
+    if (performanceListeners.size === 0) {
+      clearPerformancePollTimer();
+
+      if (performancePollController) {
+        performancePollController.abort();
+        performancePollController = null;
+      }
+
+      performancePollInFlight = false;
+      performancePreviousCpuSample = null;
+    }
+  };
+}
+
+function usePerformanceSnapshot() {
+  return useSyncExternalStore(
+    subscribeToPerformanceSnapshot,
+    () => performanceSnapshot,
+    () => performanceSnapshot,
+  );
+}
+
 export function PerformanceMonitor() {
-  const tokenUsage = useStore(tokenUsageStore);
-  const [sample, setSample] = useState<NodePerformanceSample | null>(null);
-  const [cpuPercent, setCpuPercent] = useState(0);
-  const thresholdsRef = useRef(readThresholds());
-  const previousCpuRef = useRef<{ total: number; timestamp: number } | null>(null);
-  const hostedRuntimeEnabled = isHostedRuntimeEnabled();
-
-  useEffect(() => {
-    let mounted = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleNextPoll = (delayMs: number) => {
-      if (!mounted) {
-        return;
-      }
-
-      timer = setTimeout(() => {
-        void poll();
-      }, delayMs);
-    };
-
-    const poll = async () => {
-      try {
-        thresholdsRef.current = readThresholds();
-
-        const response = await fetch('/api/system/performance');
-
-        if (!response.ok) {
-          scheduleNextPoll(hostedRuntimeEnabled ? 120000 : 30000);
-          return;
-        }
-
-        const nextSample = (await response.json()) as NodePerformanceSample;
-
-        if (!mounted || !nextSample.available || !nextSample.cpu) {
-          scheduleNextPoll(hostedRuntimeEnabled ? 120000 : 30000);
-          return;
-        }
-
-        const totalCpuMicros = nextSample.cpu.user + nextSample.cpu.system;
-        const previous = previousCpuRef.current;
-
-        if (previous) {
-          const cpuDeltaMicros = totalCpuMicros - previous.total;
-          const timeDeltaMs = nextSample.timestamp - previous.timestamp;
-
-          if (timeDeltaMs > 0) {
-            const rawPercent = (cpuDeltaMicros / (timeDeltaMs * 1000)) * 100;
-            setCpuPercent(Math.max(0, Math.min(100, rawPercent)));
-          }
-        }
-
-        previousCpuRef.current = {
-          total: totalCpuMicros,
-          timestamp: nextSample.timestamp,
-        };
-
-        setSample(nextSample);
-      } catch {
-        // Best-effort widget; keep silent if endpoint is unavailable.
-      } finally {
-        const hidden = typeof document !== 'undefined' ? document.hidden : false;
-        const nextDelayMs = hostedRuntimeEnabled ? (hidden ? 120000 : 60000) : hidden ? 30000 : 10000;
-        scheduleNextPoll(nextDelayMs);
-      }
-    };
-
-    void poll();
-
-    return () => {
-      mounted = false;
-
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [hostedRuntimeEnabled]);
+  const { sample, cpuPercent } = usePerformanceSnapshot();
+  const tokenUsage = useTokenUsageSnapshot();
 
   const recommendations = useMemo(() => {
     const items: string[] = [];
-    const thresholds = thresholdsRef.current;
+    const thresholds = readThresholds();
     const rssMb = Number(formatMb(sample?.memory?.rss));
 
     if (rssMb > thresholds.memoryMb) {

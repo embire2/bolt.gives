@@ -11,20 +11,32 @@ const hostedRuntimeMocks = vi.hoisted(() => ({
 
 vi.mock('./hosted-runtime-client', () => hostedRuntimeMocks);
 
-function createRunnerHarness() {
+function createRunnerHarness(
+  filesSnapshot?: FileMap,
+  options?: { runtimeShell?: boolean; readFile?: ReturnType<typeof vi.fn> },
+) {
   const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
+  const runtimeExecuteCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'runtime ok' });
   const ready = vi.fn().mockResolvedValue(undefined);
+  const runtimeReady = vi.fn().mockResolvedValue(undefined);
   const onStepRunnerEvent = vi.fn();
+  const onAlert = vi.fn();
   const shell = {
     ready,
     terminal: {},
     process: {},
     executeCommand,
   };
+  const runtimeShell = {
+    ready: runtimeReady,
+    terminal: {},
+    process: {},
+    executeCommand: runtimeExecuteCommand,
+  };
   const webcontainer = Promise.resolve({
     workdir: '/home/project',
     fs: {
-      readFile: vi.fn().mockResolvedValue('{}'),
+      readFile: options?.readFile || vi.fn().mockResolvedValue('{}'),
       readdir: vi.fn().mockResolvedValue([]),
       mkdir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined),
@@ -34,16 +46,17 @@ function createRunnerHarness() {
   const runner = new ActionRunner(
     webcontainer as any,
     () => shell as any,
+    filesSnapshot ? () => filesSnapshot : undefined,
     undefined,
     undefined,
-    undefined,
-    undefined,
+    onAlert,
     undefined,
     undefined,
     onStepRunnerEvent,
+    options?.runtimeShell ? () => runtimeShell as any : undefined,
   );
 
-  return { runner, shell, executeCommand, onStepRunnerEvent };
+  return { runner, shell, runtimeShell, executeCommand, runtimeExecuteCommand, onAlert, onStepRunnerEvent };
 }
 
 describe('ActionRunner start actions', () => {
@@ -108,6 +121,188 @@ describe('ActionRunner start actions', () => {
     expect(eventTypes).toContain('step-start');
     expect(eventTypes).toContain('step-end');
     expect(eventTypes).toContain('complete');
+  });
+
+  it('surfaces Vite preview compile errors from local start command output', async () => {
+    const { runner, executeCommand, onAlert } = createRunnerHarness();
+    executeCommand.mockImplementationOnce(async (_runnerId, _command, _abort, onOutput) => {
+      onOutput('  VITE v5.4.0  ready in 200 ms\n');
+      onOutput(
+        '21:03:58 [vite] Pre-transform error: Transform failed with 1 error:\n/src/App.tsx:12:1: ERROR: Unexpected token\n',
+      );
+
+      return {
+        exitCode: 0,
+        output:
+          '  VITE v5.4.0  ready in 200 ms\n21:03:58 [vite] Pre-transform error: Transform failed with 1 error:\n/src/App.tsx:12:1: ERROR: Unexpected token\n',
+      };
+    });
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-start-preview-error',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+
+    const runPromise = runner.runAction(actionData);
+
+    await vi.advanceTimersByTimeAsync(2200);
+    await runPromise;
+
+    expect(onAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        title: 'Preview Error',
+        source: 'preview',
+      }),
+    );
+    expect(onAlert.mock.calls.at(-1)?.[0]).toMatchObject({
+      description: expect.stringContaining('Pre-transform error'),
+    });
+  });
+
+  it('runs local start actions on the dedicated runtime shell when one is available', async () => {
+    const { runner, executeCommand, runtimeExecuteCommand } = createRunnerHarness(undefined, { runtimeShell: true });
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-runtime-shell-start',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+
+    const runPromise = runner.runAction(actionData);
+
+    await vi.advanceTimersByTimeAsync(2200);
+    await runPromise;
+
+    expect(runtimeExecuteCommand).toHaveBeenCalledWith(
+      expect.any(String),
+      'pnpm run dev',
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('keeps follow-up shell actions on the command shell while the runtime shell keeps the preview process alive', async () => {
+    let resolveRuntimeStart: ((value: { exitCode: number; output: string }) => void) | undefined;
+    const { runner, executeCommand, runtimeExecuteCommand } = createRunnerHarness(undefined, { runtimeShell: true });
+
+    runtimeExecuteCommand.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRuntimeStart = resolve;
+        }),
+    );
+
+    const startAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-runtime-shell-start-pending',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+    const shellAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-command-shell-followup',
+      action: {
+        type: 'shell',
+        content: 'pnpm install --no-frozen-lockfile',
+      } as any,
+    };
+
+    runner.addAction(startAction);
+
+    const startPromise = runner.runAction(startAction);
+
+    await vi.advanceTimersByTimeAsync(2200);
+    await startPromise;
+
+    runner.addAction(shellAction);
+    await runner.runAction(shellAction);
+
+    expect(runtimeExecuteCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.any(String),
+      'pnpm install --no-frozen-lockfile --reporter=append-only',
+      expect.any(Function),
+      expect.any(Function),
+    );
+
+    resolveRuntimeStart?.({ exitCode: 0, output: 'preview ready' });
+    await vi.runAllTicks();
+  });
+
+  it('normalizes preview start commands before execution when the workspace uses Vite', async () => {
+    const { runner, executeCommand } = createRunnerHarness({
+      '/home/project/package.json': {
+        type: 'file',
+        content: JSON.stringify({
+          scripts: {
+            dev: 'vite',
+          },
+        }),
+        isBinary: false,
+      } as any,
+    });
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-2b',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev &',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+
+    const runPromise = runner.runAction(actionData);
+
+    await vi.advanceTimersByTimeAsync(2200);
+    await runPromise;
+
+    expect(executeCommand).toHaveBeenCalled();
+    expect(executeCommand.mock.calls.at(-1)?.[1]).toBe('pnpm run dev --host 0.0.0.0 --port 5173');
+  });
+
+  it('skips duplicate current-directory scaffolding when source files already exist without a manifest', async () => {
+    const readFile = vi.fn(async (filePath: string) => {
+      if (filePath === 'src/App.jsx') {
+        return 'export default function App() { return <h1>Existing app</h1>; }';
+      }
+
+      throw new Error('ENOENT');
+    });
+    const { runner, executeCommand } = createRunnerHarness(undefined, { readFile });
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'action-skip-duplicate-scaffold',
+      action: {
+        type: 'shell',
+        content: 'pnpm dlx create-vite@latest . --template react',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await runner.runAction(actionData);
+
+    expect(executeCommand.mock.calls.at(-1)?.[1]).toContain('Skipping scaffold command');
   });
 
   it('blocks shell redirection and keeps file writes out of shell commands', async () => {

@@ -4,6 +4,95 @@ import { IGNORE_PATTERNS, type FileMap } from './constants';
 import ignore from 'ignore';
 import type { ContextAnnotation } from '~/types/context';
 
+const DETERMINISTIC_CONTEXT_MAX_FILES = 8;
+
+function toRelativeFilePath(path: string) {
+  return path.replace('/home/project/', '');
+}
+
+function extractGoalTokens(goal: string | undefined) {
+  return new Set(
+    String(goal || '')
+      .toLowerCase()
+      .match(/[a-z0-9][a-z0-9._-]{2,}/g) || [],
+  );
+}
+
+function scoreDeterministicContextFile(path: string, goalTokens: Set<string>) {
+  const relativePath = toRelativeFilePath(path);
+  const normalizedPath = relativePath.toLowerCase();
+  const fileName = normalizedPath.split('/').pop() || normalizedPath;
+  let score = 0;
+
+  if (normalizedPath === 'package.json') {
+    score += 180;
+  }
+
+  if (normalizedPath === 'index.html') {
+    score += 150;
+  }
+
+  if (/^vite\.config\./.test(fileName)) {
+    score += 145;
+  }
+
+  if (/^src\/app\.(tsx|jsx|ts|js)$/.test(normalizedPath)) {
+    score += 170;
+  }
+
+  if (/^src\/main\.(tsx|jsx|ts|js)$/.test(normalizedPath)) {
+    score += 160;
+  }
+
+  if (/^src\/(index|app)\.css$/.test(normalizedPath)) {
+    score += 120;
+  }
+
+  if (/^(tailwind|postcss|uno)\.config\./.test(fileName)) {
+    score += 115;
+  }
+
+  if (/^tsconfig/.test(fileName)) {
+    score += 105;
+  }
+
+  if (/^app\/root\./.test(normalizedPath)) {
+    score += 165;
+  }
+
+  if (/^app\/routes\//.test(normalizedPath)) {
+    score += 155;
+  }
+
+  if (/^(src|app)\/components\//.test(normalizedPath)) {
+    score += 100;
+  }
+
+  if (/readme/i.test(fileName)) {
+    score += 30;
+  }
+
+  if (/^(public|assets)\//.test(normalizedPath)) {
+    score -= 20;
+  }
+
+  if (/^(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb)$/.test(fileName)) {
+    score -= 80;
+  }
+
+  let goalMatchCount = 0;
+
+  for (const token of goalTokens) {
+    if (normalizedPath.includes(token)) {
+      goalMatchCount += 1;
+    }
+  }
+
+  score += Math.min(goalMatchCount, 3) * 24;
+
+  return score;
+}
+
 export function extractPropertiesFromMessage(message: Omit<Message, 'id'>): {
   model: string;
   provider: string;
@@ -58,7 +147,7 @@ export function createFilesContext(files: FileMap, useRelativePath?: boolean) {
   const ig = ignore().add(IGNORE_PATTERNS);
   let filePaths = Object.keys(files);
   filePaths = filePaths.filter((x) => {
-    const relPath = x.replace('/home/project/', '');
+    const relPath = toRelativeFilePath(x);
     return !ig.ignores(relPath);
   });
 
@@ -79,13 +168,51 @@ export function createFilesContext(files: FileMap, useRelativePath?: boolean) {
       let filePath = path;
 
       if (useRelativePath) {
-        filePath = path.replace('/home/project/', '');
+        filePath = toRelativeFilePath(path);
       }
 
       return `<boltAction type="file" filePath="${filePath}">${codeWithLinesNumbers}</boltAction>`;
     });
 
   return `<boltArtifact id="code-content" title="Code Content" >\n${fileContexts.join('\n')}\n</boltArtifact>`;
+}
+
+export function selectDeterministicContextFiles(
+  files: FileMap,
+  options?: {
+    latestGoal?: string;
+    maxFiles?: number;
+  },
+) {
+  const ig = ignore().add(IGNORE_PATTERNS);
+  const maxFiles = options?.maxFiles || DETERMINISTIC_CONTEXT_MAX_FILES;
+  const goalTokens = extractGoalTokens(options?.latestGoal);
+  const candidates = Object.entries(files)
+    .filter(([path, dirent]) => {
+      const relPath = toRelativeFilePath(path);
+
+      return dirent?.type === 'file' && !dirent.isBinary && !ig.ignores(relPath);
+    })
+    .map(([path, dirent]) => ({
+      path,
+      dirent,
+      score: scoreDeterministicContextFile(path, goalTokens),
+    }));
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  const rankedCandidates = [...candidates].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  const positiveCandidates = rankedCandidates.filter((candidate) => candidate.score > 0);
+  const selectedCandidates = (positiveCandidates.length > 0 ? positiveCandidates : rankedCandidates).slice(0, maxFiles);
+  const selectedFiles: FileMap = {};
+
+  for (const candidate of selectedCandidates) {
+    selectedFiles[toRelativeFilePath(candidate.path)] = candidate.dirent;
+  }
+
+  return selectedFiles;
 }
 
 export function extractCurrentContext(messages: Message[]) {

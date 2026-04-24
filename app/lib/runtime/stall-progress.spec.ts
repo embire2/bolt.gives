@@ -72,4 +72,21 @@ describe('stall-progress', () => {
 
     expect(latest).toBe(new Date('2026-02-23T00:00:25.000Z').getTime());
   });
+
+  it('treats hosted commentary data timestamps as meaningful progress when step events are only telemetry', () => {
+    const fallbackTimestamp = new Date('2026-02-23T00:00:00.000Z').getTime();
+    const latest = getLastMeaningfulProgressTimestamp(
+      [
+        event({
+          type: 'telemetry',
+          description: 'runtime telemetry',
+          timestamp: '2026-02-23T00:00:35.000Z',
+        }),
+      ],
+      fallbackTimestamp,
+      [new Date('2026-02-23T00:00:50.000Z').getTime()],
+    );
+
+    expect(latest).toBe(new Date('2026-02-23T00:00:50.000Z').getTime());
+  });
 });

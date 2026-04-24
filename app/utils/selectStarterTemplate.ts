@@ -65,6 +65,18 @@ Important: Provide only the selection tags in your response, with no extra comme
 
 const templates: Template[] = STARTER_TEMPLATES.filter((t) => !t.name.includes('shadcn'));
 
+export type StarterTemplateBootstrapCommands = {
+  installCommand?: string;
+  startCommand?: string;
+};
+
+export type StarterTemplatePayload = {
+  assistantMessage: string;
+  userMessage: string;
+  usingLocalFallback: boolean;
+  bootstrapCommands?: StarterTemplateBootstrapCommands;
+};
+
 type HeuristicTemplateRule = {
   template: string;
   patterns: RegExp[];
@@ -265,7 +277,11 @@ const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; p
   }
 };
 
-export async function getTemplates(templateName: string, title?: string, originalRequest?: string) {
+export async function getTemplates(
+  templateName: string,
+  title?: string,
+  originalRequest?: string,
+): Promise<StarterTemplatePayload | null> {
   const template = STARTER_TEMPLATES.find((t) => t.name == templateName);
 
   if (!template) {
@@ -433,5 +449,11 @@ IMPORTANT: Never leave the built-in fallback screen visible in the final app.
     assistantMessage,
     userMessage,
     usingLocalFallback,
+    bootstrapCommands: localFallback
+      ? {
+          installCommand: localFallback.installCommand,
+          startCommand: localFallback.startCommand,
+        }
+      : undefined,
   };
 }

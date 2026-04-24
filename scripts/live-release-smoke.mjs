@@ -67,7 +67,8 @@ async function waitForPromptSurface(page) {
     attempt += 1;
 
     const promptVisible = await page
-      .locator('textarea[placeholder="How can Bolt help you today?"]')
+      .locator('textarea')
+      .first()
       .isVisible()
       .catch(() => false);
 
@@ -244,11 +245,11 @@ try {
   await page.screenshot({ path: path.join(outDir, 'live-smoke-before-submit.png'), fullPage: true });
 
   logProgress('Submitting prompt');
-  await page.fill(
-    'textarea[placeholder="How can Bolt help you today?"]',
+  const promptTextarea = page.locator('textarea').first();
+  await promptTextarea.fill(
     `Build a React doctor appointment scheduling website for a clinic with calendar slots, patient booking form, doctor selection, SMTP reminder settings, and a visible heading "${appToken}". Implement it and run it.`,
   );
-  await page.press('textarea[placeholder="How can Bolt help you today?"]', 'Enter');
+  await promptTextarea.press('Enter');
 
   await waitForCommentaryInCurrentSurface(page, 'Live Commentary');
   await waitForPreviewToRender(page);

@@ -134,17 +134,19 @@ export class WebContainerManager {
 
   boot() {
     if (import.meta.env.SSR) {
-      // Cache a settled (rejected) promise so repeated calls from SSR paths
-      // like queueWebcontainerWrite fail fast instead of accumulating
-      // never-resolving promises.
+      /*
+       * Cache a settled (rejected) promise so repeated calls from SSR paths
+       * like queueWebcontainerWrite fail fast instead of accumulating
+       * never-resolving promises.
+       */
       if (!this.#bootPromise) {
-        const ssrRejection = Promise.reject(
-          new Error('WebContainerManager.boot() cannot be called during SSR'),
-        );
+        const ssrRejection = Promise.reject(new Error('WebContainerManager.boot() cannot be called during SSR'));
 
-        // Attach a no-op handler to suppress unhandled-rejection warnings for
-        // callers that never await the cached promise.
-        ssrRejection.catch(() => {});
+        /*
+         * Attach a no-op handler to suppress unhandled-rejection warnings for
+         * callers that never await the cached promise.
+         */
+        ssrRejection.catch(() => undefined);
         this.#bootPromise = ssrRejection;
       }
 
@@ -165,9 +167,11 @@ export class WebContainerManager {
         return webcontainer;
       })
       .catch(async (error) => {
-        // Boot failed (either during creation or attach); make sure we don't
-        // leak a partially-initialized container, and reset state so a
-        // subsequent forceReboot/boot can start from scratch.
+        /*
+         * Boot failed (either during creation or attach); make sure we don't
+         * leak a partially-initialized container, and reset state so a
+         * subsequent forceReboot/boot can start from scratch.
+         */
         this.#bootPromise = null;
         this.#instance = null;
 
@@ -196,8 +200,10 @@ export class WebContainerManager {
   }
 
   forceReboot(reason: string): Promise<WebContainer> {
-    // Coalesce concurrent callers onto the same reboot so we don't kick off
-    // a second boot() while the first is mid-flight.
+    /*
+     * Coalesce concurrent callers onto the same reboot so we don't kick off
+     * a second boot() while the first is mid-flight.
+     */
     if (this.#rebootPromise) {
       return this.#rebootPromise;
     }
@@ -282,9 +288,11 @@ export class WebContainerManager {
       }
     }
 
-    // Only publish the instance once the runtime has been attached
-    // successfully; if any of the steps above threw, we never leave a
-    // partially-initialized container on the manager.
+    /*
+     * Only publish the instance once the runtime has been attached
+     * successfully; if any of the steps above threw, we never leave a
+     * partially-initialized container on the manager.
+     */
     this.#instance = webcontainer;
     this._context.loaded = this.#activeRuntime !== 'hosted';
     this._context.lastBootedAt = Date.now();
@@ -358,9 +366,11 @@ export class WebContainerManager {
     try {
       const marker = `${Date.now()}`;
 
-      // Wrap the whole mkdir/write/read+verify sequence in a single overall
-      // timeout so one slow step cannot consume the entire tick budget and
-      // cause back-to-back heartbeats to pile up beyond HEARTBEAT_INTERVAL_MS.
+      /*
+       * Wrap the whole mkdir/write/read+verify sequence in a single overall
+       * timeout so one slow step cannot consume the entire tick budget and
+       * cause back-to-back heartbeats to pile up beyond HEARTBEAT_INTERVAL_MS.
+       */
       await withTimeout(
         (async () => {
           await container.fs.mkdir('.bolt-runtime', { recursive: true });

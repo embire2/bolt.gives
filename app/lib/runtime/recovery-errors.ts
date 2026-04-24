@@ -3,6 +3,13 @@ export interface RecoverableStreamErrorFlags {
   disconnectLike: boolean;
 }
 
+export interface CompletedRunDisconnectContext {
+  message: string | undefined | null;
+  requestStartedAt: number;
+  lastRunCompletedAt?: number | null;
+  lastPreviewReadyAt?: number | null;
+}
+
 export function classifyRecoverableStreamError(message: string | undefined | null): RecoverableStreamErrorFlags {
   const normalizedMessage = String(message || '').toLowerCase();
 
@@ -19,4 +26,16 @@ export function classifyRecoverableStreamError(message: string | undefined | nul
     timeoutLike,
     disconnectLike,
   };
+}
+
+export function shouldIgnoreDisconnectAfterCompletedRun(context: CompletedRunDisconnectContext): boolean {
+  const { disconnectLike } = classifyRecoverableStreamError(context.message);
+
+  if (!disconnectLike) {
+    return false;
+  }
+
+  const completionEvidenceAt = Math.max(context.lastRunCompletedAt ?? 0, context.lastPreviewReadyAt ?? 0);
+
+  return completionEvidenceAt >= context.requestStartedAt && completionEvidenceAt > 0;
 }

@@ -20,15 +20,15 @@ function createTelemetryEvent(output: string, description = 'runtime telemetry')
 
 describe('execution-status helpers', () => {
   it('detects preview verification from preview-ready telemetry', () => {
-    expect(hasPreviewVerification([createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready')])).toBe(
-      true,
-    );
+    expect(
+      hasPreviewVerification([createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified')]),
+    ).toBe(true);
   });
 
   it('unlocks the prompt after preview verification once the quiet threshold is reached', () => {
     expect(
       shouldUnlockPromptAfterPreviewReady(
-        [createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready')],
+        [createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified')],
         20_000,
         20_000,
       ),
@@ -52,7 +52,7 @@ describe('execution-status helpers', () => {
 
     expect(
       deriveProgressMessage(progressEvents, [
-        createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready'),
+        createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified'),
       ]),
     ).toBe('Response Generated (preview verified)');
   });
@@ -94,9 +94,17 @@ describe('execution-status helpers', () => {
 
     expect(
       deriveWhyThisAction(commentaryEvents, progressEvents, [
-        createTelemetryEvent('https://localhost:5173 (port 5173)', 'Preview ready'),
+        createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified'),
       ]),
     ).toBe('The preview is live and ready for inspection.');
+  });
+
+  it('does not treat preview session detection as preview verification', () => {
+    expect(
+      hasPreviewVerification([
+        createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview session available'),
+      ]),
+    ).toBe(false);
   });
 
   it('counts shell steps alongside tool calls', () => {

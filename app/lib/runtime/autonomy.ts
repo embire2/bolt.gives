@@ -49,9 +49,13 @@ function stripShellRedirections(segment: string): string {
     .trim();
 }
 
+function stripLeadingEnvAssignments(segment: string): string {
+  return segment.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s]+)\s+)+/, '').trim();
+}
+
 function isCommandChainSafe(segments: string[], allowPrefixes: RegExp[]): boolean {
   return segments.every((segment) => {
-    const normalized = stripShellRedirections(segment);
+    const normalized = stripLeadingEnvAssignments(stripShellRedirections(segment));
 
     if (!normalized) {
       return false;

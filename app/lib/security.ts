@@ -85,12 +85,20 @@ class InMemoryRateLimitStore implements RateLimitStore {
   }
 }
 
-/** KV-backed store; `kv` is a Cloudflare KVNamespace. Typed loosely so we don't
- *  pull in @cloudflare/workers-types as a runtime dep. */
-class KvRateLimitStore implements RateLimitStore {
-  #kv: { get(key: string): Promise<string | null>; put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>; delete(key: string): Promise<void> };
+/**
+ * KV-backed store; `kv` is a Cloudflare KVNamespace. Typed loosely so we don't
+ *  pull in @cloudflare/workers-types as a runtime dep.
+ */
+type KvLike = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+};
 
-  constructor(kv: KvRateLimitStore['#kv']) {
+class KvRateLimitStore implements RateLimitStore {
+  #kv: KvLike;
+
+  constructor(kv: KvLike) {
     this.#kv = kv;
   }
 
@@ -124,8 +132,10 @@ class KvRateLimitStore implements RateLimitStore {
         expirationTtl: Math.max(60, Math.ceil(ttlMs / 1000)),
       });
     } catch {
-      // KV occasionally fails closed; fall back to allowing the request rather
-      // than denying legitimate traffic on a transient storage error.
+      /*
+       * KV occasionally fails closed; fall back to allowing the request rather
+       * than denying legitimate traffic on a transient storage error.
+       */
     }
   }
 
@@ -140,9 +150,11 @@ class KvRateLimitStore implements RateLimitStore {
 
 let defaultStore: RateLimitStore = new InMemoryRateLimitStore();
 
-/** Called once during app bootstrap (or per-request on CF) to install a
+/**
+ * Called once during app bootstrap (or per-request on CF) to install a
  *  distributed store. Safe to call with `undefined` — keeps the in-memory
- *  fallback. */
+ *  fallback.
+ */
 export function setRateLimitStore(store: RateLimitStore | undefined) {
   defaultStore = store ?? new InMemoryRateLimitStore();
 }
@@ -151,9 +163,11 @@ export function getRateLimitStore(): RateLimitStore {
   return defaultStore;
 }
 
-/** Build a KV-backed store from a Cloudflare KV binding. Returns `undefined`
+/**
+ * Build a KV-backed store from a Cloudflare KV binding. Returns `undefined`
  *  if the binding looks invalid, so callers can transparently fall back to
- *  the in-memory store. */
+ *  the in-memory store.
+ */
 export function createKvRateLimitStore(binding: unknown): RateLimitStore | undefined {
   if (
     !binding ||
@@ -306,9 +320,36 @@ function isProduction(env: EnvLike): boolean {
   return typeof process === 'undefined';
 }
 
+function getRequestHostname(request?: Request): string {
+  if (!request) {
+    return '';
+  }
+
+  try {
+    return new URL(request.url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = String(hostname || '')
+    .trim()
+    .toLowerCase();
+
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '[::1]' ||
+    normalized === '::1' ||
+    normalized.endsWith('.localhost')
+  );
+}
+
 /** Returns the full security header set we want applied to every response. */
 export function createSecurityHeaders(env?: EnvLike, request?: Request): Record<string, string> {
   const production = isProduction(env);
+  const localLoopbackRequest = isLoopbackHostname(getRequestHostname(request));
 
   /*
    * CSP notes:
@@ -326,6 +367,14 @@ export function createSecurityHeaders(env?: EnvLike, request?: Request): Record<
   const scriptSrc = production
     ? "'self' 'unsafe-inline' blob: https://*.bolt.gives https://bolt.gives"
     : "'self' 'unsafe-inline' 'unsafe-eval' blob:";
+  const connectSrc = localLoopbackRequest
+    ? /*
+       * Chromium rejects bracketed IPv6 loopback sources here, so keep the
+       * loopback allowances to the forms WebContainer/provider traffic
+       * actually uses in practice.
+       */
+      "'self' https: wss: blob: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*"
+    : "'self' https: wss: blob:";
 
   const csp = [
     "default-src 'self'",
@@ -334,14 +383,14 @@ export function createSecurityHeaders(env?: EnvLike, request?: Request): Record<
     "style-src 'self' 'unsafe-inline' https:",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https:",
-    "connect-src 'self' https: wss: blob:",
+    `connect-src ${connectSrc}`,
     "worker-src 'self' blob:",
     "frame-src 'self' blob: https:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    'upgrade-insecure-requests',
+    ...(localLoopbackRequest ? [] : ['upgrade-insecure-requests']),
   ].join('; ');
 
   const headers: Record<string, string> = {
@@ -358,8 +407,10 @@ export function createSecurityHeaders(env?: EnvLike, request?: Request): Record<
     headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload';
   }
 
-  // Include a request-id if the upstream proxy set one; otherwise mint a new
-  // one so logs stay correlatable.
+  /*
+   * Include a request-id if the upstream proxy set one; otherwise mint a new
+   * one so logs stay correlatable.
+   */
   const requestId = request?.headers.get('x-request-id') ?? generateRequestId();
   headers['X-Request-Id'] = requestId;
 
@@ -414,8 +465,10 @@ function parseCookies(header: string | null): Record<string, string> {
   return out;
 }
 
-/** Returns a `Response` when CSRF validation fails, or `null` when the
- *  request may proceed. Safe methods (GET/HEAD/OPTIONS) always pass. */
+/**
+ * Returns a `Response` when CSRF validation fails, or `null` when the
+ *  request may proceed. Safe methods (GET/HEAD/OPTIONS) always pass.
+ */
 export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
   if (CSRF_SAFE_METHODS.has(request.method)) {
     return null;
@@ -423,17 +476,17 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
 
   const url = new URL(request.url);
 
-  // Same-origin or same-site POST from our own UI is fine; we use
-  // Origin/Referer as a pre-check before requiring the token, so the static
-  // UI (which may not carry the cookie on first POST) still works when the
-  // caller is clearly us.
+  /*
+   * Same-origin or same-site POST from our own UI is fine; we use
+   * Origin/Referer as a pre-check before requiring the token, so the static
+   * UI (which may not carry the cookie on first POST) still works when the
+   * caller is clearly us.
+   */
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
   const expectedHost = url.host;
 
-  const sameOrigin =
-    (origin && tryHost(origin) === expectedHost) ||
-    (referer && tryHost(referer) === expectedHost);
+  const sameOrigin = (origin && tryHost(origin) === expectedHost) || (referer && tryHost(referer) === expectedHost);
 
   if (!sameOrigin) {
     return new Response(JSON.stringify({ error: 'Cross-origin request blocked' }), {
@@ -445,8 +498,10 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
     });
   }
 
-  // Double-submit cookie check — accept either cookie+header match, or a
-  // well-formed Bearer-style API key header used by first-party tooling.
+  /*
+   * Double-submit cookie check — accept either cookie+header match, or a
+   * well-formed Bearer-style API key header used by first-party tooling.
+   */
   const cookies = parseCookies(request.headers.get('cookie'));
   const cookieToken = cookies[CSRF_COOKIE_NAME];
   const headerToken = request.headers.get(CSRF_HEADER_NAME);
@@ -455,12 +510,11 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
     return null;
   }
 
-  // Allow unauthenticated POSTs to select public endpoints that can't carry
-  // cookies yet (e.g. initial bootstrap). Keep the list narrow.
-  const allowListNoCsrf = new Set<string>([
-    '/api/health',
-    '/api/sessions',
-  ]);
+  /*
+   * Allow unauthenticated POSTs to select public endpoints that can't carry
+   * cookies yet (e.g. initial bootstrap). Keep the list narrow.
+   */
+  const allowListNoCsrf = new Set<string>(['/api/health', '/api/sessions']);
 
   if (allowListNoCsrf.has(url.pathname)) {
     return null;
@@ -506,6 +560,7 @@ export function validateApiKeyFormat(apiKey: string, provider: string): boolean 
   };
 
   const minLength = minLengths[provider.toLowerCase()] ?? 20;
+
   return apiKey.length >= minLength;
 }
 
@@ -605,16 +660,13 @@ export function withSecurity<T extends (args: ActionFunctionArgs | LoaderFunctio
         headers: merged,
       });
     } catch (error) {
-      return new Response(
-        JSON.stringify({ error: true, message: sanitizeErrorMessage(error, env) }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...createSecurityHeaders(env, request),
-          },
+      return new Response(JSON.stringify({ error: true, message: sanitizeErrorMessage(error, env) }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...createSecurityHeaders(env, request),
         },
-      );
+      });
     }
   };
 }

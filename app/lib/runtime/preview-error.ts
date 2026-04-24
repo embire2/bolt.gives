@@ -1,6 +1,8 @@
 import type { ActionAlert } from '~/types/actions';
 
 const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
+const DEV_SERVER_READY_RE =
+  /\b(?:VITE v[\d.]+\s+ready in|ready - started server on|Local:\s+http:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):\d+)/i;
 const PREVIEW_ERROR_PATTERNS = [
   /\[plugin:vite:[^\]]+\]/i,
   /Pre-transform error/i,
@@ -28,6 +30,21 @@ function normalizePreviewText(value: string | null | undefined) {
 
 function stripAnsi(value: string) {
   return value.replace(/\u001B\[[0-9;]*m/g, '');
+}
+
+function isDetachedDevServerLifecycleNoise(combinedText: string) {
+  const normalized = stripAnsi(combinedText);
+  const hasLifecycleFailure = /\bELIFECYCLE\b/i.test(normalized) || /\bCommand failed\b/i.test(normalized);
+
+  if (!hasLifecycleFailure || !DEV_SERVER_READY_RE.test(normalized)) {
+    return false;
+  }
+
+  const hardFailurePatterns = PREVIEW_ERROR_PATTERNS.filter(
+    (pattern) => !/\bELIFECYCLE\b/i.test(pattern.source) && !/\bCommand failed\b/i.test(pattern.source),
+  );
+
+  return !hardFailurePatterns.some((pattern) => pattern.test(normalized));
 }
 
 function pickPreviewDescription(combinedText: string) {
@@ -81,6 +98,10 @@ export function extractPreviewAlertFromText(rawText: string | null | undefined):
       content: combinedText.slice(0, 5000),
       source: 'preview',
     };
+  }
+
+  if (isDetachedDevServerLifecycleNoise(combinedText)) {
+    return null;
   }
 
   if (!PREVIEW_ERROR_PATTERNS.some((pattern) => pattern.test(combinedText))) {

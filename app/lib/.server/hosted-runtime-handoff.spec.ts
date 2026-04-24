@@ -83,7 +83,7 @@ describe('applyHostedRuntimeAssistantActions', () => {
       'https://alpha1.bolt.gives/runtime/sessions/session123/command',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ kind: 'start', command: 'pnpm run dev -- --host 0.0.0.0 --port 4101' }),
+        body: JSON.stringify({ kind: 'start', command: 'pnpm run dev' }),
       }),
     );
   });

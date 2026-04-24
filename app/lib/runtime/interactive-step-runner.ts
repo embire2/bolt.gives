@@ -244,6 +244,25 @@ export class InteractiveStepRunner extends EventTarget {
         });
         this.#flushStreamBuffer();
 
+        if (!result) {
+          const errorMessage = 'Step executor returned no result.';
+
+          this.#emit({
+            type: 'error',
+            timestamp: new Date().toISOString(),
+            stepIndex: index,
+            description: step.description,
+            error: errorMessage,
+          });
+
+          return {
+            status: 'error',
+            failedStepIndex: index,
+            exitCode: undefined,
+            error: errorMessage,
+          };
+        }
+
         this.#emit({
           type: 'step-end',
           timestamp: new Date().toISOString(),

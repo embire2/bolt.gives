@@ -32,9 +32,11 @@ export class CircuitOpenError extends Error {
   }
 }
 
-/** Bounded Promise race with cleanup. Cancels the timer whether the inner
+/**
+ * Bounded Promise race with cleanup. Cancels the timer whether the inner
  *  promise resolves or rejects. If an `AbortController` is passed, it is
- *  aborted on timeout so downstream fetches stop doing work. */
+ *  aborted on timeout so downstream fetches stop doing work.
+ */
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -66,14 +68,19 @@ export async function withTimeout<T>(
 export interface RetryOptions {
   /** Max attempts including the initial try. Default 3. */
   attempts?: number;
+
   /** Base delay before the 2nd attempt, in ms. Default 250. */
   baseDelayMs?: number;
+
   /** Cap on the delay between attempts. Default 4000. */
   maxDelayMs?: number;
+
   /** Predicate: should this error be retried? Default: retry network + 5xx. */
   shouldRetry?: (error: unknown, attempt: number) => boolean;
+
   /** Observability hook fired before each retry. */
   onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
+
   /** Abort signal to cut the retry loop short. */
   signal?: AbortSignal;
 }
@@ -143,6 +150,7 @@ export async function withRetry<T>(run: (attempt: number) => Promise<T>, options
           if (options.signal.aborted) {
             clearTimeout(timer);
             reject(options.signal.reason ?? new Error('Aborted'));
+
             return;
           }
 
@@ -161,10 +169,13 @@ export async function withRetry<T>(run: (attempt: number) => Promise<T>, options
 
 export interface CircuitBreakerOptions {
   label: string;
+
   /** Consecutive failures before we open the circuit. Default 5. */
   failureThreshold?: number;
+
   /** How long to stay open before allowing a single probe. Default 30s. */
   cooldownMs?: number;
+
   /** Optional clock for tests. */
   now?: () => number;
 }
@@ -239,19 +250,25 @@ export class CircuitBreaker {
 export interface BoundedFetchOptions extends Omit<RequestInit, 'signal'> {
   /** Per-request timeout. Default 15s. */
   timeoutMs?: number;
+
   /** Caller's abort signal. We link it to our internal controller. */
   signal?: AbortSignal;
+
   /** Label used in error messages / logs. Default: URL's host. */
   label?: string;
+
   /** Number of attempts. Default 1 (no retry). */
   attempts?: number;
+
   /** Base retry delay. */
   baseDelayMs?: number;
 }
 
-/** Fetch wrapper that always times out, always links caller AbortSignal,
+/**
+ * Fetch wrapper that always times out, always links caller AbortSignal,
  *  and optionally retries on transient failures. Returns the raw Response
- *  (throws on network/timeout/abort, not on HTTP status). */
+ *  (throws on network/timeout/abort, not on HTTP status).
+ */
 export async function boundedFetch(input: RequestInfo | URL, options: BoundedFetchOptions = {}): Promise<Response> {
   const { timeoutMs = 15_000, signal: callerSignal, label, attempts, baseDelayMs, ...init } = options;
 
@@ -269,7 +286,12 @@ export async function boundedFetch(input: RequestInfo | URL, options: BoundedFet
 
     const resolvedLabel = label ?? (typeof input === 'string' ? safeHost(input) : safeHost(String(input)));
 
-    return withTimeout(fetch(input as any, { ...init, signal: controller.signal }), timeoutMs, `fetch:${resolvedLabel}`, controller);
+    return withTimeout(
+      fetch(input as any, { ...init, signal: controller.signal }),
+      timeoutMs,
+      `fetch:${resolvedLabel}`,
+      controller,
+    );
   };
 
   if ((attempts ?? 1) <= 1) {

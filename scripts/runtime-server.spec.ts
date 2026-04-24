@@ -6,14 +6,17 @@ import {
   applyPreviewResponseHeaders,
   applyUnavailablePackageVersionRepair,
   authorizeHostedFreeRelaySecret,
+  buildHostedWorkspaceBootstrapAlert,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildWorkspaceFileMapFromDisk,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
   collectMissingWorkspacePackages,
+  ensureHostedWorkspaceProjectBootstrap,
   extractUnavailablePackageVersionRepair,
   inferHostedWorkspaceStartCommand,
+  isPreviewPortReserved,
   mergeWorkspaceFileMap,
   markSessionMutationStart,
   normalizeSessionId,
@@ -22,7 +25,11 @@ import {
   normalizeTenantRegistry,
   prepareHostedWorkspaceForStart,
   probeSessionPreviewHealth,
+  refreshSessionCurrentFileMapFromDisk,
+  repairHostedWorkspaceSupportFilesAfterSync,
+  resolveStalePreviewRedirectPath,
   recordPreviewResponse,
+  releaseReservedPreviewPorts,
   resolveRuntimeWorkspaceRoot,
   resolveSessionSnapshotFiles,
   restoreSessionLastKnownGoodWorkspace,
@@ -154,6 +161,83 @@ describe('runtime server workspace isolation', () => {
     );
   });
 
+  it('does not mark healthy javascript preview assets as preview errors', () => {
+    const session = {
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-assets/4100',
+      },
+      previewDiagnostics: {
+        status: 'starting',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: null,
+      },
+      autoRestoreTimer: null,
+      autoRestoreInFlight: false,
+      restorePointFileMap: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return <h1>Clinic Console</h1>; }',
+          isBinary: false,
+        },
+      },
+      workspaceMutationId: 1,
+      lastAutoRestoreFingerprint: null,
+    };
+
+    recordPreviewResponse(
+      session as any,
+      'import { createRoot } from "/runtime/preview/session-assets/4100/node_modules/react-dom/client.js";\nconsole.log("preview ok");\n',
+      200,
+      '/src/main.tsx',
+      'text/javascript',
+    );
+
+    expect(session.previewDiagnostics.alert).toBeNull();
+    expect(session.previewDiagnostics.status).toBe('starting');
+    expect(session.previewDiagnostics.healthy).toBe(false);
+  });
+
+  it('clears stale preview alerts after a later healthy html document response', () => {
+    const session = {
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-ready/4100',
+      },
+      previewDiagnostics: {
+        status: 'error',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: {
+          type: 'error',
+          title: 'Preview Error',
+          description: 'Previous compile error',
+          content: 'Transform failed with 1 error',
+          source: 'preview',
+        },
+      },
+    };
+
+    recordPreviewResponse(
+      session as any,
+      '<!doctype html><html><body><div id="root"></div></body></html>',
+      200,
+      '/',
+      'text/html',
+    );
+
+    expect(session.previewDiagnostics.alert).toEqual(
+      expect.objectContaining({
+        description: 'Previous compile error',
+      }),
+    );
+    expect(session.previewDiagnostics.status).toBe('error');
+    expect(session.previewDiagnostics.healthy).toBe(false);
+  });
+
   it('updates the hosted preview url when the dev server restarts on a new port', () => {
     const session = {
       id: 'session-123',
@@ -187,6 +271,61 @@ describe('runtime server workspace isolation', () => {
       baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-123/4110',
     });
     expect(session.preview?.port).toBe(4110);
+  });
+
+  it('releases stale preview paths when a session moves to a new port', () => {
+    const session = {
+      id: 'session-redirect',
+      preview: {
+        port: 4110,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-redirect/4110',
+      },
+    };
+
+    expect(
+      resolveStalePreviewRedirectPath(
+        session as {
+          id: string;
+          preview?: {
+            port: number;
+            baseUrl: string;
+          };
+        },
+        '/runtime/preview/session-redirect/4100/src/main.tsx?import',
+      ),
+    ).toBe('/runtime/preview/session-redirect/4110/src/main.tsx?import');
+  });
+
+  it('releases reserved preview ports when a session terminates', () => {
+    const session = {
+      id: 'session-port-release',
+      preview: undefined as { port: number; baseUrl: string } | undefined,
+    };
+
+    updateSessionPreview(
+      session as {
+        id: string;
+        preview?: {
+          port: number;
+          baseUrl: string;
+        };
+      },
+      {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'alpha1.bolt.gives',
+        },
+      } as {
+        headers: Record<string, string>;
+      },
+      4105,
+    );
+
+    expect(isPreviewPortReserved(4105, 'session-port-release')).toBe(true);
+
+    releaseReservedPreviewPorts(session as { id: string });
+
+    expect(isPreviewPortReserved(4105, 'session-port-release')).toBe(false);
   });
 
   it('prefers an explicit public origin for hosted preview urls', () => {
@@ -273,7 +412,7 @@ describe('runtime server workspace isolation', () => {
     });
   });
 
-  it('does not clear an existing preview error just because the html shell still returns 200', () => {
+  it('clears a stale preview error once the current html shell is healthy again', () => {
     const session = {
       id: 'session-preview-error-persist',
       preview: {
@@ -314,7 +453,11 @@ describe('runtime server workspace isolation', () => {
 
     expect(session.previewDiagnostics.status).toBe('error');
     expect(session.previewDiagnostics.healthy).toBe(false);
-    expect(session.previewDiagnostics.alert?.description).toContain('PatientForm');
+    expect(session.previewDiagnostics.alert).toEqual(
+      expect.objectContaining({
+        description: 'Failed to resolve import "./components/PatientForm" from "src/App.jsx". Does the file exist?',
+      }),
+    );
   });
 
   it('normalizes tenant registry records with lifecycle metadata', () => {
@@ -393,6 +536,71 @@ describe('runtime server workspace isolation', () => {
 
     expect(result.healthy).toBe(false);
     expect(result.alert?.description).toContain('ELIFECYCLE');
+  });
+
+  it('ignores detached ELIFECYCLE noise once the preview server is already ready', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        [
+          ' ELIFECYCLE  Command failed.',
+          'Port 4107 is in use, trying another one...',
+          'VITE v5.4.21  ready in 259 ms',
+          '➜  Local:   http://127.0.0.1:4108/',
+        ].join('\n'),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+          },
+        },
+      ),
+    );
+
+    const result = await probeSessionPreviewHealth({
+      preview: {
+        port: 4108,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-probe-ready/4108',
+      },
+    });
+
+    fetchSpy.mockRestore();
+
+    expect(result.healthy).toBe(true);
+    expect(result.alert).toBeNull();
+  });
+
+  it('detects missing vite bootstrap files before trusting the preview shell', async () => {
+    const workspace = await makeTempDir('bolt-runtime-probe-bootstrap-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'index.html'),
+      '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Doctor Scheduler</h1>; }\n',
+      'utf8',
+    );
+    await fs.writeFile(path.join(workspace, 'vite.config.ts'), 'export default {};\n', 'utf8');
+
+    const result = await probeSessionPreviewHealth({
+      dir: workspace,
+      preview: {
+        port: 4103,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-probe/4103',
+      },
+      previewDiagnostics: {
+        status: 'starting',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: null,
+      },
+    } as any);
+
+    expect(result.healthy).toBe(false);
+    expect(result.alert?.description).toContain('src/main.tsx');
   });
 
   it('preserves an existing preview alert during health probes until a fresh mutation clears it', async () => {
@@ -555,7 +763,127 @@ describe('runtime server workspace isolation', () => {
     expect(result.changed).toBe(true);
     expect(result.sanitizedFiles).toEqual(['src/App.css']);
     expect(result.installedPackages).toEqual([]);
+    expect(result.generatedFiles).toEqual([]);
     await expect(fs.readFile(path.join(workspace, 'src', 'App.css'), 'utf8')).resolves.toBe('.card { color: red; }\n');
+  });
+
+  it('self-heals missing vite tsconfig support files for generated workspaces before preview start', async () => {
+    const workspace = await makeTempDir('bolt-runtime-vite-tsconfig-support-');
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        scripts: {
+          dev: 'vite',
+          build: 'vite build',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'tsconfig.json'),
+      JSON.stringify(
+        {
+          files: [],
+          references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    await fs.writeFile(path.join(workspace, 'vite.config.js'), 'export default {};\n', 'utf8');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(path.join(workspace, 'src', 'main.tsx'), "console.log('ready');\n", 'utf8');
+
+    const result = await prepareHostedWorkspaceForStart(
+      {
+        dir: workspace,
+      } as {
+        dir: string;
+      },
+      {},
+    );
+
+    expect(result.generatedFiles).toEqual(['tsconfig.app.json', 'tsconfig.node.json']);
+    await expect(fs.readFile(path.join(workspace, 'tsconfig.app.json'), 'utf8')).resolves.toContain(
+      '"include": [\n    "src"\n  ]',
+    );
+    await expect(fs.readFile(path.join(workspace, 'tsconfig.node.json'), 'utf8')).resolves.toContain(
+      '"include": [\n    "vite.config.*"\n  ]',
+    );
+  }, 120000);
+
+  it('repairs missing vite tsconfig support files after a workspace sync and returns file-map entries', async () => {
+    const workspace = await makeTempDir('bolt-runtime-vite-tsconfig-sync-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        scripts: {
+          dev: 'vite',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'tsconfig.json'),
+      JSON.stringify(
+        {
+          files: [],
+          references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    await fs.writeFile(path.join(workspace, 'vite.config.ts'), 'export default {};\n', 'utf8');
+    await fs.writeFile(path.join(workspace, 'src', 'main.tsx'), "console.log('ready');\n", 'utf8');
+
+    const repair = await repairHostedWorkspaceSupportFilesAfterSync({
+      dir: workspace,
+    } as {
+      dir: string;
+    });
+    const generatedFileMap = repair.fileMap as Record<
+      string,
+      {
+        type: string;
+        isBinary: boolean;
+        content: string;
+      }
+    >;
+
+    expect(repair.generatedFiles).toEqual(['tsconfig.app.json', 'tsconfig.node.json']);
+    expect(generatedFileMap).toMatchObject({
+      '/home/project/tsconfig.app.json': {
+        type: 'file',
+        isBinary: false,
+      },
+      '/home/project/tsconfig.node.json': {
+        type: 'file',
+        isBinary: false,
+      },
+    });
+    expect(generatedFileMap['/home/project/tsconfig.app.json'].content).toContain('"include": [\n    "src"\n  ]');
   });
 
   it('extracts unavailable package version repairs from pnpm stderr', () => {
@@ -626,6 +954,43 @@ The latest release of react-calendar is "6.0.1".`),
     await expect(fs.access(path.join(workspace, 'node_modules'))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workspace, 'node_modules', '.bin', 'vite'))).resolves.toBeUndefined();
   }, 120000);
+
+  it('bootstraps a runnable Vite React manifest when generated source files have no package.json', async () => {
+    const workspace = await makeTempDir('bolt-runtime-bootstrap-manifest-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'index.html'),
+      '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'main.jsx'),
+      "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nReactDOM.createRoot(document.getElementById('root')).render(<App />);\n",
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.jsx'),
+      'export default function App(){return <div>Doctor schedule</div>;}\n',
+      'utf8',
+    );
+
+    const repair = await ensureHostedWorkspaceProjectBootstrap({
+      dir: workspace,
+    } as {
+      dir: string;
+    });
+
+    expect(repair.generatedFiles).toContain('package.json');
+    expect(repair.generatedFiles).toContain('vite.config.js');
+    expect(repair.inferredStartCommand).toBe('pnpm run dev');
+    await expect(fs.readFile(path.join(workspace, 'package.json'), 'utf8')).resolves.toContain(
+      '"dev": "vite --host 0.0.0.0 --port 5173"',
+    );
+    await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain(
+      "@vitejs/plugin-react",
+    );
+    await expect(workspaceHasOwnProjectManifest(workspace)).resolves.toBe(true);
+  });
 
   it('self-heals unavailable dependency versions before preview start', async () => {
     const workspace = await makeTempDir('bolt-runtime-install-repair-');
@@ -849,6 +1214,58 @@ The latest release of react-calendar is "6.0.1".`),
       content: 'export default function App() { return <h1>Generated Scheduler</h1>; }\n',
       isBinary: false,
     });
+  });
+
+  it('refreshes the in-memory file map from the real workspace after sync', async () => {
+    const workspace = await makeTempDir('bolt-runtime-current-file-map-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(path.join(workspace, 'src', 'main.tsx'), 'console.log("ready");\n', 'utf8');
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Healthy</h1>; }\n',
+      'utf8',
+    );
+    const session: { dir: string; currentFileMap: Record<string, any> } = {
+      dir: workspace,
+      currentFileMap: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'stale app',
+          isBinary: false,
+        },
+      },
+    };
+
+    const refreshed = await refreshSessionCurrentFileMapFromDisk(session as any);
+
+    expect(refreshed['/home/project/src/main.tsx']).toEqual({
+      type: 'file',
+      content: 'console.log("ready");\n',
+      isBinary: false,
+    });
+    expect(session.currentFileMap['/home/project/src/App.tsx']?.content).toContain('Healthy');
+  });
+
+  it('builds a bootstrap alert when a vite workspace loses its main entry file', () => {
+    const alert = buildHostedWorkspaceBootstrapAlert({
+      '/home/project/index.html': {
+        type: 'file',
+        content: '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+        isBinary: false,
+      },
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App() { return <h1>Clinic Console</h1>; }',
+        isBinary: false,
+      },
+      '/home/project/vite.config.ts': {
+        type: 'file',
+        content: 'export default {};',
+        isBinary: false,
+      },
+    } as any);
+
+    expect(alert?.description).toContain('src/main.tsx');
   });
 
   it('does not overwrite the restore point with a starter placeholder snapshot', () => {

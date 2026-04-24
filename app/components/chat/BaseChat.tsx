@@ -351,6 +351,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const commentaryFeedRef = useRef<HTMLDivElement | null>(null);
     const technicalFeedRef = useRef<HTMLDivElement | null>(null);
     const workspaceAutoSurfaceRef = useRef(false);
+    const previousStreamingRef = useRef(isStreaming);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [openSurfaces, setOpenSurfaces] = useState<SurfaceTabId[]>(['chat', 'workspace']);
@@ -358,6 +359,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [surfaceLayoutHydrated, setSurfaceLayoutHydrated] = useState(false);
     const providerListSignature = (providerList || PROVIDER_LIST).map((item) => item.name).join('|');
     const promptSurfaceMountLoggedRef = useRef(false);
+    const isWorkspaceActivationBlocked = chatStarted && isStreaming && stepRunnerEvents.length === 0;
 
     useEffect(() => {
       if (expoUrl) {
@@ -466,8 +468,25 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setOpenSurfaces((currentTabs) =>
         currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
       );
+      setActiveSurface('workspace');
       workbenchStore.showWorkbench.set(true);
     }, [stepRunnerEvents]);
+
+    useEffect(() => {
+      const wasStreaming = previousStreamingRef.current;
+      previousStreamingRef.current = isStreaming;
+
+      if (!chatStarted || !wasStreaming || isStreaming) {
+        return;
+      }
+
+      if (!workspaceAutoSurfaceRef.current || activeSurface !== 'workspace') {
+        return;
+      }
+
+      workspaceAutoSurfaceRef.current = false;
+      setActiveSurface('chat');
+    }, [activeSurface, chatStarted, isStreaming]);
 
     useEffect(() => {
       onStreamingChange?.(isStreaming);
@@ -505,7 +524,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
     useEffect(() => {
       if (typeof window === 'undefined') {
-        return;
+        return undefined;
       }
 
       let disposed = false;
@@ -681,6 +700,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     };
 
     const openSurface = (surfaceId: SurfaceTabId) => {
+      if (surfaceId === 'workspace' && isWorkspaceActivationBlocked) {
+        return;
+      }
+
       setOpenSurfaces((currentTabs) => (currentTabs.includes(surfaceId) ? currentTabs : [...currentTabs, surfaceId]));
       setActiveSurface(surfaceId);
 
@@ -962,6 +985,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 const isActive = activeSurface === tab.id;
                 const panelId = `${tab.id}-surface-panel`;
                 const tabId = `${tab.id}-surface-tab`;
+                const workspaceTabBlocked = tab.id === 'workspace' && isWorkspaceActivationBlocked;
 
                 return (
                   <div
@@ -972,6 +996,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       isActive
                         ? classNames(styles.SurfaceTabActive, 'bg-transparent text-bolt-elements-textPrimary')
                         : 'bg-transparent text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
+                      workspaceTabBlocked ? 'opacity-60' : '',
                     )}
                   >
                     <button
@@ -979,15 +1004,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       id={tabId}
                       role="tab"
                       aria-selected={isActive}
+                      aria-disabled={workspaceTabBlocked}
                       aria-controls={panelId}
                       className={classNames(
                         'flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5',
                         isActive
                           ? 'text-bolt-elements-textPrimary'
                           : 'text-bolt-elements-textSecondary group-hover:text-bolt-elements-textPrimary',
+                        workspaceTabBlocked ? 'cursor-not-allowed' : '',
                       )}
                       onClick={() => openSurface(tab.id)}
-                      title={tab.description}
+                      title={workspaceTabBlocked ? 'Workspace opens once setup activity starts.' : tab.description}
                     >
                       <span className={tab.id === 'chat' ? 'i-ph:chat-circle-dots' : 'i-ph:stack'} />
                       <span className="font-medium">{tab.label}</span>
@@ -1012,10 +1039,18 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   type="button"
                   role="tab"
                   aria-selected={false}
+                  aria-disabled={tab.id === 'workspace' && isWorkspaceActivationBlocked}
                   aria-controls={`${tab.id}-surface-panel`}
-                  className="flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-transparent px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary"
+                  className={classNames(
+                    'flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-transparent px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary',
+                    tab.id === 'workspace' && isWorkspaceActivationBlocked ? 'cursor-not-allowed opacity-60' : '',
+                  )}
                   onClick={() => openSurface(tab.id)}
-                  title={tab.description}
+                  title={
+                    tab.id === 'workspace' && isWorkspaceActivationBlocked
+                      ? 'Workspace opens once setup activity starts.'
+                      : tab.description
+                  }
                 >
                   <span className="i-ph:plus" />
                   <span className="text-bolt-elements-textPrimary">Open {tab.label}</span>

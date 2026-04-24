@@ -27,7 +27,7 @@ const IRRELEVANT_PROJECT_PATH_RE = /(^|\/)(node_modules|\.pnpm|\.vite|coverage|\
 // Helper function to make any command non-interactive
 function makeNonInteractive(command: string): string {
   // Set environment variables for non-interactive mode
-  const envVars = 'export CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0';
+  const envVars = 'CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0';
 
   // Common interactive packages and their non-interactive flags
   const interactivePackages = [
@@ -46,7 +46,7 @@ function makeNonInteractive(command: string): string {
     processedCommand = processedCommand.replace(pattern, replacement);
   });
 
-  return `${envVars} && ${processedCommand}`;
+  return `${envVars} ${processedCommand}`;
 }
 
 function normalizePath(path: string): string {
@@ -180,6 +180,23 @@ function inferProjectKind(files: FileContent[]) {
   return null;
 }
 
+function looksLikeReactWorkspace(files: FileContent[]) {
+  return getProjectFiles(files).some((file) => {
+    const normalizedPath = normalizePath(file.path);
+
+    if (!/\.(?:[jt]sx?|mjs|mts|cts)$/.test(normalizedPath)) {
+      return false;
+    }
+
+    return (
+      /\bfrom\s+['"]react['"]/.test(file.content) ||
+      /\bfrom\s+['"]react-dom(?:\/client)?['"]/.test(file.content) ||
+      /\bReactDOM\.createRoot\b/.test(file.content) ||
+      /\buse(?:State|Effect|Memo|Callback|Reducer|Ref)\b/.test(file.content)
+    );
+  });
+}
+
 export async function detectProjectCommands(files: FileContent[]): Promise<ProjectCommands> {
   const projectFiles = getProjectFiles(files);
   const hasFile = (name: string) => files.some((f) => f.path.endsWith(name));
@@ -265,6 +282,18 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
     }
 
     return { type: '', setupCommand: '', followupMessage: '' };
+  }
+
+  const inferredProjectKind = inferProjectKind(projectFiles);
+
+  if (inferredProjectKind === 'vite' && looksLikeReactWorkspace(projectFiles)) {
+    return {
+      type: 'Node.js',
+      setupCommand: createSetupCommand('pnpm', false),
+      startCommand: 'pnpm run dev',
+      followupMessage:
+        'Detected a generated Vite React workspace without package.json. Bootstrapping a minimal package manifest and running "pnpm run dev".',
+    };
   }
 
   if (hasFile('index.html')) {

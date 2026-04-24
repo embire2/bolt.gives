@@ -89,6 +89,19 @@ describe('extractPreviewAlertFromText', () => {
     expect(alert?.content).toContain('Command failed');
   });
 
+  it('ignores detached lifecycle noise once the dev server is already ready', () => {
+    expect(
+      extractPreviewAlertFromText(
+        [
+          ' ELIFECYCLE  Command failed.',
+          'Port 4107 is in use, trying another one...',
+          'VITE v5.4.21  ready in 259 ms',
+          '➜  Local:   http://127.0.0.1:4108/',
+        ].join('\n'),
+      ),
+    ).toBeNull();
+  });
+
   it('returns null for healthy preview text', () => {
     expect(extractPreviewAlertFromText('Preview healthy and serving application output.')).toBeNull();
   });

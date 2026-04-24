@@ -115,6 +115,50 @@ exports[`StreamingMessageParser > valid artifacts with actions > should correctl
 }
 `;
 
+exports[`StreamingMessageParser > valid artifacts with actions > should correctly parse chunks and strip out bolt artifacts (2) > onActionClose 1`] = `
+{
+  "action": {
+    "content": "npm install",
+    "type": "shell",
+  },
+  "actionId": "0",
+  "artifactId": "message_1-0",
+  "messageId": "message_1",
+}
+`;
+
+exports[`StreamingMessageParser > valid artifacts with actions > should correctly parse chunks and strip out bolt artifacts (2) > onActionOpen 1`] = `
+{
+  "action": {
+    "content": "",
+    "type": "shell",
+  },
+  "actionId": "0",
+  "artifactId": "message_1-0",
+  "messageId": "message_1",
+}
+`;
+
+exports[`StreamingMessageParser > valid artifacts with actions > should correctly parse chunks and strip out bolt artifacts (2) > onArtifactClose 1`] = `
+{
+  "artifactId": "message_1-0",
+  "id": "message_1-0",
+  "messageId": "message_1",
+  "title": "Some title",
+  "type": undefined,
+}
+`;
+
+exports[`StreamingMessageParser > valid artifacts with actions > should correctly parse chunks and strip out bolt artifacts (2) > onArtifactOpen 1`] = `
+{
+  "artifactId": "message_1-0",
+  "id": "message_1-0",
+  "messageId": "message_1",
+  "title": "Some title",
+  "type": undefined,
+}
+`;
+
 exports[`StreamingMessageParser > valid artifacts without actions > should correctly parse chunks and strip out bolt artifacts (0) > onArtifactClose 1`] = `
 {
   "artifactId": "message_1-0",

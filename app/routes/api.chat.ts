@@ -20,7 +20,7 @@ import type {
 } from '~/types/context';
 import { WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
-import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
+import { extractPropertiesFromMessage, selectDeterministicContextFiles } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
 import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
@@ -35,6 +35,11 @@ import { addUsageTotals } from '~/lib/runtime/usage';
 import { enforceCommentaryContract } from '~/lib/runtime/commentary-contract';
 import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/checkpoint-events';
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
+import {
+  buildHostedPreviewRecoveryPrompt,
+  shouldContinueHostedPreviewRecovery,
+  summarizeHostedPreviewFailure,
+} from '~/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
 import {
@@ -53,6 +58,7 @@ import {
   waitForHostedRuntimePreviewVerificationForRequest,
 } from '~/lib/.server/hosted-runtime-snapshot';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
+import { extractLatestUserGoal, findLatestUserMessage } from '~/lib/runtime/user-goal';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -61,6 +67,170 @@ export async function action(args: ActionFunctionArgs) {
 const logger = createScopedLogger('api.chat');
 const MAX_RUN_CONTINUATION_ATTEMPTS = 5;
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
+const BOLT_ACTION_RE = /<boltAction\b/i;
+const FILE_ACTION_RE = /<boltAction[^>]*type=(["'])file\1/i;
+const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementation\s+plan|plan:|next\s+steps)\b/i;
+
+type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
+
+export function shouldUseSynthesizedRunHandoff(reason: ContinuationReason) {
+  return (
+    reason === 'run-intent-without-start' ||
+    reason === 'preview-not-verified' ||
+    reason === 'bootstrap-only-shell-actions' ||
+    reason === 'scaffold-without-start'
+  );
+}
+
+export function shouldAllowSynthesizedRunHandoff(options: {
+  assistantContent: string;
+  latestExecutionFailure?: ReturnType<typeof extractExecutionFailure>;
+  continuationReason?: ContinuationReason;
+}) {
+  const hasFileAction = FILE_ACTION_RE.test(options.assistantContent);
+
+  if (hasFileAction) {
+    return true;
+  }
+
+  if (options.latestExecutionFailure) {
+    return false;
+  }
+
+  if (options.continuationReason === 'preview-not-verified') {
+    return BOLT_ACTION_RE.test(options.assistantContent) && !PLAN_ONLY_RESPONSE_RE.test(options.assistantContent);
+  }
+
+  return true;
+}
+
+export function shouldContinueAfterBlockedSynthesizedRunHandoff(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hasSynthesizedRunHandoff: boolean;
+  allowSynthesizedRunHandoff: boolean;
+  attempts: number;
+  maxAttempts: number;
+}) {
+  return (
+    options.chatMode === 'build' &&
+    !options.previewCheckpointObserved &&
+    !options.hasExecutionFailures &&
+    options.hasSynthesizedRunHandoff &&
+    !options.allowSynthesizedRunHandoff &&
+    options.attempts >= 0 &&
+    options.attempts < options.maxAttempts
+  );
+}
+
+export function shouldSkipPlannerForRecoveryPrompt(content: string | undefined): boolean {
+  if (!content) {
+    return false;
+  }
+
+  return /\[Architect Auto-Heal\]|preview-runtime-exception|preview-compile-error|preview-not-verified|The previous run ended without a preview-ready checkpoint|You scaffolded a project but did not complete the requested implementation|Latest concrete failure to fix first/i.test(
+    content,
+  );
+}
+
+export function buildRunContinuationPrompt(options: {
+  model: string;
+  provider: string;
+  originalRequest: string;
+  starterEntryTarget: string;
+  continuationReason: ContinuationReason;
+  shouldContinueForRunIntent: boolean;
+  latestExecutionFailure?: ReturnType<typeof extractExecutionFailure>;
+}) {
+  const {
+    model,
+    provider,
+    originalRequest,
+    starterEntryTarget,
+    continuationReason,
+    shouldContinueForRunIntent,
+    latestExecutionFailure,
+  } = options;
+
+  const requiresStarterEntryReplacement =
+    continuationReason === 'starter-entry-unchanged' || continuationReason === 'starter-without-implementation';
+  const mustUseStartAction =
+    continuationReason === 'run-intent-without-start' ||
+    continuationReason === 'scaffold-without-start' ||
+    continuationReason === 'bootstrap-only-shell-actions' ||
+    continuationReason === 'preview-not-verified';
+
+  const blockerText = requiresStarterEntryReplacement
+    ? `Concrete blocker:
+- ${starterEntryTarget} is still the active starter entry and must be replaced first.
+- Do not spend the next turn on curl/sleep/background shell verification before that file is overwritten.`
+    : mustUseStartAction
+      ? `Concrete blocker:
+- You must launch the dev server with <boltAction type="start">...</boltAction>.
+- Do not use background shell commands like npm run dev & or shell-only verification loops as a substitute for a start action.`
+      : `Concrete blocker:
+- Continue from the current project files and fix the missing implementation/runtime step directly.`;
+
+  const failureDetails = latestExecutionFailure
+    ? `Latest concrete failure to fix first:
+- Tool: ${latestExecutionFailure.toolName}
+- Command: ${latestExecutionFailure.command}
+- Exit code: ${latestExecutionFailure.exitCode}
+- Error excerpt:
+\`\`\`
+${(latestExecutionFailure.stderr || '').slice(0, 1200)}
+\`\`\`
+- Repair the file or command that caused this failure before replaying install/start steps.`
+    : '';
+
+  if (shouldContinueForRunIntent) {
+    return `[Model: ${model}]
+
+[Provider: ${provider}]
+
+You scaffolded a project but did not complete the requested implementation.
+${blockerText}
+${failureDetails ? `\n\n${failureDetails}` : ''}
+
+Continue now and do ALL of the following:
+1) continue from the current project files (do NOT re-run create-vite/create-react-app if package.json already exists).
+2) implement the requested product requirements from the original user request:
+   ${originalRequest}
+3) your FIRST executable action must be a <boltAction type="file"> that replaces ${starterEntryTarget} if the starter screen is still active there.
+4) install dependencies only if missing.
+5) include a <boltAction type="start"> command that launches the dev server.
+6) never use background shell jobs, curl polling, or sleep-based verification as a substitute for the required file replacement and start action.
+7) if a command fails, self-heal and retry with a corrected command.
+8) your response must start with executable <boltAction> steps (no plan-only prose).
+9) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
+10) do NOT re-scaffold or re-bootstrap the starter when package.json already exists.
+11) keep the final response concise and execution-focused.
+`;
+  }
+
+  return `[Model: ${model}]
+
+[Provider: ${provider}]
+
+The previous run ended without a preview-ready checkpoint.
+${blockerText}
+${failureDetails ? `\n\n${failureDetails}` : ''}
+
+Continue from the current project state right now and do ALL of the following:
+1) do not re-scaffold the project if package.json or app files already exist.
+2) implement the original user request fully:
+   ${originalRequest}
+3) if the starter screen is still present, replace ${starterEntryTarget} before any additional prose.
+4) run whatever install or fix steps are still required.
+5) emit executable <boltAction> steps immediately.
+6) launch the dev server with <boltAction type="start"> and do not finish until a preview-ready checkpoint is produced.
+7) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
+8) do not use background shell jobs, curl polling, or sleep-based verification as a substitute for the required file replacement and start action.
+9) if a command fails, self-heal and retry with the corrected command.
+10) finish with a concise summary only after the requested app is actually running in preview.
+`;
+}
 
 function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
   if (typeof value !== 'string') {
@@ -80,18 +250,6 @@ function parseBooleanEnv(value: string | undefined, defaultValue: boolean): bool
   return defaultValue;
 }
 
-function extractLatestUserGoal(messages: Messages): string {
-  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
-
-  if (!lastUser) {
-    return '';
-  }
-
-  const { content } = extractPropertiesFromMessage(lastUser);
-
-  return content || lastUser.content || '';
-}
-
 function summarizeGoalForCommentary(goal: string | undefined): string {
   const normalized = String(goal || '')
     .replace(/\s+/g, ' ')
@@ -109,7 +267,7 @@ function withGoal(message: string, goal: string | undefined): string {
 }
 
 function detectManualIntervention(messages: Messages): boolean {
-  const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+  const lastUser = findLatestUserMessage(messages, { includeHidden: false }) || findLatestUserMessage(messages);
 
   if (!lastUser) {
     return false;
@@ -146,6 +304,67 @@ export function resolveContinuationFiles(options: {
   }
 
   return requestFiles;
+}
+
+export function shouldAttemptHostedPreviewVerification(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hostedRuntimeSessionId?: string | null;
+}) {
+  return (
+    options.chatMode === 'build' &&
+    !options.previewCheckpointObserved &&
+    !options.hasExecutionFailures &&
+    typeof options.hostedRuntimeSessionId === 'string' &&
+    options.hostedRuntimeSessionId.trim().length > 0
+  );
+}
+
+export function shouldContinuePendingHostedPreviewVerification(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hostedRuntimeSessionId?: string | null;
+  attempts: number;
+  maxAttempts: number;
+}) {
+  return (
+    shouldAttemptHostedPreviewVerification(options) && options.attempts >= 0 && options.attempts < options.maxAttempts
+  );
+}
+
+export function shouldReplayLocalRuntimeHandoff(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hostedRuntimeSessionId?: string | null;
+  hasSynthesizedRunHandoff: boolean;
+  continuationReason?: ContinuationReason;
+}) {
+  return (
+    options.chatMode === 'build' &&
+    !options.previewCheckpointObserved &&
+    !options.hasExecutionFailures &&
+    (!options.continuationReason || shouldUseSynthesizedRunHandoff(options.continuationReason)) &&
+    !(typeof options.hostedRuntimeSessionId === 'string' && options.hostedRuntimeSessionId.trim().length > 0) &&
+    options.hasSynthesizedRunHandoff
+  );
+}
+
+function extractPreviewPort(previewBaseUrl: string | null | undefined): number | undefined {
+  if (typeof previewBaseUrl !== 'string' || previewBaseUrl.trim().length === 0) {
+    return undefined;
+  }
+
+  try {
+    const pathnameSegments = new URL(previewBaseUrl).pathname.split('/').filter(Boolean);
+    const maybePort = Number(pathnameSegments[pathnameSegments.length - 1]);
+
+    return Number.isFinite(maybePort) && maybePort > 0 ? maybePort : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseCookies(cookieHeader: string): Record<string, string> {
@@ -190,6 +409,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     messages: Messages;
     files: any;
     hostedRuntimeSessionId?: string;
+    projectContextId?: string;
     promptId?: string;
     contextOptimization: boolean;
     chatMode: 'discuss' | 'build';
@@ -220,6 +440,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     messages,
     files: requestFiles,
     hostedRuntimeSessionId,
+    projectContextId,
     promptId,
     contextOptimization,
     supabase,
@@ -340,6 +561,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     hasOpenAIEnvKey: Boolean(runtimeEnv.OPENAI_API_KEY),
     chatMode,
     maxLLMSteps,
+    hasProjectContextId: typeof projectContextId === 'string' && projectContextId.trim().length > 0,
   };
   let resolvedSelectionForLogs: {
     provider?: string;
@@ -350,7 +572,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
   const manualInterventionDetected = detectManualIntervention(messages);
   const latestUserGoal = extractLatestUserGoal(messages);
-  const projectKey = deriveProjectMemoryKey(files);
+  const projectKey = deriveProjectMemoryKey({
+    files,
+    projectContextId,
+    hostedRuntimeSessionId,
+  });
   const cachedProjectMemory = getProjectMemory(projectKey);
   const effectiveProjectMemory =
     projectMemory && projectMemory.projectKey === projectKey ? projectMemory : cachedProjectMemory;
@@ -388,6 +614,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let hasExecutionFailures = false;
         let latestExecutionFailure: ReturnType<typeof extractExecutionFailure> = null;
         let previewCheckpointObserved = false;
+        let latestProjectMemoryFiles: FileMap | undefined = files;
         let lastVisibleResultForHeartbeat = '';
         let lastProgressMessageForHeartbeat = '';
         const effectiveChatMode = chatMode || 'build';
@@ -493,7 +720,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             firstCommentaryAt === null ? null : firstCommentaryAt - requestStartedAt;
           const projectMemoryEntry = upsertProjectMemory({
             projectKey,
-            files,
+            files: latestProjectMemoryFiles,
             latestGoal: latestUserGoal,
             summary: summary || finalAssistantText,
           });
@@ -549,12 +776,16 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           dataStream.writeData({ ...runMetricsEvent });
           dataStream.writeData({ ...projectMemoryEvent });
 
-          const responseMessage =
-            effectiveChatMode === 'build' && !previewCheckpointObserved && !hasExecutionFailures
-              ? 'Response Generated (preview not yet verified)'
-              : hasExecutionFailures
-                ? 'Response Generated (with execution failures)'
-                : 'Response Generated';
+          const responseMessage = shouldAttemptHostedPreviewVerification({
+            chatMode: effectiveChatMode,
+            previewCheckpointObserved,
+            hasExecutionFailures,
+            hostedRuntimeSessionId,
+          })
+            ? 'Response Generated (preview not yet verified)'
+            : hasExecutionFailures
+              ? 'Response Generated (with execution failures)'
+              : 'Response Generated';
           dataStream.writeData({
             type: 'progress',
             label: 'response',
@@ -577,7 +808,14 @@ Next: I am returning clear recovery instructions to help you resolve it quickly.
             return;
           }
 
-          if (effectiveChatMode === 'build' && !previewCheckpointObserved) {
+          if (
+            shouldAttemptHostedPreviewVerification({
+              chatMode: effectiveChatMode,
+              previewCheckpointObserved,
+              hasExecutionFailures,
+              hostedRuntimeSessionId,
+            })
+          ) {
             writeCommentary(
               'next-step',
               'Preview startup is still being verified.',
@@ -670,114 +908,128 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
           messageSliceId = processedMessages.length - 3;
         }
 
-        if (filePaths.length > 0 && contextOptimization) {
-          logger.debug('Generating Chat Summary');
-          writeCommentary(
-            'plan',
-            withGoal(
-              'I am quickly summarizing the recent context for {goal} so the implementation stays on track.',
-              latestUserGoal,
-            ),
-          );
-          dataStream.writeData({
-            type: 'progress',
-            label: 'summary',
-            status: 'in-progress',
-            order: progressCounter++,
-            message: 'Analysing Request',
-          } satisfies ProgressAnnotation);
-          lastProgressMessageForHeartbeat = 'Summarising the recent context and existing files.';
+        if (filePaths.length > 0) {
+          if (contextOptimization) {
+            logger.debug('Generating Chat Summary');
+            writeCommentary(
+              'plan',
+              withGoal(
+                'I am quickly summarizing the recent context for {goal} so the implementation stays on track.',
+                latestUserGoal,
+              ),
+            );
+            dataStream.writeData({
+              type: 'progress',
+              label: 'summary',
+              status: 'in-progress',
+              order: progressCounter++,
+              message: 'Analysing Request',
+            } satisfies ProgressAnnotation);
+            lastProgressMessageForHeartbeat = 'Summarising the recent context and existing files.';
 
-          // Create a summary of the chat
-          console.log(`Messages count: ${processedMessages.length}`);
+            console.log(`Messages count: ${processedMessages.length}`);
 
-          summary = await createSummary({
-            messages: [...processedMessages],
-            env: runtimeEnv as any,
-            apiKeys,
-            providerSettings,
-            promptId,
-            contextOptimization,
-            onFinish(resp) {
-              if (resp.usage) {
-                logger.debug('createSummary token usage', JSON.stringify(resp.usage));
-                addUsageTotals(cumulativeUsage, resp.usage as any);
-              }
-            },
-          });
-          dataStream.writeData({
-            type: 'progress',
-            label: 'summary',
-            status: 'complete',
-            order: progressCounter++,
-            message: 'Analysis Complete',
-          } satisfies ProgressAnnotation);
-          lastVisibleResultForHeartbeat = 'Context summary completed successfully.';
+            summary = await createSummary({
+              messages: [...processedMessages],
+              env: runtimeEnv as any,
+              apiKeys,
+              providerSettings,
+              promptId,
+              contextOptimization,
+              onFinish(resp) {
+                if (resp.usage) {
+                  logger.debug('createSummary token usage', JSON.stringify(resp.usage));
+                  addUsageTotals(cumulativeUsage, resp.usage as any);
+                }
+              },
+            });
+            dataStream.writeData({
+              type: 'progress',
+              label: 'summary',
+              status: 'complete',
+              order: progressCounter++,
+              message: 'Analysis Complete',
+            } satisfies ProgressAnnotation);
+            lastVisibleResultForHeartbeat = 'Context summary completed successfully.';
 
-          dataStream.writeMessageAnnotation({
-            type: 'chatSummary',
-            summary,
-            chatId: processedMessages.slice(-1)?.[0]?.id,
-          } as ContextAnnotation);
+            dataStream.writeMessageAnnotation({
+              type: 'chatSummary',
+              summary,
+              chatId: processedMessages.slice(-1)?.[0]?.id,
+            } as ContextAnnotation);
 
-          // Update context buffer
-          logger.debug('Updating Context Buffer');
-          writeCommentary('plan', withGoal('I am selecting the files that matter for {goal}.', latestUserGoal));
-          dataStream.writeData({
-            type: 'progress',
-            label: 'context',
-            status: 'in-progress',
-            order: progressCounter++,
-            message: 'Determining Files to Read',
-          } satisfies ProgressAnnotation);
-          lastProgressMessageForHeartbeat = 'Selecting the files and folders that matter for this task.';
+            logger.debug('Updating Context Buffer');
+            writeCommentary('plan', withGoal('I am selecting the files that matter for {goal}.', latestUserGoal));
+            dataStream.writeData({
+              type: 'progress',
+              label: 'context',
+              status: 'in-progress',
+              order: progressCounter++,
+              message: 'Determining Files to Read',
+            } satisfies ProgressAnnotation);
+            lastProgressMessageForHeartbeat = 'Selecting the files and folders that matter for this task.';
 
-          // Select context files
-          console.log(`Messages count: ${processedMessages.length}`);
-          filteredFiles = await selectContext({
-            messages: [...processedMessages],
-            env: runtimeEnv as any,
-            apiKeys,
-            files,
-            providerSettings,
-            promptId,
-            contextOptimization,
-            summary,
-            onFinish(resp) {
-              if (resp.usage) {
-                logger.debug('selectContext token usage', JSON.stringify(resp.usage));
-                addUsageTotals(cumulativeUsage, resp.usage as any);
-              }
-            },
-          });
-
-          if (filteredFiles) {
-            logger.debug(`files in context : ${JSON.stringify(Object.keys(filteredFiles))}`);
+            console.log(`Messages count: ${processedMessages.length}`);
+            filteredFiles = await selectContext({
+              messages: [...processedMessages],
+              env: runtimeEnv as any,
+              apiKeys,
+              files,
+              providerSettings,
+              promptId,
+              contextOptimization,
+              summary,
+              onFinish(resp) {
+                if (resp.usage) {
+                  logger.debug('selectContext token usage', JSON.stringify(resp.usage));
+                  addUsageTotals(cumulativeUsage, resp.usage as any);
+                }
+              },
+            });
+          } else {
+            writeCommentary(
+              'plan',
+              withGoal(
+                'I am loading the current project snapshot for {goal} so follow-up changes stay grounded.',
+                latestUserGoal,
+              ),
+            );
+            dataStream.writeData({
+              type: 'progress',
+              label: 'context',
+              status: 'in-progress',
+              order: progressCounter++,
+              message: 'Loading Project Snapshot',
+            } satisfies ProgressAnnotation);
+            filteredFiles = selectDeterministicContextFiles(files, {
+              latestGoal: latestUserGoal,
+            });
+            lastVisibleResultForHeartbeat = 'Current project snapshot loaded for follow-up work.';
           }
 
-          dataStream.writeMessageAnnotation({
-            type: 'codeContext',
-            files: Object.keys(filteredFiles).map((key) => {
-              let path = key;
+          if (filteredFiles && Object.keys(filteredFiles).length > 0) {
+            logger.debug(`files in context : ${JSON.stringify(Object.keys(filteredFiles))}`);
+            dataStream.writeMessageAnnotation({
+              type: 'codeContext',
+              files: Object.keys(filteredFiles).map((key) => {
+                let path = key;
 
-              if (path.startsWith(WORK_DIR)) {
-                path = path.replace(WORK_DIR, '');
-              }
+                if (path.startsWith(WORK_DIR)) {
+                  path = path.replace(WORK_DIR, '');
+                }
 
-              return path;
-            }),
-          } as ContextAnnotation);
-
-          dataStream.writeData({
-            type: 'progress',
-            label: 'context',
-            status: 'complete',
-            order: progressCounter++,
-            message: 'Code Files Selected',
-          } satisfies ProgressAnnotation);
-          lastVisibleResultForHeartbeat = 'Relevant files were selected for execution.';
-
-          // logger.debug('Code Files Selected');
+                return path;
+              }),
+            } as ContextAnnotation);
+            dataStream.writeData({
+              type: 'progress',
+              label: 'context',
+              status: 'complete',
+              order: progressCounter++,
+              message: contextOptimization ? 'Code Files Selected' : 'Project Snapshot Loaded',
+            } satisfies ProgressAnnotation);
+            lastVisibleResultForHeartbeat = 'Relevant project files are loaded into the current request context.';
+          }
         }
 
         let subAgentPlan: string | undefined = undefined;
@@ -810,9 +1062,13 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
           const effectivePlannerProvider = plannerProvider || selectedProvider || '';
           const isLongThinkModel = LONG_THINK_MODEL_RE.test(effectivePlannerModel);
           const shouldSkipPlannerForHostedFree = effectivePlannerProvider === 'FREE';
+          const shouldSkipPlannerForRecovery = shouldSkipPlannerForRecoveryPrompt(
+            plannerSelection?.content || latestPlannerSourceMessage?.content,
+          );
           const shouldRunPlanner =
             plannerFeatureEnabled &&
             !shouldSkipPlannerForHostedFree &&
+            !shouldSkipPlannerForRecovery &&
             (plannerAllowedForLongThink || !isLongThinkModel);
 
           if (!shouldRunPlanner) {
@@ -820,7 +1076,9 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
               ? 'disabled by configuration'
               : shouldSkipPlannerForHostedFree
                 ? 'skipped for the hosted FREE provider to reduce stall risk and start coding immediately'
-                : `skipped for ${effectivePlannerModel || 'current model'} to reduce stall risk`;
+                : shouldSkipPlannerForRecovery
+                  ? 'skipped for recovery/continuation prompts so the next response starts with executable fixes'
+                  : `skipped for ${effectivePlannerModel || 'current model'} to reduce stall risk`;
             writeCommentary(
               'plan',
               'I am skipping the planning helper and moving directly into executable steps.',
@@ -1149,14 +1407,133 @@ Next: I am sending the final result now.`,
                     sessionId: hostedRuntimeSessionId,
                   }).catch(() => null)
                 : null;
+
+            if (
+              shouldAttemptHostedPreviewVerification({
+                chatMode: effectiveChatMode,
+                previewCheckpointObserved,
+                hasExecutionFailures,
+                hostedRuntimeSessionId,
+              })
+            ) {
+              const hostedPreviewVerificationTimeoutMs = Number(
+                envVars?.BOLT_HOSTED_PREVIEW_VERIFY_TIMEOUT_MS ||
+                  process?.env?.BOLT_HOSTED_PREVIEW_VERIFY_TIMEOUT_MS ||
+                  60_000,
+              );
+              const hostedPreviewVerificationPollIntervalMs = Number(
+                envVars?.BOLT_HOSTED_PREVIEW_VERIFY_POLL_INTERVAL_MS ||
+                  process?.env?.BOLT_HOSTED_PREVIEW_VERIFY_POLL_INTERVAL_MS ||
+                  1_000,
+              );
+              let lastDirectPreviewVerificationCommentaryAt = 0;
+              let lastDirectPreviewVerificationStatus = '';
+
+              const directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                requestUrl: request.url,
+                sessionId: hostedRuntimeSessionId!,
+                timeoutMs:
+                  Number.isFinite(hostedPreviewVerificationTimeoutMs) && hostedPreviewVerificationTimeoutMs > 0
+                    ? hostedPreviewVerificationTimeoutMs
+                    : 60_000,
+                pollIntervalMs:
+                  Number.isFinite(hostedPreviewVerificationPollIntervalMs) &&
+                  hostedPreviewVerificationPollIntervalMs >= 0
+                    ? hostedPreviewVerificationPollIntervalMs
+                    : 1_000,
+                onPoll: async (status, elapsedMs) => {
+                  const nextStatus = status?.status || 'starting';
+                  const shouldEmitCommentary =
+                    nextStatus !== lastDirectPreviewVerificationStatus ||
+                    elapsedMs - lastDirectPreviewVerificationCommentaryAt >= 5_000;
+
+                  if (!shouldEmitCommentary) {
+                    return;
+                  }
+
+                  lastDirectPreviewVerificationStatus = nextStatus;
+                  lastDirectPreviewVerificationCommentaryAt = elapsedMs;
+
+                  const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
+                  const previewBaseUrl = status?.preview?.baseUrl || 'the hosted preview';
+                  const progressMessage =
+                    nextStatus === 'ready'
+                      ? `Key changes: The hosted runtime reports the preview as ready at ${previewBaseUrl}.
+Next: I am syncing that verified preview into the workspace now.`
+                      : nextStatus === 'error'
+                        ? `Key changes: The hosted runtime reported a preview error while finalizing this run.
+Next: I am checking the latest preview output before deciding whether to continue automatically.`
+                        : `Key changes: The hosted runtime is still warming the preview (${elapsedSeconds}s elapsed).
+Next: I am waiting for a verified preview before I decide whether another continuation pass is required.`;
+
+                  writeCommentary(
+                    'verification',
+                    nextStatus === 'ready'
+                      ? 'Hosted preview is already running. I am syncing it into the workspace.'
+                      : nextStatus === 'error'
+                        ? 'Hosted preview reported a startup problem during final verification.'
+                        : 'Hosted preview is still starting. I am waiting for the verified preview signal.',
+                    nextStatus === 'error' ? 'warning' : 'in-progress',
+                    progressMessage,
+                  );
+                },
+              });
+
+              logger.info(
+                `hosted runtime active preview verification ${JSON.stringify({
+                  runId,
+                  provider,
+                  model,
+                  hostedRuntimeSessionId,
+                  outcome: directHostedPreviewVerification.outcome,
+                  status: directHostedPreviewVerification.status?.status ?? null,
+                  healthy: directHostedPreviewVerification.status?.healthy ?? null,
+                  previewBaseUrl: directHostedPreviewVerification.status?.preview?.baseUrl ?? null,
+                  recoveryState: directHostedPreviewVerification.status?.recovery?.state ?? null,
+                })}`,
+              );
+
+              if (directHostedPreviewVerification.outcome === 'ready') {
+                previewCheckpointObserved = true;
+
+                const verifiedPreviewBaseUrl = directHostedPreviewVerification.status?.preview?.baseUrl ?? undefined;
+                const verifiedPreviewPort =
+                  directHostedPreviewVerification.status?.preview?.port ??
+                  extractPreviewPort(verifiedPreviewBaseUrl) ??
+                  undefined;
+
+                dataStream.writeData({
+                  type: 'checkpoint',
+                  checkpointType: 'preview-ready',
+                  status: 'complete',
+                  message: 'Preview ready and verified.',
+                  timestamp: new Date().toISOString(),
+                  ...(hostedRuntimeSessionId ? { hostedRuntimeSessionId } : {}),
+                  ...(verifiedPreviewBaseUrl ? { previewBaseUrl: verifiedPreviewBaseUrl } : {}),
+                  ...(typeof verifiedPreviewPort === 'number' ? { previewPort: verifiedPreviewPort } : {}),
+                } satisfies CheckpointDataEvent);
+
+                writeCommentary(
+                  'verification',
+                  'Hosted preview verified successfully.',
+                  'complete',
+                  `Key changes: The generated app responded successfully at ${
+                    verifiedPreviewBaseUrl || 'the hosted preview URL'
+                  }.
+Next: I am returning the finished result with the verified preview ready for inspection.`,
+                );
+              }
+            }
+
             const continuationFiles = resolveContinuationFiles({
               requestFiles: files,
               hostedRuntimeSnapshot,
             });
+            latestProjectMemoryFiles = continuationFiles || files;
 
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
-              lastUserContent,
+              lastUserContent: latestUserGoal || lastUserContent,
               assistantContent: content,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
               currentFiles: continuationFiles,
@@ -1179,30 +1556,62 @@ Next: I am sending the final result now.`,
             );
 
             const shouldContinueForRunIntent = runContinuationDecision.shouldContinue;
-            const shouldContinueForUnverifiedPreview =
-              effectiveChatMode === 'build' &&
-              !previewCheckpointObserved &&
-              !hasExecutionFailures &&
-              runContinuationAttempts < MAX_RUN_CONTINUATION_ATTEMPTS;
+            const shouldContinueForUnverifiedPreview = shouldContinuePendingHostedPreviewVerification({
+              chatMode: effectiveChatMode,
+              previewCheckpointObserved,
+              hasExecutionFailures,
+              hostedRuntimeSessionId,
+              attempts: runContinuationAttempts,
+              maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+            });
 
-            if (shouldContinueForRunIntent || shouldContinueForUnverifiedPreview) {
-              const continuationReason = shouldContinueForRunIntent
-                ? runContinuationDecision.reason
-                : 'preview-not-verified';
+            const synthesizedRunHandoff = await synthesizeRunHandoff({
+              assistantContent: content,
+              currentFiles: continuationFiles,
+            });
+            const continuationReason: ContinuationReason = shouldContinueForRunIntent
+              ? runContinuationDecision.reason
+              : 'preview-not-verified';
+            const allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
+              assistantContent: content,
+              latestExecutionFailure,
+              continuationReason,
+            });
+            const hasHostedRuntimeSession =
+              typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0;
+            const shouldReplayLocalRuntimeHandoffNow = shouldReplayLocalRuntimeHandoff({
+              chatMode: effectiveChatMode,
+              previewCheckpointObserved,
+              hasExecutionFailures,
+              hostedRuntimeSessionId,
+              hasSynthesizedRunHandoff: Boolean(synthesizedRunHandoff && allowSynthesizedRunHandoff),
+              continuationReason,
+            });
+            const shouldContinueAfterBlockedSynthesizedRunHandoffNow = shouldContinueAfterBlockedSynthesizedRunHandoff({
+              chatMode: effectiveChatMode,
+              previewCheckpointObserved,
+              hasExecutionFailures,
+              hasSynthesizedRunHandoff: Boolean(synthesizedRunHandoff),
+              allowSynthesizedRunHandoff,
+              attempts: runContinuationAttempts,
+              maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+            });
+
+            if (
+              shouldContinueForRunIntent ||
+              shouldContinueForUnverifiedPreview ||
+              shouldReplayLocalRuntimeHandoffNow ||
+              shouldContinueAfterBlockedSynthesizedRunHandoffNow
+            ) {
               const starterEntryTarget =
                 runContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
-              const synthesizedRunHandoff = await synthesizeRunHandoff({
-                assistantContent: content,
-                currentFiles: continuationFiles,
-              });
 
               if (
                 synthesizedRunHandoff &&
-                (continuationReason === 'run-intent-without-start' ||
-                  continuationReason === 'preview-not-verified' ||
-                  continuationReason === 'bootstrap-only-shell-actions')
+                allowSynthesizedRunHandoff &&
+                (shouldReplayLocalRuntimeHandoffNow || shouldUseSynthesizedRunHandoff(continuationReason))
               ) {
-                if (typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0) {
+                if (hasHostedRuntimeSession) {
                   try {
                     const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
                       requestUrl: request.url,
@@ -1212,6 +1621,23 @@ Next: I am sending the final result now.`,
                     });
 
                     if (hostedHandoffResult) {
+                      const hostedPreviewPort = extractPreviewPort(hostedHandoffResult.start.previewBaseUrl);
+
+                      dataStream.writeData({
+                        type: 'checkpoint',
+                        checkpointType: 'preview-ready',
+                        status: 'in-progress',
+                        message: 'Hosted preview session synchronized.',
+                        timestamp: new Date().toISOString(),
+                        command: synthesizedRunHandoff.startCommand,
+                        exitCode: hostedHandoffResult.start.exitCode,
+                        hostedRuntimeSessionId,
+                        ...(hostedHandoffResult.start.previewBaseUrl
+                          ? { previewBaseUrl: hostedHandoffResult.start.previewBaseUrl }
+                          : {}),
+                        ...(typeof hostedPreviewPort === 'number' ? { previewPort: hostedPreviewPort } : {}),
+                      } satisfies CheckpointDataEvent);
+
                       writeCommentary(
                         'action',
                         synthesizedRunHandoff.followupMessage,
@@ -1317,6 +1743,14 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
 
                       if (hostedPreviewVerification.outcome === 'ready') {
                         previewCheckpointObserved = true;
+
+                        const verifiedPreviewBaseUrl =
+                          hostedPreviewVerification.status?.preview?.baseUrl ??
+                          hostedHandoffResult.start.previewBaseUrl ??
+                          undefined;
+                        const verifiedPreviewPort =
+                          hostedPreviewVerification.status?.preview?.port ?? hostedPreviewPort ?? undefined;
+
                         dataStream.writeData({
                           type: 'checkpoint',
                           checkpointType: 'preview-ready',
@@ -1325,6 +1759,9 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
                           timestamp: new Date().toISOString(),
                           command: synthesizedRunHandoff.startCommand,
                           exitCode: hostedHandoffResult.start.exitCode,
+                          hostedRuntimeSessionId,
+                          ...(verifiedPreviewBaseUrl ? { previewBaseUrl: verifiedPreviewBaseUrl } : {}),
+                          ...(typeof verifiedPreviewPort === 'number' ? { previewPort: verifiedPreviewPort } : {}),
                         } satisfies CheckpointDataEvent);
                         writeCommentary(
                           'verification',
@@ -1337,31 +1774,122 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
                           }.
 Next: I am returning the finished result with the verified preview ready for inspection.`,
                         );
-                      } else if (hostedPreviewVerification.outcome === 'error') {
-                        const previewAlertMessage =
-                          hostedPreviewVerification.status?.alert?.description ||
-                          hostedPreviewVerification.status?.recentLogs?.find(Boolean) ||
-                          'The hosted preview reported an error after the runtime handoff.';
-                        writeCommentary(
-                          'verification',
-                          'Hosted preview reported an error after start.',
-                          'warning',
-                          `Key changes: The runtime replay finished, but preview verification failed.
-Next: Review the hosted preview output: ${previewAlertMessage}`,
-                        );
                       } else {
-                        writeCommentary(
-                          'verification',
-                          'Preview startup is taking longer than expected.',
-                          'warning',
-                          `Key changes: The runtime handoff completed, but the hosted preview did not confirm readiness within ${
-                            Number.isFinite(hostedPreviewVerificationTimeoutMs) &&
-                            hostedPreviewVerificationTimeoutMs > 0
-                              ? Math.round(hostedPreviewVerificationTimeoutMs / 1000)
-                              : 60
-                          }s.
-Next: The workspace preview will keep retrying automatically while I return the current run state.`,
-                        );
+                        const previewAlertMessage = summarizeHostedPreviewFailure(hostedPreviewVerification.status);
+                        const shouldContinueHostedPreview = shouldContinueHostedPreviewRecovery({
+                          outcome: hostedPreviewVerification.outcome,
+                          attempts: runContinuationAttempts,
+                          maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+                        });
+
+                        if (shouldContinueHostedPreview) {
+                          runContinuationAttempts += 1;
+                          recoveryTriggered = true;
+                          pendingRecoveryReason =
+                            pendingRecoveryReason ||
+                            `hosted-preview-${hostedPreviewVerification.outcome}-${runContinuationAttempts}`;
+
+                          const continuationAttemptLabel = `${runContinuationAttempts}/${MAX_RUN_CONTINUATION_ATTEMPTS}`;
+
+                          writeCommentary(
+                            'recovery',
+                            hostedPreviewVerification.outcome === 'error'
+                              ? 'Hosted preview hit a startup error. I am fixing it now.'
+                              : 'Hosted preview is still not healthy. I am making another repair pass now.',
+                            'warning',
+                            hostedPreviewVerification.outcome === 'error'
+                              ? `Key changes: Hosted preview verification failed (${continuationAttemptLabel}).
+Next: I am continuing from the current workspace state and fixing this concrete preview issue: ${previewAlertMessage}`
+                              : `Key changes: Hosted preview verification timed out (${continuationAttemptLabel}).
+Next: I am continuing from the current workspace state and tightening the preview/start flow until it becomes healthy.`,
+                          );
+
+                          logger.info(
+                            `hosted runtime preview recovery continuation ${JSON.stringify({
+                              runId,
+                              provider,
+                              model,
+                              hostedRuntimeSessionId,
+                              outcome: hostedPreviewVerification.outcome,
+                              attempt: runContinuationAttempts,
+                              maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+                              previewAlertMessage,
+                            })}`,
+                          );
+
+                          processedMessages.push({ id: generateId(), role: 'assistant', content });
+                          processedMessages.push({
+                            id: generateId(),
+                            role: 'user',
+                            content: buildHostedPreviewRecoveryPrompt({
+                              model,
+                              provider,
+                              originalRequest: latestUserGoal || lastUserContent,
+                              failureSummary: previewAlertMessage,
+                              attempt: runContinuationAttempts,
+                              maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+                            }),
+                          });
+
+                          beginRunMonitors();
+
+                          const continuationResult = await streamText({
+                            messages: [...processedMessages],
+                            env: runtimeEnv as any,
+                            options: {
+                              ...options,
+                              abortSignal: createStreamAbortSignal(),
+                            },
+                            apiKeys,
+                            files,
+                            providerSettings,
+                            promptId,
+                            contextOptimization,
+                            contextFiles: filteredFiles,
+                            chatMode,
+                            designScheme,
+                            summary,
+                            messageSliceId,
+                            projectMemory: effectiveProjectMemory || undefined,
+                            subAgentPlan,
+                          });
+
+                          markRunActivity();
+                          continuationResult.mergeIntoDataStream(dataStream);
+
+                          return;
+                        }
+
+                        hasExecutionFailures = true;
+                        latestExecutionFailure = {
+                          toolName: 'hosted-preview',
+                          command: synthesizedRunHandoff.startCommand,
+                          exitCode: 1,
+                          stderr: previewAlertMessage,
+                        };
+
+                        if (hostedPreviewVerification.outcome === 'error') {
+                          writeCommentary(
+                            'verification',
+                            'Hosted preview reported an error after start.',
+                            'warning',
+                            `Key changes: The runtime replay finished, but preview verification failed.
+Next: Review the hosted preview output: ${previewAlertMessage}`,
+                          );
+                        } else {
+                          writeCommentary(
+                            'verification',
+                            'Preview startup is taking longer than expected.',
+                            'warning',
+                            `Key changes: The runtime handoff completed, but the hosted preview did not confirm readiness within ${
+                              Number.isFinite(hostedPreviewVerificationTimeoutMs) &&
+                              hostedPreviewVerificationTimeoutMs > 0
+                                ? Math.round(hostedPreviewVerificationTimeoutMs / 1000)
+                                : 60
+                            }s.
+Next: Review the hosted preview output and runtime logs before treating this run as complete. Latest signal: ${previewAlertMessage}`,
+                          );
+                        }
                       }
 
                       emitFinalNextStepCommentary();
@@ -1455,42 +1983,15 @@ Next: I will keep working from the existing project state until the app is runni
               processedMessages.push({
                 id: generateId(),
                 role: 'user',
-                content: shouldContinueForRunIntent
-                  ? `[Model: ${model}]
-
-[Provider: ${provider}]
-
-You scaffolded a project but did not complete the requested implementation.
-Continue now and do ALL of the following:
-1) continue from the current project files (do NOT re-run create-vite/create-react-app if package.json already exists).
-2) implement the requested product requirements from the original user request:
-   ${lastUserContent}
-3) your FIRST executable action must be a <boltAction type="file"> that replaces ${starterEntryTarget} if the starter placeholder is still present there.
-4) install dependencies only if missing.
-5) include a <boltAction type="start"> command that launches the dev server.
-6) if a command fails, self-heal and retry with a corrected command.
-7) your response must start with executable <boltAction> steps (no plan-only prose).
-8) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
-9) do NOT re-scaffold or re-bootstrap the starter when package.json already exists.
-10) keep the final response concise and execution-focused.
-`
-                  : `[Model: ${model}]
-
-[Provider: ${provider}]
-
-The previous run ended without a preview-ready checkpoint.
-Continue from the current project state right now and do ALL of the following:
-1) do not re-scaffold the project if package.json or app files already exist.
-2) implement the original user request fully:
-   ${lastUserContent}
-3) if the starter placeholder is still present, replace ${starterEntryTarget} before any additional prose.
-4) run whatever install or fix steps are still required.
-5) emit executable <boltAction> steps immediately.
-6) launch the dev server and do not finish until a preview-ready checkpoint is produced.
-7) do NOT emit ls, pwd, cat, find, echo, or other inspection-only shell commands unless they are required to fix a failing command.
-8) if a command fails, self-heal and retry with the corrected command.
-9) finish with a concise summary only after the requested app is actually running in preview.
-`,
+                content: buildRunContinuationPrompt({
+                  model,
+                  provider,
+                  originalRequest: latestUserGoal || lastUserContent,
+                  starterEntryTarget,
+                  continuationReason,
+                  shouldContinueForRunIntent,
+                  latestExecutionFailure,
+                }),
               });
 
               beginRunMonitors();

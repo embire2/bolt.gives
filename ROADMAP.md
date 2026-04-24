@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-17
+Last updated: 2026-04-23
 
 Status legend:
 
@@ -60,11 +60,17 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [~] Keep `Chat` and `Workspace` status explicit during generation so users always know whether the system is scaffolding, installing, starting, ready, or repairing.
 - [~] Remove remaining starter/workspace hydration ambiguity on generated-app flows, including rejecting prose-only runtime handoffs on follow-up prompts and resolving generated entry-file writes onto the active starter file.
 - [~] Keep incomplete starter rewrites in the continuation path until the active entry file no longer contains fallback placeholder content, so “preview verification pending” only appears for genuinely runnable projects.
+- [~] Keep follow-up prompts anchored to a stable per-project context id and deterministic current-workspace snapshots, so the model stays aware of the active codebase and can keep iterating instead of restarting from stale/global memory.
+- [~] Keep local follow-up installs/restarts isolated from the active dev-server shell, so iterative prompts can repair and improve a running project without tearing down the current preview session mid-stream.
 - [~] Keep hosted preview verification visibly alive during long warm-ups and force the browser preview to reconcile quickly once the generated app is ready, so users do not get stranded on the fallback starter while the server already has a valid app.
 - [~] Ignore stale fallback-starter detections once the active workspace files no longer contain the starter placeholder, so hosted preview recovery does not roll back valid generated apps.
 - [~] Prevent hidden continuation/recovery prompts from overlapping an active stream, so transport retries do not cascade into browser-side reconnect loops.
 - [~] Infer setup/start handoff commands from the merged workspace snapshot instead of the latest assistant delta, so preview recovery reuses the real project runtime after a disconnected or interrupted stream.
-- [ ] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified.
+- [~] Refuse runtime handoff until the merged workspace contains a concrete primary app entry file, so partial starter-plus-component responses stay in continuation instead of being launched as a broken preview.
+- [~] Require the latest assistant response to include a concrete implementation file before synthesized runtime handoff can run, so scaffold-only `create-vite`/bootstrap responses continue generating instead of previewing stale request snapshots or the fallback starter.
+- [~] Sync shell-created Vite files before local pre-start React repairs, so missing default exports and legacy `ReactDOM.render` calls are fixed against the actual workspace state before preview startup.
+- [~] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified. Browser E2E now requires the requested token to appear inside preview, not just an iframe mount.
+- [~] Limit server-side “preview not verified” continuation loops to hosted-runtime sessions that the backend can actually verify, so local/self-host builds can settle on a runnable preview and accept follow-up prompts normally.
 - [~] Fail release verification when post-deploy browser health detects missing hashed assets or a non-interactive prompt shell after rollout.
 
 2. Commentary quality and transparency

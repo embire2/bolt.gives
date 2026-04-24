@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 import { flushSync } from 'react-dom';
 import { BaseChat } from './BaseChat';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
-import { description, useChatHistory } from '~/lib/persistence';
+import { chatId as persistedChatId, description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { getCollaborationServerUrl } from '~/lib/collaboration/config';
@@ -20,7 +20,11 @@ import { useSettings } from '~/lib/hooks/useSettings';
 import type { IProviderSetting, ProviderInfo } from '~/types/model';
 import { useSearchParams } from '@remix-run/react';
 import { createSampler } from '~/utils/sampler';
-import { getTemplates, selectStarterTemplate } from '~/utils/selectStarterTemplate';
+import {
+  getTemplates,
+  selectStarterTemplate,
+  type StarterTemplateBootstrapCommands,
+} from '~/utils/selectStarterTemplate';
 import { logStore } from '~/lib/stores/logs';
 import { streamingState } from '~/lib/stores/streaming';
 import { filesToArtifacts } from '~/utils/fileUtils';
@@ -58,6 +62,7 @@ import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
 import type {
   AgentRunMetricsDataEvent,
+  CheckpointDataEvent,
   ProjectMemoryDataEvent,
   SyntheticRunHandoffDataEvent,
   UsageDataEvent,
@@ -66,12 +71,26 @@ import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
-import { classifyRecoverableStreamError } from '~/lib/runtime/recovery-errors';
+import { classifyRecoverableStreamError, shouldIgnoreDisconnectAfterCompletedRun } from '~/lib/runtime/recovery-errors';
 import { securedFetch } from '~/lib/hooks/useCsrf';
+import { buildStarterBootstrapMessages } from './starter-bootstrap-messages';
+import {
+  getStarterBootstrapRuntimeActionStatus,
+  selectMissingStarterBootstrapRuntimeActions,
+  shouldWaitForStarterBootstrapObservation,
+  shouldWaitForStarterContinuation,
+  shouldRunImmediateStarterBootstrapRuntime,
+  type StarterBootstrapRuntimeAction,
+} from './starter-bootstrap-runtime';
+import {
+  selectSyntheticRuntimeHandoffCandidate,
+  shouldApplySyntheticRuntimeHandoff,
+} from './synthetic-runtime-handoff';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
-const PROJECT_MEMORY_STORAGE_KEY = 'bolt_project_memory_v1';
+const PROJECT_MEMORY_STORAGE_PREFIX = 'bolt_project_memory_v2';
+const PROJECT_CONTEXT_STORAGE_PREFIX = 'bolt_project_context_v1';
 const CHAT_SELECTION_COOKIE_EXPIRY_DAYS = 365;
 const MAX_CHAT_DATA_EVENTS = 140;
 const MAX_STEP_RUNNER_EVENTS = 96;
@@ -129,6 +148,22 @@ function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean 
   });
 }
 
+function collectWorkbenchRuntimeActions(): StarterBootstrapRuntimeAction[] {
+  return Object.values(workbenchStore.artifacts.get()).flatMap((artifact) =>
+    Object.values(artifact.runner.actions.get())
+      .filter((action) => action.type === 'shell' || action.type === 'start')
+      .map((action) => ({
+        type: action.type as StarterBootstrapRuntimeAction['type'],
+        content: action.content,
+        status: action.status,
+      })),
+  );
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function isSyntheticRunHandoffEvent(value: unknown): value is SyntheticRunHandoffDataEvent {
   return (
     typeof value === 'object' &&
@@ -138,12 +173,52 @@ function isSyntheticRunHandoffEvent(value: unknown): value is SyntheticRunHandof
   );
 }
 
-function loadStoredProjectMemory(): StoredProjectMemory {
+function isCheckpointDataEvent(value: unknown): value is CheckpointDataEvent {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && (value as any).type === 'checkpoint';
+}
+
+function createProjectContextId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `pc_${crypto.randomUUID()}`;
+  }
+
+  return `pc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getProjectContextStorageKey(chatIdValue: string) {
+  return `${PROJECT_CONTEXT_STORAGE_PREFIX}:${chatIdValue}`;
+}
+
+function getProjectMemoryStorageKey(projectContextId: string) {
+  return `${PROJECT_MEMORY_STORAGE_PREFIX}:${projectContextId}`;
+}
+
+function loadStoredProjectContextId(chatIdValue: string | undefined): string | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  const raw = window.localStorage.getItem(PROJECT_MEMORY_STORAGE_KEY);
+  if (!chatIdValue) {
+    return null;
+  }
+
+  return window.localStorage.getItem(getProjectContextStorageKey(chatIdValue));
+}
+
+function persistProjectContextId(chatIdValue: string, projectContextId: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getProjectContextStorageKey(chatIdValue), projectContextId);
+}
+
+function loadStoredProjectMemory(projectContextId: string | null | undefined): StoredProjectMemory {
+  if (typeof window === 'undefined' || !projectContextId) {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(getProjectMemoryStorageKey(projectContextId));
 
   if (!raw) {
     return null;
@@ -160,6 +235,14 @@ function loadStoredProjectMemory(): StoredProjectMemory {
   } catch {
     return null;
   }
+}
+
+function persistProjectMemory(projectContextId: string, memory: ProjectMemoryDataEvent) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getProjectMemoryStorageKey(projectContextId), JSON.stringify(memory));
 }
 
 function getApiKeysFromCookiesSafe(): Record<string, string> {
@@ -418,6 +501,9 @@ export const ChatImpl = memo(
     const [searchParams, setSearchParams] = useSearchParams();
     const [fakeLoading, setFakeLoading] = useState(false);
     const files = useStore(workbenchStore.files);
+    const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
+    const previews = useStore(workbenchStore.previews);
+    const currentChatId = useStore(persistedChatId);
     const [designScheme, setDesignScheme] = useState<DesignScheme>(defaultDesignScheme);
     const actionAlert = useStore(workbenchStore.alert);
     const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
@@ -459,13 +545,19 @@ export const ChatImpl = memo(
     const [agentMode, setAgentMode] = useState<AgentMode>('chat');
     const [agentPlanSteps, setAgentPlanSteps] = useState<AgentPlanStep[]>([]);
     const [sketchElements, setSketchElements] = useState<SketchElement[]>([]);
-    const [projectMemory, setProjectMemory] = useState<StoredProjectMemory>(() => loadStoredProjectMemory());
+    const [projectContextId, setProjectContextId] = useState(() => {
+      const storedProjectContextId = loadStoredProjectContextId(currentChatId);
+
+      return storedProjectContextId || createProjectContextId();
+    });
+    const [projectMemory, setProjectMemory] = useState<StoredProjectMemory>(null);
     const [latestRunMetrics, setLatestRunMetrics] = useState<AgentRunMetricsDataEvent | null>(null);
     const [latestUsage, setLatestUsage] = useState<UsageDataEvent | null>(null);
     const [pendingArchitectAutoHeal, setPendingArchitectAutoHeal] = useState<PendingArchitectAutoHeal | null>(null);
     const [architectAutoHealStatus, setArchitectAutoHealStatus] = useState<'queued' | 'running' | null>(null);
     const hostedRuntimeEnabled = useMemo(() => isHostedRuntimeEnabled(), []);
     const selectionBootstrapRef = useRef(false);
+    const previousChatIdRef = useRef<string | undefined>(currentChatId);
     const architectAttemptCountsRef = useRef<Record<string, number>>({});
     const architectInFlightRef = useRef(false);
     const providerEnvKeyStatusRef = useRef<Record<string, boolean>>({});
@@ -480,6 +572,40 @@ export const ChatImpl = memo(
 
       setProvider(DEFAULT_PROVIDER as ProviderInfo);
     }, [provider]);
+
+    useEffect(() => {
+      const previousChatId = previousChatIdRef.current;
+      previousChatIdRef.current = currentChatId;
+
+      if (!currentChatId) {
+        if (previousChatId !== undefined) {
+          setProjectContextId(createProjectContextId());
+        }
+
+        return;
+      }
+
+      const storedProjectContextId = loadStoredProjectContextId(currentChatId);
+
+      if (storedProjectContextId) {
+        if (storedProjectContextId !== projectContextId) {
+          setProjectContextId(storedProjectContextId);
+        }
+
+        return;
+      }
+
+      const nextProjectContextId = previousChatId === undefined ? projectContextId : createProjectContextId();
+      persistProjectContextId(currentChatId, nextProjectContextId);
+
+      if (nextProjectContextId !== projectContextId) {
+        setProjectContextId(nextProjectContextId);
+      }
+    }, [currentChatId, projectContextId]);
+
+    useEffect(() => {
+      setProjectMemory(loadStoredProjectMemory(projectContextId));
+    }, [projectContextId]);
 
     useEffect(() => {
       runContextRef.current = {
@@ -546,6 +672,7 @@ export const ChatImpl = memo(
         selectedModel: model,
         files,
         hostedRuntimeSessionId: hostedRuntimeEnabled ? workbenchStore.hostedRuntimeSessionId : undefined,
+        projectContextId,
         promptId,
         contextOptimization: contextOptimizationEnabled,
         chatMode,
@@ -636,14 +763,20 @@ export const ChatImpl = memo(
     const lastAssistantProgressSignatureRef = useRef('');
     const latestUserRequestRef = useRef('');
     const requestLifecycleStartedAtRef = useRef(Date.now());
+    const lastRunCompletedAtRef = useRef<number | null>(null);
+    const lastPreviewReadyAtRef = useRef<number | null>(null);
     const pendingStarterContinuationRef = useRef<string | null>(null);
     const starterContinuationTriggeredRef = useRef(false);
+    const starterBootstrapCommandsRef = useRef<StarterTemplateBootstrapCommands | null>(null);
+    const starterBootstrapQueuedAtRef = useRef<number | null>(null);
+    const starterStartRecoveryTriggeredRef = useRef(false);
     const autoContinuationCountRef = useRef(0);
     const previewPromptUnlockTriggeredRef = useRef(false);
     const isLoadingRef = useRef(isLoading);
     const fakeLoadingRef = useRef(fakeLoading);
     const messagesRef = useRef(messages);
     const appliedSyntheticRunHandoffsRef = useRef(new Set<string>());
+    const pendingSyntheticRunHandoffRef = useRef<SyntheticRunHandoffDataEvent | null>(null);
     const [queuedHiddenContinuation, setQueuedHiddenContinuation] = useState<QueuedHiddenContinuation | null>(null);
 
     useEffect(() => {
@@ -825,19 +958,20 @@ export const ChatImpl = memo(
 
     const dispatchStarterContinuation = useCallback(
       (reason: 'stream-finished' | 'stream-stalled') => {
-        const pendingOriginalRequest = pendingStarterContinuationRef.current;
+        const pendingStarterContext = pendingStarterContinuationRef.current;
         const activeRunContext = runContextRef.current;
         const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(workbenchStore.files.get());
 
-        if (!pendingOriginalRequest || starterContinuationTriggeredRef.current) {
+        if (!pendingStarterContext || starterContinuationTriggeredRef.current) {
           return false;
         }
 
-        const normalizedRequest = pendingOriginalRequest.trim() || latestUserRequestRef.current.trim();
+        const normalizedRequest = pendingStarterContext.trim() || latestUserRequestRef.current.trim();
 
-        if (!normalizedRequest || !starterPlaceholderStillPresent) {
+        if (!normalizedRequest) {
           pendingStarterContinuationRef.current = null;
           starterContinuationTriggeredRef.current = false;
+          starterBootstrapQueuedAtRef.current = null;
 
           return false;
         }
@@ -854,20 +988,26 @@ export const ChatImpl = memo(
               ? 'Starter bootstrap stalled. Continuing with the user request.'
               : 'Starter bootstrap completed. Continuing with the user request.',
           includeSelectionReason: true,
-          content: `Starter bootstrap is complete, but the fallback placeholder is still present.
+          content: `${
+            starterPlaceholderStillPresent
+              ? 'Starter bootstrap is complete, but the fallback placeholder is still present.'
+              : 'Starter bootstrap is complete, but the imported starter baseline still needs to be turned into the requested app.'
+          }
 Continue implementing the original request now and do not stop at scaffold/install/start.
 
-Original request:
+Starter import context:
 ${normalizedRequest}
 
 Requirements:
 1) Continue from the existing files and runtime state. Do not re-run create-vite/create-react-app if package.json already exists.
-2) Replace any fallback placeholder UI in src/App.tsx, src/App.jsx, app/page.tsx, or the equivalent entry screen.
+2) Replace any fallback placeholder UI or starter baseline screen in src/App.tsx, src/App.jsx, app/page.tsx, or the equivalent entry screen.
 3) Implement the requested features fully, beyond the starter baseline.
 4) Keep preview running and verify the output.
 5) Your first output must be actionable <boltAction> steps (do not respond with plan-only prose).
 6) If a command fails, self-heal by correcting the command and retrying.
-7) Do not finish while the preview still shows "${STARTER_PLACEHOLDER_TEXT}".
+7) Do not finish while the preview still shows the imported starter instead of the requested app${
+            starterPlaceholderStillPresent ? `, including "${STARTER_PLACEHOLDER_TEXT}"` : ''
+          }.
 8) Finish with a concise completion summary plus any remaining gaps.`,
         });
 
@@ -891,6 +1031,9 @@ Requirements:
         if (!dispatched) {
           pendingStarterContinuationRef.current = null;
           starterContinuationTriggeredRef.current = false;
+          starterBootstrapQueuedAtRef.current = null;
+        } else {
+          starterBootstrapQueuedAtRef.current = null;
         }
 
         return dispatched;
@@ -946,9 +1089,7 @@ Requirements:
             return prev;
           }
 
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem(PROJECT_MEMORY_STORAGE_KEY, JSON.stringify(lastProjectMemoryEvent));
-          }
+          persistProjectMemory(projectContextId, lastProjectMemoryEvent);
 
           return lastProjectMemoryEvent;
         });
@@ -962,30 +1103,57 @@ Requirements:
         );
 
       if (lastRunMetricsEvent) {
+        const runCompletedAt = Date.parse(lastRunMetricsEvent.timestamp || '');
+
+        if (Number.isFinite(runCompletedAt)) {
+          lastRunCompletedAtRef.current = runCompletedAt;
+        }
+
         setLatestRunMetrics((prev) => (prev?.runId === lastRunMetricsEvent.runId ? prev : lastRunMetricsEvent));
       }
-    }, [boundedChatData]);
+    }, [boundedChatData, projectContextId]);
 
     useEffect(() => {
-      const syntheticRunHandoff = [...boundedChatData]
+      const latestSyntheticRunHandoff = [...boundedChatData]
         .reverse()
         .find((item): item is SyntheticRunHandoffDataEvent => isSyntheticRunHandoffEvent(item));
+      const syntheticRunHandoff = selectSyntheticRuntimeHandoffCandidate({
+        latestEvent: latestSyntheticRunHandoff,
+        pendingEvent: pendingSyntheticRunHandoffRef.current,
+      });
 
-      if (!syntheticRunHandoff || isLoading || fakeLoading) {
+      if (latestSyntheticRunHandoff) {
+        pendingSyntheticRunHandoffRef.current = latestSyntheticRunHandoff;
+      }
+
+      if (!syntheticRunHandoff) {
         return;
       }
 
-      if (appliedSyntheticRunHandoffsRef.current.has(syntheticRunHandoff.handoffId)) {
+      const currentMessages = messagesRef.current;
+
+      if (
+        !shouldApplySyntheticRuntimeHandoff({
+          event: syntheticRunHandoff,
+          appliedHandoffIds: appliedSyntheticRunHandoffsRef.current,
+          messages: currentMessages,
+          isLoading,
+          fakeLoading,
+        })
+      ) {
+        if (
+          appliedSyntheticRunHandoffsRef.current.has(syntheticRunHandoff.handoffId) ||
+          currentMessages.some((message) => message.id === syntheticRunHandoff.messageId)
+        ) {
+          pendingSyntheticRunHandoffRef.current = null;
+        }
+
         return;
       }
 
       appliedSyntheticRunHandoffsRef.current.add(syntheticRunHandoff.handoffId);
-
-      const currentMessages = messagesRef.current;
-
-      if (currentMessages.some((message) => message.id === syntheticRunHandoff.messageId)) {
-        return;
-      }
+      pendingSyntheticRunHandoffRef.current = null;
+      lastMessageProgressAtRef.current = Date.now();
 
       appendStepRunnerEvent({
         type: 'telemetry',
@@ -1005,6 +1173,150 @@ Requirements:
 
       toast.info('Workspace runtime handoff: launching the preview from inferred project commands.');
     }, [boundedChatData, fakeLoading, isLoading]);
+
+    const appliedHostedPreviewCheckpointRef = useRef<string | null>(null);
+
+    useEffect(() => {
+      const hostedPreviewCheckpoint = [...boundedChatData]
+        .reverse()
+        .find(
+          (item): item is CheckpointDataEvent =>
+            isCheckpointDataEvent(item) &&
+            item.checkpointType === 'preview-ready' &&
+            typeof item.previewBaseUrl === 'string' &&
+            item.previewBaseUrl.length > 0 &&
+            typeof item.previewPort === 'number',
+        );
+
+      if (!hostedPreviewCheckpoint?.previewBaseUrl || typeof hostedPreviewCheckpoint.previewPort !== 'number') {
+        return;
+      }
+
+      const checkpointSignature = [
+        hostedPreviewCheckpoint.timestamp,
+        hostedPreviewCheckpoint.previewBaseUrl,
+        hostedPreviewCheckpoint.previewPort,
+      ].join('::');
+
+      if (appliedHostedPreviewCheckpointRef.current === checkpointSignature) {
+        return;
+      }
+
+      appliedHostedPreviewCheckpointRef.current = checkpointSignature;
+
+      const previewReadyAt = Date.parse(hostedPreviewCheckpoint.timestamp || '');
+
+      if (Number.isFinite(previewReadyAt)) {
+        lastPreviewReadyAtRef.current = previewReadyAt;
+      }
+
+      appendStepRunnerEvent({
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Preview verified',
+        output: `url=${hostedPreviewCheckpoint.previewBaseUrl} port=${hostedPreviewCheckpoint.previewPort}`,
+      });
+      workbenchStore.syncHostedPreview({
+        port: hostedPreviewCheckpoint.previewPort,
+        baseUrl: hostedPreviewCheckpoint.previewBaseUrl,
+      });
+    }, [boundedChatData]);
+
+    useEffect(() => {
+      const bootstrapCommands = starterBootstrapCommandsRef.current;
+      const runtimeActions = collectWorkbenchRuntimeActions();
+
+      if (!bootstrapCommands?.startCommand || starterStartRecoveryTriggeredRef.current) {
+        return;
+      }
+
+      const hasReadyPreview = previews.some((preview) => preview.ready && preview.baseUrl);
+
+      if (hasReadyPreview) {
+        starterBootstrapCommandsRef.current = null;
+        starterBootstrapQueuedAtRef.current = null;
+        starterStartRecoveryTriggeredRef.current = false;
+
+        return;
+      }
+
+      if (!hasMaterializedStarterWorkspace(files)) {
+        return;
+      }
+
+      const installStatus = getStarterBootstrapRuntimeActionStatus(runtimeActions, bootstrapCommands.installCommand);
+      const startStatus = getStarterBootstrapRuntimeActionStatus(runtimeActions, bootstrapCommands.startCommand);
+      const starterBootstrapObservationPending = shouldWaitForStarterBootstrapObservation({
+        commands: bootstrapCommands,
+        installStatus,
+        startStatus,
+        queuedAt: starterBootstrapQueuedAtRef.current,
+        recoveryTriggered: starterStartRecoveryTriggeredRef.current,
+      });
+
+      if (starterBootstrapObservationPending) {
+        return;
+      }
+
+      const installCompleted = bootstrapCommands.installCommand ? installStatus === 'complete' : true;
+      const startInFlight = startStatus === 'pending' || startStatus === 'running';
+      const startAlreadyRecovered = startStatus === 'complete';
+
+      if (!installCompleted || startInFlight || startAlreadyRecovered) {
+        return;
+      }
+
+      starterStartRecoveryTriggeredRef.current = true;
+
+      if (bootstrapCommands.installCommand && installStatus === 'idle') {
+        const recoveryId = `starter-bootstrap-recovery-${Date.now()}`;
+
+        appendStepRunnerEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Dispatching starter runtime bootstrap recovery',
+          output: [bootstrapCommands.installCommand, bootstrapCommands.startCommand].filter(Boolean).join(' | '),
+        });
+
+        void ensureStarterBootstrapRuntime({
+          artifactId: recoveryId,
+          messageId: recoveryId,
+          title: 'Starter Runtime Recovery',
+          commands: bootstrapCommands,
+        })
+          .then((recovered) => {
+            if (!recovered) {
+              starterStartRecoveryTriggeredRef.current = false;
+            }
+          })
+          .catch((error) => {
+            starterStartRecoveryTriggeredRef.current = false;
+            logger.warn('starter runtime bootstrap recovery failed', error);
+          });
+
+        return;
+      }
+
+      appendStepRunnerEvent({
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Dispatching starter preview recovery',
+        output: `start=${bootstrapCommands.startCommand}`,
+      });
+
+      const recoveryId = `starter-preview-recovery-${Date.now()}`;
+
+      void workbenchStore
+        .dispatchSyntheticRuntimeHandoff({
+          messageId: recoveryId,
+          handoffId: recoveryId,
+          startCommand: bootstrapCommands.startCommand,
+        })
+        .catch((error) => {
+          starterStartRecoveryTriggeredRef.current = false;
+          logger.warn('starter preview recovery dispatch failed', error);
+        });
+    }, [files, previews, stepRunnerEvents]);
 
     useEffect(() => {
       const streaming = isLoading || fakeLoading;
@@ -1048,7 +1360,7 @@ Requirements:
           const lastMeaningfulTimestamp = getLastMeaningfulProgressTimestamp(
             recentStepEvents,
             requestLifecycleStartedAtRef.current,
-            [lastMessageProgressAtRef.current],
+            [lastMessageProgressAtRef.current, lastDataEventAtRef.current],
           );
           const meaningfulStallMs = Date.now() - lastMeaningfulTimestamp;
           const meaningfulStallSeconds = Math.round(meaningfulStallMs / 1000);
@@ -1214,6 +1526,10 @@ Requirements:
         return undefined;
       }
 
+      if (starterContinuationTriggeredRef.current) {
+        return undefined;
+      }
+
       let cancelled = false;
 
       const evaluateStarterContinuation = async () => {
@@ -1230,16 +1546,26 @@ Requirements:
         }
 
         const starterWorkspaceReady = hasMaterializedStarterWorkspace(files);
-        const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(files);
+        const bootstrapCommands = starterBootstrapCommandsRef.current;
+        const runtimeActions = collectWorkbenchRuntimeActions();
+        const installStatus = getStarterBootstrapRuntimeActionStatus(runtimeActions, bootstrapCommands?.installCommand);
+        const startStatus = getStarterBootstrapRuntimeActionStatus(runtimeActions, bootstrapCommands?.startCommand);
+        const starterBootstrapObservationPending = shouldWaitForStarterBootstrapObservation({
+          commands: bootstrapCommands || undefined,
+          installStatus,
+          startStatus,
+          queuedAt: starterBootstrapQueuedAtRef.current,
+          recoveryTriggered: starterStartRecoveryTriggeredRef.current,
+        });
+        const starterRuntimeBootstrapInFlight =
+          starterBootstrapObservationPending ||
+          Boolean(bootstrapCommands && shouldWaitForStarterContinuation({ installStatus, startStatus }));
 
         if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
           return;
         }
 
-        if (!starterPlaceholderStillPresent) {
-          pendingStarterContinuationRef.current = null;
-          starterContinuationTriggeredRef.current = false;
-
+        if (starterRuntimeBootstrapInFlight && autoContinuationCountRef.current === 0) {
           return;
         }
 
@@ -1247,7 +1573,6 @@ Requirements:
           return;
         }
 
-        starterContinuationTriggeredRef.current = false;
         dispatchStarterContinuation('stream-finished');
       };
 
@@ -1256,7 +1581,7 @@ Requirements:
       return () => {
         cancelled = true;
       };
-    }, [actionAlert?.source, dispatchStarterContinuation, fakeLoading, files, isLoading]);
+    }, [actionAlert?.source, dispatchStarterContinuation, fakeLoading, files, isLoading, stepRunnerEvents]);
 
     useEffect(() => {
       if (selectionBootstrapRef.current || activeProviders.length === 0) {
@@ -1552,6 +1877,37 @@ Requirements:
         const { timeoutLike: timeoutLikeError, disconnectLike: disconnectLikeError } = classifyRecoverableStreamError(
           errorInfo.message,
         );
+        const shouldIgnoreCompletedRunDisconnect =
+          context === 'chat' &&
+          shouldIgnoreDisconnectAfterCompletedRun({
+            message: errorInfo.message,
+            requestStartedAt: requestLifecycleStartedAtRef.current,
+            lastRunCompletedAt: lastRunCompletedAtRef.current,
+            lastPreviewReadyAt: lastPreviewReadyAtRef.current,
+          });
+
+        if (shouldIgnoreCompletedRunDisconnect) {
+          logStore.logWarning('Ignoring late stream disconnect after completed run', {
+            component: 'Chat',
+            action: 'request',
+            provider: diagnostics.provider,
+            diagnostics,
+            lastRunCompletedAt: lastRunCompletedAtRef.current,
+            lastPreviewReadyAt: lastPreviewReadyAtRef.current,
+          });
+
+          appendStepRunnerEvent({
+            type: 'telemetry',
+            timestamp: new Date().toISOString(),
+            description: 'Ignoring late stream disconnect after completed run',
+            output: `provider=${diagnostics.provider} model=${diagnostics.model}`,
+          });
+          setLlmErrorAlert(undefined);
+          setData([]);
+
+          return;
+        }
+
         let queuedAutoRecovery = false;
 
         if (
@@ -1632,6 +1988,73 @@ Requirements:
     const clearApiErrorAlert = useCallback(() => {
       setLlmErrorAlert(undefined);
     }, []);
+
+    const ensureStarterBootstrapRuntime = useCallback(
+      async (options: {
+        artifactId: string;
+        messageId: string;
+        title: string;
+        commands: StarterTemplateBootstrapCommands | undefined;
+      }) => {
+        const waitDeadline = Date.now() + 8000;
+
+        while (Date.now() < waitDeadline) {
+          if (hasMaterializedStarterWorkspace(workbenchStore.files.get())) {
+            break;
+          }
+
+          await delay(100);
+        }
+
+        if (!hasMaterializedStarterWorkspace(workbenchStore.files.get())) {
+          return false;
+        }
+
+        const pendingActions = selectMissingStarterBootstrapRuntimeActions(
+          options.commands,
+          collectWorkbenchRuntimeActions(),
+        );
+
+        if (pendingActions.length === 0) {
+          return false;
+        }
+
+        appendStepRunnerEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Dispatching starter runtime bootstrap',
+          output: pendingActions.map((action) => `${action.type}:${action.content}`).join(' | '),
+        });
+
+        await workbenchStore.addArtifact({
+          id: options.artifactId,
+          messageId: options.messageId,
+          title: options.title,
+          type: 'bundled',
+        });
+
+        const runtimeArtifact = workbenchStore.artifacts.get()[options.artifactId];
+
+        if (!runtimeArtifact) {
+          return false;
+        }
+
+        for (const [index, action] of pendingActions.entries()) {
+          const actionData = {
+            artifactId: options.artifactId,
+            messageId: options.messageId,
+            actionId: `${options.artifactId}-runtime-${index}`,
+            action,
+          };
+
+          runtimeArtifact.runner.addAction(actionData);
+          await runtimeArtifact.runner.runAction(actionData);
+        }
+
+        return true;
+      },
+      [],
+    );
 
     const replaceMessagesAndReload = useCallback(
       (
@@ -2212,8 +2635,13 @@ Requirements:
       lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
       lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
+      lastRunCompletedAtRef.current = null;
+      lastPreviewReadyAtRef.current = null;
       stallRecoveryTriggeredRef.current = false;
       starterContinuationTriggeredRef.current = false;
+      starterBootstrapCommandsRef.current = null;
+      starterBootstrapQueuedAtRef.current = null;
+      starterStartRecoveryTriggeredRef.current = false;
       autoContinuationCountRef.current = 0;
       pendingStarterContinuationRef.current = null;
 
@@ -2399,7 +2827,7 @@ Requirements:
             });
 
             if (temResp) {
-              const { assistantMessage, usingLocalFallback } = temResp;
+              const { assistantMessage, usingLocalFallback, bootstrapCommands } = temResp;
               const starterActionCount = (assistantMessage.match(/<(?:boltAction|codyAction)\b/g) || []).length;
               logger.info('Starter template import prepared', {
                 template,
@@ -2407,28 +2835,33 @@ Requirements:
                 usingLocalFallback,
               });
 
-              pendingStarterContinuationRef.current = finalMessageContent;
+              pendingStarterContinuationRef.current = `${temResp.userMessage.trim()}
+
+CONTINUE IMMEDIATELY:
+1) Continue from the already imported starter files and current workspace state.
+2) Do not answer with a plan or explanation first.
+3) Your response must begin with executable <boltAction> steps.
+4) Replace any fallback placeholder UI before any final summary.
+5) Keep the dev server running or restart it if needed after file changes.
+6) Do not stop until the requested app is implemented and previewable.
+7) End with a concise completion summary only after the app is running.`;
               starterContinuationTriggeredRef.current = false;
+              starterBootstrapCommandsRef.current = bootstrapCommands || null;
+              starterBootstrapQueuedAtRef.current = Date.now();
+              starterStartRecoveryTriggeredRef.current = false;
 
               const userMessageText = buildUserMessageText(finalMessageContent);
               const attachments = await buildChatAttachments();
+              const timestamp = new Date().getTime().toString();
 
-              const nextMessages: Message[] = [
-                {
-                  id: `1-${new Date().getTime()}`,
-                  role: 'user',
-                  content: userMessageText,
-                  parts: createMessageParts(userMessageText, imageDataList),
-                  experimental_attachments: attachments,
-                },
-                {
-                  id: `2-${new Date().getTime()}`,
-                  role: 'assistant',
-                  content: assistantMessage,
-                },
-              ];
-
-              const reloadOptions = attachments ? { experimental_attachments: attachments } : undefined;
+              const nextMessages = buildStarterBootstrapMessages({
+                userMessageId: `1-${timestamp}`,
+                assistantMessageId: `2-${timestamp}`,
+                userMessageText,
+                starterAssistantMessage: assistantMessage,
+                userParts: createMessageParts(userMessageText, imageDataList),
+                attachments,
+              });
 
               logger.info('Starter template chat reload triggered', {
                 template,
@@ -2440,7 +2873,27 @@ Requirements:
                 template,
                 placeholderExpected: true,
               });
-              replaceMessagesAndReload(nextMessages, reloadOptions);
+              flushSync(() => {
+                setMessages(nextMessages);
+              });
+
+              if (
+                shouldRunImmediateStarterBootstrapRuntime({
+                  commands: bootstrapCommands,
+                  hostedRuntimeEnabled,
+                  usingLocalFallback,
+                })
+              ) {
+                void ensureStarterBootstrapRuntime({
+                  artifactId: `${timestamp}-starter-runtime`,
+                  messageId: `${timestamp}-starter-runtime`,
+                  title: 'Starter Runtime Bootstrap',
+                  commands: bootstrapCommands,
+                }).catch((runtimeBootstrapError) => {
+                  handleError(runtimeBootstrapError, 'chat');
+                });
+              }
+
               setInput('');
               Cookies.remove(PROMPT_COOKIE_KEY);
 

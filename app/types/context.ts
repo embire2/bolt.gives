@@ -40,6 +40,9 @@ export type CheckpointDataEvent = {
   command?: string;
   exitCode?: number;
   stderr?: string;
+  previewBaseUrl?: string;
+  previewPort?: number;
+  hostedRuntimeSessionId?: string;
 };
 
 export type ToolCallAnnotation = {

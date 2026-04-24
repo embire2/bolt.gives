@@ -10,6 +10,13 @@ export type ProjectMemoryEntry = {
 };
 
 type MemoryStore = Map<string, ProjectMemoryEntry>;
+type ProjectMemoryKeyInput =
+  | FileMap
+  | {
+      files?: FileMap;
+      projectContextId?: string | null;
+      hostedRuntimeSessionId?: string | null;
+    };
 
 const GLOBAL_MEMORY_KEY = '__bolt_project_memory_v1';
 
@@ -34,6 +41,15 @@ function hash(input: string): string {
   }
 
   return `pm_${(h >>> 0).toString(16)}`;
+}
+
+function createEphemeralSeed() {
+  const randomId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  return `ephemeral:${randomId}`;
 }
 
 function normalizeGoal(message: string): string {
@@ -92,9 +108,49 @@ function inferArchitecture(files?: FileMap): string {
   return `${summary}. Key files sampled: ${fileList.slice(0, 8).join(', ')}`;
 }
 
-export function deriveProjectMemoryKey(files?: FileMap): string {
+function isProjectMemoryIdentityInput(
+  value: ProjectMemoryKeyInput | undefined,
+): value is Exclude<ProjectMemoryKeyInput, FileMap> {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    ('files' in value || 'projectContextId' in value || 'hostedRuntimeSessionId' in value),
+  );
+}
+
+function resolveProjectMemorySeed(input?: ProjectMemoryKeyInput): string {
+  let files: FileMap | undefined;
+
+  if (isProjectMemoryIdentityInput(input)) {
+    const explicitProjectContextId = input.projectContextId?.trim();
+
+    if (explicitProjectContextId) {
+      return `project-context:${explicitProjectContextId}`;
+    }
+
+    const hostedRuntimeSessionId = input.hostedRuntimeSessionId?.trim();
+
+    if (hostedRuntimeSessionId) {
+      return `hosted-runtime:${hostedRuntimeSessionId}`;
+    }
+
+    files = input.files;
+  } else {
+    files = input;
+  }
+
   const fileList = pickTopFiles(files);
-  const seed = fileList.length ? fileList.join('|') : 'no-files';
+
+  if (fileList.length > 0) {
+    return `files:${fileList.join('|')}`;
+  }
+
+  return createEphemeralSeed();
+}
+
+export function deriveProjectMemoryKey(input?: ProjectMemoryKeyInput): string {
+  const seed = resolveProjectMemorySeed(input);
 
   return hash(seed);
 }
@@ -114,7 +170,10 @@ export function upsertProjectMemory(input: {
   const runCount = (existing?.runCount || 0) + 1;
   const latestGoal = normalizeGoal(input.latestGoal);
   const summary = input.summary?.trim() || existing?.summary || latestGoal;
-  const architecture = inferArchitecture(input.files);
+  const architecture =
+    pickTopFiles(input.files).length > 0
+      ? inferArchitecture(input.files)
+      : existing?.architecture || inferArchitecture(input.files);
   const updatedAt = new Date().toISOString();
 
   const entry: ProjectMemoryEntry = {

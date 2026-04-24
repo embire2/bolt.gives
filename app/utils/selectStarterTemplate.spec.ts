@@ -36,6 +36,10 @@ describe('getTemplates', () => {
     expect(result?.assistantMessage).toContain('filePath="README.md"');
     expect(result?.assistantMessage).toContain('filePath="package.json"');
     expect(result?.usingLocalFallback).toBe(true);
+    expect(result?.bootstrapCommands).toEqual({
+      installCommand: 'pnpm install --reporter=append-only',
+      startCommand: 'pnpm run dev',
+    });
 
     const packageIndex = result?.assistantMessage.indexOf('filePath="package.json"') ?? -1;
     const installIndex = result?.assistantMessage.indexOf('pnpm install') ?? -1;
@@ -76,6 +80,7 @@ describe('getTemplates', () => {
     expect(result?.assistantMessage).toContain('filePath="package.json"');
     expect(result?.userMessage).toContain('Fallback starter note');
     expect(result?.usingLocalFallback).toBe(true);
+    expect(result?.bootstrapCommands?.startCommand).toBe('pnpm run dev');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

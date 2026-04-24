@@ -18,6 +18,7 @@ import {
   makeInstallCommandsLowNoise,
   makeFileChecksPortable,
   makeInstallCommandsProjectAware,
+  makePreviewStartCommandsWebContainerFriendly,
   makeScaffoldCommandsProjectAware,
   normalizeShellCommandSurface,
   unwrapCommandJsonEnvelope,
@@ -26,6 +27,7 @@ import {
 } from './shell-command-utils';
 import { getBlockedShellMutationReason, shouldRunZombieCleanup } from './shell-interceptor';
 import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath } from './file-paths';
+import { extractPreviewAlertFromText } from './preview-error';
 import type { FileMap } from '~/lib/stores/files';
 import {
   isHostedRuntimeEnabled,
@@ -112,6 +114,14 @@ function normalizeShellChunkForTimeline(chunk: string): string {
     .replace(/\r/g, '\n');
 }
 
+function shouldInspectCommandOutputForPreviewIssues(command: string, kind: 'shell' | 'start') {
+  if (kind === 'start') {
+    return true;
+  }
+
+  return /\b(?:pnpm|npm|yarn|bun)\s+run\s+dev\b|\bvite(?:\s|$)|\bnext\s+dev\b|\bastro\s+dev\b/i.test(command);
+}
+
 export type ActionStatus = 'pending' | 'running' | 'complete' | 'aborted' | 'failed';
 
 export type BaseActionState = BoltAction & {
@@ -171,6 +181,7 @@ export class ActionRunner {
   #webcontainer: Promise<WebContainer>;
   #currentExecutionPromise: Promise<void> = Promise.resolve();
   #shellTerminal: () => BoltShell;
+  #runtimeShellTerminal?: () => BoltShell;
   #getFilesSnapshot?: () => FileMap;
   #onPreviewReady?: (preview: HostedRuntimePreviewInfo) => void;
   #hostedRuntimeSessionId?: string;
@@ -200,9 +211,11 @@ export class ActionRunner {
     onSupabaseAlert?: (alert: SupabaseAlert) => void,
     onDeployAlert?: (alert: DeployAlert) => void,
     onStepRunnerEvent?: (event: InteractiveStepRunnerEvent) => void,
+    getRuntimeShellTerminal?: () => BoltShell,
   ) {
     this.#webcontainer = webcontainerPromise;
     this.#shellTerminal = getShellTerminal;
+    this.#runtimeShellTerminal = getRuntimeShellTerminal;
     this.#getFilesSnapshot = getFilesSnapshot;
     this.#onPreviewReady = onPreviewReady;
     this.#hostedRuntimeSessionId = hostedRuntimeSessionId;
@@ -339,6 +352,54 @@ export class ActionRunner {
       revision: this.#hostedRuntimePreviewRevision,
     };
     this.#onPreviewReady?.(this.#lastHostedRuntimePreview);
+  }
+
+  #createPreviewAlertMonitor(command: string, kind: 'shell' | 'start') {
+    if (!shouldInspectCommandOutputForPreviewIssues(command, kind)) {
+      return {
+        observeChunk: (_chunk: string) => undefined,
+        observeFinalOutput: (_output: string) => undefined,
+      };
+    }
+
+    let combinedOutput = '';
+    let lastAlertSignature: string | null = null;
+
+    const maybeEmitAlert = () => {
+      const alert = extractPreviewAlertFromText(combinedOutput);
+
+      if (!alert) {
+        return;
+      }
+
+      const signature = `${alert.title}\n${alert.description}\n${alert.content}`;
+
+      if (signature === lastAlertSignature) {
+        return;
+      }
+
+      lastAlertSignature = signature;
+      this.onAlert?.(alert);
+    };
+
+    return {
+      observeChunk: (chunk: string) => {
+        if (!chunk.trim()) {
+          return;
+        }
+
+        combinedOutput = capCapturedOutput(`${combinedOutput}${chunk}`);
+        maybeEmitAlert();
+      },
+      observeFinalOutput: (output: string) => {
+        if (!output.trim()) {
+          return;
+        }
+
+        combinedOutput = capCapturedOutput(`${combinedOutput}${combinedOutput ? '\n' : ''}${output}`);
+        maybeEmitAlert();
+      },
+    };
   }
 
   #scheduleHostedRuntimeFileFlush() {
@@ -683,6 +744,7 @@ export class ActionRunner {
     let stepError: string | undefined;
     const heavyCommand = HEAVY_COMMAND_RE.test(action.content);
     const streamState = { lastProgressEmitAt: 0 };
+    const previewAlertMonitor = this.#createPreviewAlertMonitor(action.content, 'shell');
 
     const stepSocket = this.#getStepEventSocket();
     const stepRunner = new InteractiveStepRunner(
@@ -701,6 +763,8 @@ export class ActionRunner {
               if (!normalized.trim()) {
                 return;
               }
+
+              previewAlertMonitor.observeChunk(normalized);
 
               if (heavyCommand && NOISY_PACKAGE_PROGRESS_RE.test(normalized)) {
                 const now = Date.now();
@@ -723,6 +787,7 @@ export class ActionRunner {
 
           finalOutput = output;
           finalExitCode = exitCode;
+          previewAlertMonitor.observeFinalOutput(output);
 
           return {
             exitCode,
@@ -793,7 +858,7 @@ export class ActionRunner {
       unreachable('Shell terminal not found');
     }
 
-    const shell = this.#shellTerminal();
+    const shell = this.#runtimeShellTerminal?.() ?? this.#shellTerminal();
     await shell.ready();
 
     if (!shell || !shell.terminal || !shell.process) {
@@ -819,6 +884,7 @@ export class ActionRunner {
     let finalOutput = '';
     let finalExitCode = 0;
     let stepError: string | undefined;
+    const previewAlertMonitor = this.#createPreviewAlertMonitor(action.content, 'start');
     const stepSocket = this.#getStepEventSocket();
     const stepRunner = new InteractiveStepRunner(
       {
@@ -837,6 +903,7 @@ export class ActionRunner {
                 return;
               }
 
+              previewAlertMonitor.observeChunk(normalized);
               context.onStdout(normalized);
             },
           );
@@ -845,6 +912,7 @@ export class ActionRunner {
 
           finalOutput = output;
           finalExitCode = exitCode;
+          previewAlertMonitor.observeFinalOutput(output);
 
           return {
             exitCode,
@@ -918,10 +986,9 @@ export class ActionRunner {
   }
 
   async #runZombieKiller(kind: 'shell' | 'start') {
-    const cleanupCommand = 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true';
-
     try {
       if (isHostedRuntimeEnabled()) {
+        const cleanupCommand = 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true';
         await this.#syncHostedRuntimeSnapshot();
         await runHostedRuntimeCommand({
           sessionId: this.#getHostedRuntimeSessionId(),
@@ -931,10 +998,6 @@ export class ActionRunner {
 
         return;
       }
-
-      const shell = this.#shellTerminal();
-      await shell.ready();
-      await shell.executeCommand(this.runnerId.get(), cleanupCommand);
     } catch (error) {
       logger.debug('Zombie cleanup skipped (runtime may not expose pkill)', error);
     }
@@ -1330,6 +1393,11 @@ export class ActionRunner {
     applyRewrite(makeInstallCommandsLowNoise(trimmedCommand));
     applyRewrite(makeFileChecksPortable(trimmedCommand));
     applyRewrite(rewriteAllPackageManagersToPnpm(trimmedCommand));
+    applyRewrite(
+      makePreviewStartCommandsWebContainerFriendly(trimmedCommand, {
+        filesSnapshot: this.#getFilesSnapshot?.(),
+      }),
+    );
     applyRewrite(rewritePythonCommands(trimmedCommand));
 
     const blockedAfterRewrite = getBlockedShellMutationReason(trimmedCommand);
@@ -1438,11 +1506,31 @@ export class ActionRunner {
   }
 
   async #isProjectInitialized(): Promise<boolean> {
+    const projectIndicators = [
+      'package.json',
+      'index.html',
+      'vite.config.ts',
+      'vite.config.js',
+      'src/App.tsx',
+      'src/App.jsx',
+      'src/main.tsx',
+      'src/main.jsx',
+    ];
+
     try {
       const webcontainer = await this.#webcontainer;
-      await webcontainer.fs.readFile('package.json', 'utf-8');
 
-      return true;
+      for (const filePath of projectIndicators) {
+        try {
+          await webcontainer.fs.readFile(filePath, 'utf-8');
+
+          return true;
+        } catch {
+          // Continue checking other common project files.
+        }
+      }
+
+      return false;
     } catch {
       return false;
     }

@@ -1,6 +1,7 @@
 import {
   decodeHtmlCommandDelimiters,
   makeInstallCommandsLowNoise,
+  makeStartCommandsForeground,
   normalizeShellCommandSurface,
   rewriteAllPackageManagersToPnpm,
   unwrapCommandJsonEnvelope,
@@ -56,11 +57,14 @@ const SCAFFOLD_RE = /create-vite|npm\s+create\s+vite|pnpm\s+dlx\s+create-vite|cr
 const STARTER_BOOTSTRAP_RE =
   /Bolt is initializing your project|template import is done|built-in .*starter fallback|fallback starter/i;
 const STARTER_PLACEHOLDER_RE = /Your fallback starter is ready\./i;
+const VITE_REACT_STARTER_RE =
+  /Vite \+ React|vite\.svg|react\.svg|Click on the Vite and React logos|count is|setCount\(\(count\) => count \+ 1\)|Learn React/i;
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
+const PRIMARY_ENTRY_FILE_RE =
+  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|pages\/index\.(?:[jt]sx?)|src\/pages\/index\.(?:[jt]sx?)|app\/routes\/(?:index|_index)\.(?:[jt]sx?)|src\/routes\/(?:index|\+page)\.(?:[jt]sx?|vue|svelte))$/i;
 const SOURCE_EXTENSION_PRIORITY = ['.tsx', '.ts', '.jsx', '.js'] as const;
 const SOURCE_PATH_HINT_RE = /(?:^|\/)(?:src|app|components?|pages)(?:\/|$)/i;
-const START_ACTION_RE = /<boltAction[^>]*type="start"/i;
 const START_ACTION_WITH_CONTENT_RE = /<boltAction[^>]*type="start"[^>]*>([\s\S]*?)<\/boltAction>/gi;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type="file"/i;
@@ -191,18 +195,20 @@ function isRunnableStartCommand(command: string): boolean {
 function extractRunnableStartCommand(assistantContent: string): string | undefined {
   for (const command of extractStartCommands(assistantContent)) {
     const sanitized = sanitizeShellCommand(command);
+    const foregroundStart = makeStartCommandsForeground(sanitized).modifiedCommand || sanitized;
 
-    if (isRunnableStartCommand(sanitized)) {
-      return sanitized;
+    if (isRunnableStartCommand(foregroundStart)) {
+      return foregroundStart;
     }
   }
 
   for (const command of extractShellCommands(assistantContent)) {
     const sanitized = sanitizeShellCommand(command);
-    const startSegment = splitCommandSegments(sanitized).find((segment) => START_COMMAND_RE.test(segment));
+    const foregroundStart = makeStartCommandsForeground(sanitized).modifiedCommand || sanitized;
+    const startSegment = splitCommandSegments(foregroundStart).find((segment) => START_COMMAND_RE.test(segment));
 
-    if (startSegment && isRunnableStartCommand(sanitized)) {
-      return sanitized;
+    if (startSegment && isRunnableStartCommand(foregroundStart)) {
+      return foregroundStart;
     }
   }
 
@@ -486,7 +492,17 @@ function replacesStarterEntryFile(
 }
 
 function hasStarterPlaceholderInFiles(files: ExtractedFileAction[]): boolean {
-  return files.some((file) => STARTER_ENTRY_FILE_RE.test(file.path) && STARTER_PLACEHOLDER_RE.test(file.content));
+  return files.some((file) => STARTER_ENTRY_FILE_RE.test(file.path) && hasKnownStarterContent(file.content));
+}
+
+function hasKnownStarterContent(content: string): boolean {
+  return STARTER_PLACEHOLDER_RE.test(content) || VITE_REACT_STARTER_RE.test(content);
+}
+
+function hasConcretePrimaryEntryFile(files: ExtractedFileAction[]): boolean {
+  return files.some(
+    (file) => PRIMARY_ENTRY_FILE_RE.test(normalizeFilePath(file.path)) && !hasKnownStarterContent(file.content),
+  );
 }
 
 function hasImplementationFileAction(filePaths: string[]): boolean {
@@ -502,6 +518,22 @@ function hasImplementationFileAction(filePaths: string[]): boolean {
     }
 
     return !NON_IMPLEMENTATION_FILE_RE.test(normalizedPath);
+  });
+}
+
+function hasConcreteImplementationFile(files: ExtractedFileAction[]): boolean {
+  return files.some((file) => {
+    const normalizedPath = normalizeFilePath(file.path);
+
+    if (
+      !normalizedPath ||
+      normalizedPath.startsWith('node_modules/') ||
+      NON_IMPLEMENTATION_FILE_RE.test(normalizedPath)
+    ) {
+      return false;
+    }
+
+    return !hasKnownStarterContent(file.content);
   });
 }
 
@@ -643,13 +675,22 @@ export async function synthesizeRunHandoff(options: {
   const shellCommands = extractShellCommands(assistantContent);
   const fileActions = extractFileActions(assistantContent);
   const mergedFiles = mergeWorkspaceFiles(currentFiles, fileActions);
-  const filePaths = mergedFiles.map((file) => file.path);
+  const fileActionPaths = fileActions.map((file) => file.path);
+  const hasNewImplementationFileAction = hasImplementationFileAction(fileActionPaths);
 
-  if (!hasImplementationFileAction(filePaths)) {
+  if (!hasNewImplementationFileAction || !hasConcreteImplementationFile(fileActions)) {
+    return null;
+  }
+
+  if (!hasConcreteImplementationFile(mergedFiles)) {
     return null;
   }
 
   if (hasStarterPlaceholderInFiles(mergedFiles)) {
+    return null;
+  }
+
+  if (!hasConcretePrimaryEntryFile(mergedFiles)) {
     return null;
   }
 
@@ -762,15 +803,18 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     };
   }
 
-  const hasStartAction = START_ACTION_RE.test(assistantContent);
+  const hasRunnableStartAction = Boolean(extractRunnableStartCommand(assistantContent));
   const shellCommands = extractShellCommands(assistantContent);
   const filePaths = extractFilePaths(assistantContent);
   const fileActions = extractFileActions(assistantContent);
+  const mergedFiles = mergeWorkspaceFiles(options.currentFiles, fileActions);
   const starterEntryFiles = findStarterEntryFiles(options.currentFiles);
   const starterEntryFilePath = starterEntryFiles[0];
   const hasAnyBoltAction = BOLT_ACTION_RE.test(assistantContent);
   const hasFileAction = FILE_ACTION_RE.test(assistantContent);
   const hasImplementationFile = hasImplementationFileAction(filePaths);
+  const hasConcreteImplementationAction = hasConcreteImplementationFile(fileActions);
+  const hasConcretePrimaryEntry = hasConcretePrimaryEntryFile(mergedFiles);
   const touchedStarterEntry = touchesStarterEntryFile(filePaths, starterEntryFiles, options.currentFiles);
   const replacedStarterEntry = replacesStarterEntryFile(fileActions, starterEntryFiles, options.currentFiles);
   const mentionsScaffold = SCAFFOLD_RE.test(assistantContent);
@@ -801,7 +845,15 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     };
   }
 
-  if ((mentionsScaffold || starterBootstrapDetected) && !hasStartAction && !hasImplementationFile) {
+  if (buildIntentDetected && onlyBootstrapCommands && !hasConcreteImplementationAction) {
+    return {
+      shouldContinue: true,
+      reason: 'bootstrap-only-shell-actions',
+      starterEntryFilePath,
+    };
+  }
+
+  if ((mentionsScaffold || starterBootstrapDetected) && !hasRunnableStartAction && !hasImplementationFile) {
     return {
       shouldContinue: true,
       reason: 'scaffold-without-start',
@@ -809,7 +861,15 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     };
   }
 
-  if (runIntentDetected && !hasStartAction) {
+  if (runIntentDetected && !hasRunnableStartAction) {
+    return {
+      shouldContinue: true,
+      reason: 'run-intent-without-start',
+      starterEntryFilePath,
+    };
+  }
+
+  if (buildIntentDetected && hasImplementationFile && !hasRunnableStartAction) {
     return {
       shouldContinue: true,
       reason: 'run-intent-without-start',
@@ -833,6 +893,14 @@ export function analyzeRunContinuation(options: RunContinuationOptions): RunCont
     return {
       shouldContinue: true,
       reason: 'bootstrap-only-shell-actions',
+      starterEntryFilePath,
+    };
+  }
+
+  if (buildIntentDetected && hasImplementationFile && !hasConcretePrimaryEntry) {
+    return {
+      shouldContinue: true,
+      reason: 'starter-without-implementation',
       starterEntryFilePath,
     };
   }

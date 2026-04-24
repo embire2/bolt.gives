@@ -67,7 +67,7 @@ export default defineConfig((config) => {
           return null;
         },
       },
-      config.mode !== 'test' && remixCloudflareDevProxy(),
+      shouldEnableCloudflareDevProxy(config) && remixCloudflareDevProxy(),
       remixVitePlugin({
         future: {
           v3_fetcherPersist: true,
@@ -110,6 +110,10 @@ export default defineConfig((config) => {
     },
   };
 });
+
+export function shouldEnableCloudflareDevProxy(config: { command?: string; mode?: string }) {
+  return config.command === 'serve' && config.mode !== 'test';
+}
 
 function chrome129IssuePlugin() {
   return {

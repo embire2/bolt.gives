@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createPreviewProbeCoordinator,
+  extractConfiguredStartPort,
   extractPreviewPortFromOutput,
   normalizeStartCommand,
   parsePreviewProxyRequestTarget,
@@ -31,6 +32,18 @@ describe('runtime preview helpers', () => {
     );
     expect(normalizeStartCommand('npm run dev', 4100)).toBe('npm run dev -- --host 127.0.0.1 --port 4100');
     expect(normalizeStartCommand('next dev', 4100)).toBe('next dev -H 127.0.0.1 -p 4100');
+    expect(normalizeStartCommand('npx --yes serve', 4100)).toBe('npx --yes serve --port 4100');
+    expect(normalizeStartCommand('npx --yes serve --host 0.0.0.0 --port 5173', 4100)).toBe(
+      'npx --yes serve --port 4100',
+    );
+  });
+
+  it('extracts configured start ports from normalized command variants', () => {
+    expect(extractConfiguredStartPort('pnpm run dev --host 127.0.0.1 --port 4100')).toBe(4100);
+    expect(extractConfiguredStartPort('next dev -H 127.0.0.1 -p 4101')).toBe(4101);
+    expect(extractConfiguredStartPort('npx --yes serve --port 4102')).toBe(4102);
+    expect(extractConfiguredStartPort('serve -l tcp://127.0.0.1:4103')).toBe(4103);
+    expect(extractConfiguredStartPort('echo ready')).toBeUndefined();
   });
 
   it('switches preview probe target when the actual port changes', async () => {
@@ -94,6 +107,28 @@ describe('runtime preview helpers', () => {
     expect(output).toContain('import thing from "/runtime/preview/session123/4101/src/main.jsx";');
     expect(output).toContain("const escapedStringRegExp = /^'([^]*?)'?$/;");
     expect(output).toContain("const doubleQuoteRegExp = /''/g;");
+  });
+
+  it('rewrites proxied vite client websocket and base settings to stay under the preview path', () => {
+    const input = `
+      const importMetaUrl = new URL(import.meta.url);
+      const serverHost = "127.0.0.1:4100/";
+      const socketProtocol = null || (importMetaUrl.protocol === "https:" ? "wss" : "ws");
+      const hmrPort = null;
+      const socketHost = \`\${null || importMetaUrl.hostname}:\${hmrPort || importMetaUrl.port}\${"/"}\`;
+      const directSocketHost = "127.0.0.1:4100/";
+      const base = "/" || "/";
+    `;
+
+    const output = rewritePreviewAssetUrls(input, '/runtime/preview/session123/4101');
+
+    expect(output).toContain(
+      'const proxyPathPrefix = importMetaUrl.pathname.replace(/\\/@vite\\/client$/, "/");',
+    );
+    expect(output).toContain('const serverHost = `${importMetaUrl.host}${proxyPathPrefix}`;');
+    expect(output).toContain('const socketHost = `${importMetaUrl.host}${proxyPathPrefix}`;');
+    expect(output).toContain('const directSocketHost = `${importMetaUrl.host}${proxyPathPrefix}`;');
+    expect(output).toContain('const base = proxyPathPrefix;');
   });
 
   it('parses preview proxy request targets including query strings', () => {
