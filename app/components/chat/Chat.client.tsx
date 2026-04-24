@@ -123,6 +123,7 @@ type PendingArchitectAutoHeal = {
   alert: ActionAlert;
   diagnosis: ArchitectDiagnosis;
   alertKey: string;
+  promptGeneration: number;
 };
 
 type QueuedHiddenContinuation = {
@@ -560,6 +561,8 @@ export const ChatImpl = memo(
     const previousChatIdRef = useRef<string | undefined>(currentChatId);
     const architectAttemptCountsRef = useRef<Record<string, number>>({});
     const architectInFlightRef = useRef(false);
+    const manualPromptGenerationRef = useRef(0);
+    const architectAlertPromptGenerationRef = useRef<Record<string, number>>({});
     const providerEnvKeyStatusRef = useRef<Record<string, boolean>>({});
     const mcpSettings = useMCPStore((state) => state.settings);
     const mcpInitialized = useMCPStore((state) => state.isInitialized);
@@ -2635,6 +2638,7 @@ Requirements:
       lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
       lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
+      manualPromptGenerationRef.current += 1;
       lastRunCompletedAtRef.current = null;
       lastPreviewReadyAtRef.current = null;
       stallRecoveryTriggeredRef.current = false;
@@ -2644,6 +2648,8 @@ Requirements:
       starterStartRecoveryTriggeredRef.current = false;
       autoContinuationCountRef.current = 0;
       pendingStarterContinuationRef.current = null;
+      setPendingArchitectAutoHeal(null);
+      setArchitectAutoHealStatus(null);
 
       if (agentMode === 'act') {
         const executed = await runAgentActWorkflow();
@@ -3119,8 +3125,21 @@ CONTINUE IMMEDIATELY:
         }
 
         const alertKey = buildActionAlertKey(actionAlert);
+        const alertPromptGeneration =
+          architectAlertPromptGenerationRef.current[alertKey] ?? manualPromptGenerationRef.current;
+        architectAlertPromptGenerationRef.current[alertKey] = alertPromptGeneration;
 
         if (pendingArchitectAutoHeal?.alertKey === alertKey) {
+          return;
+        }
+
+        if (alertPromptGeneration !== manualPromptGenerationRef.current) {
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            output: `${diagnosis.title} (${diagnosis.issueId}) was superseded by a newer user prompt.`,
+          });
+
           return;
         }
 
@@ -3177,6 +3196,7 @@ CONTINUE IMMEDIATELY:
             alert: actionAlert,
             diagnosis,
             alertKey,
+            promptGeneration: alertPromptGeneration,
           });
           setArchitectAutoHealStatus('queued');
           appendArchitectTimelineEvent({
@@ -3208,6 +3228,19 @@ CONTINUE IMMEDIATELY:
 
     useEffect(() => {
       if (!pendingArchitectAutoHeal || isLoading || architectInFlightRef.current) {
+        return;
+      }
+
+      if (pendingArchitectAutoHeal.promptGeneration !== manualPromptGenerationRef.current) {
+        setPendingArchitectAutoHeal(null);
+        setArchitectAutoHealStatus(null);
+
+        appendArchitectTimelineEvent({
+          type: 'telemetry',
+          description: `${ARCHITECT_NAME} auto-heal skipped`,
+          output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) was superseded by a newer user prompt.`,
+        });
+
         return;
       }
 

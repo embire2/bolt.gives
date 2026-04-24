@@ -3,6 +3,7 @@ import {
   buildRunContinuationPrompt,
   shouldAllowSynthesizedRunHandoff,
   shouldContinueAfterBlockedSynthesizedRunHandoff,
+  shouldContinueHostedPreviewVerificationFailure,
   shouldReplayLocalRuntimeHandoff,
   shouldSkipPlannerForRecoveryPrompt,
 } from '~/routes/api.chat';
@@ -89,6 +90,36 @@ describe('api.chat continuation helpers', () => {
         maxAttempts: 5,
       }),
     ).toBe(true);
+  });
+
+  it('continues after direct hosted preview verification reports an unhealthy preview', () => {
+    expect(
+      shouldContinueHostedPreviewVerificationFailure({
+        chatMode: 'build',
+        outcome: 'error',
+        attempts: 0,
+        maxAttempts: 5,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not continue direct hosted preview verification after success or budget exhaustion', () => {
+    expect(
+      shouldContinueHostedPreviewVerificationFailure({
+        chatMode: 'build',
+        outcome: 'ready',
+        attempts: 0,
+        maxAttempts: 5,
+      }),
+    ).toBe(false);
+    expect(
+      shouldContinueHostedPreviewVerificationFailure({
+        chatMode: 'build',
+        outcome: 'error',
+        attempts: 5,
+        maxAttempts: 5,
+      }),
+    ).toBe(false);
   });
 
   it('skips planner for architect recovery prompts', () => {

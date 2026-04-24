@@ -37,6 +37,7 @@ import { extractCheckpointEvents, extractExecutionFailure } from '~/lib/runtime/
 import { COMMENTARY_HEARTBEAT_INTERVAL_MS, buildCommentaryHeartbeat } from '~/lib/runtime/commentary-heartbeat';
 import {
   buildHostedPreviewRecoveryPrompt,
+  type HostedPreviewRecoveryOutcome,
   shouldContinueHostedPreviewRecovery,
   summarizeHostedPreviewFailure,
 } from '~/lib/runtime/hosted-preview-recovery';
@@ -331,6 +332,20 @@ export function shouldContinuePendingHostedPreviewVerification(options: {
 }) {
   return (
     shouldAttemptHostedPreviewVerification(options) && options.attempts >= 0 && options.attempts < options.maxAttempts
+  );
+}
+
+export function shouldContinueHostedPreviewVerificationFailure(options: {
+  chatMode?: 'discuss' | 'build';
+  outcome?: HostedPreviewRecoveryOutcome | null;
+  attempts: number;
+  maxAttempts: number;
+}) {
+  return (
+    options.chatMode === 'build' &&
+    Boolean(options.outcome && options.outcome !== 'ready') &&
+    options.attempts >= 0 &&
+    options.attempts < options.maxAttempts
   );
 }
 
@@ -1408,6 +1423,9 @@ Next: I am sending the final result now.`,
                   }).catch(() => null)
                 : null;
 
+            let directHostedPreviewVerificationOutcome: HostedPreviewRecoveryOutcome | null = null;
+            let directHostedPreviewFailureSummary: string | null = null;
+
             if (
               shouldAttemptHostedPreviewVerification({
                 chatMode: effectiveChatMode,
@@ -1493,6 +1511,8 @@ Next: I am waiting for a verified preview before I decide whether another contin
                 })}`,
               );
 
+              directHostedPreviewVerificationOutcome = directHostedPreviewVerification.outcome;
+
               if (directHostedPreviewVerification.outcome === 'ready') {
                 previewCheckpointObserved = true;
 
@@ -1521,6 +1541,10 @@ Next: I am waiting for a verified preview before I decide whether another contin
                     verifiedPreviewBaseUrl || 'the hosted preview URL'
                   }.
 Next: I am returning the finished result with the verified preview ready for inspection.`,
+                );
+              } else {
+                directHostedPreviewFailureSummary = summarizeHostedPreviewFailure(
+                  directHostedPreviewVerification.status,
                 );
               }
             }
@@ -1564,6 +1588,12 @@ Next: I am returning the finished result with the verified preview ready for ins
               attempts: runContinuationAttempts,
               maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
             });
+            const shouldContinueForHostedPreviewFailure = shouldContinueHostedPreviewVerificationFailure({
+              chatMode: effectiveChatMode,
+              outcome: directHostedPreviewVerificationOutcome,
+              attempts: runContinuationAttempts,
+              maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+            });
 
             const synthesizedRunHandoff = await synthesizeRunHandoff({
               assistantContent: content,
@@ -1600,6 +1630,7 @@ Next: I am returning the finished result with the verified preview ready for ins
             if (
               shouldContinueForRunIntent ||
               shouldContinueForUnverifiedPreview ||
+              shouldContinueForHostedPreviewFailure ||
               shouldReplayLocalRuntimeHandoffNow ||
               shouldContinueAfterBlockedSynthesizedRunHandoffNow
             ) {
@@ -1608,6 +1639,7 @@ Next: I am returning the finished result with the verified preview ready for ins
 
               if (
                 synthesizedRunHandoff &&
+                !shouldContinueForHostedPreviewFailure &&
                 allowSynthesizedRunHandoff &&
                 (shouldReplayLocalRuntimeHandoffNow || shouldUseSynthesizedRunHandoff(continuationReason))
               ) {
@@ -1983,15 +2015,26 @@ Next: I will keep working from the existing project state until the app is runni
               processedMessages.push({
                 id: generateId(),
                 role: 'user',
-                content: buildRunContinuationPrompt({
-                  model,
-                  provider,
-                  originalRequest: latestUserGoal || lastUserContent,
-                  starterEntryTarget,
-                  continuationReason,
-                  shouldContinueForRunIntent,
-                  latestExecutionFailure,
-                }),
+                content: shouldContinueForHostedPreviewFailure
+                  ? buildHostedPreviewRecoveryPrompt({
+                      model,
+                      provider,
+                      originalRequest: latestUserGoal || lastUserContent,
+                      failureSummary:
+                        directHostedPreviewFailureSummary ||
+                        'The hosted preview verification ended unhealthy after the latest response.',
+                      attempt: runContinuationAttempts,
+                      maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
+                    })
+                  : buildRunContinuationPrompt({
+                      model,
+                      provider,
+                      originalRequest: latestUserGoal || lastUserContent,
+                      starterEntryTarget,
+                      continuationReason,
+                      shouldContinueForRunIntent,
+                      latestExecutionFailure,
+                    }),
               });
 
               beginRunMonitors();
