@@ -40,6 +40,7 @@ Follow-up prompts now take precedence over queued auto-heal attempts, and hosted
 Hosted FREE now leaves starter and preview recovery to the server verifier instead of dispatching hidden client continuations, so manual follow-up prompts can improve the current project without racing another `/api/chat` request.
 Hosted runtime command replay now treats the managed runtime `exit` event as completion even when the transport remains open, so live chat streams do not idle after the server has already finished the start command.
 Hosted runtime preview startup now probes the reserved managed preview port immediately instead of depending on dev-server stdout, so quiet Vite starts and package-only partial workspaces cannot hold the chat stream open silently.
+Hosted runtime preview autostart now rejects package-only Vite workspaces before it opens a runtime command stream, so an incomplete snapshot cannot keep the session lock while the server is trying to apply the completed generated project.
 Runtime stabilization now also enforces bounded shell/build output capture and guarded heartbeat probing, reducing memory pressure and duplicate recovery races during long-running installs/builds.
 Release verification now also includes a browser-level post-deploy asset health check so stale manifests and missing client bundles fail the release instead of leaving users on a non-interactive shell.
 The workspace shell now stays interactive during boot instead of crashing on the performance monitor token-usage subscription path.
@@ -91,6 +92,7 @@ Local follow-up repairs now keep the running dev server on a dedicated runtime s
 - Hosted FREE preview verification now syncs generated file actions into the server runtime before health checks, so the verifier acts on the real current project rather than a partially synced workspace.
 - Hosted runtime command replay now exits on the runtime `exit` event instead of waiting for the transport to close, preventing completed start commands from holding `/api/chat` streams open.
 - Hosted runtime preview startup probes the reserved preview port immediately and marks package-only Vite workspaces as incomplete, preventing quiet dev-server starts from idling until the runtime command timeout.
+- Hosted runtime preview autostart refuses package-only Vite workspaces before opening a runtime command stream, preventing incomplete snapshots from holding the session operation lock ahead of the real generated file handoff.
 - Hosted runtime startup repairs common raw JSX angle text emitted by smaller models, so navigation buttons like `<` and `>` do not block Vite preview creation.
 - Local self-host CSP now allows the loopback preview/provider sockets that WebContainer-based runs actually use on `localhost` and `127.0.0.1`, while avoiding invalid `[::1]` policy entries that generated fresh browser console errors.
 - Hosted preview verification now streams visible startup progress while the server waits for the managed preview to turn healthy, which keeps long warm-ups readable instead of going silent and makes disconnect recovery less opaque.

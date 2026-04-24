@@ -38,6 +38,7 @@ import {
   sanitizeLegacyTailwindCss,
   shouldRetryPreviewProxyResponse,
   startReservedPreviewProbe,
+  startHostedPreviewForSession,
   syncWorkspaceSnapshot,
   updateSessionPreview,
   waitForProjectManifest,
@@ -1385,6 +1386,63 @@ The latest release of react-calendar is "6.0.1".`),
     } as any);
 
     expect(alert?.description).toContain('index.html');
+  });
+
+  it('does not autostart a hosted preview from a package-only vite workspace', async () => {
+    const workspace = await makeTempDir('bolt-runtime-package-only-autostart-');
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          dev: 'vite',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+          '@vitejs/plugin-react': '^4.0.0',
+        },
+      }),
+      'utf8',
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const session = {
+        id: 'package-only-autostart',
+        dir: workspace,
+        preview: undefined,
+        autoRestoreInFlight: false,
+        processes: new Map(),
+        publicOrigin: 'https://alpha1.bolt.gives',
+        previewSubscribers: new Set(),
+        previewDiagnostics: {
+          status: 'idle',
+          healthy: false,
+          updatedAt: null,
+          recentLogs: [],
+          alert: null,
+        },
+        previewRecovery: {
+          state: 'idle',
+          token: 0,
+          message: null,
+          updatedAt: null,
+        },
+      };
+
+      await expect(startHostedPreviewForSession(session as any)).resolves.toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect((session.previewDiagnostics.alert as { description?: string } | null)?.description).toContain(
+        'index.html',
+      );
+      expect(session.previewDiagnostics.recentLogs.join('\n')).toContain('index.html');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not overwrite the restore point with a starter placeholder snapshot', () => {

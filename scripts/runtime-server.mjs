@@ -3026,8 +3026,21 @@ async function inferWorkspaceStartCommand(session) {
   return inferHostedWorkspaceStartCommand(packageJsonRecord.json);
 }
 
-async function startHostedPreviewForSession(session) {
+export async function startHostedPreviewForSession(session) {
   if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
+    return false;
+  }
+
+  const diskFiles = await buildWorkspaceFileMapFromDisk(session);
+  const bootstrapAlert = buildHostedWorkspaceBootstrapAlert(diskFiles);
+
+  if (bootstrapAlert) {
+    appendPreviewDiagnosticEntries(session, 'autostart', bootstrapAlert.description);
+    touchPreviewDiagnostics(session, {
+      status: 'error',
+      healthy: false,
+      alert: bootstrapAlert,
+    });
     return false;
   }
 
