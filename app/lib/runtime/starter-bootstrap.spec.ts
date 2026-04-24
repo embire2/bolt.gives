@@ -38,13 +38,24 @@ describe('shouldUseClientStarterBootstrap', () => {
     ).toBe(false);
   });
 
-  it('forces starter bootstrap for the hosted FREE provider', () => {
+  it('skips client bootstrap for hosted FREE so server-side recovery owns the run', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
         modelName: 'deepseek/deepseek-v3.2',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps client bootstrap available for FREE when hosted runtime is unavailable', () => {
+    expect(
+      shouldUseClientStarterBootstrap({
+        providerName: 'FREE',
+        modelName: 'deepseek/deepseek-v3.2',
+        message: 'Build a React appointment scheduling app for a doctor office',
+        hostedRuntimeEnabled: false,
       }),
     ).toBe(true);
   });
