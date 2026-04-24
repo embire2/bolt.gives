@@ -348,6 +348,7 @@ async function runHostedRuntimeCommandServer(options: {
   let output = '';
   let exitCode = 1;
   let previewBaseUrl: string | null = null;
+  let sawExit = false;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -390,11 +391,17 @@ async function runHostedRuntimeCommandServer(options: {
 
       if (event.type === 'exit') {
         exitCode = Number(event.exitCode ?? 1);
+        sawExit = true;
       }
 
       if (event.type === 'error') {
         throw new Error(String(event.error || 'Hosted runtime command reported an error'));
       }
+    }
+
+    if (sawExit) {
+      await reader.cancel().catch(() => undefined);
+      break;
     }
   }
 

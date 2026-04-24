@@ -88,6 +88,67 @@ describe('applyHostedRuntimeAssistantActions', () => {
     );
   });
 
+  it('finishes command replay when the runtime emits exit before closing the transport', async () => {
+    let commandStreamCancelled = false;
+    const commandStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            '{"type":"stdout","chunk":"dev server ready\\n"}\n{"type":"ready","preview":{"baseUrl":"https://alpha1.bolt.gives/runtime/preview/session123/4101"}}\n{"type":"exit","exitCode":0}\n',
+          ),
+        );
+      },
+      cancel() {
+        commandStreamCancelled = true;
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: 'session123',
+            files: {},
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(commandStream, {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-ndjson' },
+        }),
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await Promise.race([
+      applyHostedRuntimeAssistantActions({
+        requestUrl: 'https://alpha1.bolt.gives/api/chat',
+        sessionId: 'session123',
+        assistantContent,
+        synthesizedRunHandoff: {
+          reason: 'inferred-project-commands',
+          followupMessage: 'runtime handoff',
+          startCommand: 'pnpm run dev',
+          assistantContent: '<boltArtifact id="runtime-handoff"></boltArtifact>',
+        },
+      }),
+      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 1000)),
+    ]);
+
+    expect(result).not.toBe('timeout');
+    expect(result).toMatchObject({
+      start: {
+        exitCode: 0,
+        output: 'dev server ready\n',
+        previewBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session123/4101',
+      },
+    });
+    expect(commandStreamCancelled).toBe(true);
+  });
+
   it('returns null when there are no file actions to apply', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
