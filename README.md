@@ -29,36 +29,29 @@
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
-## Roadmap to v3.0.9
+## Current Release (`v3.0.9`)
 
-`v3.0.9` is the next launch-hardening release. The goal is to make bolt.gives easier to trust as a daily coding workspace, easier to self-host, and safer to operate at scale.
+`v3.0.9` is the current stable hosted release. The goal of this line was to make bolt.gives reliable enough for daily hosted use by tightening prompt-to-preview, managed runtime handoff, follow-up context, and release validation.
 
-Recent hardening in this line includes safer hidden continuation dispatch: follow-up recovery prompts now wait until the active chat stream is genuinely idle before they are sent, which reduces mid-run disconnect/reconnect loops on longer builds.
-Another recent runtime fix now synthesizes preview handoff commands from the merged workspace state instead of the latest assistant delta only, which prevents broken follow-up runs from replaying dependency-only installs and stalling preview startup.
-Runtime handoff now also refuses scaffold-only `create-vite`/bootstrap responses unless the assistant produced a new concrete implementation file, and the local workbench syncs shell-created Vite files before React entry repairs so preview startup acts on the real current project.
-Follow-up prompts now take precedence over queued auto-heal attempts, and hosted preview verification errors force another repair pass instead of ending with an unhealthy project state.
-Hosted FREE now leaves starter and preview recovery to the server verifier instead of dispatching hidden client continuations, so manual follow-up prompts can improve the current project without racing another `/api/chat` request.
-Hosted runtime command replay now treats the managed runtime `exit` event as completion even when the transport remains open, so live chat streams do not idle after the server has already finished the start command.
-Hosted runtime preview startup now probes the reserved managed preview port immediately instead of depending on dev-server stdout, so quiet Vite starts and package-only partial workspaces cannot hold the chat stream open silently.
-Hosted runtime preview autostart now rejects package-only Vite workspaces before it opens a runtime command stream, so an incomplete snapshot cannot keep the session lock while the server is trying to apply the completed generated project.
-Runtime stabilization now also enforces bounded shell/build output capture and guarded heartbeat probing, reducing memory pressure and duplicate recovery races during long-running installs/builds.
-Release verification now also includes a browser-level post-deploy asset health check so stale manifests and missing client bundles fail the release instead of leaving users on a non-interactive shell.
-The workspace shell now stays interactive during boot instead of crashing on the performance monitor token-usage subscription path.
-Local self-host loopback CSP now keeps preview/provider sockets open for `localhost` and `127.0.0.1` without adding fresh invalid-source browser errors.
-Generated-app browser smoke is now strict: the calendar E2E only passes once the requested unique token is visible inside preview, not merely when an iframe mounts.
-Follow-up project memory is now scoped per project/chat instead of shared across one browser-global slot, which keeps later prompts attached to the right workspace history.
-The server now supplies a deterministic current-workspace snapshot even when context optimization is off, so iterative prompts still know the project’s active files and structure.
-Server-side preview-verification continuations now only fire for hosted-runtime sessions, so local/self-host project generation can settle into a previewable result instead of looping through a false “preview not verified” recovery path.
-Local follow-up repairs now keep the running dev server on a dedicated runtime shell, so install/restart actions from later prompts can build on the same project state without trampling the active preview session.
+The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies generated files into the managed runtime before preview verification, rejects incomplete/prose-only handoffs, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview content with strict browser E2E coverage.
+
+Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory.
+
+Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, and new instances are spawned from the same live build plus the protected hosted FREE relay secret.
+
+The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
+
+## Roadmap to v3.1.0
+
+`v3.1.0` is the next platform-hardening release. The focus is managed-instance rollout observability, rollback, tenant/RBAC hardening, first-party template packs, stronger release gates, and continued browser-weight reduction.
 
 ### Launch blockers
 
-- Make prompt-to-preview status explicit at every step: `scaffolding`, `installing`, `starting`, `preview ready`, `repairing`.
+- Add deployment history, last good SHA, health-verified refreshes, and rollback outcomes to the managed-instance/operator surfaces.
+- Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC.
+- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline.
 - Keep commentary task-specific in both `Chat` and `Workspace`, driven from real runtime/file/command events instead of generic filler.
 - Reduce the remaining browser-heavy editor/PDF/git/terminal paths so long sessions stay responsive.
-- Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC.
-- Add managed-instance rollout visibility with deployment history, health-checked refreshes, and rollback outcomes.
-- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline.
 - Keep the self-host installer resilient enough to recover from common package, dependency, build, and service-start failures without forcing the user to start over.
 
 ### Key improvements planned
@@ -69,7 +62,7 @@ Local follow-up repairs now keep the running dev server on a dedicated runtime s
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.8`)
+## Current Platform Baseline (`v3.0.9`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
@@ -121,8 +114,8 @@ Chat:
 Plan prompt example:
 ![bolt.gives plan prompt](docs/screenshots/chat-plan.png)
 
-System in action:
-![bolt.gives system in action](docs/screenshots/system-in-action.png)
+Workspace:
+![bolt.gives workspace](docs/screenshots/system-in-action.png)
 
 Changelog:
 ![bolt.gives changelog](docs/screenshots/changelog.png)

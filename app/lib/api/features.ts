@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9',
+    name: 'v3.0.9 prompt-to-preview reliability and history-aware hosted runtime',
+    description:
+      'Hosted FREE project generation now applies generated files to the managed runtime before preview verification, blocks incomplete Vite autostarts, keeps follow-up prompts anchored to the current workspace snapshot, and verifies live projects with strict preview-token browser smoke coverage.',
+    releaseDate: '2026-04-24',
+  },
+  {
     id: 'release-v3.0.8',
     name: 'v3.0.8 Cloudflare trial registration and private admin control plane',
     description:

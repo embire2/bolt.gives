@@ -40,7 +40,15 @@ async function forceProviderDefaults() {
 }
 
 async function waitReady() {
-  await page.waitForSelector('textarea[placeholder="How can Bolt help you today?"]', { timeout: 90000 });
+  await getPromptLocator().waitFor({ state: 'visible', timeout: 90000 });
+}
+
+function getPromptLocator() {
+  return page
+    .locator(
+      'textarea[placeholder="How can Bolt help you today?"], textarea, [contenteditable="true"][role="textbox"], [contenteditable="true"]',
+    )
+    .first();
 }
 
 async function captureHome() {
@@ -64,8 +72,9 @@ async function captureHome() {
 async function runPromptCapture({ prompt, token, outputName }) {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
-  await page.fill('textarea[placeholder="How can Bolt help you today?"]', `${prompt}\n\nInclude token: ${token}`);
-  await page.press('textarea[placeholder="How can Bolt help you today?"]', 'Enter');
+  const promptInput = getPromptLocator();
+  await promptInput.fill(`${prompt}\n\nInclude token: ${token}`);
+  await promptInput.press('Enter');
 
   await page.waitForFunction(
     (tok) => {
@@ -91,6 +100,27 @@ async function capturePromptShell(outputName) {
   }
 
   await page.screenshot({ path: path.join(outDir, outputName), fullPage: true });
+}
+
+async function captureWorkspaceShell() {
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await waitReady();
+
+  const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
+
+  if (await workspaceTab.isVisible().catch(() => false)) {
+    await workspaceTab.click();
+  }
+
+  await page.waitForTimeout(750);
+
+  const text = await page.evaluate(() => document.body.innerText || '');
+
+  if (/server error|error details|custom error/i.test(text)) {
+    throw new Error('Cannot capture system-in-action.png: page contains a server error marker.');
+  }
+
+  await page.screenshot({ path: path.join(outDir, 'system-in-action.png'), fullPage: true });
 }
 
 async function captureChangelog() {
@@ -125,6 +155,7 @@ try {
     });
   }
 
+  await captureWorkspaceShell();
   await captureChangelog();
   console.log(`Wrote README screenshots to ${outDir}`);
 } finally {

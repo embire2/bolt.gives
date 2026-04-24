@@ -10,152 +10,116 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.8`
+- [x] `v3.0.9`
 
 Next release target:
 
-- [~] `v3.0.9`
+- [~] `v3.1.0`
 
-## v3.0.8 - Shipped Baseline
+## v3.0.9 - Shipped Baseline
 
-Release theme: move the hosted product onto a real server-first runtime, stand up the private operator surface, and make managed Cloudflare trial instances real instead of aspirational.
+Release theme: make bolt.gives reliable enough for daily hosted use by hardening prompt-to-preview, follow-up context, managed runtime handoff, and release validation.
 
-### Shipped in v3.0.8
-
-1. Hosted runtime and browser offload
-
-- [x] Hosted instances now default to the managed server runtime for install/build/dev/test/preview flows.
-- [x] Preview status and recovery now come from server-side status/SSE instead of tight browser polling.
-- [x] Preview breakage now routes into server-side self-heal and last-known-good restore.
-- [x] Live release smoke covers generated-app success plus intentional preview break/recovery.
-
-2. Managed FREE provider
-
-- [x] Hosted `FREE` is locked to `deepseek/deepseek-v3.2`.
-- [x] Hosted OpenRouter credentials stay server-side only.
-- [x] Managed trial instances inherit the hosted FREE path through a protected relay, not a browser-visible key.
-
-3. Cloudflare managed trials
-
-- [x] `/managed-instances` is a real registration-first provisioning surface.
-- [x] One-client / one-instance enforcement is implemented in runtime.
-- [x] Managed instances now persist the real Cloudflare-assigned hostname and private client profile linkage in the operator panel.
-- [x] `admin.bolt.gives` now exposes the private operator surface for profiles, assignments, and admin email activity.
-
-4. Self-host packaging
-
-- [x] Installer supports custom app/admin/create domains.
-- [x] Installer provisions local PostgreSQL and Caddy-managed HTTPS.
-- [x] Self-hosted installs can expose the same public `create` and `admin` flows as the hosted service.
-
-## v3.0.9 - Launch Plan
-
-Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to-preview reliability, operator controls, self-host resilience, and release observability.
-
-### P0 Launch Blockers
+### Shipped in v3.0.9
 
 1. Prompt-to-preview reliability
 
-- [~] Keep the live chat request path aligned with CSRF/security requirements so hosted builds cannot fail at request start because the browser omitted the protected `/api/chat` header.
-- [~] Keep `Chat` and `Workspace` status explicit during generation so users always know whether the system is scaffolding, installing, starting, ready, or repairing.
-- [~] Remove remaining starter/workspace hydration ambiguity on generated-app flows, including rejecting prose-only runtime handoffs on follow-up prompts and resolving generated entry-file writes onto the active starter file.
-- [~] Keep incomplete starter rewrites in the continuation path until the active entry file no longer contains fallback placeholder content, so “preview verification pending” only appears for genuinely runnable projects.
-- [~] Keep follow-up prompts anchored to a stable per-project context id and deterministic current-workspace snapshots, so the model stays aware of the active codebase and can keep iterating instead of restarting from stale/global memory.
-- [~] Keep local follow-up installs/restarts isolated from the active dev-server shell, so iterative prompts can repair and improve a running project without tearing down the current preview session mid-stream.
-- [~] Keep hosted preview verification visibly alive during long warm-ups and force the browser preview to reconcile quickly once the generated app is ready, so users do not get stranded on the fallback starter while the server already has a valid app.
-- [~] Ignore stale fallback-starter detections once the active workspace files no longer contain the starter placeholder, so hosted preview recovery does not roll back valid generated apps.
-- [~] Prevent hidden continuation/recovery prompts from overlapping an active stream, so transport retries do not cascade into browser-side reconnect loops.
-- [~] Infer setup/start handoff commands from the merged workspace snapshot instead of the latest assistant delta, so preview recovery reuses the real project runtime after a disconnected or interrupted stream.
-- [~] Refuse runtime handoff until the merged workspace contains a concrete primary app entry file, so partial starter-plus-component responses stay in continuation instead of being launched as a broken preview.
-- [~] Require the latest assistant response to include a concrete implementation file before synthesized runtime handoff can run, so scaffold-only `create-vite`/bootstrap responses continue generating instead of previewing stale request snapshots or the fallback starter.
-- [~] Sync shell-created Vite files before local pre-start React repairs, so missing default exports and legacy `ReactDOM.render` calls are fixed against the actual workspace state before preview startup.
-- [~] Keep user follow-up prompts ahead of queued auto-heal work and continue automatically on direct hosted-preview verification errors, so iterative prompts build on the current project instead of racing hidden repair requests.
-- [~] Keep hosted FREE starter/preview recovery server-owned after generation, so hidden client continuations do not race the user’s next follow-up prompt once preview is healthy.
-- [~] Apply hosted FREE file/start actions on the server before preview verification, so health checks evaluate the actual generated project instead of a partially synced runtime workspace.
-- [~] Finish hosted runtime command replay on the managed runtime `exit` event even when the transport remains open, so completed start commands cannot leave live chat streams idle.
-- [~] Probe the reserved hosted preview port immediately and classify package-only Vite workspaces as incomplete, so quiet dev-server starts cannot consume the full runtime command timeout.
-- [~] Refuse hosted preview autostart for package-only Vite snapshots before opening a runtime command stream, so incomplete workspace state cannot hold the session lock ahead of the completed generated files.
-- [~] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified. Browser E2E now requires the requested token to appear inside preview, not just an iframe mount.
-- [~] Limit server-side “preview not verified” continuation loops to hosted-runtime sessions that the backend can actually verify, so local/self-host builds can settle on a runnable preview and accept follow-up prompts normally.
-- [~] Fail release verification when post-deploy browser health detects missing hashed assets or a non-interactive prompt shell after rollout.
+- [x] Hosted `FREE` stays locked to `deepseek/deepseek-v3.2` through the protected server-side runtime path.
+- [x] `/api/chat` uses the required same-origin CSRF header on hosted surfaces, so live project creation does not fail at request start.
+- [x] Generated hosted files are applied to the managed runtime before preview verification, so health checks inspect the actual current project instead of partial package-only state.
+- [x] Hosted runtime command replay finishes on the runtime `exit` event even when transport streams stay open.
+- [x] Reserved preview ports are probed immediately, and package-only Vite snapshots are classified as incomplete before they can idle the stream.
+- [x] Hosted preview autostart refuses package-only Vite workspaces before opening a command stream, preventing incomplete snapshots from holding the session operation lock.
+- [x] Starter-placeholder detections are ignored once the active workspace no longer contains starter placeholder content, preventing valid generated apps from being rolled back.
+- [x] Scaffold-only or prose-only runtime handoffs are rejected until the merged workspace contains concrete implementation files and runnable app entries.
+- [x] Generated entry-file writes resolve onto the active starter source file when models choose a sibling JS/TS extension.
+- [x] Browser E2E validates working projects strictly by requiring the requested token to appear inside preview, not just an iframe mount.
+- [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
 
-2. Commentary quality and transparency
+2. History-aware iteration
 
-- [~] Derive commentary from real runtime steps, files, commands, and recovery events.
-- [ ] Eliminate remaining generic keep-alive phrasing.
-- [ ] Keep the same status model visible in both `Chat` and `Workspace` so progress is never hidden behind the active pane.
+- [x] Follow-up prompts use a stable project-context id and project-scoped memory instead of a browser-global slot.
+- [x] Current workspace snapshots are supplied deterministically even when context optimization is disabled.
+- [x] Follow-up prompts supersede queued auto-heal work, avoiding hidden repair races against user-requested improvements.
+- [x] Follow-up installs/restarts use a dedicated runtime shell so iterative prompts can build on the current project without trampling the active preview.
+- [x] Hosted runtime snapshots are used as canonical chat file state for live follow-up prompts.
 
-3. Browser-weight reduction and server offload
+3. Transparency and release validation
 
-- [~] Continue cutting the remaining heavy browser chunks (`editor`, `pdf`, `git`, `terminal`).
-- [~] Runtime shell/build output capture is now bounded and stream shutdown paths are guarded, reducing memory spikes and freeze risk during long installs/builds.
-- [ ] Push more preview/log reconciliation state entirely to the server.
-- [ ] Keep browser runtime surfaces thin enough that longer sessions no longer degrade visibly on lower-end machines.
+- [x] Chat and Workspace remain separate top-level tabs with visible live commentary and technical execution state.
+- [x] Hosted preview verification emits visible startup progress during long warm-ups.
+- [x] The Workspace preview reconciles quickly when the managed runtime reports a verified preview.
+- [x] Postdeploy browser health checks fail release validation on missing hashed assets or non-interactive prompt shells.
+- [x] Runtime startup blocks managed-instance rollout when `/srv/bolt-gives` is behind `origin/main`.
 
-4. FREE / managed-instance reliability
+4. Operator, managed-instance, and self-host baseline
 
-- [~] Keep `FREE` + `DeepSeek V3.2` reliable across hosted, Pages, and managed instances.
-- [~] Keep public registration and operator surfaces visually readable in both light and dark themes, especially `create.bolt.gives` and `admin.bolt.gives`.
-- [x] Rebuild `admin.bolt.gives` into a structured operator shell with sticky sidebar navigation and grouped sections so tenants, client profiles, managed instances, and outreach actions are no longer presented as one long stacked page.
-- [x] Stabilize the authenticated admin dashboard hydration path by formatting operator timestamps deterministically across server and browser renders.
-- [~] Keep registration, private client profile capture, filtered operator outreach, and one-client / one-instance enforcement aligned across the managed-instance surfaces.
-- [ ] Add health-verified refresh and rollback for managed Cloudflare trial updates.
-- [~] Refuse managed-instance rollout when the live runtime checkout is behind `origin/main`, and surface that guard state in the operator/admin views.
-- [ ] Surface deployment history, last good SHA, and rollback outcomes to the operator panel.
+- [x] Managed Cloudflare instances are registration-first, one-client / one-instance environments with private client profile capture.
+- [x] Active managed Cloudflare instances are refreshed from the current release SHA by the runtime rollout controller.
+- [x] New managed instances are provisioned from the current live build and protected hosted FREE relay secret.
+- [x] `admin.bolt.gives` includes the private operator dashboard, client profile filtering/export, instance assignment state, SMTP configuration, and audience-based outbound email.
+- [x] Header-level `Shout Out Box` messaging is available with unread tracking and a user-side settings toggle.
+- [x] Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
-5. Tenant and operator hardening
+## v3.1.0 - Launch Plan
 
-- [ ] Replace the bootstrap-only admin/tenant baseline with production-safe account and RBAC rules.
-- [ ] Add approval history, invite lifecycle, and auditable state transitions.
+Release theme: turn the current hosted reliability baseline into a more observable, reversible, and scalable platform for managed instances, teams, self-hosters, and common project templates.
+
+### P0 Priorities
+
+1. Managed Cloudflare rollout observability
+
+- [ ] Add operator-visible deployment history, last good SHA, and rollback outcome per managed instance.
+- [ ] Make active-instance refresh health-verified and reversible, not just deploy-command successful.
+- [ ] Add capacity and fleet state summaries to `admin.bolt.gives`.
+- [ ] Record startup-sync and interval-sync results in durable operator-visible history.
+
+2. Tenant and account hardening
+
+- [ ] Replace the bootstrap-only tenant/admin baseline with production-safe account and RBAC rules.
+- [ ] Add approval history, invite lifecycle, password reset lifecycle, and auditable state transitions.
 - [ ] Add safer admin credential rotation and clearer operator session management.
-- [~] Keep operator email delivery self-serve: SMTP transport is now configurable in `admin.bolt.gives`, with the next step being test-delivery verification and stronger operator auth around transport changes.
-- [~] Keep the new in-console bug-report workflow durable: reports should persist to PostgreSQL, notify operators safely, and surface clean triage state inside `admin.bolt.gives` without leaking secrets.
+- [ ] Add stronger authorization checks around SMTP transport changes, managed refresh, suspend, and export actions.
 
-6. Self-host installer resilience
+3. Prompt-to-preview quality
 
-- [~] Keep self-host install interactive for domains and local PostgreSQL credentials.
-- [x] Fresh self-host installs now prompt for the private operator/admin password and seed the local tenant registry instead of falling back to `admin / admin`.
-- [ ] Install both PostgreSQL server and client tooling (`psql`) as part of the supported VPS baseline.
-- [ ] Recover automatically from common apt, dependency, build, and service-start failures instead of exiting on the first error.
-- [ ] Add a repeatable no-db and full-db installer smoke path to release validation.
+- [ ] Ship first-party template packs for the most common app requests.
+- [ ] Add CI smoke coverage for each first-party template pack.
+- [ ] Reduce empty scaffold / starter-only outcomes on real user requests.
+- [ ] Broaden Architect recovery signatures beyond preview restore into dependency, build, and routing failures.
 
-7. Template and request reliability
+4. Browser weight and runtime offload
 
-- [ ] Ship first-party templates for the most common requested stacks.
-- [ ] Add CI smoke coverage for those templates.
-- [ ] Reduce the number of “empty scaffold / starter only” outcomes on real user requests.
+- [ ] Push more preview/log reconciliation state entirely to the server.
+- [ ] Continue reducing heavy editor, PDF, git, terminal, and deploy chunks from startup paths.
+- [ ] Add bundle budgets in CI so browser weight cannot silently regress.
+- [ ] Keep longer hosted sessions responsive on lower-end machines.
 
-8. Release visibility and operator observability
+5. Self-host installer resilience
 
-- [ ] Add capacity visibility for managed trial usage and expiry.
-- [ ] Add deployment history and last rollout result to the admin surface.
-- [ ] Make release smoke a hard pre-deploy gate for hosted and managed-instance updates.
-- [ ] Add broadcast communication controls and moderation for the Shout Out Box so operators can manage abuse/reporting without exposing secrets.
+- [ ] Add repeatable no-db and full-db installer smoke paths to release validation.
+- [ ] Improve automatic repair for apt, dependency, build, Caddy, and service-start failures.
+- [ ] Keep interactive install prompts recoverable and clear when a VPS is partially configured.
+
+6. Transparency and moderation
+
+- [ ] Eliminate remaining generic keep-alive commentary and keep progress derived from concrete runtime/file/command events.
+- [ ] Keep the same status model visible in both `Chat` and `Workspace`.
+- [ ] Add broadcast communication moderation and abuse/reporting controls for the Shout Out Box.
 
 ### P1 Improvements
 
-1. Teams and collaboration
-
 - [ ] Teams mode with RBAC and shared project ownership.
 - [ ] Collaboration audit trail and operator export.
-
-2. Additional runtime hardening
-
-- [ ] Broader Architect recovery signatures beyond preview restore.
-- [ ] More bounded retry/recovery flows for dependency and dev-server failures.
-
-3. Product polish
-
-- [ ] Cleaner operator email workflows.
+- [ ] Cleaner operator email workflows with test delivery and bounce/error visibility.
 - [ ] Better first-run education for hosted and self-hosted users.
-- [ ] Additional bundle budgets in CI so browser weight cannot silently regress.
 
-## v3.0.9 Release Metrics
+## v3.1.0 Release Metrics
 
-- [ ] First prompt-to-preview success rate >= 90% on the first-party template set.
+- [ ] First prompt-to-preview success rate >= 95% on the first-party template set.
 - [ ] Commentary first visible update <= 2s on hosted runs.
 - [ ] No hidden agent actions: critical execution state always visible in `Chat` or `Workspace`.
-- [ ] Managed Cloudflare refresh path is health-verified and reversible.
+- [ ] Managed Cloudflare refresh path is health-verified and rollback-capable.
 - [ ] Installer success rate >= 95% on the validated Ubuntu VPS baseline.
 - [ ] No shared browser startup chunk exceeds the agreed budget.
 

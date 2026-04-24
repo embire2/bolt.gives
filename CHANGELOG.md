@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased (`v3.0.9` in progress)
+## Unreleased (`v3.1.0` in progress)
+
+- `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
+
+## v3.0.9 (2026-04-24)
 
 - `create.bolt.gives/managed-instances` now uses explicit high-contrast light-mode cards, form fields, policy text, and call-to-action styling so the registration flow stays readable on the live public create-domain surface.
 
@@ -18,8 +22,8 @@
 
 - Managed Cloudflare instances are now indefinite for now instead of auto-expiring after 15 days, and legacy timed expiry state is normalized away on the live registry/admin paths.
 - The managed-instance registration flow is now explicitly treated as client profile capture, including email address, so operators can support and message registered users from the private admin surface.
-- `ROADMAP.md` is now rewritten around the actual `v3.0.9` launch plan, with explicit launch blockers, operator/self-host priorities, and release metrics.
-- `README.md` now surfaces the `v3.0.9` roadmap near the top, keeps the `create.bolt.gives` managed-instance flow prominent, and removes a large amount of unnecessary release-history detail from the main read path.
+- `ROADMAP.md` now marks `v3.0.9` as shipped and opens the `v3.1.0` plan around managed rollout observability, tenant/RBAC hardening, template packs, and release gates.
+- `README.md` now reflects the `v3.0.9` shipped baseline, keeps the `create.bolt.gives` managed-instance flow prominent, and points current planning at `v3.1.0`.
 - The hosted `FREE` default path is pinned to `deepseek/deepseek-v3.2`, with the server runtime carrying the protected OpenRouter token so hosted and managed instances can start coding immediately without exposing operator credentials.
 - Continue pushing tenant lifecycle from the current private operator baseline into full production RBAC, approval history, operator email delivery, and rollout observability.
 - README now sends users directly to [`https://create.bolt.gives`](https://create.bolt.gives) for the managed-instance registration flow, and the app/runtime now supports a dedicated create-domain redirect path alongside the admin domain path.
