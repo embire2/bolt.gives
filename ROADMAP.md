@@ -39,6 +39,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
 - [x] Hosted preview autostart consumes runtime command streams through the `ready` event, preventing healthy generated previews from staying stuck in `starting`.
 - [x] Header preview/deploy controls lazy-load after chat starts, preventing initial browser chunks from creating workbench initialization cycles.
+- [x] Hosted preview verification waits for recovered `restored` states to settle before launching another model continuation, keeping the first chat stream from blocking follow-up prompts after a valid preview is already recoverable.
 
 2. History-aware iteration
 

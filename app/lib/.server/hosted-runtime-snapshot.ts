@@ -65,6 +65,10 @@ function isTransientHostedPreviewError(status: HostedRuntimePreviewStatus | null
     return true;
   }
 
+  if (status.recovery?.state === 'restored') {
+    return true;
+  }
+
   const logs = status.recentLogs.join('\n');
   const alertText = `${status.alert?.description || ''}\n${status.alert?.content || ''}`.trim();
   const combinedText = `${logs}\n${alertText}`;
