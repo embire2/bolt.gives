@@ -3125,6 +3125,19 @@ CONTINUE IMMEDIATELY:
         }
 
         const alertKey = buildActionAlertKey(actionAlert);
+
+        if (hostedRuntimeEnabled && provider.name === 'FREE') {
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            output: `${diagnosis.title} (${diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
+          });
+          setPendingArchitectAutoHeal(null);
+          setArchitectAutoHealStatus(null);
+
+          return;
+        }
+
         const alertPromptGeneration =
           architectAlertPromptGenerationRef.current[alertKey] ?? manualPromptGenerationRef.current;
         architectAlertPromptGenerationRef.current[alertKey] = alertPromptGeneration;
@@ -3222,12 +3235,27 @@ CONTINUE IMMEDIATELY:
       autonomyMode,
       dispatchArchitectAutoHeal,
       dispatchStarterContinuation,
+      hostedRuntimeEnabled,
       isLoading,
       pendingArchitectAutoHeal,
+      provider.name,
     ]);
 
     useEffect(() => {
       if (!pendingArchitectAutoHeal || isLoading || architectInFlightRef.current) {
+        return;
+      }
+
+      if (hostedRuntimeEnabled && provider.name === 'FREE') {
+        setPendingArchitectAutoHeal(null);
+        setArchitectAutoHealStatus(null);
+
+        appendArchitectTimelineEvent({
+          type: 'telemetry',
+          description: `${ARCHITECT_NAME} auto-heal skipped`,
+          output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
+        });
+
         return;
       }
 
@@ -3245,7 +3273,7 @@ CONTINUE IMMEDIATELY:
       }
 
       void dispatchArchitectAutoHeal(pendingArchitectAutoHeal.alert, pendingArchitectAutoHeal.diagnosis);
-    }, [dispatchArchitectAutoHeal, isLoading, pendingArchitectAutoHeal]);
+    }, [dispatchArchitectAutoHeal, hostedRuntimeEnabled, isLoading, pendingArchitectAutoHeal, provider.name]);
 
     /**
      * Handles the change event for the textarea and updates the input state.
