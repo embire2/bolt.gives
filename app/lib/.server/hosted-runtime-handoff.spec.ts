@@ -54,6 +54,12 @@ describe('applyHostedRuntimeAssistantActions', () => {
 
     expect(result).toEqual({
       appliedFilePaths: ['/home/project/src/App.tsx'],
+      appliedFiles: [
+        {
+          path: '/home/project/src/App.tsx',
+          content: 'export default function App() {\n  return <h1>FOLLOWUP_MARKER</h1>;\n}\n',
+        },
+      ],
       start: {
         exitCode: 0,
         output: '',

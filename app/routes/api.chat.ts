@@ -56,10 +56,12 @@ import {
 } from '~/lib/.server/llm/message-selection';
 import {
   fetchHostedRuntimeSnapshotForRequest,
+  type HostedRuntimePreviewStatus,
   waitForHostedRuntimePreviewVerificationForRequest,
 } from '~/lib/.server/hosted-runtime-snapshot';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 import { extractLatestUserGoal, findLatestUserMessage } from '~/lib/runtime/user-goal';
+import { normalizeArtifactFilePath } from '~/lib/runtime/file-paths';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -305,6 +307,83 @@ export function resolveContinuationFiles(options: {
   }
 
   return requestFiles;
+}
+
+const HOSTED_HANDOFF_PERSISTENCE_FILE_RE =
+  /(^|\/)(?:src|app|components?|pages|routes)(?:\/|$)|(^|\/)(?:index\.html|App\.(?:tsx?|jsx?)|main\.(?:tsx?|jsx?))$/i;
+
+function normalizeComparableFileContent(content: string | undefined) {
+  return String(content || '')
+    .replace(/\r\n/g, '\n')
+    .trimEnd();
+}
+
+function toProjectRelativePath(filePath: string) {
+  return normalizeArtifactFilePath(filePath).replace(/^\/home\/project\/?/i, '');
+}
+
+export function detectRestoredHostedRuntimeHandoffMismatch(options: {
+  status?: HostedRuntimePreviewStatus | null;
+  snapshot?: FileMap | null;
+  appliedFiles?: Array<{ path: string; content: string }> | null;
+}): string | null {
+  if (options.status?.recovery?.state !== 'restored') {
+    return null;
+  }
+
+  const appliedFiles = options.appliedFiles || [];
+
+  if (appliedFiles.length === 0) {
+    return null;
+  }
+
+  if (!options.snapshot || Object.keys(options.snapshot).length === 0) {
+    return 'The hosted preview recovered by restoring a prior workspace, but the runtime snapshot could not be loaded to confirm the latest generated files were retained.';
+  }
+
+  const criticalFiles = appliedFiles.filter((file) => HOSTED_HANDOFF_PERSISTENCE_FILE_RE.test(file.path));
+  const filesToVerify = criticalFiles.length > 0 ? criticalFiles : appliedFiles;
+
+  for (const appliedFile of filesToVerify) {
+    const normalizedPath = normalizeArtifactFilePath(appliedFile.path);
+    const snapshotEntry = options.snapshot[normalizedPath] ?? options.snapshot[appliedFile.path];
+
+    if (!snapshotEntry || snapshotEntry.type !== 'file' || snapshotEntry.isBinary) {
+      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
+        appliedFile.path,
+      )} is no longer present. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
+    }
+
+    if (normalizeComparableFileContent(snapshotEntry.content) !== normalizeComparableFileContent(appliedFile.content)) {
+      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
+        appliedFile.path,
+      )} was not retained. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
+    }
+  }
+
+  return null;
+}
+
+async function summarizeRestoredHostedRuntimeHandoffMismatchForRequest(options: {
+  requestUrl: string;
+  sessionId: string;
+  status?: HostedRuntimePreviewStatus | null;
+  appliedFiles?: Array<{ path: string; content: string }> | null;
+}) {
+  if (options.status?.recovery?.state !== 'restored') {
+    return null;
+  }
+
+  const snapshot = await fetchHostedRuntimeSnapshotForRequest({
+    requestUrl: options.requestUrl,
+    sessionId: options.sessionId,
+  }).catch(() => null);
+
+  return detectRestoredHostedRuntimeHandoffMismatch({
+    status: options.status,
+    snapshot,
+    appliedFiles: options.appliedFiles,
+  });
 }
 
 export function shouldAttemptHostedPreviewVerification(options: {
@@ -1454,6 +1533,7 @@ Next: I am sending the final result now.`,
             });
             let directHostedPreviewVerificationOutcome: HostedPreviewRecoveryOutcome | null = null;
             let directHostedPreviewFailureSummary: string | null = null;
+            let directHostedHandoffAppliedFiles: Array<{ path: string; content: string }> | null = null;
 
             if (
               shouldApplyHostedRuntimeHandoffBeforePreviewVerification({
@@ -1483,6 +1563,8 @@ Next: I am starting the managed preview from that synced workspace before report
                 });
 
                 if (hostedHandoffResult) {
+                  directHostedHandoffAppliedFiles = hostedHandoffResult.appliedFiles;
+
                   const hostedPreviewPort = extractPreviewPort(hostedHandoffResult.start.previewBaseUrl);
 
                   dataStream.writeData({
@@ -1643,9 +1725,29 @@ Next: I am waiting for a verified preview before I decide whether another contin
                 })}`,
               );
 
-              directHostedPreviewVerificationOutcome = directHostedPreviewVerification.outcome;
+              let verifiedHostedPreviewOutcome = directHostedPreviewVerification.outcome;
+              const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                requestUrl: request.url,
+                sessionId: hostedRuntimeSessionId!,
+                status: directHostedPreviewVerification.status,
+                appliedFiles: directHostedHandoffAppliedFiles,
+              });
 
-              if (directHostedPreviewVerification.outcome === 'ready') {
+              if (restoredHandoffMismatch) {
+                verifiedHostedPreviewOutcome = 'error';
+                directHostedPreviewFailureSummary = restoredHandoffMismatch;
+                writeCommentary(
+                  'recovery',
+                  'Hosted preview recovered by rolling back the latest generated files.',
+                  'warning',
+                  `Key changes: Preview recovery restored a prior working snapshot, so the latest generated file update was not retained.
+Next: I am continuing from the restored workspace and reapplying the requested change with a compiling fix.`,
+                );
+              }
+
+              directHostedPreviewVerificationOutcome = verifiedHostedPreviewOutcome;
+
+              if (verifiedHostedPreviewOutcome === 'ready') {
                 previewCheckpointObserved = true;
 
                 const verifiedPreviewBaseUrl = directHostedPreviewVerification.status?.preview?.baseUrl ?? undefined;
@@ -1674,7 +1776,7 @@ Next: I am waiting for a verified preview before I decide whether another contin
                   }.
 Next: I am returning the finished result with the verified preview ready for inspection.`,
                 );
-              } else {
+              } else if (!directHostedPreviewFailureSummary) {
                 directHostedPreviewFailureSummary = summarizeHostedPreviewFailure(
                   directHostedPreviewVerification.status,
                 );
@@ -1881,13 +1983,32 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
                         },
                       });
 
+                      let hostedPreviewVerificationOutcome = hostedPreviewVerification.outcome;
+                      const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                        requestUrl: request.url,
+                        sessionId: hostedRuntimeSessionId,
+                        status: hostedPreviewVerification.status,
+                        appliedFiles: hostedHandoffResult.appliedFiles,
+                      });
+
+                      if (restoredHandoffMismatch) {
+                        hostedPreviewVerificationOutcome = 'error';
+                        writeCommentary(
+                          'recovery',
+                          'Hosted preview recovered by rolling back the latest generated files.',
+                          'warning',
+                          `Key changes: Preview recovery restored a prior working snapshot, so the latest generated file update was not retained.
+Next: I am continuing from the restored workspace and reapplying the requested change with a compiling fix.`,
+                        );
+                      }
+
                       logger.info(
                         `hosted runtime preview verification ${JSON.stringify({
                           runId,
                           provider,
                           model,
                           hostedRuntimeSessionId,
-                          outcome: hostedPreviewVerification.outcome,
+                          outcome: hostedPreviewVerificationOutcome,
                           status: hostedPreviewVerification.status?.status ?? null,
                           healthy: hostedPreviewVerification.status?.healthy ?? null,
                           previewBaseUrl:
@@ -1898,7 +2019,7 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
                         })}`,
                       );
 
-                      if (hostedPreviewVerification.outcome === 'ready') {
+                      if (hostedPreviewVerificationOutcome === 'ready') {
                         previewCheckpointObserved = true;
 
                         const verifiedPreviewBaseUrl =
@@ -1932,9 +2053,10 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
 Next: I am returning the finished result with the verified preview ready for inspection.`,
                         );
                       } else {
-                        const previewAlertMessage = summarizeHostedPreviewFailure(hostedPreviewVerification.status);
+                        const previewAlertMessage =
+                          restoredHandoffMismatch || summarizeHostedPreviewFailure(hostedPreviewVerification.status);
                         const shouldContinueHostedPreview = shouldContinueHostedPreviewRecovery({
-                          outcome: hostedPreviewVerification.outcome,
+                          outcome: hostedPreviewVerificationOutcome,
                           attempts: runContinuationAttempts,
                           maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
                         });
@@ -1944,17 +2066,17 @@ Next: I am returning the finished result with the verified preview ready for ins
                           recoveryTriggered = true;
                           pendingRecoveryReason =
                             pendingRecoveryReason ||
-                            `hosted-preview-${hostedPreviewVerification.outcome}-${runContinuationAttempts}`;
+                            `hosted-preview-${hostedPreviewVerificationOutcome}-${runContinuationAttempts}`;
 
                           const continuationAttemptLabel = `${runContinuationAttempts}/${MAX_RUN_CONTINUATION_ATTEMPTS}`;
 
                           writeCommentary(
                             'recovery',
-                            hostedPreviewVerification.outcome === 'error'
+                            hostedPreviewVerificationOutcome === 'error'
                               ? 'Hosted preview hit a startup error. I am fixing it now.'
                               : 'Hosted preview is still not healthy. I am making another repair pass now.',
                             'warning',
-                            hostedPreviewVerification.outcome === 'error'
+                            hostedPreviewVerificationOutcome === 'error'
                               ? `Key changes: Hosted preview verification failed (${continuationAttemptLabel}).
 Next: I am continuing from the current workspace state and fixing this concrete preview issue: ${previewAlertMessage}`
                               : `Key changes: Hosted preview verification timed out (${continuationAttemptLabel}).
@@ -1967,7 +2089,7 @@ Next: I am continuing from the current workspace state and tightening the previe
                               provider,
                               model,
                               hostedRuntimeSessionId,
-                              outcome: hostedPreviewVerification.outcome,
+                              outcome: hostedPreviewVerificationOutcome,
                               attempt: runContinuationAttempts,
                               maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
                               previewAlertMessage,
@@ -2025,7 +2147,7 @@ Next: I am continuing from the current workspace state and tightening the previe
                           stderr: previewAlertMessage,
                         };
 
-                        if (hostedPreviewVerification.outcome === 'error') {
+                        if (hostedPreviewVerificationOutcome === 'error') {
                           writeCommentary(
                             'verification',
                             'Hosted preview reported an error after start.',

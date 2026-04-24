@@ -30,10 +30,12 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Hosted runtime command replay finishes on the runtime `exit` event even when transport streams stay open.
 - [x] Reserved preview ports are probed immediately, and package-only Vite snapshots are classified as incomplete before they can idle the stream.
 - [x] Hosted preview autostart refuses package-only Vite workspaces before opening a command stream, preventing incomplete snapshots from holding the session operation lock.
+- [x] Hosted runtime waits for completed file actions before syncing source into Vite, preventing partial streamed code from triggering preview rollback.
 - [x] Starter-placeholder detections are ignored once the active workspace no longer contains starter placeholder content, preventing valid generated apps from being rolled back.
 - [x] Scaffold-only or prose-only runtime handoffs are rejected until the merged workspace contains concrete implementation files and runnable app entries.
 - [x] Generated entry-file writes resolve onto the active starter source file when models choose a sibling JS/TS extension.
 - [x] Browser E2E validates working projects strictly by requiring the requested token to appear inside preview, not just an iframe mount.
+- [x] Browser E2E now also verifies that generated and follow-up tokens persist in the hosted runtime snapshot after preview recovery settles.
 - [x] Live `alpha1` FREE/DeepSeek E2E validated first prompt generation plus a follow-up prompt that preserved both tokens in preview.
 
 2. History-aware iteration
@@ -43,6 +45,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Follow-up prompts supersede queued auto-heal work, avoiding hidden repair races against user-requested improvements.
 - [x] Follow-up installs/restarts use a dedicated runtime shell so iterative prompts can build on the current project without trampling the active preview.
 - [x] Hosted runtime snapshots are used as canonical chat file state for live follow-up prompts.
+- [x] Recovered previews are no longer accepted as follow-up success if the rollback dropped the latest generated file changes.
 
 3. Transparency and release validation
 

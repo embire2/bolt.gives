@@ -1069,13 +1069,6 @@ export class ActionRunner {
     }
 
     if (isStreaming) {
-      if (hostedRuntimeEnabled) {
-        await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
-        await this.#hostedRuntimeFlushPromise;
-
-        return;
-      }
-
       logger.debug(`Skipping runnable workspace write for streaming file action ${relativePath}`);
 
       return;

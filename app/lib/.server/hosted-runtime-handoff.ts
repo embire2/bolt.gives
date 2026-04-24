@@ -18,6 +18,7 @@ export interface HostedRuntimeCommandReplayResult {
 
 export interface HostedRuntimeServerHandoffResult {
   appliedFilePaths: string[];
+  appliedFiles: ExtractedFileAction[];
   setup?: HostedRuntimeCommandReplayResult;
   start: HostedRuntimeCommandReplayResult;
 }
@@ -499,6 +500,7 @@ export async function applyHostedRuntimeAssistantActions(options: {
 
   return {
     appliedFilePaths: fileActions.map((fileAction) => fileAction.path),
+    appliedFiles: fileActions,
     start: startResult,
   };
 }

@@ -33,9 +33,9 @@
 
 `v3.0.9` is the current stable hosted release. The goal of this line was to make bolt.gives reliable enough for daily hosted use by tightening prompt-to-preview, managed runtime handoff, follow-up context, and release validation.
 
-The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies generated files into the managed runtime before preview verification, rejects incomplete/prose-only handoffs, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview content with strict browser E2E coverage.
+The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, rejects incomplete/prose-only handoffs, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
-Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory.
+Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory. If preview recovery rolls back a broken follow-up, verification treats that as unfinished unless the latest generated files still persist in the runtime snapshot.
 
 Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, and new instances are spawned from the same live build plus the protected hosted FREE relay secret.
 
@@ -82,6 +82,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Local workbench preview startup syncs shell-created Vite files before React entry repairs and ignores commented-out default exports, which keeps first preview starts and follow-up repairs aligned with the actual filesystem.
 - Manual follow-up prompts supersede queued Architect auto-heal work, so user-requested improvements do not race hidden recovery requests against the same runtime session.
 - Hosted preview verification errors now trigger a concrete repair continuation, keeping follow-up prompts history-aware and self-healing when the preview remains unhealthy.
+- Hosted runtime waits for completed file actions before syncing source into Vite, and recovered previews are not accepted as follow-up success if the rollback dropped the latest generated files.
 - Hosted FREE preview verification now syncs generated file actions into the server runtime before health checks, so the verifier acts on the real current project rather than a partially synced workspace.
 - Hosted runtime command replay now exits on the runtime `exit` event instead of waiting for the transport to close, preventing completed start commands from holding `/api/chat` streams open.
 - Hosted runtime preview startup probes the reserved preview port immediately and marks package-only Vite workspaces as incomplete, preventing quiet dev-server starts from idling until the runtime command timeout.

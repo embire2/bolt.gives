@@ -20,6 +20,7 @@ const consoleErrors = [];
 const chatRequests = [];
 const previewStatusEvents = [];
 const previewTextHistory = [];
+const runtimeSnapshotChecks = [];
 
 function elapsed() {
   return ((Date.now() - started) / 1000).toFixed(1);
@@ -49,6 +50,57 @@ function extractRuntimeSessionId(previewUrl) {
   } catch {
     return null;
   }
+}
+
+function fileMapContainsTokens(files, tokens) {
+  const text = Object.values(files || {})
+    .filter((entry) => entry?.type === 'file' && !entry.isBinary && typeof entry.content === 'string')
+    .map((entry) => entry.content)
+    .join('\n');
+
+  return tokens.every((token) => text.includes(token));
+}
+
+async function fetchRuntimeJson(page, sessionId, endpoint) {
+  return await page
+    .evaluate(
+      async ({ sessionId, endpoint }) => {
+        const response = await fetch(`/runtime/sessions/${encodeURIComponent(sessionId)}/${endpoint}`, {
+          headers: { Accept: 'application/json' },
+        });
+
+        if (!response.ok) {
+          return { ok: false, status: response.status, payload: null };
+        }
+
+        return { ok: true, status: response.status, payload: await response.json() };
+      },
+      { sessionId, endpoint },
+    )
+    .catch((error) => ({ ok: false, status: 0, payload: null, error: error instanceof Error ? error.message : String(error) }));
+}
+
+async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
+  const statusResponse = await fetchRuntimeJson(page, sessionId, 'preview-status');
+  const snapshotResponse = await fetchRuntimeJson(page, sessionId, 'snapshot');
+  const status = statusResponse.payload || null;
+  const snapshotContainsTokens = fileMapContainsTokens(snapshotResponse.payload?.files, tokens);
+  const ready = Boolean(status?.preview && status.status === 'ready' && status.healthy);
+  const result = {
+    elapsedSec: Number(elapsed()),
+    ready,
+    snapshotContainsTokens,
+    status: status?.status || null,
+    healthy: status?.healthy ?? null,
+    recovery: status?.recovery?.state || null,
+    tokens,
+  };
+  runtimeSnapshotChecks.push(result);
+
+  return {
+    ok: ready && snapshotContainsTokens,
+    result,
+  };
 }
 
 function isBenignNetworkFailure(entry) {
@@ -160,13 +212,17 @@ async function main() {
   let sawPreview = false;
   let sawError = false;
   let previewContainsToken = false;
+  let snapshotContainsToken = false;
   let followUpSubmitted = false;
   let followUpPreviewContainsTokens = false;
+  let followUpSnapshotContainsTokens = false;
   let bodyTextLast = '';
   let lastPreviewText = '';
   let lastPreviewSrc = '';
   let hostedRuntimeSessionId = null;
   let lastPreviewStatusKey = '';
+  let loggedInitialSnapshotWait = false;
+  let loggedFollowUpSnapshotWait = false;
 
   while (Date.now() < checkDeadline) {
     await keepPreviewSurfaceVisible(page);
@@ -212,8 +268,24 @@ async function main() {
 
         if (inner.includes(appToken)) {
           previewContainsToken = true;
-          log('SUCCESS: preview contains token');
-          break;
+
+          if (!hostedRuntimeSessionId) {
+            log('SUCCESS: preview contains token');
+            break;
+          }
+
+          const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, [appToken]);
+
+          if (snapshotCheck.ok) {
+            snapshotContainsToken = true;
+            log('SUCCESS: runtime snapshot contains token');
+            break;
+          }
+
+          if (!loggedInitialSnapshotWait) {
+            loggedInitialSnapshotWait = true;
+            log('runtime snapshot pending token', JSON.stringify(snapshotCheck.result));
+          }
         }
       } catch {
         // Keep polling; cross-origin preview startup can transiently fail reads.
@@ -310,8 +382,27 @@ async function main() {
 
           if (inner.includes(appToken) && inner.includes(followUpToken)) {
             followUpPreviewContainsTokens = true;
-            log('SUCCESS: follow-up preview contains both tokens');
-            break;
+
+            if (!hostedRuntimeSessionId) {
+              log('SUCCESS: follow-up preview contains both tokens');
+              break;
+            }
+
+            const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, [
+              appToken,
+              followUpToken,
+            ]);
+
+            if (snapshotCheck.ok) {
+              followUpSnapshotContainsTokens = true;
+              log('SUCCESS: follow-up runtime snapshot contains both tokens');
+              break;
+            }
+
+            if (!loggedFollowUpSnapshotWait) {
+              loggedFollowUpSnapshotWait = true;
+              log('follow-up runtime snapshot pending tokens', JSON.stringify(snapshotCheck.result));
+            }
           }
         } catch {
           // Keep polling; preview swaps can transiently fail reads.
@@ -337,7 +428,9 @@ async function main() {
   const summary = {
     ok:
       previewContainsToken &&
-      (!requireFollowUp || followUpPreviewContainsTokens) &&
+      (!hostedRuntimeSessionId || snapshotContainsToken) &&
+      (!requireFollowUp ||
+        (followUpPreviewContainsTokens && (!hostedRuntimeSessionId || followUpSnapshotContainsTokens))) &&
       chatRequests.some((request) => request.status === 200),
     baseUrl,
     providerName,
@@ -351,8 +444,10 @@ async function main() {
     sawPreview,
     sawError,
     previewContainsToken,
+    snapshotContainsToken,
     followUpSubmitted,
     followUpPreviewContainsTokens,
+    followUpSnapshotContainsTokens,
     hostedRuntimeSessionId,
     chatRequests,
     consoleErrors: consoleErrors.slice(0, 60),
@@ -360,6 +455,7 @@ async function main() {
     fatalNetworkErrors: networkErrors.filter((entry) => !isBenignNetworkFailure(entry)).slice(0, 60),
     previewStatusEvents,
     previewTextHistory,
+    runtimeSnapshotChecks,
     events,
     bodyExcerpt: finalBody,
   };
@@ -373,8 +469,10 @@ async function main() {
     sawPreview,
     sawError,
     previewContainsToken,
+    snapshotContainsToken,
     followUpSubmitted,
     followUpPreviewContainsTokens,
+    followUpSnapshotContainsTokens,
     elapsedSec: summary.elapsedSec,
     chatRequestStatuses: chatRequests.map((r) => r.status),
     consoleErrorCount: consoleErrors.length,
