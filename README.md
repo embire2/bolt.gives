@@ -86,6 +86,7 @@ Local follow-up repairs now keep the running dev server on a dedicated runtime s
 - Local workbench preview startup syncs shell-created Vite files before React entry repairs and ignores commented-out default exports, which keeps first preview starts and follow-up repairs aligned with the actual filesystem.
 - Manual follow-up prompts supersede queued Architect auto-heal work, so user-requested improvements do not race hidden recovery requests against the same runtime session.
 - Hosted preview verification errors now trigger a concrete repair continuation, keeping follow-up prompts history-aware and self-healing when the preview remains unhealthy.
+- Hosted FREE preview verification now syncs generated file actions into the server runtime before health checks, so the verifier acts on the real current project rather than a partially synced workspace.
 - Hosted runtime startup repairs common raw JSX angle text emitted by smaller models, so navigation buttons like `<` and `>` do not block Vite preview creation.
 - Local self-host CSP now allows the loopback preview/provider sockets that WebContainer-based runs actually use on `localhost` and `127.0.0.1`, while avoiding invalid `[::1]` policy entries that generated fresh browser console errors.
 - Hosted preview verification now streams visible startup progress while the server waits for the managed preview to turn healthy, which keeps long warm-ups readable instead of going silent and makes disconnect recovery less opaque.

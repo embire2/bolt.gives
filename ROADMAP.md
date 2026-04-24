@@ -71,6 +71,7 @@ Release theme: make bolt.gives launch-safe for daily use by tightening prompt-to
 - [~] Sync shell-created Vite files before local pre-start React repairs, so missing default exports and legacy `ReactDOM.render` calls are fixed against the actual workspace state before preview startup.
 - [~] Keep user follow-up prompts ahead of queued auto-heal work and continue automatically on direct hosted-preview verification errors, so iterative prompts build on the current project instead of racing hidden repair requests.
 - [~] Keep hosted FREE starter/preview recovery server-owned after generation, so hidden client continuations do not race the user’s next follow-up prompt once preview is healthy.
+- [~] Apply hosted FREE file/start actions on the server before preview verification, so health checks evaluate the actual generated project instead of a partially synced runtime workspace.
 - [~] Keep preview success/failure criteria strict so the app only reports success after a usable preview is verified. Browser E2E now requires the requested token to appear inside preview, not just an iframe mount.
 - [~] Limit server-side “preview not verified” continuation loops to hosted-runtime sessions that the backend can actually verify, so local/self-host builds can settle on a runnable preview and accept follow-up prompts normally.
 - [~] Fail release verification when post-deploy browser health detects missing hashed assets or a non-interactive prompt shell after rollout.

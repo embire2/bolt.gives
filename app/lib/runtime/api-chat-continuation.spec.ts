@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRunContinuationPrompt,
   shouldAllowSynthesizedRunHandoff,
+  shouldApplyHostedRuntimeHandoffBeforePreviewVerification,
   shouldContinueAfterBlockedSynthesizedRunHandoff,
   shouldContinueHostedPreviewVerificationFailure,
   shouldReplayLocalRuntimeHandoff,
@@ -101,6 +102,42 @@ describe('api.chat continuation helpers', () => {
         maxAttempts: 5,
       }),
     ).toBe(true);
+  });
+
+  it('applies hosted runtime handoff before verification when generated actions are runnable', () => {
+    expect(
+      shouldApplyHostedRuntimeHandoffBeforePreviewVerification({
+        chatMode: 'build',
+        previewCheckpointObserved: false,
+        hasExecutionFailures: false,
+        hostedRuntimeSessionId: 'session-1',
+        hasSynthesizedRunHandoff: true,
+        allowSynthesizedRunHandoff: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not apply hosted runtime handoff before verification without a safe synthesized handoff', () => {
+    expect(
+      shouldApplyHostedRuntimeHandoffBeforePreviewVerification({
+        chatMode: 'build',
+        previewCheckpointObserved: false,
+        hasExecutionFailures: false,
+        hostedRuntimeSessionId: 'session-1',
+        hasSynthesizedRunHandoff: true,
+        allowSynthesizedRunHandoff: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyHostedRuntimeHandoffBeforePreviewVerification({
+        chatMode: 'build',
+        previewCheckpointObserved: false,
+        hasExecutionFailures: false,
+        hostedRuntimeSessionId: '',
+        hasSynthesizedRunHandoff: true,
+        allowSynthesizedRunHandoff: true,
+      }),
+    ).toBe(false);
   });
 
   it('does not continue direct hosted preview verification after success or budget exhaustion', () => {

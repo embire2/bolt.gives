@@ -322,6 +322,21 @@ export function shouldAttemptHostedPreviewVerification(options: {
   );
 }
 
+export function shouldApplyHostedRuntimeHandoffBeforePreviewVerification(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hostedRuntimeSessionId?: string | null;
+  hasSynthesizedRunHandoff: boolean;
+  allowSynthesizedRunHandoff: boolean;
+}) {
+  return (
+    shouldAttemptHostedPreviewVerification(options) &&
+    options.hasSynthesizedRunHandoff &&
+    options.allowSynthesizedRunHandoff
+  );
+}
+
 export function shouldContinuePendingHostedPreviewVerification(options: {
   chatMode?: 'discuss' | 'build';
   previewCheckpointObserved: boolean;
@@ -1413,7 +1428,7 @@ Next: I am sending the final result now.`,
               return;
             }
 
-            const hostedRuntimeSnapshot =
+            let hostedRuntimeSnapshot =
               effectiveChatMode === 'build' &&
               typeof hostedRuntimeSessionId === 'string' &&
               hostedRuntimeSessionId.trim().length > 0
@@ -1423,8 +1438,116 @@ Next: I am sending the final result now.`,
                   }).catch(() => null)
                 : null;
 
+            let continuationFiles = resolveContinuationFiles({
+              requestFiles: files,
+              hostedRuntimeSnapshot,
+            });
+            let synthesizedRunHandoff = await synthesizeRunHandoff({
+              assistantContent: content,
+              currentFiles: continuationFiles,
+            });
+            let allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
+              assistantContent: content,
+              latestExecutionFailure,
+              continuationReason: 'preview-not-verified',
+            });
             let directHostedPreviewVerificationOutcome: HostedPreviewRecoveryOutcome | null = null;
             let directHostedPreviewFailureSummary: string | null = null;
+
+            if (
+              shouldApplyHostedRuntimeHandoffBeforePreviewVerification({
+                chatMode: effectiveChatMode,
+                previewCheckpointObserved,
+                hasExecutionFailures,
+                hostedRuntimeSessionId,
+                hasSynthesizedRunHandoff: Boolean(synthesizedRunHandoff),
+                allowSynthesizedRunHandoff,
+              }) &&
+              synthesizedRunHandoff
+            ) {
+              try {
+                const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                  requestUrl: request.url,
+                  sessionId: hostedRuntimeSessionId!,
+                  assistantContent: content,
+                  synthesizedRunHandoff,
+                });
+
+                if (hostedHandoffResult) {
+                  const hostedPreviewPort = extractPreviewPort(hostedHandoffResult.start.previewBaseUrl);
+
+                  dataStream.writeData({
+                    type: 'checkpoint',
+                    checkpointType: 'preview-ready',
+                    status: 'in-progress',
+                    message: 'Hosted preview session synchronized.',
+                    timestamp: new Date().toISOString(),
+                    command: synthesizedRunHandoff.startCommand,
+                    exitCode: hostedHandoffResult.start.exitCode,
+                    hostedRuntimeSessionId: hostedRuntimeSessionId!,
+                    ...(hostedHandoffResult.start.previewBaseUrl
+                      ? { previewBaseUrl: hostedHandoffResult.start.previewBaseUrl }
+                      : {}),
+                    ...(typeof hostedPreviewPort === 'number' ? { previewPort: hostedPreviewPort } : {}),
+                  } satisfies CheckpointDataEvent);
+
+                  writeCommentary(
+                    'action',
+                    'Applied generated files to the hosted runtime before preview verification.',
+                    'in-progress',
+                    `Key changes: The server applied ${hostedHandoffResult.appliedFilePaths.length.toString()} generated file update${hostedHandoffResult.appliedFilePaths.length === 1 ? '' : 's'} and started the hosted preview from the synced workspace.
+Next: I am waiting for the hosted preview to confirm the generated app is running.`,
+                  );
+                  logger.info(
+                    `direct hosted runtime handoff applied before preview verification ${JSON.stringify({
+                      runId,
+                      provider,
+                      model,
+                      hostedRuntimeSessionId,
+                      appliedFilePaths: hostedHandoffResult.appliedFilePaths,
+                      startExitCode: hostedHandoffResult.start.exitCode,
+                      previewBaseUrl: hostedHandoffResult.start.previewBaseUrl,
+                    })}`,
+                  );
+
+                  hostedRuntimeSnapshot =
+                    (await fetchHostedRuntimeSnapshotForRequest({
+                      requestUrl: request.url,
+                      sessionId: hostedRuntimeSessionId!,
+                    }).catch(() => null)) || hostedRuntimeSnapshot;
+                  continuationFiles = resolveContinuationFiles({
+                    requestFiles: files,
+                    hostedRuntimeSnapshot,
+                  });
+                  synthesizedRunHandoff = await synthesizeRunHandoff({
+                    assistantContent: content,
+                    currentFiles: continuationFiles,
+                  });
+                  allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
+                    assistantContent: content,
+                    latestExecutionFailure,
+                    continuationReason: 'preview-not-verified',
+                  });
+                }
+              } catch (error) {
+                logger.warn('direct hosted runtime handoff before preview verification failed', {
+                  runId,
+                  provider,
+                  model,
+                  hostedRuntimeSessionId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                writeCommentary(
+                  'recovery',
+                  'Hosted runtime sync reported a problem before preview verification.',
+                  'warning',
+                  `Key changes: I could not apply the generated files directly before preview verification.
+Next: I am keeping the server-side recovery loop active so the next pass can repair the hosted workspace. Latest error: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                );
+              }
+            }
 
             if (
               shouldAttemptHostedPreviewVerification({
@@ -1549,10 +1672,6 @@ Next: I am returning the finished result with the verified preview ready for ins
               }
             }
 
-            const continuationFiles = resolveContinuationFiles({
-              requestFiles: files,
-              hostedRuntimeSnapshot,
-            });
             latestProjectMemoryFiles = continuationFiles || files;
 
             const runContinuationDecision = analyzeRunContinuation({
@@ -1595,18 +1714,15 @@ Next: I am returning the finished result with the verified preview ready for ins
               maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
             });
 
-            const synthesizedRunHandoff = await synthesizeRunHandoff({
-              assistantContent: content,
-              currentFiles: continuationFiles,
-            });
             const continuationReason: ContinuationReason = shouldContinueForRunIntent
               ? runContinuationDecision.reason
               : 'preview-not-verified';
-            const allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
+            allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
               assistantContent: content,
               latestExecutionFailure,
               continuationReason,
             });
+
             const hasHostedRuntimeSession =
               typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0;
             const shouldReplayLocalRuntimeHandoffNow = shouldReplayLocalRuntimeHandoff({
