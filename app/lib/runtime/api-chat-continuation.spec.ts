@@ -6,6 +6,7 @@ import {
   shouldApplyHostedRuntimeHandoffBeforePreviewVerification,
   shouldContinueAfterBlockedSynthesizedRunHandoff,
   shouldContinueHostedPreviewVerificationFailure,
+  shouldContinueRunIntentAfterHostedPreviewReady,
   shouldReplayLocalRuntimeHandoff,
   shouldSkipPlannerForRecoveryPrompt,
 } from '~/routes/api.chat';
@@ -101,6 +102,28 @@ describe('api.chat continuation helpers', () => {
         outcome: 'error',
         attempts: 0,
         maxAttempts: 5,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not keep a hosted chat stream open for inspection-only continuation after preview is verified', () => {
+    expect(
+      shouldContinueRunIntentAfterHostedPreviewReady({
+        shouldContinueForRunIntent: true,
+        continuationReason: 'inspection-only-shell-actions',
+        previewCheckpointObserved: true,
+        hostedRuntimeSessionId: 'session-123',
+      }),
+    ).toBe(false);
+  });
+
+  it('still allows inspection-only continuation before hosted preview verification succeeds', () => {
+    expect(
+      shouldContinueRunIntentAfterHostedPreviewReady({
+        shouldContinueForRunIntent: true,
+        continuationReason: 'inspection-only-shell-actions',
+        previewCheckpointObserved: false,
+        hostedRuntimeSessionId: 'session-123',
       }),
     ).toBe(true);
   });

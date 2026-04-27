@@ -76,6 +76,12 @@ const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementa
 
 type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
 
+const HOSTED_PREVIEW_READY_SUPPRESSED_CONTINUATION_REASONS = new Set<ContinuationReason>([
+  'inspection-only-shell-actions',
+  'no-bolt-actions',
+  'run-intent-without-start',
+]);
+
 export function shouldUseSynthesizedRunHandoff(reason: ContinuationReason) {
   return (
     reason === 'run-intent-without-start' ||
@@ -135,6 +141,30 @@ export function shouldSkipPlannerForRecoveryPrompt(content: string | undefined):
   return /\[Architect Auto-Heal\]|preview-runtime-exception|preview-compile-error|preview-not-verified|The previous run ended without a preview-ready checkpoint|You scaffolded a project but did not complete the requested implementation|Latest concrete failure to fix first/i.test(
     content,
   );
+}
+
+export function shouldContinueRunIntentAfterHostedPreviewReady(options: {
+  shouldContinueForRunIntent: boolean;
+  continuationReason: ContinuationReason;
+  previewCheckpointObserved: boolean;
+  hostedRuntimeSessionId?: string | null;
+}) {
+  if (!options.shouldContinueForRunIntent) {
+    return false;
+  }
+
+  const hasHostedRuntimeSession =
+    typeof options.hostedRuntimeSessionId === 'string' && options.hostedRuntimeSessionId.trim().length > 0;
+
+  if (
+    hasHostedRuntimeSession &&
+    options.previewCheckpointObserved &&
+    HOSTED_PREVIEW_READY_SUPPRESSED_CONTINUATION_REASONS.has(options.continuationReason)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export function buildRunContinuationPrompt(options: {
@@ -1809,7 +1839,12 @@ Next: I am returning the finished result with the verified preview ready for ins
               })}`,
             );
 
-            const shouldContinueForRunIntent = runContinuationDecision.shouldContinue;
+            const shouldContinueForRunIntent = shouldContinueRunIntentAfterHostedPreviewReady({
+              shouldContinueForRunIntent: runContinuationDecision.shouldContinue,
+              continuationReason: runContinuationDecision.reason,
+              previewCheckpointObserved,
+              hostedRuntimeSessionId,
+            });
             const shouldContinueForUnverifiedPreview = shouldContinuePendingHostedPreviewVerification({
               chatMode: effectiveChatMode,
               previewCheckpointObserved,
