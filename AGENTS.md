@@ -5,8 +5,8 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform. The product must be reliable, visibly transparent while it works, safe when it acts autonomously, and easy to self-host.
 
 Current release line:
-- Stable: `v3.0.8`
-- In progress: `v3.0.9`
+- Stable: `v3.0.9.1`
+- In progress: `v3.1.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
 
@@ -79,7 +79,7 @@ When changing hosted runtime behavior, validate both the app service and the run
 - Keep behavior changes explicit in commit messages and docs.
 - If you encounter unexpected unrelated file modifications while editing, stop and assess before overwriting them.
 
-## v3.0.9 Priorities
+## v3.1.0 Priorities
 
 These are the current release priorities:
 - Prompt-to-preview reliability

@@ -4,6 +4,13 @@
 
 - `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
 
+## v3.0.9.1 (2026-04-28)
+
+### Changed
+
+- Workspace Activity is now capped to a compact drawer with tighter spacing and internal scrolling, keeping generated files and preview visible while live commentary and execution status continue updating.
+- The visible app/package release version is now `v3.0.9.1`, while `v3.1.0` remains the next roadmap target.
+
 ## v3.0.9 (2026-04-24)
 
 - `create.bolt.gives/managed-instances` now uses explicit high-contrast light-mode cards, form fields, policy text, and call-to-action styling so the registration flow stays readable on the live public create-domain surface.

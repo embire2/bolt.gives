@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-24
+Last updated: 2026-04-28
 
 Status legend:
 
@@ -10,11 +10,20 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9`
+- [x] `v3.0.9.1`
 
 Next release target:
 
 - [~] `v3.1.0`
+
+## v3.0.9.1 - Current Patch
+
+Release theme: keep the shipped hosted reliability baseline while reclaiming workspace vertical space for generated files and preview.
+
+### Shipped in v3.0.9.1
+
+- [x] Workspace Activity is capped to a compact drawer with internal feed scrolling.
+- [x] The live version label, package metadata, release docs, and managed-instance documentation identify the current hosted release as `v3.0.9.1`.
 
 ## v3.0.9 - Shipped Baseline
 

@@ -32,7 +32,7 @@ describe('/api/bug-report action', () => {
         issue: 'Preview stayed blank after install completed.',
         summary: 'Blank preview after install',
         pageUrl: 'https://alpha1.bolt.gives',
-        appVersion: '3.0.9',
+        appVersion: '3.0.9.1',
         provider: 'FREE',
         model: 'deepseek/deepseek-v3.2',
         browser: 'Firefox',

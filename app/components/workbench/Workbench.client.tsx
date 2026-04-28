@@ -825,27 +825,27 @@ export const Workbench = memo(
             )}
           </div>
           {chatStarted ? (
-            <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-3 py-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+            <div className="max-h-44 shrink-0 overflow-hidden border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-2 py-1.5">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                     Workspace Activity
                   </div>
-                  <div className="text-xs text-bolt-elements-textTertiary">
+                  <div className="hidden truncate text-[11px] text-bolt-elements-textTertiary lg:block">
                     Live progress stays visible here while files and preview update above.
                   </div>
                 </div>
-                <div className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
+                <div className="shrink-0 rounded-full border border-bolt-elements-borderColor px-1.5 py-0.5 text-[10px] text-bolt-elements-textSecondary">
                   {isStreaming ? 'Working…' : hasWorkspaceContent ? 'Ready' : 'Standing by'}
                 </div>
               </div>
-              <div className="grid min-h-0 gap-3 xl:grid-cols-[0.95fr_1.05fr]">
-                <div ref={workspaceCommentaryRef} className="max-h-[22rem] overflow-y-auto pr-1">
+              <div className="grid max-h-36 min-h-0 gap-2 overflow-hidden md:grid-cols-[0.95fr_1.05fr]">
+                <div ref={workspaceCommentaryRef} className="max-h-36 overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading live commentary" />}>
                     <LazyCommentaryFeed data={data} scrollRef={workspaceCommentaryRef} />
                   </Suspense>
                 </div>
-                <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1">
+                <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading execution status" />}>
                     <LazyExecutionTransparencyPanel
                       data={data}

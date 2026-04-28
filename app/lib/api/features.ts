@@ -12,11 +12,11 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
-    id: 'release-v3.0.9',
-    name: 'v3.0.9 prompt-to-preview reliability and history-aware hosted runtime',
+    id: 'release-v3.0.9.1',
+    name: 'v3.0.9.1 compact workspace activity and hosted follow-up reliability',
     description:
-      'Hosted FREE project generation now applies generated files to the managed runtime before preview verification, blocks incomplete Vite autostarts, keeps follow-up prompts anchored to the current workspace snapshot, and verifies live projects with strict preview-token browser smoke coverage.',
-    releaseDate: '2026-04-24',
+      'Workspace Activity now stays compact so generated files and preview remain visible, while hosted FREE project generation keeps follow-up prompts anchored to the current runtime snapshot and closes verified preview streams promptly.',
+    releaseDate: '2026-04-28',
   },
   {
     id: 'release-v3.0.8',

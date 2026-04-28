@@ -29,9 +29,9 @@
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
-## Current Release (`v3.0.9`)
+## Current Release (`v3.0.9.1`)
 
-`v3.0.9` is the current stable hosted release. The goal of this line was to make bolt.gives reliable enough for daily hosted use by tightening prompt-to-preview, managed runtime handoff, follow-up context, and release validation.
+`v3.0.9.1` is the current stable hosted release. This patch keeps the `v3.0.9` reliability baseline and makes the Workspace Activity drawer much smaller so generated files and preview stay visible while live progress continues updating.
 
 The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
@@ -66,7 +66,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9`)
+## Current Platform Baseline (`v3.0.9.1`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
@@ -98,7 +98,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Hosted preview verification now streams visible startup progress while the server waits for the managed preview to turn healthy, which keeps long warm-ups readable instead of going silent and makes disconnect recovery less opaque.
 - The Workspace preview now re-checks hosted preview state immediately on iframe load, so generated apps replace the fallback starter much sooner on live domains.
 - Browser E2E coverage now treats “working project” strictly: the generated app has to render the requested prompt token in preview before the smoke passes.
-- `Chat` and `Workspace` are separate top-level tabs, with a dedicated `Workspace Activity` area for commentary and execution state.
+- `Chat` and `Workspace` are separate top-level tabs, with a compact `Workspace Activity` area for commentary and execution state that does not crowd out generated files and preview.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.
 - The live console now includes an in-app `Report Bug` control that captures the reporter’s full name, reply email, and issue summary, stores the report privately in PostgreSQL, and routes a formatted operator notification without exposing server-side credentials.
