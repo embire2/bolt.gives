@@ -29,9 +29,9 @@
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
-## Current Release (`v3.0.9.1`)
+## Current Release (`v3.0.9.2`)
 
-`v3.0.9.1` is the current stable hosted release. This patch keeps the `v3.0.9` reliability baseline and makes the Workspace Activity drawer much smaller so generated files and preview stay visible while live progress continues updating.
+`v3.0.9.2` is the current stable hosted release. This patch restores managed Cloudflare trial coding by allowing authenticated hosted `FREE` relay calls through the server CSRF gate only when the shared relay secret matches. It keeps the compact Workspace Activity drawer from `v3.0.9.1`, so generated files and preview remain visible while live progress continues updating.
 
 The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
@@ -41,7 +41,7 @@ Follow-up prompts are history-aware. They use a stable project-context id, deter
 
 After a hosted preview is verified healthy, the active chat stream is allowed to finish instead of staying open for inspection-only recovery loops, so users can immediately send follow-up improvements against the current project.
 
-Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and registry writes use collision-proof atomic temp files during rollout.
+Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and release validation creates a fresh instance through `https://create.bolt.gives` before verifying preview plus follow-up prompt behavior.
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
@@ -66,10 +66,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.1`)
+## Current Platform Baseline (`v3.0.9.2`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
+- Managed Cloudflare trial instances use the same protected hosted `FREE` relay path and can generate previewable apps plus follow-up improvements without requiring users to bring their own model API key.
 - The live chat request path now uses the same protected CSRF handshake as the rest of the control plane, so hosted `FREE` project requests do not die at request start with a silent `403` before generation begins.
 - The workspace shell now survives initial load reliably after the token-usage performance monitor was moved onto a stable external-store subscription instead of a hook path that could invalidate hydration.
 - Managed hosted runtime handles installs, builds, tests, preview hosting, and file sync on live instances by default.

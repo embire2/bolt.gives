@@ -4,6 +4,14 @@
 
 - `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
 
+## v3.0.9.2 (2026-05-03)
+
+### Fixed
+
+- Managed Cloudflare trial instances can code again: authenticated hosted `FREE` relay POSTs to `/api/chat` and `/api/llmcall` now pass the server CSRF gate only when the shared relay secret matches, so Pages-hosted instances can reach the protected DeepSeek V3.2 path without exposing operator credentials.
+- Added regression coverage proving regular cross-origin API posts still fail, unrelated API routes stay protected, and bad relay secrets are rejected.
+- Release validation now includes a newly spawned `create.bolt.gives` managed instance that must generate a previewable React app and accept a follow-up prompt against the same project context.
+
 ## v3.0.9.1 (2026-04-28)
 
 ### Changed

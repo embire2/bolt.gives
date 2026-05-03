@@ -436,6 +436,9 @@ function generateRequestId(): string {
 const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const HOSTED_FREE_RELAY_HEADER = 'x-bolt-hosted-free-relay';
+const HOSTED_FREE_RELAY_SECRET_HEADER = 'x-bolt-hosted-free-relay-secret';
+const HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
 
 function parseCookies(header: string | null): Record<string, string> {
   if (!header) {
@@ -488,6 +491,10 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
 
   const sameOrigin = (origin && tryHost(origin) === expectedHost) || (referer && tryHost(referer) === expectedHost);
 
+  if (!sameOrigin && isTrustedHostedFreeRelayRequest(request, env, url.pathname)) {
+    return null;
+  }
+
   if (!sameOrigin) {
     return new Response(JSON.stringify({ error: 'Cross-origin request blocked' }), {
       status: 403,
@@ -527,6 +534,21 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
       ...createSecurityHeaders(env, request),
     },
   });
+}
+
+function isTrustedHostedFreeRelayRequest(request: Request, env: EnvLike | undefined, pathname: string) {
+  if (!HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS.has(pathname)) {
+    return false;
+  }
+
+  if (request.headers.get(HOSTED_FREE_RELAY_HEADER) !== '1') {
+    return false;
+  }
+
+  const expectedSecret = String(env?.BOLT_HOSTED_FREE_RELAY_SECRET || env?.HOSTED_FREE_RELAY_SECRET || '').trim();
+  const providedSecret = String(request.headers.get(HOSTED_FREE_RELAY_SECRET_HEADER) || '').trim();
+
+  return Boolean(expectedSecret && providedSecret && expectedSecret === providedSecret);
 }
 
 function tryHost(urlish: string): string | null {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSecurityHeaders } from './security';
+import { createSecurityHeaders, enforceCsrf } from './security';
 
 describe('createSecurityHeaders', () => {
   it('allows loopback websocket and http sources for localhost requests', () => {
@@ -22,5 +22,78 @@ describe('createSecurityHeaders', () => {
     expect(csp).not.toContain('http://localhost:*');
     expect(csp).not.toContain('ws://localhost:*');
     expect(csp).toContain('upgrade-insecure-requests');
+  });
+});
+
+describe('enforceCsrf', () => {
+  it('blocks regular cross-origin API posts', () => {
+    const response = enforceCsrf(
+      new Request('https://alpha1.bolt.gives/api/chat', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://trial.pages.dev',
+        },
+      }),
+      { NODE_ENV: 'production' },
+    );
+
+    expect(response?.status).toBe(403);
+  });
+
+  it('allows authenticated hosted FREE relay posts to chat without a browser CSRF token', () => {
+    const response = enforceCsrf(
+      new Request('https://alpha1.bolt.gives/api/chat', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://trial.pages.dev',
+          'X-Bolt-Hosted-Free-Relay': '1',
+          'X-Bolt-Hosted-Free-Relay-Secret': 'relay-secret',
+        },
+      }),
+      {
+        NODE_ENV: 'production',
+        BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      },
+    );
+
+    expect(response).toBeNull();
+  });
+
+  it('does not apply the hosted relay CSRF exception to unrelated API routes', () => {
+    const response = enforceCsrf(
+      new Request('https://alpha1.bolt.gives/api/update', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://trial.pages.dev',
+          'X-Bolt-Hosted-Free-Relay': '1',
+          'X-Bolt-Hosted-Free-Relay-Secret': 'relay-secret',
+        },
+      }),
+      {
+        NODE_ENV: 'production',
+        BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      },
+    );
+
+    expect(response?.status).toBe(403);
+  });
+
+  it('rejects hosted relay posts when the shared secret does not match', () => {
+    const response = enforceCsrf(
+      new Request('https://alpha1.bolt.gives/api/chat', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://trial.pages.dev',
+          'X-Bolt-Hosted-Free-Relay': '1',
+          'X-Bolt-Hosted-Free-Relay-Secret': 'wrong-secret',
+        },
+      }),
+      {
+        NODE_ENV: 'production',
+        BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      },
+    );
+
+    expect(response?.status).toBe(403);
   });
 });

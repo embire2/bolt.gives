@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.2',
+    name: 'v3.0.9.2 managed Cloudflare coding restore',
+    description:
+      'Managed Cloudflare trial instances now pass authenticated hosted FREE relay requests through the server CSRF gate, restoring prompt-to-preview coding and follow-up edits on Pages-hosted instances without exposing operator-funded model credentials.',
+    releaseDate: '2026-05-03',
+  },
+  {
     id: 'release-v3.0.9.1',
     name: 'v3.0.9.1 compact workspace activity and hosted follow-up reliability',
     description:

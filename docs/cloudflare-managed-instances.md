@@ -1,6 +1,6 @@
 # Cloudflare Managed Instances (Experimental Blueprint)
 
-Status: the app/runtime control plane is implemented and live in the `v3.0.9.1` release line. Public trial requests now require profile registration first, the private operator surface at `https://admin.bolt.gives` tracks registered clients, assigned instances, and operator actions, and active managed instances are refreshed from the current release SHA by the runtime rollout controller. Live provisioning still requires operator-side Cloudflare credentials on the runtime service.
+Status: the app/runtime control plane is implemented and live in the `v3.0.9.2` release line. Public trial requests now require profile registration first, the private operator surface at `https://admin.bolt.gives` tracks registered clients, assigned instances, and operator actions, and active managed instances are refreshed from the current release SHA by the runtime rollout controller. Managed trial instances use the protected hosted `FREE` relay so users can code and preview without operator credentials being exposed to the browser.
 
 This document describes the **real implementation path** for an experimental bolt.gives managed-instance service on Cloudflare.
 
@@ -219,7 +219,7 @@ This pricing is a product intention, not a billing implementation yet.
 - implement chosen subdomain handling
 - implement current-build rollout synchronization logic
 
-### v3.0.9.1+
+### v3.0.9.2+
 
 - replace the server-local registry with D1 / durable locking for production scale
 - live-enable Cloudflare provisioning everywhere operator credentials exist

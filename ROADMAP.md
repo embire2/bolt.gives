@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-28
+Last updated: 2026-05-03
 
 Status legend:
 
@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.1`
+- [x] `v3.0.9.2`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.1 - Current Patch
+## v3.0.9.2 - Current Patch
+
+Release theme: restore managed Cloudflare prompt-to-preview coding while preserving strict server-side protection for the hosted `FREE` model path.
+
+### Shipped in v3.0.9.2
+
+- [x] Managed Cloudflare trial instances can POST authenticated hosted `FREE` relay requests through `/api/chat` and `/api/llmcall` without being blocked by same-origin browser CSRF checks.
+- [x] The relay exception is scoped to the shared hosted FREE secret and does not apply to unrelated API routes or invalid secrets.
+- [x] Release validation includes a fresh instance created through `https://create.bolt.gives`, a visible preview check, and a follow-up prompt check against the same project.
+
+## v3.0.9.1 - Shipped Patch
 
 Release theme: keep the shipped hosted reliability baseline while reclaiming workspace vertical space for generated files and preview.
 
