@@ -1347,6 +1347,27 @@ function isDetachedDevServerLifecycleNoise(combinedText) {
   return !hardFailurePatterns.some((pattern) => pattern.test(combinedText));
 }
 
+function isLifecycleOnlyPreviewAlert(alert) {
+  if (!alert || typeof alert !== 'object') {
+    return false;
+  }
+
+  const combinedText = normalizePreviewText(
+    `${alert.title || ''}\n${alert.description || ''}\n${alert.content || ''}`,
+  );
+  const hasLifecycleFailure = /\bELIFECYCLE\b/i.test(combinedText) || /\bCommand failed\b/i.test(combinedText);
+
+  if (!hasLifecycleFailure) {
+    return false;
+  }
+
+  const hardFailurePatterns = PREVIEW_ERROR_PATTERNS.filter(
+    (pattern) => !/\bELIFECYCLE\b/i.test(pattern.source) && !/\bCommand failed\b/i.test(pattern.source),
+  );
+
+  return !hardFailurePatterns.some((pattern) => pattern.test(combinedText));
+}
+
 function extractPreviewAlertFromText(rawText) {
   const combinedText = normalizePreviewText(rawText);
 
@@ -1731,9 +1752,15 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
       requestPath === '/' ||
       requestPath.endsWith('.html');
     const body = shouldReadBody ? await response.text() : '';
+    const bodyAlert = extractPreviewAlertFromText(body);
+    const existingAlertIsStaleLifecycleNoise =
+      !bodyAlert &&
+      response.status >= 200 &&
+      response.status < 400 &&
+      isLifecycleOnlyPreviewAlert(existingAlert);
     const alert =
-      extractPreviewAlertFromText(body) ||
-      existingAlert ||
+      bodyAlert ||
+      (existingAlertIsStaleLifecycleNoise ? null : existingAlert) ||
       (response.status >= 500
         ? {
             type: 'error',
@@ -2026,7 +2053,11 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath, c
     statusCode >= 200 &&
     statusCode < 400 &&
     shouldInspectForAlerts &&
-    !(session.previewDiagnostics?.status === 'error' && session.previewDiagnostics?.alert)
+    !(
+      session.previewDiagnostics?.status === 'error' &&
+      session.previewDiagnostics?.alert &&
+      !isLifecycleOnlyPreviewAlert(session.previewDiagnostics.alert)
+    )
   ) {
     touchPreviewDiagnostics(session, {
       status: session.preview ? 'ready' : 'idle',
@@ -3609,7 +3640,7 @@ async function terminateSessionProcesses(session) {
   cancelPendingPreviewVerification(session);
 
   for (const [, handle] of session.processes.entries()) {
-    handle.process.kill('SIGTERM');
+    terminateSessionProcessHandle(handle);
   }
 
   session.processes.clear();
@@ -3617,6 +3648,29 @@ async function terminateSessionProcesses(session) {
   session.preview = undefined;
   clearPreviewDiagnostics(session);
   clearPreviewRecoveryState(session);
+}
+
+function terminateSessionProcessHandle(handle, signal = 'SIGTERM') {
+  const child = handle?.process;
+
+  if (!child || !Number.isFinite(Number(child.pid))) {
+    return;
+  }
+
+  if (handle.detached) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child below when the process group has already exited.
+    }
+  }
+
+  try {
+    child.kill(signal);
+  } catch {
+    // The process may already be gone.
+  }
 }
 
 async function handleRunCommand(req, res, session, body) {
@@ -3750,7 +3804,7 @@ async function handleRunCommand(req, res, session, body) {
   });
 
   const processKey = kind === 'start' ? 'preview' : `command-${Date.now()}`;
-  session.processes.set(processKey, { process: child, port: previewPort });
+  session.processes.set(processKey, { process: child, port: previewPort, detached: kind === 'start' });
 
   let output = '';
   let settled = false;
@@ -3760,7 +3814,7 @@ async function handleRunCommand(req, res, session, body) {
       return;
     }
 
-    child.kill('SIGTERM');
+    terminateSessionProcessHandle({ process: child, port: previewPort, detached: kind === 'start' });
   }, COMMAND_TIMEOUT_MS);
   const exitPromise = new Promise((resolve, reject) => {
     child.on('close', (exitCode) => resolve(exitCode ?? 1));
@@ -3883,7 +3937,7 @@ async function handleRunCommand(req, res, session, body) {
         },
       });
       writeEvent({ type: 'stderr', chunk: `${error instanceof Error ? error.message : String(error)}\n` });
-      child.kill('SIGTERM');
+      terminateSessionProcessHandle({ process: child, port: previewPort, detached: kind === 'start' });
       const exitCode = await exitPromise.catch(() => 1);
       session.processes.delete(processKey);
       releaseReservedPreviewPorts(session);

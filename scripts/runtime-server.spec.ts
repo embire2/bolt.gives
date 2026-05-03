@@ -654,6 +654,84 @@ describe('runtime server workspace isolation', () => {
     expect(result.alert).toBeNull();
   });
 
+  it('ignores stale lifecycle-only preview alerts when the root probe is healthy', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<!doctype html><div id="root"></div><script type="module" src="/src/main.jsx"></script>', {
+        status: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+        },
+      }),
+    );
+
+    const result = await probeSessionPreviewHealth({
+      preview: {
+        port: 4109,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-stale-lifecycle/4109',
+      },
+      previewDiagnostics: {
+        status: 'error',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: {
+          type: 'error',
+          title: 'Preview Error',
+          description: '[stdout] ELIFECYCLE Command failed.',
+          content: '[stdout] ELIFECYCLE Command failed.',
+          source: 'preview',
+        },
+      },
+    });
+
+    fetchSpy.mockRestore();
+
+    expect(result.healthy).toBe(true);
+    expect(result.alert).toBeNull();
+  });
+
+  it('clears stale lifecycle-only preview alerts after a successful proxied preview response', () => {
+    const session = {
+      id: 'session-clear-lifecycle',
+      preview: {
+        port: 4111,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-clear-lifecycle/4111',
+      },
+      previewSubscribers: new Set(),
+      previewDiagnostics: {
+        status: 'error',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: {
+          type: 'error',
+          title: 'Preview Error',
+          description: '[stdout] ELIFECYCLE Command failed.',
+          content: '[stdout] ELIFECYCLE Command failed.',
+          source: 'preview',
+        },
+      },
+      previewRecovery: {
+        state: 'idle',
+        token: 0,
+        message: null,
+        updatedAt: null,
+      },
+    };
+
+    recordPreviewResponse(
+      session as any,
+      '<!doctype html><div id="root"></div><script type="module" src="/src/main.jsx"></script>',
+      200,
+      '/',
+      'text/html; charset=utf-8',
+    );
+
+    expect(session.previewDiagnostics.status).toBe('ready');
+    expect(session.previewDiagnostics.healthy).toBe(true);
+    expect(session.previewDiagnostics.alert).toBeNull();
+  });
+
   it('detects missing vite bootstrap files before trusting the preview shell', async () => {
     const workspace = await makeTempDir('bolt-runtime-probe-bootstrap-');
     await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
