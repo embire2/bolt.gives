@@ -8,8 +8,8 @@
 
 ### Fixed
 
-- Managed Cloudflare trial instances can code again: authenticated hosted `FREE` relay POSTs to `/api/chat` and `/api/llmcall` now pass the server CSRF gate only when the shared relay secret matches, so Pages-hosted instances can reach the protected DeepSeek V3.2 path without exposing operator credentials.
-- Added regression coverage proving regular cross-origin API posts still fail, unrelated API routes stay protected, and bad relay secrets are rejected.
+- Managed Cloudflare trial instances can code again: hosted `FREE` relay POSTs to `/api/chat` and `/api/llmcall` now pass the server CSRF gate only when they carry relay credentials, then the route action verifies the shared secret against the runtime verifier before any model call is allowed.
+- Added regression coverage proving regular cross-origin API posts still fail, unrelated API routes stay protected, and relay-shaped requests without credentials are rejected before route handling.
 - Release validation now includes a newly spawned `create.bolt.gives` managed instance that must generate a previewable React app and accept a follow-up prompt against the same project context.
 
 ## v3.0.9.1 (2026-04-28)

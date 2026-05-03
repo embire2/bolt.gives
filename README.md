@@ -31,7 +31,7 @@
 
 ## Current Release (`v3.0.9.2`)
 
-`v3.0.9.2` is the current stable hosted release. This patch restores managed Cloudflare trial coding by allowing authenticated hosted `FREE` relay calls through the server CSRF gate only when the shared relay secret matches. It keeps the compact Workspace Activity drawer from `v3.0.9.1`, so generated files and preview remain visible while live progress continues updating.
+`v3.0.9.2` is the current stable hosted release. This patch restores managed Cloudflare trial coding by allowing credentialed hosted `FREE` relay calls through the server CSRF gate for chat routes, then verifying the shared relay secret through the runtime verifier before any model call is allowed. It keeps the compact Workspace Activity drawer from `v3.0.9.1`, so generated files and preview remain visible while live progress continues updating.
 
 The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 

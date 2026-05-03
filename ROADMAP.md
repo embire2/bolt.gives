@@ -22,8 +22,8 @@ Release theme: restore managed Cloudflare prompt-to-preview coding while preserv
 
 ### Shipped in v3.0.9.2
 
-- [x] Managed Cloudflare trial instances can POST authenticated hosted `FREE` relay requests through `/api/chat` and `/api/llmcall` without being blocked by same-origin browser CSRF checks.
-- [x] The relay exception is scoped to the shared hosted FREE secret and does not apply to unrelated API routes or invalid secrets.
+- [x] Managed Cloudflare trial instances can POST credentialed hosted `FREE` relay requests through `/api/chat` and `/api/llmcall` without being blocked by same-origin browser CSRF checks.
+- [x] The relay exception is scoped to chat/LLM relay routes; route actions still verify the shared hosted FREE secret against the runtime verifier before any model call.
 - [x] Release validation includes a fresh instance created through `https://create.bolt.gives`, a visible preview check, and a follow-up prompt check against the same project.
 
 ## v3.0.9.1 - Shipped Patch

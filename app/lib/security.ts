@@ -491,7 +491,7 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
 
   const sameOrigin = (origin && tryHost(origin) === expectedHost) || (referer && tryHost(referer) === expectedHost);
 
-  if (!sameOrigin && isTrustedHostedFreeRelayRequest(request, env, url.pathname)) {
+  if (!sameOrigin && isHostedFreeRelayCsrfExemptRequest(request, url.pathname)) {
     return null;
   }
 
@@ -536,7 +536,7 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
   });
 }
 
-function isTrustedHostedFreeRelayRequest(request: Request, env: EnvLike | undefined, pathname: string) {
+function isHostedFreeRelayCsrfExemptRequest(request: Request, pathname: string) {
   if (!HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS.has(pathname)) {
     return false;
   }
@@ -545,10 +545,15 @@ function isTrustedHostedFreeRelayRequest(request: Request, env: EnvLike | undefi
     return false;
   }
 
-  const expectedSecret = String(env?.BOLT_HOSTED_FREE_RELAY_SECRET || env?.HOSTED_FREE_RELAY_SECRET || '').trim();
   const providedSecret = String(request.headers.get(HOSTED_FREE_RELAY_SECRET_HEADER) || '').trim();
 
-  return Boolean(expectedSecret && providedSecret && expectedSecret === providedSecret);
+  /*
+   * CSRF runs before route actions. Managed Pages relays may target an app
+   * worker that does not carry the relay secret in-process, so the chat and
+   * llmcall actions perform the authoritative async verification against the
+   * runtime verifier before any model call is allowed.
+   */
+  return Boolean(providedSecret);
 }
 
 function tryHost(urlish: string): string | null {
