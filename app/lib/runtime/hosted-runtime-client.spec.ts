@@ -24,14 +24,14 @@ describe('hosted runtime client', () => {
     ).toBe('http://127.0.0.1:4321/runtime');
   });
 
-  it('routes pages hosts to alpha1 runtime', () => {
+  it('routes the primary Pages host to the central runtime proxy', () => {
     expect(
       resolveHostedRuntimeBaseUrl({
         host: 'bolt-gives.pages.dev',
         protocol: 'https:',
         originHost: 'bolt-gives.pages.dev',
       }),
-    ).toBe('https://alpha1.bolt.gives/runtime');
+    ).toBe('https://bolt.gives/runtime');
   });
 
   it('uses same-host runtime for hosted instances', () => {

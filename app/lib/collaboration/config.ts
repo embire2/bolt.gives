@@ -1,7 +1,7 @@
 const COLLAB_SERVER_STORAGE_KEY = 'bolt_collab_server_url';
 const COLLAB_ENABLED_STORAGE_KEY = 'bolt_collab_enabled';
 const LOCAL_DEFAULT_COLLAB_SERVER_URL = 'ws://localhost:1234';
-const PAGES_DEFAULT_COLLAB_SERVER_URL = 'wss://alpha1.bolt.gives/collab';
+const PAGES_DEFAULT_COLLAB_SERVER_URL = 'wss://bolt.gives/collab';
 
 export function isLocalCollaborationHost(host: string) {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';

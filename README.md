@@ -31,6 +31,8 @@
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
+Managed instances serve their runtime preview through their own assigned hostname. The Pages deployment proxies `/runtime/*` to the hosted runtime control plane while preserving the instance origin, so users preview locally hosted workspace output at `https://<assigned-instance>/runtime/preview/...` and can publish publicly only when they choose to deploy.
+
 ## Contribution Pathway
 
 `bolt.gives` is open source and actively looking for contributors. Start at [`https://bolt.gives/contribute`](https://bolt.gives/contribute), complete the contributor application, and include:

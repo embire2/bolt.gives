@@ -207,14 +207,19 @@ describe('managed instance registry helpers', () => {
   it('builds the managed trial Pages env config without exposing the model key', () => {
     expect(
       buildManagedInstancePagesEnvConfig({
-        hostedFreeRelayOrigin: 'https://alpha1.bolt.gives',
+        hostedFreeRelayOrigin: 'https://bolt.gives',
+        runtimeControlPublicUrl: 'https://bolt.gives/runtime',
       }),
     ).toEqual({
       preview: {
         env_vars: {
           BOLT_HOSTED_FREE_RELAY_ORIGIN: {
             type: 'plain_text',
-            value: 'https://alpha1.bolt.gives',
+            value: 'https://bolt.gives',
+          },
+          BOLT_RUNTIME_CONTROL_PUBLIC_URL: {
+            type: 'plain_text',
+            value: 'https://bolt.gives/runtime',
           },
         },
       },
@@ -222,7 +227,11 @@ describe('managed instance registry helpers', () => {
         env_vars: {
           BOLT_HOSTED_FREE_RELAY_ORIGIN: {
             type: 'plain_text',
-            value: 'https://alpha1.bolt.gives',
+            value: 'https://bolt.gives',
+          },
+          BOLT_RUNTIME_CONTROL_PUBLIC_URL: {
+            type: 'plain_text',
+            value: 'https://bolt.gives/runtime',
           },
         },
       },

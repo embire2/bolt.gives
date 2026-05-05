@@ -27,15 +27,82 @@ import {
 
 interface PagesEnv {
   RATE_LIMIT_KV?: unknown;
+  BOLT_RUNTIME_CONTROL_PUBLIC_URL?: string;
+  BOLT_RUNTIME_CONTROL_URL?: string;
   NODE_ENV?: string;
   [key: string]: unknown;
 }
 
 const WEBCONTAINER_PREFIXES = ['/webcontainer.connect', '/webcontainer.preview'];
+const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
+
+export function shouldProxyRuntimeRequest(pathname: string) {
+  return pathname === '/runtime' || pathname.startsWith('/runtime/');
+}
+
+export function normalizeRuntimeControlBaseUrl(value?: string) {
+  const trimmed = String(value || DEFAULT_RUNTIME_CONTROL_BASE_URL)
+    .trim()
+    .replace(/\/+$/, '');
+
+  return trimmed.endsWith('/runtime') ? trimmed : `${trimmed}/runtime`;
+}
+
+export function buildRuntimeProxyTargetUrl(requestUrl: string, runtimeControlBaseUrl?: string) {
+  const url = new URL(requestUrl);
+  const runtimeSuffix = url.pathname === '/runtime' ? '' : url.pathname.slice('/runtime'.length);
+
+  return `${normalizeRuntimeControlBaseUrl(runtimeControlBaseUrl)}${runtimeSuffix}${url.search}`;
+}
+
+export function buildRuntimeProxyHeaders(request: Request) {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+
+  headers.delete('host');
+  headers.delete('content-length');
+  headers.set('x-bolt-public-origin', url.origin);
+  headers.set('x-forwarded-host', url.host);
+  headers.set('x-forwarded-proto', url.protocol.replace(/:$/, ''));
+
+  return headers;
+}
+
+async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
+  const runtimeControlBaseUrl =
+    typeof env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL === 'string' && env.BOLT_RUNTIME_CONTROL_PUBLIC_URL.trim()
+      ? env.BOLT_RUNTIME_CONTROL_PUBLIC_URL
+      : typeof env?.BOLT_RUNTIME_CONTROL_URL === 'string' && env.BOLT_RUNTIME_CONTROL_URL.trim()
+        ? env.BOLT_RUNTIME_CONTROL_URL
+        : DEFAULT_RUNTIME_CONTROL_BASE_URL;
+  const targetUrl = buildRuntimeProxyTargetUrl(request.url, runtimeControlBaseUrl);
+  const requestOrigin = new URL(request.url).origin;
+  const targetOrigin = new URL(targetUrl).origin;
+
+  if (targetOrigin === requestOrigin) {
+    return new Response('Runtime proxy target cannot be the current Pages origin.', {
+      status: 502,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
+  }
+
+  return fetch(targetUrl, {
+    method: request.method,
+    headers: buildRuntimeProxyHeaders(request),
+    body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    redirect: 'manual',
+  });
+}
 
 export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
+
+  if (shouldProxyRuntimeRequest(url.pathname)) {
+    return proxyRuntimeRequest(request, env);
+  }
 
   // 1. Distributed rate-limit store, if a KV binding is configured.
   const kvStore = createKvRateLimitStore(env?.RATE_LIMIT_KV);

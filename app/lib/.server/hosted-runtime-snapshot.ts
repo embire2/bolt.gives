@@ -2,7 +2,7 @@ import type { FileMap } from '~/lib/.server/llm/constants';
 import type { ActionAlert } from '~/types/actions';
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
-const PAGES_RUNTIME_BASE_URL = 'https://alpha1.bolt.gives/runtime';
+const PAGES_RUNTIME_BASE_URL = 'https://bolt.gives/runtime';
 const DEFAULT_HOSTED_RUNTIME_PREVIEW_VERIFY_TIMEOUT_MS = 60_000;
 const DEFAULT_HOSTED_RUNTIME_PREVIEW_VERIFY_POLL_INTERVAL_MS = 750;
 const TRANSIENT_PREVIEW_ERROR_GRACE_MS = 15_000;

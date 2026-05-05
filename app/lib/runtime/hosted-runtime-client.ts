@@ -18,7 +18,7 @@ const HOSTED_SNAPSHOT_TIMEOUT_MS = 30_000;
 const HOSTED_ALERT_TIMEOUT_MS = 10_000;
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
-const PAGES_RUNTIME_BASE_URL = 'https://alpha1.bolt.gives/runtime';
+const PAGES_RUNTIME_BASE_URL = 'https://bolt.gives/runtime';
 
 export interface HostedRuntimePreviewInfo {
   port: number;

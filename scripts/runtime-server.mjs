@@ -119,7 +119,11 @@ const MANAGED_INSTANCE_PUBLIC_ENABLED = process.env.RUNTIME_MANAGED_INSTANCE_ENA
 const MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN =
   process.env.BOLT_MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN ||
   process.env.BOLT_HOSTED_FREE_RELAY_ORIGIN ||
-  'https://alpha1.bolt.gives';
+  'https://bolt.gives';
+const MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL =
+  process.env.BOLT_MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL ||
+  process.env.BOLT_RUNTIME_CONTROL_PUBLIC_URL ||
+  'https://bolt.gives/runtime';
 const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
   process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
@@ -786,6 +790,7 @@ async function fetchCloudflarePagesProject(projectName) {
 function buildManagedInstanceDeploymentConfigs() {
   return buildManagedInstancePagesEnvConfig({
     hostedFreeRelayOrigin: MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN,
+    runtimeControlPublicUrl: MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL,
   });
 }
 
@@ -815,7 +820,7 @@ async function upsertManagedInstanceProjectSecret(instance, secretName, secretVa
 }
 
 async function configureManagedInstanceProject(instance) {
-  if (!MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN || !MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET) {
+  if (!MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN && !MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL) {
     return;
   }
 
