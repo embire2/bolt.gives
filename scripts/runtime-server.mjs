@@ -45,6 +45,7 @@ import {
   sendAdminEmail,
   sendAdminEmailBatch,
   sendBugReportNotification,
+  sendContributorApplicationEmails,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
 
@@ -4836,6 +4837,65 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to record the bug report.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/contributor-applications') {
+      try {
+        const body = await readJsonBody(req);
+        const fullName = String(body.fullName || '').trim();
+        const email = String(body.email || '')
+          .trim()
+          .toLowerCase();
+        const githubUsername = String(body.githubUsername || '')
+          .trim()
+          .replace(/^@+/, '');
+        const experience = String(body.experience || '').trim();
+        const why = String(body.why || '').trim();
+        const contributionAreas = String(body.contributionAreas || '').trim();
+
+        if (!fullName || !email || !githubUsername || !experience || !why) {
+          sendText(res, 400, 'Name, email, GitHub username, experience, and motivation are required.');
+          return;
+        }
+
+        if (!isLikelyValidEmail(email)) {
+          sendText(res, 400, 'A valid email address is required.');
+          return;
+        }
+
+        if (experience.length < 20 || why.length < 20) {
+          sendText(res, 400, 'Contributor applications need more detail before they can be submitted.');
+          return;
+        }
+
+        const notification = await sendContributorApplicationEmails({
+          fullName,
+          email,
+          githubUsername,
+          role: String(body.role || '').trim(),
+          location: String(body.location || '').trim(),
+          profileUrl: String(body.profileUrl || '').trim(),
+          portfolioUrl: String(body.portfolioUrl || '').trim(),
+          availability: String(body.availability || '').trim(),
+          experience,
+          contributionAreas,
+          why,
+          sourceUrl: String(body.sourceUrl || '').trim(),
+          userAgent: String(req.headers['user-agent'] || '').trim(),
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          notification: {
+            status: notification.status,
+            recipient: notification.recipient,
+            applicantEmail: notification.applicantEmail,
+          },
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to submit contributor application.');
       }
       return;
     }

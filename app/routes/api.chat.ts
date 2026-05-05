@@ -474,6 +474,23 @@ export function shouldContinueHostedPreviewVerificationFailure(options: {
   );
 }
 
+export function shouldWaitForHostedPreviewRecoverySettle(options: {
+  chatMode?: 'discuss' | 'build';
+  previewCheckpointObserved: boolean;
+  hasExecutionFailures: boolean;
+  hostedRuntimeSessionId?: string | null;
+  outcome?: HostedPreviewRecoveryOutcome | null;
+  status?: HostedRuntimePreviewStatus | null;
+}) {
+  const recoveryState = options.status?.recovery?.state;
+
+  return (
+    shouldAttemptHostedPreviewVerification(options) &&
+    options.outcome !== 'ready' &&
+    (recoveryState === 'running' || recoveryState === 'restored')
+  );
+}
+
 export function shouldReplayLocalRuntimeHandoff(options: {
   chatMode?: 'discuss' | 'build';
   previewCheckpointObserved: boolean;
@@ -1743,7 +1760,7 @@ Next: I am keeping the server-side recovery loop active so the next pass can rep
               let lastDirectPreviewVerificationCommentaryAt = 0;
               let lastDirectPreviewVerificationStatus = '';
 
-              const directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+              let directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
                 requestUrl: request.url,
                 sessionId: hostedRuntimeSessionId!,
                 timeoutMs:
@@ -1806,6 +1823,94 @@ Next: I am waiting for a verified preview before I decide whether another contin
                   recoveryState: directHostedPreviewVerification.status?.recovery?.state ?? null,
                 })}`,
               );
+
+              if (
+                shouldWaitForHostedPreviewRecoverySettle({
+                  chatMode: effectiveChatMode,
+                  previewCheckpointObserved,
+                  hasExecutionFailures,
+                  hostedRuntimeSessionId,
+                  outcome: directHostedPreviewVerification.outcome,
+                  status: directHostedPreviewVerification.status,
+                })
+              ) {
+                const hostedPreviewRecoverySettleTimeoutMs = Number(
+                  envVars?.BOLT_HOSTED_PREVIEW_RECOVERY_SETTLE_MS ||
+                    process?.env?.BOLT_HOSTED_PREVIEW_RECOVERY_SETTLE_MS ||
+                    90_000,
+                );
+                const recoverySettleTimeoutMs =
+                  Number.isFinite(hostedPreviewRecoverySettleTimeoutMs) && hostedPreviewRecoverySettleTimeoutMs > 0
+                    ? hostedPreviewRecoverySettleTimeoutMs
+                    : 90_000;
+                let lastRecoverySettleCommentaryAt = 0;
+                let lastRecoverySettleStatus = '';
+
+                writeCommentary(
+                  'verification',
+                  'Hosted preview recovery is still settling. I am waiting before starting another repair pass.',
+                  'in-progress',
+                  `Key changes: The local hosted preview recovered a workspace snapshot but has not finished reporting a healthy browser preview.
+Next: I am giving the recovered local dev server a short settle window so the run can finish cleanly if the app is already visible.`,
+                );
+
+                directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                  requestUrl: request.url,
+                  sessionId: hostedRuntimeSessionId!,
+                  timeoutMs: recoverySettleTimeoutMs,
+                  pollIntervalMs:
+                    Number.isFinite(hostedPreviewVerificationPollIntervalMs) &&
+                    hostedPreviewVerificationPollIntervalMs >= 0
+                      ? hostedPreviewVerificationPollIntervalMs
+                      : 1_000,
+                  onPoll: async (status, elapsedMs) => {
+                    const nextStatus = status?.status || 'starting';
+                    const shouldEmitCommentary =
+                      nextStatus !== lastRecoverySettleStatus || elapsedMs - lastRecoverySettleCommentaryAt >= 5_000;
+
+                    if (!shouldEmitCommentary) {
+                      return;
+                    }
+
+                    lastRecoverySettleStatus = nextStatus;
+                    lastRecoverySettleCommentaryAt = elapsedMs;
+
+                    const previewBaseUrl =
+                      status?.preview?.baseUrl ||
+                      directHostedPreviewVerification.status?.preview?.baseUrl ||
+                      'the hosted preview';
+                    const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
+
+                    writeCommentary(
+                      'verification',
+                      nextStatus === 'ready'
+                        ? 'Recovered hosted preview is ready. I am finalizing the run.'
+                        : 'Recovered hosted preview is still settling.',
+                      nextStatus === 'error' ? 'warning' : 'in-progress',
+                      nextStatus === 'ready'
+                        ? `Key changes: The recovered local preview is now healthy at ${previewBaseUrl}.
+Next: I am syncing that verified preview into the workspace and closing this run.`
+                        : `Key changes: The recovered local preview is still warming (${elapsedSeconds}s elapsed).
+Next: I am waiting for it to become healthy before deciding whether another repair pass is needed.`,
+                    );
+                  },
+                });
+
+                logger.info(
+                  `hosted runtime active preview recovery settle ${JSON.stringify({
+                    runId,
+                    provider,
+                    model,
+                    hostedRuntimeSessionId,
+                    outcome: directHostedPreviewVerification.outcome,
+                    status: directHostedPreviewVerification.status?.status ?? null,
+                    healthy: directHostedPreviewVerification.status?.healthy ?? null,
+                    previewBaseUrl: directHostedPreviewVerification.status?.preview?.baseUrl ?? null,
+                    recoveryState: directHostedPreviewVerification.status?.recovery?.state ?? null,
+                    timeoutMs: recoverySettleTimeoutMs,
+                  })}`,
+                );
+              }
 
               let verifiedHostedPreviewOutcome = directHostedPreviewVerification.outcome;
               const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({

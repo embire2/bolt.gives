@@ -77,6 +77,12 @@ export function Header() {
           Cloudflare Trials
         </a>
         <a
+          href="/contribute"
+          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+        >
+          Contribute
+        </a>
+        <a
           href={adminPanelUrl}
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
         >

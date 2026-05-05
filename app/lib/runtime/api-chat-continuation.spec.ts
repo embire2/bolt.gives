@@ -7,6 +7,7 @@ import {
   shouldContinueAfterBlockedSynthesizedRunHandoff,
   shouldContinueHostedPreviewVerificationFailure,
   shouldContinueRunIntentAfterHostedPreviewReady,
+  shouldWaitForHostedPreviewRecoverySettle,
   shouldReplayLocalRuntimeHandoff,
   shouldSkipPlannerForRecoveryPrompt,
 } from '~/routes/api.chat';
@@ -179,6 +180,36 @@ describe('api.chat continuation helpers', () => {
         outcome: 'error',
         attempts: 5,
         maxAttempts: 5,
+      }),
+    ).toBe(false);
+  });
+
+  it('waits for recovered hosted previews to settle before forcing another continuation pass', () => {
+    expect(
+      shouldWaitForHostedPreviewRecoverySettle({
+        chatMode: 'build',
+        previewCheckpointObserved: false,
+        hasExecutionFailures: false,
+        hostedRuntimeSessionId: 'session-123',
+        outcome: 'timeout',
+        status: {
+          recovery: { state: 'restored' },
+        } as any,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not wait for recovery settling after a hosted preview is already verified', () => {
+    expect(
+      shouldWaitForHostedPreviewRecoverySettle({
+        chatMode: 'build',
+        previewCheckpointObserved: true,
+        hasExecutionFailures: false,
+        hostedRuntimeSessionId: 'session-123',
+        outcome: 'ready',
+        status: {
+          recovery: { state: 'restored' },
+        } as any,
       }),
     ).toBe(false);
   });

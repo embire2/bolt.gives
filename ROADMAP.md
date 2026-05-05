@@ -28,6 +28,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Direct public URLs in build prompts are scraped before generation and injected as source context for new website builds.
 - [x] Release validation includes a live `alpha1.bolt.gives` scrape-to-preview E2E before broader deployment.
 - [x] Automatic managed Cloudflare fleet refreshes are serialized so startup-sync and interval-sync cannot overlap during long rollouts.
+- [x] `bolt.gives/contribute` gives open-source contributors a clear application path with GitHub profile capture and SMTP-backed operator/applicant emails.
 
 ## v3.0.9.2 - Shipped Patch
 

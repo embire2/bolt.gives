@@ -15,6 +15,7 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="https://create.bolt.gives">create a managed instance</a> ·
+  <a href="https://bolt.gives/contribute">contribute</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
   <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
@@ -23,11 +24,25 @@
 ## Start Here
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
+- [Apply to become a contributor](https://bolt.gives/contribute)
 - [Open the live alpha environment](https://alpha1.bolt.gives)
 - [Review the roadmap](ROADMAP.md)
 - [Read the changelog](CHANGELOG.md)
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
+
+## Contribution Pathway
+
+`bolt.gives` is open source and actively looking for contributors. Start at [`https://bolt.gives/contribute`](https://bolt.gives/contribute), complete the contributor application, and include:
+
+- your full name and email address
+- your GitHub username
+- profile, portfolio, role, timezone, and availability details
+- relevant experience with React, Remix, Cloudflare, runtime tooling, AI coding systems, design, testing, docs, or open-source maintenance
+- the areas where you want to help
+- why you want to become a `bolt.gives` contributor
+
+Applications are sent to the operator inbox and applicants receive a formatted thank-you email when SMTP is configured. Approved contributors can open pull requests against the GitHub project, pick up roadmap-aligned issues, and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
 ## Current Release (`v3.0.9.3`)
 

@@ -331,3 +331,252 @@ export async function sendBugReportNotification({
     };
   }
 }
+
+function normalizeGithubUsername(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\/.*$/, '');
+}
+
+function buildContributorApplicationEmails(application = {}, recipient) {
+  const fullName = String(application.fullName || '').trim();
+  const email = String(application.email || '')
+    .trim()
+    .toLowerCase();
+  const githubUsername = normalizeGithubUsername(application.githubUsername);
+  const githubUrl = githubUsername ? `https://github.com/${githubUsername}` : '';
+  const role = String(application.role || '').trim();
+  const location = String(application.location || '').trim();
+  const profileUrl = String(application.profileUrl || '').trim();
+  const portfolioUrl = String(application.portfolioUrl || '').trim();
+  const availability = String(application.availability || '').trim();
+  const experience = normalizeMessageBody(application.experience);
+  const contributionAreas = normalizeMessageBody(application.contributionAreas);
+  const why = normalizeMessageBody(application.why);
+
+  const detailRows = [
+    ['Name', fullName],
+    ['Email', email],
+    ['GitHub', githubUrl || githubUsername],
+    ['Role / company', role],
+    ['Location / timezone', location],
+    ['Profile', profileUrl],
+    ['Portfolio', portfolioUrl],
+    ['Availability', availability],
+  ].filter(([, value]) => value);
+
+  const operatorText = [
+    `New bolt.gives contributor application`,
+    ``,
+    `Name: ${fullName}`,
+    `Email: ${email}`,
+    githubUsername ? `GitHub: ${githubUrl}` : '',
+    role ? `Role / company: ${role}` : '',
+    location ? `Location / timezone: ${location}` : '',
+    profileUrl ? `Profile: ${profileUrl}` : '',
+    portfolioUrl ? `Portfolio: ${portfolioUrl}` : '',
+    availability ? `Availability: ${availability}` : '',
+    ``,
+    `Experience:`,
+    experience,
+    ``,
+    `Contribution areas:`,
+    contributionAreas,
+    ``,
+    `Why they want to contribute:`,
+    why,
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+
+  const operatorHtml = `
+    <div style="font-family:Inter,Segoe UI,system-ui,sans-serif;background:#f4f7fb;padding:28px;color:#121826;">
+      <div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ee;border-radius:24px;overflow:hidden;box-shadow:0 24px 70px rgba(15,23,42,0.12);">
+        <div style="padding:26px 30px;background:linear-gradient(135deg,#061826,#0d9488 48%,#f59e0b);color:#fff;">
+          <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.82;">bolt.gives contributor application</div>
+          <h1 style="margin:10px 0 0;font-size:28px;line-height:1.15;">${escapeHtml(fullName)} wants to contribute</h1>
+        </div>
+        <div style="padding:28px 30px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
+            ${detailRows
+              .map(
+                ([label, value]) => `
+                  <div style="border:1px solid #e2e8f0;border-radius:16px;padding:14px 16px;background:#f8fafc;">
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#64748b;">${escapeHtml(label)}</div>
+                    <div style="margin-top:7px;font-size:14px;font-weight:700;color:#0f172a;word-break:break-word;">${escapeHtml(value)}</div>
+                  </div>
+                `,
+              )
+              .join('')}
+          </div>
+          ${[
+            ['Experience', experience],
+            ['Contribution areas', contributionAreas],
+            ['Why bolt.gives', why],
+          ]
+            .map(
+              ([label, value]) => `
+                <div style="border:1px solid #e2e8f0;border-radius:18px;padding:18px 20px;background:#ffffff;margin-top:14px;">
+                  <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.16em;color:#64748b;">${escapeHtml(label)}</div>
+                  <div style="margin-top:12px;font-size:15px;line-height:1.65;color:#172033;white-space:pre-wrap;">${escapeHtml(value)}</div>
+                </div>
+              `,
+            )
+            .join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const thankYouText = `Hi ${fullName},
+
+Thank you for applying to become a bolt.gives contributor.
+
+We received your application and will review your GitHub profile, experience, and the areas where you want to help. If there is a fit for the current roadmap, an operator will reply with next steps.
+
+Your submitted GitHub username: ${githubUsername || 'not provided'}
+
+Thanks for wanting to help build a transparent, open-source agentic coding platform.
+
+bolt.gives`;
+
+  const thankYouHtml = `
+    <div style="font-family:Inter,Segoe UI,system-ui,sans-serif;background:#07111f;padding:32px;color:#e5f6ff;">
+      <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:28px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,0.35);">
+        <div style="padding:30px;background:linear-gradient(135deg,#052e2b,#0f766e 55%,#f59e0b);color:#ffffff;">
+          <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;opacity:0.86;">bolt.gives open source</div>
+          <h1 style="margin:12px 0 0;font-size:30px;line-height:1.12;">Thanks for applying, ${escapeHtml(fullName)}.</h1>
+        </div>
+        <div style="padding:30px;color:#111827;">
+          <p style="font-size:16px;line-height:1.7;margin:0 0 16px;">We received your contributor application and will review your GitHub profile, experience, and preferred contribution areas.</p>
+          <div style="border:1px solid #dbe4ee;border-radius:18px;padding:18px 20px;background:#f8fafc;margin:22px 0;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.16em;color:#64748b;">Submitted GitHub username</div>
+            <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:8px;">${escapeHtml(githubUsername ? `@${githubUsername}` : 'Not provided')}</div>
+          </div>
+          <p style="font-size:16px;line-height:1.7;margin:0;">If there is a fit for the current roadmap, an operator will reply with next steps. Thanks for wanting to help build a transparent, open-source agentic coding platform.</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return {
+    recipient,
+    applicantEmail: email,
+    operator: {
+      subject: `[Contributor Application] ${fullName} (@${githubUsername || 'github-not-provided'})`,
+      text: operatorText,
+      html: operatorHtml,
+    },
+    thankYou: {
+      subject: 'Thanks for applying to become a bolt.gives contributor',
+      text: thankYouText,
+      html: thankYouHtml,
+    },
+  };
+}
+
+export async function sendContributorApplicationEmails(application = {}) {
+  const support = buildAdminMailSupport();
+  const effectiveEnv = readMergedRuntimeEnv();
+  const recipient = envValue(effectiveEnv, 'BOLT_CONTRIBUTOR_APPLICATION_RECIPIENT') || 'mrbeepie1@gmail.com';
+  const fullName = String(application.fullName || '').trim();
+  const email = String(application.email || '')
+    .trim()
+    .toLowerCase();
+  const githubUsername = normalizeGithubUsername(application.githubUsername);
+
+  if (!fullName || !email || !githubUsername || !normalizeMessageBody(application.experience) || !normalizeMessageBody(application.why)) {
+    throw new Error('Contributor applications require name, email, GitHub username, experience, and motivation.');
+  }
+
+  const messages = buildContributorApplicationEmails(
+    {
+      ...application,
+      email,
+      githubUsername,
+    },
+    recipient,
+  );
+
+  if (!support.configured) {
+    await recordAdminEmailMessage({
+      profileEmail: recipient,
+      subject: messages.operator.subject,
+      body: messages.operator.text,
+      actor: 'contribute-form',
+      status: 'draft',
+      transport: null,
+      error: support.reason,
+    });
+
+    return {
+      status: 'draft',
+      recipient,
+      applicantEmail: email,
+      transport: null,
+      error: support.reason,
+      sentAt: null,
+    };
+  }
+
+  try {
+    const transporter = await getTransporter();
+
+    await transporter.sendMail({
+      from: support.fromAddress,
+      to: recipient,
+      replyTo: email,
+      subject: messages.operator.subject,
+      text: messages.operator.text,
+      html: messages.operator.html,
+    });
+
+    await transporter.sendMail({
+      from: support.fromAddress,
+      to: email,
+      subject: messages.thankYou.subject,
+      text: messages.thankYou.text,
+      html: messages.thankYou.html,
+    });
+
+    await recordAdminEmailMessage({
+      profileEmail: recipient,
+      subject: messages.operator.subject,
+      body: messages.operator.text,
+      actor: 'contribute-form',
+      status: 'sent',
+      transport: support.transportLabel,
+      sentAt: new Date().toISOString(),
+    });
+
+    return {
+      status: 'sent',
+      recipient,
+      applicantEmail: email,
+      transport: support.transportLabel,
+      error: null,
+      sentAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    await recordAdminEmailMessage({
+      profileEmail: recipient,
+      subject: messages.operator.subject,
+      body: messages.operator.text,
+      actor: 'contribute-form',
+      status: 'failed',
+      transport: support.transportLabel,
+      error: error instanceof Error ? error.message : 'SMTP send failed.',
+    });
+
+    return {
+      status: 'failed',
+      recipient,
+      applicantEmail: email,
+      transport: support.transportLabel,
+      error: error instanceof Error ? error.message : 'SMTP send failed.',
+      sentAt: null,
+    };
+  }
+}

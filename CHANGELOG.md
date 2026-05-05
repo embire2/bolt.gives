@@ -17,6 +17,7 @@
 ### Added
 
 - Direct website URLs in build prompts are now scraped server-side before generation and appended to the model context, allowing prompts such as “scrape this existing website and design a new one from its data” to carry concrete source copy, headings, services, and links into the generated project.
+- `/contribute` is now a public contributor application pathway with GitHub username, profile, experience, availability, contribution-area, and motivation fields; submissions notify the operator inbox and send a formatted thank-you email to the applicant when SMTP is configured.
 
 ## v3.0.9.2 (2026-05-03)
 
