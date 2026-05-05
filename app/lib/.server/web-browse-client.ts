@@ -6,6 +6,7 @@ const logger = createScopedLogger('web-browse-client');
 const DEFAULT_SERVICE_URL = 'http://127.0.0.1:4179';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v1';
+const JINA_READER_URL = 'https://r.jina.ai/http://';
 
 export interface BrowserSearchResult {
   title: string;
@@ -127,6 +128,66 @@ async function browsePageWithFirecrawl(url: string, apiKey: string, maxChars: nu
   };
 }
 
+function extractMarkdownLinks(markdown: string): Array<{ title: string; url: string }> {
+  const links: Array<{ title: string; url: string }> = [];
+  const seen = new Set<string>();
+  const markdownLinkRe = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+
+  for (const match of markdown.matchAll(markdownLinkRe)) {
+    const url = match[2];
+
+    if (seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    links.push({ title: match[1].trim(), url });
+
+    if (links.length >= 40) {
+      break;
+    }
+  }
+
+  return links;
+}
+
+async function browsePageWithReadableFallback(url: string, maxChars: number): Promise<BrowserPageResponse> {
+  const response = await fetch(`${JINA_READER_URL}${url}`, {
+    method: 'GET',
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    },
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Readable fallback failed (${response.status} ${response.statusText})`);
+  }
+
+  const raw = await response.text();
+  const title = raw.match(/^Title:\s*(.+)$/im)?.[1]?.trim() || '';
+  const finalUrl = raw.match(/^URL Source:\s*(.+)$/im)?.[1]?.trim() || url;
+  const markdownContent = raw.match(/Markdown Content:\s*\n([\s\S]*)$/i)?.[1]?.trim() || raw.trim();
+  const content = markdownContent.slice(0, maxChars);
+  const headings = markdownContent
+    .split('\n')
+    .map((line) => line.match(/^#{1,3}\s+(.+)$/)?.[1]?.trim())
+    .filter((heading): heading is string => Boolean(heading))
+    .slice(0, 30);
+
+  return {
+    url,
+    finalUrl,
+    status: 200,
+    title,
+    description: '',
+    content,
+    headings,
+    links: extractMarkdownLinks(markdownContent),
+  };
+}
+
 /**
  * Search the web using the Firecrawl cloud API.
  * Returns a BrowserSearchResponse for drop-in compatibility.
@@ -239,12 +300,22 @@ export async function browsePageWithPlaywright(
     }
   }
 
-  return callService<BrowserPageResponse>(
-    '/browse',
-    {
-      url,
-      maxChars,
-    },
-    options,
-  );
+  try {
+    return await callService<BrowserPageResponse>(
+      '/browse',
+      {
+        url,
+        maxChars,
+      },
+      options,
+    );
+  } catch (error) {
+    logger.warn('Playwright browse failed, falling back to readable mirror:', error);
+
+    try {
+      return await browsePageWithReadableFallback(url, maxChars);
+    } catch {
+      throw error;
+    }
+  }
 }

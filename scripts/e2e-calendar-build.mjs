@@ -14,6 +14,25 @@ const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toU
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
 const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
 const started = Date.now();
+const defaultPrompt = `Build a small single-page React calendar app that lets the user add and view events. Render a visible heading that contains the exact text "${appToken}". Implement complete files and run it.`;
+
+function expandTemplate(value) {
+  return String(value || '')
+    .replace(/\{\{APP_TOKEN\}\}/g, appToken)
+    .replace(/\{\{FOLLOW_UP_TOKEN\}\}/g, followUpToken || '');
+}
+
+const initialPrompt = expandTemplate(process.env.E2E_PROMPT || defaultPrompt);
+const followUpPrompt = expandTemplate(
+  process.env.E2E_FOLLOWUP_PROMPT ||
+    `Improve the existing calendar project without restarting from scratch. Keep the exact visible text "${appToken}" in the app and add another clearly visible label with the exact text "${followUpToken}". Continue from the current project and keep preview running.`,
+);
+const expectedInitialTokens = (process.env.E2E_EXPECT_TOKENS
+  ? expandTemplate(process.env.E2E_EXPECT_TOKENS)
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean)
+  : [appToken]);
 
 const events = [];
 const networkErrors = [];
@@ -236,9 +255,8 @@ async function main() {
   log('prompt surface ready');
   await page.screenshot({ path: path.join(outDir, '01-loaded.png'), fullPage: true });
 
-  const prompt = `Build a small single-page React calendar app that lets the user add and view events. Render a visible heading that contains the exact text "${appToken}". Implement complete files and run it.`;
-  log('submit prompt', `token=${appToken}`);
-  await textarea.fill(prompt);
+  log('submit prompt', `token=${appToken} expected=${expectedInitialTokens.join('|')}`);
+  await textarea.fill(initialPrompt);
   await textarea.press('Enter');
   await page.screenshot({ path: path.join(outDir, '02-submitted.png'), fullPage: true });
 
@@ -303,15 +321,15 @@ async function main() {
           log('preview text', normalizedPreview.slice(0, 200));
         }
 
-        if (inner.includes(appToken)) {
+        if (expectedInitialTokens.every((token) => inner.includes(token))) {
           previewContainsToken = true;
 
           if (!hostedRuntimeSessionId) {
-            log('SUCCESS: preview contains token');
+            log('SUCCESS: preview contains expected tokens');
             break;
           }
 
-          const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, [appToken]);
+          const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, expectedInitialTokens);
 
           if (snapshotCheck.ok) {
             snapshotContainsToken = true;
@@ -381,9 +399,7 @@ async function main() {
     followUpSubmitted = true;
     log('submit follow-up prompt', `token=${followUpToken}`);
     const followUpTextarea = await ensureChatComposerVisible(page);
-    await followUpTextarea.fill(
-      `Improve the existing calendar project without restarting from scratch. Keep the exact visible text "${appToken}" in the app and add another clearly visible label with the exact text "${followUpToken}". Continue from the current project and keep preview running.`,
-    );
+    await followUpTextarea.fill(followUpPrompt);
     await followUpTextarea.press('Enter');
     await page.screenshot({ path: path.join(outDir, '03-followup-submitted.png'), fullPage: true });
 
@@ -458,7 +474,9 @@ async function main() {
     }
   }
 
-  await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true });
+  await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
+    log('final screenshot failed', error instanceof Error ? error.message : String(error));
+  });
   const finalBody = bodyTextLast.replace(/\s+/g, ' ').slice(0, 4000);
   await fs.writeFile(path.join(outDir, 'final-body.txt'), bodyTextLast);
 

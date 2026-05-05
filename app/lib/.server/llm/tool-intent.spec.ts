@@ -24,6 +24,18 @@ describe('shouldEnableBuiltInWebTools', () => {
     expect(enabled).toBe(true);
   });
 
+  it('keeps web tools disabled after direct website source context is already hydrated', () => {
+    const enabled = shouldEnableBuiltInWebTools([
+      {
+        role: 'user',
+        content:
+          'Scrape https://example.com and build a website.\n\n[Website source context gathered by bolt.gives]\n\nExtracted page content.',
+      } as any,
+    ]);
+
+    expect(enabled).toBe(false);
+  });
+
   it('keeps web tools disabled for plain local scaffolding requests', () => {
     const enabled = shouldEnableBuiltInWebTools([
       {

@@ -111,7 +111,7 @@ describe('TenantAdminPage', () => {
           summary: 'Preview stalled after install',
           issue: 'The workspace never moved beyond install after a dependency change.',
           pageUrl: 'https://alpha1.bolt.gives',
-          appVersion: '3.0.9.2',
+          appVersion: '3.0.9.3',
           provider: 'FREE',
           model: 'deepseek/deepseek-v3.2',
           browser: 'Firefox',

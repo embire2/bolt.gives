@@ -124,4 +124,16 @@ describe('createWebBrowsingTools', () => {
     expect(result?.title).toBe('Web Browse Failed');
     expect(result?.markdown).toContain('navigation timeout');
   });
+
+  it('returns a non-throwing result when web search fails upstream', async () => {
+    vi.mocked(searchWebWithPlaywright).mockRejectedValueOnce(new Error('Web browsing service error: 500'));
+
+    const tools = createWebBrowsingTools();
+
+    const result = await tools.web_search.execute?.({ query: 'existing website examples', maxResults: 5 }, {} as any);
+
+    expect(result?.results).toEqual([]);
+    expect(result?.markdown).toContain('Web Search Failed');
+    expect(result?.markdown).toContain('Web browsing service error: 500');
+  });
 });

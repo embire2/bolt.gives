@@ -4,6 +4,19 @@
 
 - `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
 
+## v3.0.9.3 (2026-05-05)
+
+### Fixed
+
+- Web browsing no longer gets stuck after the local Playwright sidecar loses its Chromium handle; the sidecar now detects stale browser/context errors, relaunches Chromium, and retries the browse once.
+- Manual URL fetching in the chat box now uses the same CSRF-secured fetch helper as chat streaming, so `/api/web-search` requests from the UI include the required same-origin token.
+- Built-in `web_search` now returns a structured failure result when upstream browsing/search fails instead of throwing an AI tool execution error that aborts the chat stream.
+- `/api/web-search` now reports combined browse/fallback failures as a controlled `502` response instead of letting fallback network errors collapse into an opaque worker `500`.
+
+### Added
+
+- Direct website URLs in build prompts are now scraped server-side before generation and appended to the model context, allowing prompts such as “scrape this existing website and design a new one from its data” to carry concrete source copy, headings, services, and links into the generated project.
+
 ## v3.0.9.2 (2026-05-03)
 
 ### Fixed

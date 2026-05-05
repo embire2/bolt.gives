@@ -43,6 +43,7 @@ import {
 } from '~/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
+import { hydrateWebsiteSourceContext } from '~/lib/.server/llm/web-context';
 import {
   isHostedFreeRelayRequest,
   relayHostedFreeRequest,
@@ -1021,7 +1022,67 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
         let filteredFiles: FileMap | undefined = undefined;
         let summary: string | undefined = undefined;
         let messageSliceId = 0;
-        const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        let processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        let hasHydratedWebsiteSourceContext = false;
+
+        const collectedToolOutputs: string[] = [];
+        let forceFinalizeAttempted = false;
+        let runContinuationAttempts = 0;
+
+        writeCommentary(
+          'plan',
+          withGoal('I am reviewing {goal} and mapping out the first concrete steps.', latestUserGoal),
+        );
+        startCommentaryHeartbeat();
+
+        const websiteSourceContext = await hydrateWebsiteSourceContext(processedMessages, {
+          env: runtimeEnv as any,
+        }).catch((error) => {
+          logger.warn('website source context hydration failed', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+
+          return null;
+        });
+
+        if (websiteSourceContext?.sources.length) {
+          hasHydratedWebsiteSourceContext = true;
+          processedMessages = websiteSourceContext.messages;
+
+          const sourceList = websiteSourceContext.sources
+            .map((source) => source.finalUrl || source.url)
+            .filter(Boolean)
+            .join(', ');
+          writeCommentary(
+            'plan',
+            'I fetched the referenced website content and added it to the build context.',
+            'complete',
+            `Key changes: Scraped ${websiteSourceContext.sources.length.toString()} source URL${
+              websiteSourceContext.sources.length === 1 ? '' : 's'
+            } for this request: ${sourceList}.
+Next: I will use that source material while generating the new project.`,
+          );
+          dataStream.writeData({
+            type: 'progress',
+            label: 'web-context',
+            status: 'complete',
+            order: progressCounter++,
+            message: 'Website Source Loaded',
+          } satisfies ProgressAnnotation);
+          lastVisibleResultForHeartbeat = 'Referenced website content was scraped and added to the model context.';
+        } else if (websiteSourceContext?.failures.length) {
+          writeCommentary(
+            'recovery',
+            'The referenced website could not be scraped automatically.',
+            'warning',
+            `Key changes: I tried to load ${websiteSourceContext.failures.length.toString()} source URL${
+              websiteSourceContext.failures.length === 1 ? '' : 's'
+            }, but the browse helper could not return page content.
+Next: I will continue and can still use any URL details present in the prompt.`,
+          );
+        }
+
         const preferredSelection = resolvePreferredModelProvider(processedMessages, selectedModel, selectedProvider);
         const sanitizedSelection = sanitizeSelectionWithApiKeys({
           selection: preferredSelection,
@@ -1033,16 +1094,6 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
           model: sanitizedSelection.model,
         };
         ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
-
-        const collectedToolOutputs: string[] = [];
-        let forceFinalizeAttempted = false;
-        let runContinuationAttempts = 0;
-
-        writeCommentary(
-          'plan',
-          withGoal('I am reviewing {goal} and mapping out the first concrete steps.', latestUserGoal),
-        );
-        startCommentaryHeartbeat();
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -1529,6 +1580,7 @@ Next: I am sending the final result now.`,
                 chatMode,
                 designScheme,
                 projectMemory: effectiveProjectMemory || undefined,
+                enableBuiltInWebTools: !hasHydratedWebsiteSourceContext,
                 subAgentPlan,
               });
 
@@ -2165,6 +2217,7 @@ Next: I am continuing from the current workspace state and tightening the previe
                             summary,
                             messageSliceId,
                             projectMemory: effectiveProjectMemory || undefined,
+                            enableBuiltInWebTools: !hasHydratedWebsiteSourceContext,
                             subAgentPlan,
                           });
 
@@ -2339,6 +2392,7 @@ Next: I will keep working from the existing project state until the app is runni
                 summary,
                 messageSliceId,
                 projectMemory: effectiveProjectMemory || undefined,
+                enableBuiltInWebTools: !hasHydratedWebsiteSourceContext,
                 subAgentPlan,
               });
 
@@ -2417,6 +2471,7 @@ Next: I am sending the final result now.`,
               summary,
               messageSliceId,
               projectMemory: effectiveProjectMemory || undefined,
+              enableBuiltInWebTools: !hasHydratedWebsiteSourceContext,
               subAgentPlan,
             });
 
@@ -2460,6 +2515,7 @@ Next: I am sending the final result now.`,
           summary,
           messageSliceId,
           projectMemory: effectiveProjectMemory || undefined,
+          enableBuiltInWebTools: !hasHydratedWebsiteSourceContext,
           subAgentPlan,
         });
 

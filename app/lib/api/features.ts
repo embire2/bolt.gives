@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.3',
+    name: 'v3.0.9.3 web browsing and scrape-to-build restore',
+    description:
+      'Built-in web browsing now relaunches stale Playwright browsers, returns structured tool failures instead of crashing chat, and automatically injects direct website URL content into build prompts so users can scrape an existing site and generate a new previewable project from it.',
+    releaseDate: '2026-05-05',
+  },
+  {
     id: 'release-v3.0.9.2',
     name: 'v3.0.9.2 managed Cloudflare coding restore',
     description:

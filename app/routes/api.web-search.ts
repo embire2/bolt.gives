@@ -79,12 +79,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
           sourceUrl: page.finalUrl || url,
         },
       });
-    } catch {
+    } catch (browseError) {
       // Fallback to fetch-only extraction if the Playwright service is unavailable.
-      const response = await fetch(url, {
-        headers: FETCH_HEADERS,
-        signal: AbortSignal.timeout(10_000),
-      });
+      let response: Response;
+
+      try {
+        response = await fetch(url, {
+          headers: FETCH_HEADERS,
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch (fallbackError) {
+        const browseMessage = browseError instanceof Error ? browseError.message : 'Playwright browse failed';
+        const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'fallback fetch failed';
+
+        return json(
+          {
+            error: `Web browsing failed: ${browseMessage}. Fallback fetch failed: ${fallbackMessage}`,
+          },
+          { status: 502 },
+        );
+      }
 
       if (!response.ok) {
         return json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` }, { status: 502 });

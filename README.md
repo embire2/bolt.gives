@@ -29,9 +29,11 @@
 
 `create.bolt.gives` lands on the public `/managed-instances` registration flow. Users complete a short profile, including email address, request a preferred subdomain, and then receive a success page showing the live URL, assigned hostname, availability, and rollout state for the managed instance. The create flow is tuned for high-contrast readability so the public registration surface remains usable without theme tweaking. Those profile details are stored privately in the operator panel so admins can support and message clients when needed.
 
-## Current Release (`v3.0.9.2`)
+## Current Release (`v3.0.9.3`)
 
-`v3.0.9.2` is the current stable hosted release. This patch restores managed Cloudflare trial coding by allowing credentialed hosted `FREE` relay calls through the server CSRF gate for chat routes, then verifying the shared relay secret through the runtime verifier before any model call is allowed. It keeps the compact Workspace Activity drawer from `v3.0.9.1`, so generated files and preview remain visible while live progress continues updating.
+`v3.0.9.3` is the current stable hosted release. This patch restores web browsing reliability and makes direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.
+
+`v3.0.9.2` restored managed Cloudflare trial coding by allowing credentialed hosted `FREE` relay calls through the server CSRF gate for chat routes, then verifying the shared relay secret through the runtime verifier before any model call is allowed. The compact Workspace Activity drawer from `v3.0.9.1` remains in place, so generated files and preview remain visible while live progress continues updating.
 
 The hosted `FREE` path is locked to `DeepSeek V3.2` and stays server-side. Project creation now applies completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
@@ -66,7 +68,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.2`)
+## Current Platform Baseline (`v3.0.9.3`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V3.2` through a protected server-side OpenRouter route.
@@ -637,11 +639,14 @@ Fresh install checklist:
 bolt.gives can now browse docs from user prompts like:
 
 - `Study these API documentation: https://developers.cloudflare.com/workers/`
+- `Scrape https://example.com and build me a modern replacement website using its services, copy, and navigation data.`
 
 How it works:
 
 - The model uses built-in tools: `web_search` and `web_browse`.
 - `web_browse` reads the target URL with Playwright and extracts title, headings, links, and body content.
+- Direct public URLs in build prompts are also browsed before generation, and the extracted source context is appended to the model request automatically.
+- If the Playwright browser handle goes stale, the browse sidecar relaunches Chromium and retries once instead of returning a persistent closed-browser `500`.
 - The model can then create a Markdown study file directly in the workspace using `<boltAction type="file">`.
 
 Configuration:

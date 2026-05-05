@@ -104,15 +104,37 @@ async function readJsonBody(req) {
 
 let browserPromise;
 
+function isBrowserClosedError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+
+  return /browser has been closed|target page, context or browser has been closed|browser\.newContext/i.test(message);
+}
+
+function resetBrowserPromise() {
+  browserPromise = undefined;
+}
+
 async function getBrowser() {
   if (!browserPromise) {
-    browserPromise = chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-dev-shm-usage'],
-    });
+    browserPromise = chromium
+      .launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      })
+      .catch((error) => {
+        resetBrowserPromise();
+        throw error;
+      });
   }
 
-  return browserPromise;
+  const browser = await browserPromise;
+
+  if (typeof browser.isConnected === 'function' && !browser.isConnected()) {
+    resetBrowserPromise();
+    return getBrowser();
+  }
+
+  return browser;
 }
 
 async function withPage(handler) {
@@ -133,6 +155,19 @@ async function withPage(handler) {
   }
 }
 
+async function withFreshPage(handler) {
+  try {
+    return await withPage(handler);
+  } catch (error) {
+    if (!isBrowserClosedError(error)) {
+      throw error;
+    }
+
+    resetBrowserPromise();
+    return await withPage(handler);
+  }
+}
+
 async function browsePage(payload) {
   const url = String(payload?.url || '').trim();
 
@@ -146,7 +181,7 @@ async function browsePage(payload) {
 
   const maxChars = Math.max(1000, Math.min(Number(payload?.maxChars || DEFAULT_MAX_CONTENT_CHARS), 40000));
 
-  return withPage(async (page) => {
+  return withFreshPage(async (page) => {
     const response = await page.goto(url, {
       waitUntil: 'domcontentloaded',
     });
@@ -263,7 +298,7 @@ async function searchWeb(payload) {
     return results.slice(0, limit);
   };
 
-  return withPage(async (page) => {
+  return withFreshPage(async (page) => {
     await page.goto(searchUrl, {
       waitUntil: 'domcontentloaded',
     });

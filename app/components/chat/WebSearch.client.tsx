@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import { toast } from 'react-toastify';
 import { classNames } from '~/utils/classNames';
+import { securedFetch } from '~/lib/hooks/useCsrf';
 
 interface WebSearchProps {
   onSearchResult: (result: string) => void;
@@ -76,7 +77,7 @@ export function WebSearch({ onSearchResult, disabled = false }: WebSearchProps) 
     setIsSearching(true);
 
     try {
-      const response = await fetch('/api/web-search', {
+      const response = await securedFetch('/api/web-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: trimmedUrl }),

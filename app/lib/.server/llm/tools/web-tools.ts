@@ -38,6 +38,23 @@ function buildBrowseFailureResult(params: { url: string; title: string; message:
   };
 }
 
+function buildSearchFailureResult(params: { query: string; message: string; engine?: string }) {
+  return {
+    query: params.query,
+    engine: params.engine || 'web-search',
+    results: [],
+    markdown: [
+      '# Web Search Failed',
+      '',
+      `Query: ${params.query}`,
+      '',
+      params.message,
+      '',
+      'Continue with any direct URLs already provided, or ask for a public source URL if search is essential.',
+    ].join('\n'),
+  };
+}
+
 export function createWebBrowsingTools(env?: Env): ToolSet {
   const seenSearchQueries = new Map<string, number>();
   const seenBrowseUrls = new Map<string, number>();
@@ -68,7 +85,18 @@ export function createWebBrowsingTools(env?: Env): ToolSet {
           };
         }
 
-        const response = await searchWebWithPlaywright({ query, maxResults: maxResults ?? 5 }, { env });
+        let response: Awaited<ReturnType<typeof searchWebWithPlaywright>>;
+
+        try {
+          response = await searchWebWithPlaywright({ query, maxResults: maxResults ?? 5 }, { env });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown web search error';
+
+          return buildSearchFailureResult({
+            query,
+            message: `Could not complete this web search: ${message}`,
+          });
+        }
 
         return {
           query: response.query,

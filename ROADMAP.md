@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-03
+Last updated: 2026-05-05
 
 Status legend:
 
@@ -10,13 +10,25 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.2`
+- [x] `v3.0.9.3`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.2 - Current Patch
+## v3.0.9.3 - Current Patch
+
+Release theme: restore web browsing reliability and make direct website scrape-to-build prompts work without manual preloading.
+
+### Shipped in v3.0.9.3
+
+- [x] `bolt-gives-webbrowse` relaunches stale Chromium handles and retries once when Playwright reports a closed browser/context.
+- [x] Manual chat URL fetching uses the same CSRF-secured client fetch path as `/api/chat`.
+- [x] Built-in web tools return structured failure summaries instead of aborting the chat stream on upstream browse/search errors.
+- [x] Direct public URLs in build prompts are scraped before generation and injected as source context for new website builds.
+- [x] Release validation includes a live `alpha1.bolt.gives` scrape-to-preview E2E before broader deployment.
+
+## v3.0.9.2 - Shipped Patch
 
 Release theme: restore managed Cloudflare prompt-to-preview coding while preserving strict server-side protection for the hosted `FREE` model path.
 
