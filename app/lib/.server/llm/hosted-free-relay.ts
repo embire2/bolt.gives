@@ -1,7 +1,7 @@
 import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential, normalizeHttpUrl } from '~/lib/runtime/credentials';
 
-const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://alpha1.bolt.gives';
+const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://bolt.gives';
 const DEFAULT_HOSTED_FREE_RELAY_VERIFIER_URL = 'http://127.0.0.1:4321/runtime/internal/hosted-free-relay/verify';
 const HOSTED_FREE_PROXY_HOSTS = new Set(['bolt-gives.pages.dev']);
 export const HOSTED_FREE_RELAY_HEADER = 'X-Bolt-Hosted-Free-Relay';

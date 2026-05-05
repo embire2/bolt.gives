@@ -27,7 +27,7 @@ describe('resolveHostedFreeRelayOrigin', () => {
       runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
     });
 
-    expect(relayOrigin).toBe('https://alpha1.bolt.gives');
+    expect(relayOrigin).toBe('https://bolt.gives');
   });
 
   it('enables the official relay for managed pages.dev subdomains when the relay secret is present', () => {
@@ -38,7 +38,7 @@ describe('resolveHostedFreeRelayOrigin', () => {
       runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
     });
 
-    expect(relayOrigin).toBe('https://alpha1.bolt.gives');
+    expect(relayOrigin).toBe('https://bolt.gives');
   });
 
   it('does not relay when a local FREE key exists', () => {

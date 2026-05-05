@@ -30,6 +30,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Automatic managed Cloudflare fleet refreshes are serialized so startup-sync and interval-sync cannot overlap during long rollouts.
 - [x] `bolt.gives/contribute` gives open-source contributors a clear application path with GitHub profile capture and SMTP-backed operator/applicant emails.
 - [x] Managed Pages instances keep runtime previews on their own assigned hostname via a same-origin `/runtime/*` proxy that preserves the public instance origin.
+- [x] Managed Pages hosted `FREE` relay defaults now use `https://bolt.gives` as the canonical control origin instead of the old alpha host.
 
 ## v3.0.9.2 - Shipped Patch
 

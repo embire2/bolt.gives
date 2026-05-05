@@ -33,6 +33,8 @@
 
 Managed instances serve their runtime preview through their own assigned hostname. The Pages deployment proxies `/runtime/*` to the hosted runtime control plane while preserving the instance origin, so users preview locally hosted workspace output at `https://<assigned-instance>/runtime/preview/...` and can publish publicly only when they choose to deploy.
 
+Managed Pages instances also use `https://bolt.gives` as the canonical hosted `FREE` relay/control origin, so new trial instances do not inherit the older alpha host defaults.
+
 ## Contribution Pathway
 
 `bolt.gives` is open source and actively looking for contributors. Start at [`https://bolt.gives/contribute`](https://bolt.gives/contribute), complete the contributor application, and include:
