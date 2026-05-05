@@ -172,6 +172,7 @@ const sessions = new Map();
 const managedInstanceLocks = new Map();
 const reservedPreviewPorts = new Map();
 let managedInstanceSyncTimer = null;
+let managedInstanceRolloutPromise = null;
 let managedRolloutGuardState = {
   allowed: true,
   reason: null,
@@ -964,6 +965,21 @@ async function runManagedInstanceOperation(lockKey, operation) {
       managedInstanceLocks.delete(lockKey);
     }
   }
+}
+
+export function runSerializedManagedInstanceRollout(operation, { reason = 'auto-rollout' } = {}) {
+  if (managedInstanceRolloutPromise) {
+    console.warn(`[runtime] managed rollout already in progress; skipping overlapping ${reason}.`);
+    return managedInstanceRolloutPromise;
+  }
+
+  managedInstanceRolloutPromise = Promise.resolve()
+    .then(operation)
+    .finally(() => {
+      managedInstanceRolloutPromise = null;
+    });
+
+  return managedInstanceRolloutPromise;
 }
 
 async function expireManagedInstanceIfRequired(registry, instance, { actor = 'system' } = {}) {
@@ -5516,13 +5532,19 @@ function startServer() {
       console.warn(`[runtime] managed rollout guard active: ${rolloutGuard.reason}`);
     }
 
-    void rolloutManagedInstancesToCurrentBuild({ reason: 'startup-sync', actor: 'system' }).catch((error) => {
+    void runSerializedManagedInstanceRollout(
+      () => rolloutManagedInstancesToCurrentBuild({ reason: 'startup-sync', actor: 'system' }),
+      { reason: 'startup-sync' },
+    ).catch((error) => {
       console.error('[runtime] managed instance startup sync failed:', error);
     });
 
     if (!managedInstanceSyncTimer && MANAGED_INSTANCE_SYNC_INTERVAL_MS > 0) {
       managedInstanceSyncTimer = setInterval(() => {
-        void rolloutManagedInstancesToCurrentBuild({ reason: 'interval-sync', actor: 'system' }).catch((error) => {
+        void runSerializedManagedInstanceRollout(
+          () => rolloutManagedInstancesToCurrentBuild({ reason: 'interval-sync', actor: 'system' }),
+          { reason: 'interval-sync' },
+        ).catch((error) => {
           console.error('[runtime] managed instance interval sync failed:', error);
         });
       }, MANAGED_INSTANCE_SYNC_INTERVAL_MS);

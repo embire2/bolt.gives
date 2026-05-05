@@ -12,6 +12,7 @@
 - Manual URL fetching in the chat box now uses the same CSRF-secured fetch helper as chat streaming, so `/api/web-search` requests from the UI include the required same-origin token.
 - Built-in `web_search` now returns a structured failure result when upstream browsing/search fails instead of throwing an AI tool execution error that aborts the chat stream.
 - `/api/web-search` now reports combined browse/fallback failures as a controlled `502` response instead of letting fallback network errors collapse into an opaque worker `500`.
+- Managed Cloudflare startup and interval fleet refreshes are now serialized so a long-running rollout cannot overlap the next scheduled sync and duplicate active-instance deployments.
 
 ### Added
 

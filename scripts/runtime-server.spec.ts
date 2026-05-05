@@ -34,6 +34,7 @@ import {
   releaseReservedPreviewPorts,
   resolveRuntimeWorkspaceRoot,
   resolveSessionSnapshotFiles,
+  runSerializedManagedInstanceRollout,
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
@@ -1690,6 +1691,32 @@ The latest release of react-calendar is "6.0.1".`),
     await Promise.all([slowTask, fastTask]);
 
     expect(events).toEqual(['slow:start', 'slow:end', 'fast:start', 'fast:end']);
+  });
+
+  it('deduplicates overlapping full-fleet managed instance rollouts', async () => {
+    const events: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const first = runSerializedManagedInstanceRollout(async () => {
+        events.push('first:start');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        events.push('first:end');
+      }, { reason: 'startup-sync' });
+
+      const second = runSerializedManagedInstanceRollout(async () => {
+        events.push('second:start');
+      }, { reason: 'interval-sync' });
+
+      await Promise.all([first, second]);
+      expect(warn).toHaveBeenCalledWith(
+        '[runtime] managed rollout already in progress; skipping overlapping interval-sync.',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(events).toEqual(['first:start', 'first:end']);
   });
 
   it('writes synced files atomically without leaving temporary artifacts behind', async () => {

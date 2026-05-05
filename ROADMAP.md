@@ -27,6 +27,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Built-in web tools return structured failure summaries instead of aborting the chat stream on upstream browse/search errors.
 - [x] Direct public URLs in build prompts are scraped before generation and injected as source context for new website builds.
 - [x] Release validation includes a live `alpha1.bolt.gives` scrape-to-preview E2E before broader deployment.
+- [x] Automatic managed Cloudflare fleet refreshes are serialized so startup-sync and interval-sync cannot overlap during long rollouts.
 
 ## v3.0.9.2 - Shipped Patch
 

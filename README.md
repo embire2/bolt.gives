@@ -43,7 +43,7 @@ Follow-up prompts are history-aware. They use a stable project-context id, deter
 
 After a hosted preview is verified healthy, the active chat stream is allowed to finish instead of staying open for inspection-only recovery loops, so users can immediately send follow-up improvements against the current project.
 
-Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and release validation creates a fresh instance through `https://create.bolt.gives` before verifying preview plus follow-up prompt behavior.
+Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, automatic fleet refreshes are serialized to avoid overlapping startup/interval deployments, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and release validation creates a fresh instance through `https://create.bolt.gives` before verifying preview plus follow-up prompt behavior.
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
