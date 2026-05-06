@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/docs/screenshots"
+PUBLIC_OUT_DIR="${PUBLIC_SCREENSHOT_DIR:-${ROOT_DIR}/public/screenshots}"
 LOG_FILE="${ROOT_DIR}/.screenshots-dev.log"
 
 PORT="${PORT:-5173}"
@@ -43,8 +44,11 @@ else
 fi
 
 echo "Capturing screenshots with Playwright (Chromium)..."
-BASE_URL="${BASE_URL}" README_SCREENSHOT_DIR="${OUT_DIR}" node "${ROOT_DIR}/scripts/capture-readme-screenshots.mjs" >/dev/null 2>&1
-BASE_URL="${BASE_URL}" SYSTEM_ACTION_SCREENSHOT_PATH="${OUT_DIR}/system-in-action.png" node "${ROOT_DIR}/scripts/capture-system-in-action.mjs" >/dev/null 2>&1
+BASE_URL="${BASE_URL}" README_SCREENSHOT_DIR="${OUT_DIR}" README_SCREENSHOT_SKIP_PROMPTS="${README_SCREENSHOT_SKIP_PROMPTS:-}" node "${ROOT_DIR}/scripts/capture-readme-screenshots.mjs" >/dev/null 2>&1
+BASE_URL="${BASE_URL}" SYSTEM_ACTION_SCREENSHOT_PATH="${OUT_DIR}/system-in-action.png" SYSTEM_ACTION_SKIP_PROMPT="${SYSTEM_ACTION_SKIP_PROMPT:-}" node "${ROOT_DIR}/scripts/capture-system-in-action.mjs" >/dev/null 2>&1
+
+mkdir -p "${PUBLIC_OUT_DIR}"
+cp "${OUT_DIR}/home.png" "${OUT_DIR}/chat.png" "${OUT_DIR}/chat-plan.png" "${OUT_DIR}/system-in-action.png" "${OUT_DIR}/changelog.png" "${PUBLIC_OUT_DIR}/"
 
 echo "Wrote:"
 ls -1 "${OUT_DIR}" | sed 's/^/  - /'

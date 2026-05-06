@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('remix-utils/client-only', () => ({
   ClientOnly: ({ fallback }: { fallback: React.ReactNode }) => <>{fallback}</>,
@@ -23,13 +23,37 @@ describe('index route fallback shell', () => {
     });
   });
 
-  it('renders a non-interactive loading shell with the locked FREE provider details', async () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the public project website on the root route', async () => {
     const { default: Index } = await import('../../app/routes/_index');
 
     render(<Index />);
 
-    expect(screen.getByText('Preparing the coding workspace. The prompt box will become interactive as soon as the chat shell is ready.')).toBeTruthy();
-    expect(screen.getByText('FREE')).toBeTruthy();
+    expect(screen.getByText(/The transparent AI coding workspace/i)).toBeTruthy();
+    expect(screen.getAllByText('Contribute to Project').length).toBeGreaterThan(0);
+    expect(screen.getByText('Create managed instance')).toBeTruthy();
+    expect(screen.getByText('Real screenshots')).toBeTruthy();
+    expect(
+      screen.queryByText(
+        'Preparing the coding workspace. The prompt box will become interactive as soon as the chat shell is ready.',
+      ),
+    ).toBeNull();
+  });
+
+  it('keeps the chat workspace loading shell available away from the homepage', async () => {
+    const { ChatWorkspace } = await import('../../app/routes/_index');
+
+    render(<ChatWorkspace />);
+
+    expect(
+      screen.getByText(
+        'Preparing the coding workspace. The prompt box will become interactive as soon as the chat shell is ready.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByText('FREE').length).toBeGreaterThan(0);
     expect(screen.getByText(/DeepSeek V3\.2/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
   });

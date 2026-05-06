@@ -5,6 +5,9 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
+const homeUrl = new URL('/', baseUrl).toString();
+const chatUrl = new URL('/chat', baseUrl).toString();
+const changelogUrl = new URL('/changelog', baseUrl).toString();
 const outDir = process.env.README_SCREENSHOT_DIR || 'docs/screenshots';
 const secure = baseUrl.startsWith('https://');
 const pkg = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -52,25 +55,29 @@ function getPromptLocator() {
 }
 
 async function captureHome() {
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await waitReady();
+  await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction(
     (label) => {
       const text = document.body.innerText || '';
       return (
         text.includes(label) &&
+        text.includes('The transparent AI coding workspace') &&
+        text.includes('Contribute to Project') &&
+        /real screenshots/i.test(text) &&
         !text.includes('Select model') &&
+        !text.includes('Preparing the coding workspace') &&
         !/server error|error details|custom error/i.test(text)
       );
     },
     versionLabel,
     { timeout: 45000 },
   );
+  await waitForImages();
   await page.screenshot({ path: path.join(outDir, 'home.png'), fullPage: true });
 }
 
 async function runPromptCapture({ prompt, token, outputName }) {
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
   const promptInput = getPromptLocator();
   await promptInput.fill(`${prompt}\n\nInclude token: ${token}`);
@@ -91,7 +98,7 @@ async function runPromptCapture({ prompt, token, outputName }) {
 }
 
 async function capturePromptShell(outputName) {
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
   const text = await page.evaluate(() => document.body.innerText || '');
 
@@ -103,7 +110,7 @@ async function capturePromptShell(outputName) {
 }
 
 async function captureWorkspaceShell() {
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
 
   const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
@@ -124,15 +131,25 @@ async function captureWorkspaceShell() {
 }
 
 async function captureChangelog() {
-  await page.goto(`${baseUrl}/changelog`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(changelogUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction((label) => {
     const text = document.body.innerText || '';
     const title = document.title || '';
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const versionRegex = new RegExp(`Current\\s+version\\s*:\\s*${escaped}|changelog\\s*\\(${escaped}\\)`, 'i');
-    return versionRegex.test(`${title}\n${text}`) && !/server error|error details|custom error/i.test(`${title}\n${text}`);
+    return (
+      versionRegex.test(`${title}\n${text}`) && !/server error|error details|custom error/i.test(`${title}\n${text}`)
+    );
   }, versionLabel);
   await page.screenshot({ path: path.join(outDir, 'changelog.png'), fullPage: true });
+}
+
+async function waitForImages() {
+  await page.waitForFunction(
+    () =>
+      Array.from(document.images).every((image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0),
+    { timeout: 45000 },
+  );
 }
 
 try {

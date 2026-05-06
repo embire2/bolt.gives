@@ -3,6 +3,7 @@
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
+const chatUrl = new URL('/chat', baseUrl).toString();
 const outputPath = process.env.SYSTEM_ACTION_SCREENSHOT_PATH || 'docs/screenshots/system-in-action.png';
 const responseToken = `SYSTEM_ACTION_OK_${Date.now().toString(36)}`;
 const skipPromptCapture = /^(1|true|yes)$/i.test(process.env.SYSTEM_ACTION_SKIP_PROMPT || '');
@@ -12,6 +13,23 @@ const context = await browser.newContext({
   viewport: { width: 1600, height: 900 },
 });
 const page = await context.newPage();
+
+function getPromptLocator() {
+  return page
+    .locator(
+      'textarea[placeholder="How can Bolt help you today?"], textarea, [contenteditable="true"][role="textbox"], [contenteditable="true"]',
+    )
+    .first();
+}
+
+async function openWorkspaceTabIfAvailable() {
+  const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
+
+  if (await workspaceTab.isVisible().catch(() => false)) {
+    await workspaceTab.click();
+    await page.waitForTimeout(750);
+  }
+}
 
 try {
   // Force a stable provider/model pair to avoid failing screenshot captures due to
@@ -33,15 +51,16 @@ try {
     },
   ]);
 
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForSelector('textarea[placeholder="How can Bolt help you today?"]', { timeout: 90000 });
+  await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  const promptInput = getPromptLocator();
+
+  await promptInput.waitFor({ state: 'visible', timeout: 90000 });
 
   if (!skipPromptCapture) {
-    await page.fill(
-      'textarea[placeholder="How can Bolt help you today?"]',
+    await promptInput.fill(
       `Reply exactly with ${responseToken} on the first line. Then add two short bullets under the heading Next actions.`,
     );
-    await page.press('textarea[placeholder="How can Bolt help you today?"]', 'Enter');
+    await promptInput.press('Enter');
 
     await page.waitForFunction(
       (token) => {
@@ -64,6 +83,7 @@ try {
     }
   }
 
+  await openWorkspaceTabIfAvailable();
   await page.screenshot({ path: outputPath, fullPage: true });
   console.log(`Wrote ${outputPath}`);
 } finally {

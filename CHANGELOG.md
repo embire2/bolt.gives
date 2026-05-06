@@ -16,6 +16,7 @@
 - Managed Cloudflare Pages instances now default hosted `FREE` relay traffic to the canonical `https://bolt.gives` origin instead of the old `alpha1.bolt.gives` alpha host.
 - The public `/contribute` page now scrolls inside the app shell, so applicants can reach the full contributor form on hosted domains.
 - Cloudflare Pages edge functions now retry runtime-control calls through the canonical `https://bolt.gives/runtime` endpoint when Cloudflare rejects the local loopback fallback with direct-IP error `1003`.
+- The public `/` route once again renders the bolt.gives website with current release details, real product screenshots, and project links while the coding workspace now lives at `/chat`.
 
 ### Added
 
