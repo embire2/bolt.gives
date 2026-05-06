@@ -32,6 +32,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] The hosted contributor form remains vertically scrollable inside the app shell so the full application is reachable on live domains.
 - [x] Managed Pages instances keep runtime previews on their own assigned hostname via a same-origin `/runtime/*` proxy that preserves the public instance origin.
 - [x] Managed Pages hosted `FREE` relay defaults now use `https://bolt.gives` as the canonical control origin instead of the old alpha host.
+- [x] Cloudflare Pages edge functions retry runtime-control calls through the canonical hosted runtime when loopback fetches are rejected by the edge.
 
 ## v3.0.9.2 - Shipped Patch
 
