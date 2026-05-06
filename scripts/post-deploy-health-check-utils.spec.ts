@@ -47,13 +47,15 @@ describe('post-deploy health check prompt detection', () => {
 
 describe('post-deploy health check surface detection', () => {
   it('classifies chat, admin, and managed-instance URLs', () => {
-    expect(inferExpectedSurface('https://alpha1.bolt.gives')).toBe('chat');
+    expect(inferExpectedSurface('https://alpha1.bolt.gives')).toBe('website');
+    expect(inferExpectedSurface('https://alpha1.bolt.gives/chat')).toBe('chat');
     expect(inferExpectedSurface('https://admin.bolt.gives')).toBe('admin');
     expect(inferExpectedSurface('https://create.bolt.gives')).toBe('managed-instances');
     expect(inferExpectedSurface('https://alpha1.bolt.gives/managed-instances')).toBe('managed-instances');
   });
 
-  it('accepts expected admin and managed-instance control-plane content', () => {
+  it('accepts expected website, admin, and managed-instance content', () => {
+    expect(matchesExpectedSurface('website', { bodyText: 'The transparent AI coding workspace' })).toBe(true);
     expect(matchesExpectedSurface('admin', { title: 'Tenant Admin | bolt.gives' })).toBe(true);
     expect(matchesExpectedSurface('managed-instances', { bodyText: 'Managed Cloudflare instance registration' })).toBe(
       true,

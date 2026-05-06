@@ -34,7 +34,11 @@ export function inferExpectedSurface(baseUrl) {
     return 'managed-instances';
   }
 
-  return 'chat';
+  if (pathname === '/chat' || pathname.startsWith('/chat/')) {
+    return 'chat';
+  }
+
+  return 'website';
 }
 
 export function matchesExpectedSurface(expectedSurface, { title = '', bodyText = '' } = {}) {
@@ -46,6 +50,14 @@ export function matchesExpectedSurface(expectedSurface, { title = '', bodyText =
 
   if (expectedSurface === 'managed-instances') {
     return haystack.includes('managed') && (haystack.includes('instance') || haystack.includes('cloudflare'));
+  }
+
+  if (expectedSurface === 'website') {
+    return (
+      haystack.includes('transparent ai coding workspace') ||
+      haystack.includes('prompt-to-preview') ||
+      haystack.includes('contribute to project')
+    );
   }
 
   return false;

@@ -21,6 +21,7 @@
 
 ### Added
 
+- The public homepage now ships a verbose SEO package with canonical/OpenGraph/Twitter metadata, JSON-LD structured data, sitemap image entries, crawler-friendly FAQ copy, and a generated 1200x630 search/social image.
 - Direct website URLs in build prompts are now scraped server-side before generation and appended to the model context, allowing prompts such as “scrape this existing website and design a new one from its data” to carry concrete source copy, headings, services, and links into the generated project.
 - `/contribute` is now a public contributor application pathway with GitHub username, profile, experience, availability, contribution-area, and motivation fields; submissions notify the operator inbox and send a formatted thank-you email to the applicant when SMTP is configured.
 - Managed Cloudflare Pages instances now proxy `/runtime/*` through their own hostname while forwarding the instance origin to the central runtime, so generated preview URLs stay on the assigned instance domain instead of falling back to the shared alpha host.

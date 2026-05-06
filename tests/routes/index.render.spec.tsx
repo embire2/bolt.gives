@@ -33,9 +33,12 @@ describe('index route fallback shell', () => {
     render(<Index />);
 
     expect(screen.getByText(/The transparent AI coding workspace/i)).toBeTruthy();
+    expect(screen.getByText(/From prompt to production preview/i)).toBeTruthy();
+    expect(screen.getByText(/Questions people ask before building with bolt\.gives/i)).toBeTruthy();
     expect(screen.getAllByText('Contribute to Project').length).toBeGreaterThan(0);
     expect(screen.getByText('Create managed instance')).toBeTruthy();
     expect(screen.getByText('Real screenshots')).toBeTruthy();
+    expect(screen.getByAltText(/Generated bolt\.gives SEO image/i)).toBeTruthy();
     expect(
       screen.queryByText(
         'Preparing the coding workspace. The prompt box will become interactive as soon as the chat shell is ready.',

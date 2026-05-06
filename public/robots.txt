@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://bolt.gives/sitemap.xml
+Host: https://bolt.gives

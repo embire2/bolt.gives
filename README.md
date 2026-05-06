@@ -37,7 +37,7 @@ Managed Pages instances also use `https://bolt.gives` as the canonical hosted `F
 
 Cloudflare Pages edge functions also retry runtime-control calls through `https://bolt.gives/runtime` when the edge rejects the local loopback fallback, which keeps public Pages previews from surfacing avoidable runtime-control console errors.
 
-The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, contributor pathway, and real product screenshots. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.
+The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, contributor pathway, real product screenshots, crawler-friendly structured data, and a generated search/social image at `/seo/bolt-gives-agentic-coding-platform.png`. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.
 
 ## Contribution Pathway
 
