@@ -34,6 +34,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Managed Pages hosted `FREE` relay defaults now use `https://bolt.gives` as the canonical control origin instead of the old alpha host.
 - [x] Cloudflare Pages edge functions retry runtime-control calls through the canonical hosted runtime when loopback fetches are rejected by the edge.
 - [x] The public root route serves the project website with current release details, real screenshots, and contributor links while the chat workspace remains available at `/chat`.
+- [x] Managed fleet refresh continues past individual failed Pages deployments so healthy active instances can receive the latest build even when one project is inaccessible.
 
 ## v3.0.9.2 - Shipped Patch
 

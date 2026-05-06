@@ -1136,6 +1136,20 @@ async function suspendManagedInstanceRecord(
   return instance;
 }
 
+export function shouldRefreshManagedInstanceForRollout(instance, gitSha) {
+  const status = String(instance?.status || '').toLowerCase();
+
+  if (status === 'expired' || status === 'suspended' || status === 'failed') {
+    return false;
+  }
+
+  if (instance?.currentGitSha === gitSha && status === 'active') {
+    return false;
+  }
+
+  return true;
+}
+
 async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', actor = 'system' } = {}) {
   const support = await buildManagedInstanceSupportState();
 
@@ -1148,15 +1162,16 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
   const gitSha = await resolveCurrentGitSha();
 
   for (const instance of registry.instances) {
-    if (instance.status === 'expired' || instance.status === 'suspended') {
+    if (!shouldRefreshManagedInstanceForRollout(instance, gitSha)) {
       continue;
     }
 
-    if (instance.currentGitSha === gitSha && instance.status === 'active') {
-      continue;
+    try {
+      await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
+    } catch (error) {
+      const target = instance.routeHostname || instance.projectName || instance.id || 'unknown-instance';
+      console.error(`[runtime] managed instance rollout failed for ${target}; continuing with remaining instances.`, error);
     }
-
-    await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
   }
 }
 

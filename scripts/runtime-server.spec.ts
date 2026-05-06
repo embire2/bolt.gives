@@ -38,6 +38,7 @@ import {
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
+  shouldRefreshManagedInstanceForRollout,
   shouldRetryPreviewProxyResponse,
   startReservedPreviewProbe,
   startHostedPreviewForSession,
@@ -172,6 +173,27 @@ describe('runtime server workspace isolation', () => {
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain('behind origin/main');
     expect(decision.behindCount).toBe(3);
+  });
+
+  it('skips inactive and already-current managed instances during full-fleet rollout', () => {
+    const gitSha = '21cffb14b66e4d08461b61e3fb6a2de7eb61a3c1';
+
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'expired', currentGitSha: 'old-sha' }, gitSha)).toBe(
+      false,
+    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'suspended', currentGitSha: 'old-sha' }, gitSha)).toBe(
+      false,
+    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'failed', currentGitSha: 'old-sha' }, gitSha)).toBe(
+      false,
+    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: gitSha }, gitSha)).toBe(false);
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: 'old-sha' }, gitSha)).toBe(
+      true,
+    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'provisioning', currentGitSha: null }, gitSha)).toBe(
+      true,
+    );
   });
 
   it('requires a project manifest for package-manager workspace commands only', () => {
