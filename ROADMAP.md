@@ -29,6 +29,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Release validation includes a live `alpha1.bolt.gives` scrape-to-preview E2E before broader deployment.
 - [x] Automatic managed Cloudflare fleet refreshes are serialized so startup-sync and interval-sync cannot overlap during long rollouts.
 - [x] `bolt.gives/contribute` gives open-source contributors a clear application path with GitHub profile capture and SMTP-backed operator/applicant emails.
+- [x] The hosted contributor form remains vertically scrollable inside the app shell so the full application is reachable on live domains.
 - [x] Managed Pages instances keep runtime previews on their own assigned hostname via a same-origin `/runtime/*` proxy that preserves the public instance origin.
 - [x] Managed Pages hosted `FREE` relay defaults now use `https://bolt.gives` as the canonical control origin instead of the old alpha host.
 

@@ -262,11 +262,11 @@ export default function ContributePage() {
   const submitting = navigation.state === 'submitting';
 
   return (
-    <div className="relative flex min-h-full flex-col overflow-hidden bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
+    <div className="relative flex h-full w-full flex-col bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
       <BackgroundRays />
       <Header />
-      <main className="relative z-1 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-        <section className="grid gap-6 rounded-[2rem] border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-xl backdrop-blur md:grid-cols-[0.9fr_1.1fr] md:p-8">
+      <main className="modern-scrollbar relative z-1 flex-1 overflow-y-auto overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8">
+        <section className="mx-auto grid w-full max-w-6xl gap-6 rounded-[2rem] border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-xl backdrop-blur md:grid-cols-[0.9fr_1.1fr] md:p-8">
           <div className="flex flex-col justify-between gap-8 rounded-[1.5rem] bg-gradient-to-br from-teal-950 via-slate-900 to-amber-700 p-7 text-white">
             <div>
               <div className="text-xs font-bold uppercase tracking-[0.25em] text-white/70">Open source pathway</div>

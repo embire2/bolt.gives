@@ -48,6 +48,8 @@ Managed Pages instances also use `https://bolt.gives` as the canonical hosted `F
 
 Applications are sent to the operator inbox and applicants receive a formatted thank-you email when SMTP is configured. Approved contributors can open pull requests against the GitHub project, pick up roadmap-aligned issues, and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
+The hosted contributor form scrolls inside the app shell, so applicants can reach the full form on desktop and mobile without losing the site header.
+
 ## Current Release (`v3.0.9.3`)
 
 `v3.0.9.3` is the current stable hosted release. This patch restores web browsing reliability and makes direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.

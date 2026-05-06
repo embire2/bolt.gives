@@ -14,6 +14,7 @@
 - `/api/web-search` now reports combined browse/fallback failures as a controlled `502` response instead of letting fallback network errors collapse into an opaque worker `500`.
 - Managed Cloudflare startup and interval fleet refreshes are now serialized so a long-running rollout cannot overlap the next scheduled sync and duplicate active-instance deployments.
 - Managed Cloudflare Pages instances now default hosted `FREE` relay traffic to the canonical `https://bolt.gives` origin instead of the old `alpha1.bolt.gives` alpha host.
+- The public `/contribute` page now scrolls inside the app shell, so applicants can reach the full contributor form on hosted domains.
 
 ### Added
 
