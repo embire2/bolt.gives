@@ -1283,7 +1283,12 @@ export class WorkbenchStore {
       return;
     }
 
-    this.artifacts.setKey(artifactId, { ...artifact, ...state });
+    const nextArtifact = { ...artifact, ...state };
+    this.artifacts.setKey(artifactId, nextArtifact);
+
+    if (nextArtifact.closed) {
+      artifact.runner.disposeWhenIdle();
+    }
   }
 
   #primeRuntimeBootstrapFile(file: RuntimeBootstrapFile) {

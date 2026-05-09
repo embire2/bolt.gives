@@ -38,6 +38,7 @@ export function Shoutbox() {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [enabled, setEnabled] = useState(isShoutboxEnabled);
+  const [canSend, setCanSend] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string | null>(() => localStorage.getItem(SHOUTBOX_LAST_READ_AT_KEY));
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -67,7 +68,7 @@ export function Shoutbox() {
     const loadMessages = async () => {
       try {
         const response = await fetch('/api/shout/messages');
-        const payload = (await response.json()) as { messages?: unknown; error?: string };
+        const payload = (await response.json()) as { messages?: unknown; error?: string; canSend?: boolean };
 
         if (!response.ok) {
           throw new Error(payload.error || 'Failed to load shout-out messages.');
@@ -75,6 +76,7 @@ export function Shoutbox() {
 
         if (active) {
           setMessages(normalizeShoutMessages(payload.messages));
+          setCanSend(Boolean(payload.canSend));
         }
       } catch (error) {
         console.error('Failed to load shout-out messages:', error);
@@ -225,21 +227,30 @@ export function Shoutbox() {
           </div>
 
           <div className="mt-3 space-y-2">
-            <textarea
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              rows={3}
-              placeholder="Send a short update to other bolt.gives users on this deployment."
-              className="w-full rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
-            />
-            <button
-              type="button"
-              onClick={() => void sendMessage()}
-              disabled={loading || content.trim().length === 0}
-              className="rounded-lg bg-bolt-elements-button-primary-background px-3 py-2 text-xs font-medium text-bolt-elements-button-primary-text disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? 'Sending...' : 'Send shout-out'}
-            </button>
+            {canSend ? (
+              <>
+                <textarea
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  rows={3}
+                  placeholder="Send a short update to other bolt.gives users on this deployment."
+                  className="w-full rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-sm text-bolt-elements-textPrimary"
+                />
+                <button
+                  type="button"
+                  onClick={() => void sendMessage()}
+                  disabled={loading || content.trim().length === 0}
+                  className="rounded-lg bg-bolt-elements-button-primary-background px-3 py-2 text-xs font-medium text-bolt-elements-button-primary-text disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? 'Sending...' : 'Send shout-out'}
+                </button>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-3 text-xs text-bolt-elements-textSecondary">
+                Shout-out broadcasts are operator-managed. You can read updates here, but only signed-in tenant admins can
+                post new messages.
+              </div>
+            )}
           </div>
         </div>
       ) : null}

@@ -63,6 +63,7 @@ import {
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 import { extractLatestUserGoal, findLatestUserMessage } from '~/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '~/lib/runtime/file-paths';
+import { parseCookies } from '~/lib/api/cookies';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -522,24 +523,6 @@ function extractPreviewPort(previewBaseUrl: string | null | undefined): number |
   } catch {
     return undefined;
   }
-}
-
-function parseCookies(cookieHeader: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-
-  const items = cookieHeader.split(';').map((cookie) => cookie.trim());
-
-  items.forEach((item) => {
-    const [name, ...rest] = item.split('=');
-
-    if (name && rest) {
-      const decodedName = decodeURIComponent(name.trim());
-      const decodedValue = decodeURIComponent(rest.join('=').trim());
-      cookies[decodedName] = decodedValue;
-    }
-  });
-
-  return cookies;
 }
 
 function parseJsonObject<T extends Record<string, any>>(raw: string | undefined, fallback: T): T {

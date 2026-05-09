@@ -102,6 +102,27 @@ const STEP_EVENT_FLUSH_MS = 250;
 const TELEMETRY_OUTPUT_MAX_CHARS = 1600;
 const TELEMETRY_MERGE_WINDOW_MS = 20000;
 const LOCAL_PROVIDER_SET = new Set<string>(LOCAL_PROVIDERS);
+const MODEL_PREFLIGHT_CACHE_TTL_MS = 45_000;
+let cachedModelCatalog: { expiresAt: number; models: ModelInfo[] } | null = null;
+
+async function fetchCachedModelCatalog(): Promise<ModelInfo[]> {
+  const now = Date.now();
+
+  if (cachedModelCatalog && cachedModelCatalog.expiresAt > now) {
+    return cachedModelCatalog.models;
+  }
+
+  const response = await fetch('/api/models');
+  const data = (await response.json()) as { modelList?: ModelInfo[] };
+  const models = data.modelList || [];
+
+  cachedModelCatalog = {
+    models,
+    expiresAt: now + MODEL_PREFLIGHT_CACHE_TTL_MS,
+  };
+
+  return models;
+}
 const ANSI_ESCAPE_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 const CARRIAGE_RETURN_RE = /\r+/g;
 const loadSessionManager = () => import('~/lib/services/sessionManager');
@@ -673,7 +694,10 @@ export const ChatImpl = memo(
         providerSettings: getProviderSettingsFromCookiesSafe(),
         selectedProvider: provider.name,
         selectedModel: model,
-        files,
+        files:
+          hostedRuntimeEnabled && typeof workbenchStore.hostedRuntimeSessionId === 'string'
+            ? undefined
+            : files,
         hostedRuntimeSessionId: hostedRuntimeEnabled ? workbenchStore.hostedRuntimeSessionId : undefined,
         projectContextId,
         promptId,
@@ -2290,9 +2314,7 @@ Requirements:
     const resolveModelSelection = useCallback(
       async (prompt: string, currentModel: string, currentProvider: ProviderInfo) => {
         try {
-          const response = await fetch('/api/models');
-          const data = (await response.json()) as { modelList: ModelInfo[] };
-          const availableModels = data.modelList || [];
+          const availableModels = await fetchCachedModelCatalog();
           const decision = selectModelForPrompt({
             prompt,
             currentModel,
@@ -3354,6 +3376,7 @@ CONTINUE IMMEDIATELY:
         setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS);
 
         const normalizedKey = apiKey.trim();
+        cachedModelCatalog = null;
 
         if (!normalizedKey) {
           return;

@@ -1,9 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginManager } from './pluginManager';
+import { PluginManager, normalizeTrustedPluginEntry } from './pluginManager';
 
 interface StorageLike {
   getItem: (key: string) => string | null;
@@ -33,7 +29,6 @@ function createLocalStorageMock(): StorageLike {
 
 describe('PluginManager', () => {
   const originalFetch = globalThis.fetch;
-  let tempDir: string | undefined;
 
   beforeEach(() => {
     Object.defineProperty(globalThis, 'window', {
@@ -41,27 +36,25 @@ describe('PluginManager', () => {
       writable: true,
       value: {
         localStorage: createLocalStorageMock(),
+        location: {
+          origin: 'https://alpha1.bolt.gives',
+        },
       },
     });
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.restoreAllMocks();
     delete (globalThis as any).window;
     globalThis.fetch = originalFetch;
-
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
-      tempDir = undefined;
-    }
   });
 
-  it('installs, lists, and uninstalls plugins', () => {
+  it('installs, lists, and uninstalls plugins from trusted HTTPS origins', () => {
     const installed = PluginManager.install({
       name: 'sample-plugin',
       version: '1.0.0',
       description: 'sample',
-      entry: 'https://example.com/plugin.mjs',
+      entry: 'https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/plugin.mjs',
     });
 
     expect(installed).toHaveLength(1);
@@ -71,37 +64,32 @@ describe('PluginManager', () => {
     expect(afterUninstall).toHaveLength(0);
   });
 
-  it('validates manifests and rejects invalid plugin payloads', () => {
+  it('rejects non-HTTPS plugin entries', () => {
     expect(() =>
       PluginManager.install({
-        name: 'invalid',
-        version: '',
+        name: 'insecure-plugin',
+        version: '1.0.0',
+        description: 'bad',
+        entry: 'http://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/plugin.mjs',
+      }),
+    ).toThrow('Plugin entry must use HTTPS.');
+  });
+
+  it('rejects HTTPS plugin entries from non-allowlisted origins', () => {
+    expect(() =>
+      PluginManager.install({
+        name: 'unknown-origin-plugin',
+        version: '1.0.0',
         description: 'bad',
         entry: 'https://example.com/plugin.mjs',
       }),
-    ).toThrow();
+    ).toThrow('Plugin entry origin is not allowlisted');
   });
 
-  it('loads installed plugins at runtime', async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), 'bolt-plugin-'));
-
-    const entryPath = path.join(tempDir, 'plugin.mjs');
-    await writeFile(
-      entryPath,
-      'globalThis.__boltPluginLoaded = (globalThis.__boltPluginLoaded || 0) + 1; export default {};',
-      'utf8',
+  it('normalizes trusted plugin entry URLs', () => {
+    expect(normalizeTrustedPluginEntry('https://RAW.GITHUBUSERCONTENT.COM/embire2/bolt.gives-plugins/main/plugin.mjs')).toBe(
+      'https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/plugin.mjs',
     );
-
-    PluginManager.install({
-      name: 'runtime-plugin',
-      version: '1.0.0',
-      description: 'runtime',
-      entry: pathToFileURL(entryPath).href,
-    });
-
-    await PluginManager.loadInstalledPlugins();
-
-    expect((globalThis as any).__boltPluginLoaded).toBe(1);
   });
 
   it('rejects malformed marketplace registries', async () => {
@@ -110,8 +98,14 @@ describe('PluginManager', () => {
       json: async () => ({ plugins: [{ name: 'missing-fields' }] }),
     }) as any;
 
-    await expect(PluginManager.fetchMarketplace('https://example.com/registry.json')).rejects.toThrow(
+    await expect(PluginManager.fetchMarketplace('https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/registry.json')).rejects.toThrow(
       'Plugin marketplace manifest is invalid.',
+    );
+  });
+
+  it('rejects marketplace indexes from non-allowlisted origins', async () => {
+    await expect(PluginManager.fetchMarketplace('https://example.com/registry.json')).rejects.toThrow(
+      'Plugin entry origin is not allowlisted',
     );
   });
 });
