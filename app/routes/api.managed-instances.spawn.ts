@@ -1,8 +1,13 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { fetchRuntimeControlJson } from '~/lib/.server/runtime-control';
 import type { ManagedInstanceRecord } from '~/lib/managed-instances';
+import { isTenantAdminAuthorized } from '~/lib/.server/admin-auth';
 
 export async function action({ request }: ActionFunctionArgs) {
+  if (!(await isTenantAdminAuthorized(request))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
 
   try {

@@ -9,6 +9,14 @@ export interface PluginManifest {
 
 const STORAGE_KEY = 'bolt_installed_plugins';
 const DEFAULT_MARKETPLACE_INDEX = 'https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/registry.json';
+const DEFAULT_ALLOWED_PLUGIN_ORIGINS = [
+  'https://raw.githubusercontent.com',
+  'https://cdn.jsdelivr.net',
+  'https://esm.sh',
+  'https://unpkg.com',
+];
+const ALLOWED_PLUGIN_ORIGINS_ENV_KEY = 'VITE_PLUGIN_ALLOWED_ORIGINS';
+
 const pluginManifestSchema = z.object({
   name: z.string().min(1),
   version: z.string().min(1),
@@ -23,8 +31,66 @@ const pluginRegistrySchema = z.union([
   }),
 ]);
 
+function normalizeOrigin(rawOrigin: string): string | null {
+  try {
+    const normalized = new URL(rawOrigin).origin;
+    return normalized.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function getAllowedPluginOrigins() {
+  const configuredOrigins = String((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.[
+    ALLOWED_PLUGIN_ORIGINS_ENV_KEY
+  ] || '')
+    .split(',')
+    .map((value) => normalizeOrigin(value.trim()))
+    .filter((value): value is string => Boolean(value));
+
+  const origins = new Set<string>([...DEFAULT_ALLOWED_PLUGIN_ORIGINS.map((origin) => origin.toLowerCase()), ...configuredOrigins]);
+
+  if (typeof window !== 'undefined') {
+    const windowOrigin = normalizeOrigin(window.location.origin);
+
+    if (windowOrigin) {
+      origins.add(windowOrigin);
+    }
+  }
+
+  return origins;
+}
+
+export function normalizeTrustedPluginEntry(entry: string): string {
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(entry);
+  } catch {
+    throw new Error(`Invalid plugin entry URL: ${entry}`);
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error('Plugin entry must use HTTPS.');
+  }
+
+  const allowedOrigins = getAllowedPluginOrigins();
+  const origin = parsedUrl.origin.toLowerCase();
+
+  if (!allowedOrigins.has(origin)) {
+    throw new Error(`Plugin entry origin is not allowlisted: ${origin}`);
+  }
+
+  return parsedUrl.toString();
+}
+
 function parsePluginManifest(input: unknown): PluginManifest {
-  return pluginManifestSchema.parse(input);
+  const parsed = pluginManifestSchema.parse(input);
+
+  return {
+    ...parsed,
+    entry: normalizeTrustedPluginEntry(parsed.entry),
+  };
 }
 
 function readInstalled(): PluginManifest[] {
@@ -42,7 +108,11 @@ function readInstalled(): PluginManifest[] {
     const parsed = JSON.parse(raw) as unknown;
     const result = pluginManifestListSchema.safeParse(parsed);
 
-    return result.success ? result.data : [];
+    if (!result.success) {
+      return [];
+    }
+
+    return result.data.map((plugin) => parsePluginManifest(plugin));
   } catch {
     return [];
   }
@@ -92,8 +162,10 @@ export class PluginManager {
 
     await Promise.allSettled(
       installed.map(async (plugin) => {
+        const trustedEntry = normalizeTrustedPluginEntry(plugin.entry);
+
         try {
-          await import(/* @vite-ignore */ plugin.entry);
+          await import(/* @vite-ignore */ trustedEntry);
         } catch {
           // Plugin loading is best-effort and isolated from app startup.
         }
@@ -102,7 +174,8 @@ export class PluginManager {
   }
 
   static async fetchMarketplace(indexUrl = DEFAULT_MARKETPLACE_INDEX) {
-    const response = await fetch(indexUrl);
+    const trustedIndex = normalizeTrustedPluginEntry(indexUrl);
+    const response = await fetch(trustedIndex);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch plugin marketplace: ${response.status}`);
@@ -115,6 +188,7 @@ export class PluginManager {
       throw new Error('Plugin marketplace manifest is invalid.');
     }
 
-    return Array.isArray(parsed.data) ? parsed.data : parsed.data.plugins;
+    const plugins = Array.isArray(parsed.data) ? parsed.data : parsed.data.plugins;
+    return plugins.map((plugin) => parsePluginManifest(plugin));
   }
 }

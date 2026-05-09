@@ -1,5 +1,13 @@
 import { normalizeCredential } from '~/lib/runtime/credentials';
 
+function safeDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 export function parseCookies(cookieHeader: string | null) {
   const cookies: Record<string, string> = {};
 
@@ -7,18 +15,23 @@ export function parseCookies(cookieHeader: string | null) {
     return cookies;
   }
 
-  // Split the cookie string by semicolons and spaces
   const items = cookieHeader.split(';').map((cookie) => cookie.trim());
 
   items.forEach((item) => {
     const [name, ...rest] = item.split('=');
 
-    if (name && rest.length > 0) {
-      // Decode the name and value, and join value parts in case it contains '='
-      const decodedName = decodeURIComponent(name.trim());
-      const decodedValue = decodeURIComponent(rest.join('=').trim());
-      cookies[decodedName] = decodedValue;
+    if (!name || rest.length === 0) {
+      return;
     }
+
+    const decodedName = safeDecodeURIComponent(name.trim());
+    const decodedValue = safeDecodeURIComponent(rest.join('=').trim());
+
+    if (!decodedName || decodedValue === null) {
+      return;
+    }
+
+    cookies[decodedName] = decodedValue;
   });
 
   return cookies;
@@ -53,5 +66,15 @@ export function getApiKeysFromCookie(cookieHeader: string | null): Record<string
 
 export function getProviderSettingsFromCookie(cookieHeader: string | null): Record<string, any> {
   const cookies = parseCookies(cookieHeader);
-  return cookies.providers ? JSON.parse(cookies.providers) : {};
+
+  if (!cookies.providers) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(cookies.providers) as Record<string, any>;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
