@@ -44,6 +44,7 @@ const HEAVY_COMMAND_RE = /\b(?:pnpm|npm|yarn|bun)\s+(?:install|i|run\s+build|bui
 const LOW_PRIORITY_ASSET_FILE_RE =
   /\.(?:png|jpe?g|gif|webp|ico|svg|mp4|mp3|wav|ogg|pdf|zip|gz|tar|woff2?|ttf|otf|eot|wasm)$/i;
 const MAX_CAPTURED_OUTPUT_CHARS = 120_000;
+const STEP_EVENT_SOCKET_CLOSE_IDLE_MS = 4000;
 
 function capCapturedOutput(output: string): string {
   if (output.length <= MAX_CAPTURED_OUTPUT_CHARS) {
@@ -193,6 +194,10 @@ export class ActionRunner {
   #lastHostedRuntimePreview?: HostedRuntimePreviewInfo;
   #hostedRuntimePreviewRevision = 0;
   #stepEventSocket?: WebSocket;
+  #stepSocketConsumers = 0;
+  #stepSocketCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  #disposeRequested = false;
+  #disposed = false;
   runnerId = atom<string>(`${Date.now()}`);
   actions: ActionsMap = map({});
   onAlert?: (alert: ActionAlert) => void;
@@ -223,6 +228,58 @@ export class ActionRunner {
     this.onSupabaseAlert = onSupabaseAlert;
     this.onDeployAlert = onDeployAlert;
     this.onStepRunnerEvent = onStepRunnerEvent;
+  }
+
+  disposeWhenIdle() {
+    this.#disposeRequested = true;
+    this.#maybeDispose();
+  }
+
+  dispose() {
+    if (this.#disposed) {
+      return;
+    }
+
+    this.#disposed = true;
+    this.#disposeRequested = true;
+
+    if (this.#hostedRuntimeFlushTimer) {
+      clearTimeout(this.#hostedRuntimeFlushTimer);
+      this.#hostedRuntimeFlushTimer = null;
+    }
+
+    if (this.#stepSocketCloseTimer) {
+      clearTimeout(this.#stepSocketCloseTimer);
+      this.#stepSocketCloseTimer = null;
+    }
+
+    if (this.#stepEventSocket) {
+      try {
+        this.#stepEventSocket.close();
+      } catch {
+        // Ignore close errors for best-effort teardown.
+      }
+
+      this.#stepEventSocket = undefined;
+    }
+
+    this.#stepSocketConsumers = 0;
+  }
+
+  #maybeDispose() {
+    if (!this.#disposeRequested || this.#disposed) {
+      return;
+    }
+
+    const hasActiveActions = Object.values(this.actions.get()).some(
+      (action) => action.status === 'running' || action.status === 'pending',
+    );
+
+    if (hasActiveActions || this.#stepSocketConsumers > 0) {
+      return;
+    }
+
+    this.dispose();
   }
 
   #getHostedRuntimeSessionId() {
@@ -454,63 +511,68 @@ export class ActionRunner {
     let finalOutput = '';
     let finalExitCode = 0;
     let stepError: string | undefined;
-    const stepSocket = this.#getStepEventSocket();
-    const stepRunner = new InteractiveStepRunner(
-      {
-        executeStep: async (_step: InteractiveStep, context) => {
-          const resp = await runHostedRuntimeCommand({
-            sessionId: this.#getHostedRuntimeSessionId(),
-            command: action.content,
-            kind,
-            onEvent: (event) => {
-              if (event.type === 'stdout') {
-                const normalized = normalizeShellChunkForTimeline(event.chunk);
+    const stepSocketLease = this.#acquireStepEventSocket();
 
-                if (normalized.trim()) {
-                  context.onStdout(normalized);
+    try {
+      const stepRunner = new InteractiveStepRunner(
+        {
+          executeStep: async (_step: InteractiveStep, context) => {
+            const resp = await runHostedRuntimeCommand({
+              sessionId: this.#getHostedRuntimeSessionId(),
+              command: action.content,
+              kind,
+              onEvent: (event) => {
+                if (event.type === 'stdout') {
+                  const normalized = normalizeShellChunkForTimeline(event.chunk);
+
+                  if (normalized.trim()) {
+                    context.onStdout(normalized);
+                  }
+                } else if (event.type === 'stderr') {
+                  const normalized = normalizeShellChunkForTimeline(event.chunk);
+
+                  if (normalized.trim()) {
+                    context.onStderr(normalized);
+                  }
+                } else if (event.type === 'status') {
+                  context.onStdout(`${event.message}\n`);
+                } else if (event.type === 'ready') {
+                  this.#setHostedPreview(event.preview);
                 }
-              } else if (event.type === 'stderr') {
-                const normalized = normalizeShellChunkForTimeline(event.chunk);
+              },
+            });
 
-                if (normalized.trim()) {
-                  context.onStderr(normalized);
-                }
-              } else if (event.type === 'status') {
-                context.onStdout(`${event.message}\n`);
-              } else if (event.type === 'ready') {
-                this.#setHostedPreview(event.preview);
-              }
-            },
-          });
+            finalOutput = capCapturedOutput(resp.output);
+            finalExitCode = resp.exitCode;
 
-          finalOutput = capCapturedOutput(resp.output);
-          finalExitCode = resp.exitCode;
-
-          return {
-            exitCode: resp.exitCode,
-            stdout: capCapturedOutput(resp.output),
-            stderr: resp.exitCode === 0 ? '' : capCapturedOutput(resp.output),
-          };
+            return {
+              exitCode: resp.exitCode,
+              stdout: capCapturedOutput(resp.output),
+              stderr: resp.exitCode === 0 ? '' : capCapturedOutput(resp.output),
+            };
+          },
         },
-      },
-      stepSocket,
-    );
+        stepSocketLease.socket,
+      );
 
-    stepRunner.addEventListener('event', (event) => {
-      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
-      this.onStepRunnerEvent?.(detail);
+      stepRunner.addEventListener('event', (event) => {
+        const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+        this.onStepRunnerEvent?.(detail);
 
-      if (detail.type === 'error') {
-        stepError = detail.error || 'Step execution failed';
-      }
-    });
+        if (detail.type === 'error') {
+          stepError = detail.error || 'Step execution failed';
+        }
+      });
 
-    await stepRunner.run([
-      {
-        description,
-        command: [action.content],
-      },
-    ]);
+      await stepRunner.run([
+        {
+          description,
+          command: [action.content],
+        },
+      ]);
+    } finally {
+      stepSocketLease.release();
+    }
 
     if (stepError || finalExitCode !== 0) {
       const enhancedError = this.#createEnhancedShellError(action.content, finalExitCode, finalOutput);
@@ -746,74 +808,79 @@ export class ActionRunner {
     const streamState = { lastProgressEmitAt: 0 };
     const previewAlertMonitor = this.#createPreviewAlertMonitor(action.content, 'shell');
 
-    const stepSocket = this.#getStepEventSocket();
-    const stepRunner = new InteractiveStepRunner(
-      {
-        executeStep: async (_step: InteractiveStep, context) => {
-          const resp = await shell.executeCommand(
-            this.runnerId.get(),
-            action.content,
-            () => {
-              logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
-              action.abort();
-            },
-            (chunk) => {
-              const normalized = normalizeShellChunkForTimeline(chunk);
+    const stepSocketLease = this.#acquireStepEventSocket();
 
-              if (!normalized.trim()) {
-                return;
-              }
+    try {
+      const stepRunner = new InteractiveStepRunner(
+        {
+          executeStep: async (_step: InteractiveStep, context) => {
+            const resp = await shell.executeCommand(
+              this.runnerId.get(),
+              action.content,
+              () => {
+                logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
+                action.abort();
+              },
+              (chunk) => {
+                const normalized = normalizeShellChunkForTimeline(chunk);
 
-              previewAlertMonitor.observeChunk(normalized);
-
-              if (heavyCommand && NOISY_PACKAGE_PROGRESS_RE.test(normalized)) {
-                const now = Date.now();
-
-                if (now - streamState.lastProgressEmitAt < 2500) {
+                if (!normalized.trim()) {
                   return;
                 }
 
-                streamState.lastProgressEmitAt = now;
-                context.onStdout('[install progress]');
+                previewAlertMonitor.observeChunk(normalized);
 
-                return;
-              }
+                if (heavyCommand && NOISY_PACKAGE_PROGRESS_RE.test(normalized)) {
+                  const now = Date.now();
 
-              context.onStdout(normalized);
-            },
-          );
-          const output = capCapturedOutput(resp?.output || '');
-          const exitCode = resp?.exitCode ?? 1;
+                  if (now - streamState.lastProgressEmitAt < 2500) {
+                    return;
+                  }
 
-          finalOutput = output;
-          finalExitCode = exitCode;
-          previewAlertMonitor.observeFinalOutput(output);
+                  streamState.lastProgressEmitAt = now;
+                  context.onStdout('[install progress]');
 
-          return {
-            exitCode,
-            stdout: output,
-            stderr: exitCode === 0 ? '' : output,
-          };
+                  return;
+                }
+
+                context.onStdout(normalized);
+              },
+            );
+            const output = capCapturedOutput(resp?.output || '');
+            const exitCode = resp?.exitCode ?? 1;
+
+            finalOutput = output;
+            finalExitCode = exitCode;
+            previewAlertMonitor.observeFinalOutput(output);
+
+            return {
+              exitCode,
+              stdout: output,
+              stderr: exitCode === 0 ? '' : output,
+            };
+          },
         },
-      },
-      stepSocket,
-    );
+        stepSocketLease.socket,
+      );
 
-    stepRunner.addEventListener('event', (event) => {
-      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
-      this.onStepRunnerEvent?.(detail);
+      stepRunner.addEventListener('event', (event) => {
+        const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+        this.onStepRunnerEvent?.(detail);
 
-      if (detail.type === 'error') {
-        stepError = detail.error || 'Step execution failed';
-      }
-    });
+        if (detail.type === 'error') {
+          stepError = detail.error || 'Step execution failed';
+        }
+      });
 
-    await stepRunner.run([
-      {
-        description: `Run shell command: ${action.content}`,
-        command: [action.content],
-      },
-    ]);
+      await stepRunner.run([
+        {
+          description: `Run shell command: ${action.content}`,
+          command: [action.content],
+        },
+      ]);
+    } finally {
+      stepSocketLease.release();
+    }
 
     logger.debug(`${action.type} Shell Response: [exit code:${finalExitCode}]`);
 
@@ -885,60 +952,65 @@ export class ActionRunner {
     let finalExitCode = 0;
     let stepError: string | undefined;
     const previewAlertMonitor = this.#createPreviewAlertMonitor(action.content, 'start');
-    const stepSocket = this.#getStepEventSocket();
-    const stepRunner = new InteractiveStepRunner(
-      {
-        executeStep: async (_step: InteractiveStep, context) => {
-          const resp = await shell.executeCommand(
-            this.runnerId.get(),
-            action.content,
-            () => {
-              logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
-              action.abort();
-            },
-            (chunk) => {
-              const normalized = normalizeShellChunkForTimeline(chunk);
+    const stepSocketLease = this.#acquireStepEventSocket();
 
-              if (!normalized.trim()) {
-                return;
-              }
+    try {
+      const stepRunner = new InteractiveStepRunner(
+        {
+          executeStep: async (_step: InteractiveStep, context) => {
+            const resp = await shell.executeCommand(
+              this.runnerId.get(),
+              action.content,
+              () => {
+                logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
+                action.abort();
+              },
+              (chunk) => {
+                const normalized = normalizeShellChunkForTimeline(chunk);
 
-              previewAlertMonitor.observeChunk(normalized);
-              context.onStdout(normalized);
-            },
-          );
-          const output = capCapturedOutput(resp?.output || '');
-          const exitCode = resp?.exitCode ?? 1;
+                if (!normalized.trim()) {
+                  return;
+                }
 
-          finalOutput = output;
-          finalExitCode = exitCode;
-          previewAlertMonitor.observeFinalOutput(output);
+                previewAlertMonitor.observeChunk(normalized);
+                context.onStdout(normalized);
+              },
+            );
+            const output = capCapturedOutput(resp?.output || '');
+            const exitCode = resp?.exitCode ?? 1;
 
-          return {
-            exitCode,
-            stdout: output,
-            stderr: exitCode === 0 ? '' : output,
-          };
+            finalOutput = output;
+            finalExitCode = exitCode;
+            previewAlertMonitor.observeFinalOutput(output);
+
+            return {
+              exitCode,
+              stdout: output,
+              stderr: exitCode === 0 ? '' : output,
+            };
+          },
         },
-      },
-      stepSocket,
-    );
+        stepSocketLease.socket,
+      );
 
-    stepRunner.addEventListener('event', (event) => {
-      const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
-      this.onStepRunnerEvent?.(detail);
+      stepRunner.addEventListener('event', (event) => {
+        const detail = (event as CustomEvent<InteractiveStepRunnerEvent>).detail;
+        this.onStepRunnerEvent?.(detail);
 
-      if (detail.type === 'error') {
-        stepError = detail.error || 'Step execution failed';
-      }
-    });
+        if (detail.type === 'error') {
+          stepError = detail.error || 'Step execution failed';
+        }
+      });
 
-    await stepRunner.run([
-      {
-        description: `Start application: ${action.content}`,
-        command: [action.content],
-      },
-    ]);
+      await stepRunner.run([
+        {
+          description: `Start application: ${action.content}`,
+          command: [action.content],
+        },
+      ]);
+    } finally {
+      stepSocketLease.release();
+    }
 
     logger.debug(`${action.type} Shell Response: [exit code:${finalExitCode}]`);
 
@@ -948,8 +1020,48 @@ export class ActionRunner {
     }
   }
 
+  #closeStepEventSocket() {
+    if (this.#stepSocketCloseTimer) {
+      clearTimeout(this.#stepSocketCloseTimer);
+      this.#stepSocketCloseTimer = null;
+    }
+
+    if (!this.#stepEventSocket) {
+      return;
+    }
+
+    try {
+      this.#stepEventSocket.close();
+    } catch {
+      // Ignore close errors for best-effort teardown.
+    }
+
+    this.#stepEventSocket = undefined;
+  }
+
+  #scheduleStepEventSocketClose() {
+    if (this.#disposed || this.#stepSocketConsumers > 0) {
+      return;
+    }
+
+    if (this.#stepSocketCloseTimer) {
+      clearTimeout(this.#stepSocketCloseTimer);
+    }
+
+    this.#stepSocketCloseTimer = setTimeout(() => {
+      this.#stepSocketCloseTimer = null;
+
+      if (this.#stepSocketConsumers > 0) {
+        return;
+      }
+
+      this.#closeStepEventSocket();
+      this.#maybeDispose();
+    }, STEP_EVENT_SOCKET_CLOSE_IDLE_MS);
+  }
+
   #getStepEventSocket() {
-    if (typeof window === 'undefined') {
+    if (this.#disposed || typeof window === 'undefined') {
       return undefined;
     }
 
@@ -983,6 +1095,25 @@ export class ActionRunner {
       logger.warn('Unable to create step event socket', error);
       return undefined;
     }
+  }
+
+  #acquireStepEventSocket() {
+    const socket = this.#getStepEventSocket();
+
+    if (this.#stepSocketCloseTimer) {
+      clearTimeout(this.#stepSocketCloseTimer);
+      this.#stepSocketCloseTimer = null;
+    }
+
+    this.#stepSocketConsumers += 1;
+
+    const release = () => {
+      this.#stepSocketConsumers = Math.max(0, this.#stepSocketConsumers - 1);
+      this.#scheduleStepEventSocketClose();
+      this.#maybeDispose();
+    };
+
+    return { socket, release };
   }
 
   async #runZombieKiller(kind: 'shell' | 'start') {
@@ -1102,6 +1233,7 @@ export class ActionRunner {
       }
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
+      throw error;
     }
   }
 
@@ -1109,6 +1241,7 @@ export class ActionRunner {
     const actions = this.actions.get();
 
     this.actions.setKey(id, { ...actions[id], ...newState });
+    this.#maybeDispose();
   }
 
   async getFileHistory(filePath: string): Promise<FileHistory | null> {

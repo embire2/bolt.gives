@@ -497,6 +497,45 @@ describe('ActionRunner start actions', () => {
     expect(runner.actions.get()['file-outside-workdir-traversal-1']?.status).toBe('failed');
   });
 
+  it('marks file actions as failed when workspace writes throw errors', async () => {
+    const writeFile = vi.fn().mockRejectedValue(new Error('disk full'));
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile,
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand: vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' }),
+        }) as any,
+    );
+
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-write-error-1',
+      action: {
+        type: 'file',
+        filePath: '/home/project/src/App.jsx',
+        content: 'export default function App() { return null; }',
+      } as any,
+    };
+
+    runner.addAction(actionData);
+    await expect(runner.runAction(actionData)).rejects.toBeInstanceOf(Error);
+
+    expect(writeFile).toHaveBeenCalled();
+    expect(runner.actions.get()['file-write-error-1']?.status).toBe('failed');
+  });
+
   it('writes file actions using canonical workdir-relative paths', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' });
     const writeFile = vi.fn().mockResolvedValue(undefined);

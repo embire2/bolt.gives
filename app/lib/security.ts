@@ -440,6 +440,14 @@ const HOSTED_FREE_RELAY_HEADER = 'x-bolt-hosted-free-relay';
 const HOSTED_FREE_RELAY_SECRET_HEADER = 'x-bolt-hosted-free-relay-secret';
 const HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
 
+function safeDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 function parseCookies(header: string | null): Record<string, string> {
   if (!header) {
     return {};
@@ -462,7 +470,13 @@ function parseCookies(header: string | null): Record<string, string> {
 
     const name = trimmed.slice(0, eq).trim();
     const value = trimmed.slice(eq + 1).trim();
-    out[name] = decodeURIComponent(value);
+    const decodedValue = safeDecodeURIComponent(value);
+
+    if (decodedValue === null) {
+      continue;
+    }
+
+    out[name] = decodedValue;
   }
 
   return out;
