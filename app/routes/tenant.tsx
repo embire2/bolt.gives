@@ -218,10 +218,10 @@ export default function TenantPortalPage() {
   const actionData = useActionData<typeof action>();
 
   return (
-    <div className="min-h-screen bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
+    <div className="relative flex h-full w-full flex-col bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
       <BackgroundRays />
       <Header />
-      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+      <main className="modern-scrollbar relative z-1 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-4 py-6">
         <section className="rounded-2xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/90 p-6 shadow-xl backdrop-blur">
           <div className="flex flex-col gap-2">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-bolt-elements-textTertiary">

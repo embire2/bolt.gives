@@ -39,6 +39,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] The self-host app launcher detects a dead local Wrangler Pages listener and exits so systemd can restart `bolt-gives-app` before Caddy keeps returning `502`.
 - [x] Header and managed-instance CTAs use readable light-mode contrast across `bolt.gives` and `create.bolt.gives`.
 - [x] Failed file and shell actions now propagate rejection to the caller without stalling later queued actions, reducing false-success project creation states.
+- [x] The public `/tenant` portal uses an internal scroll container so tenant account details and password forms remain reachable on small screens.
 
 ## v3.0.9.2 - Shipped Patch
 
