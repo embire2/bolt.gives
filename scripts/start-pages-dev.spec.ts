@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  checkHealthUrl,
   createWranglerRuntimeEnv,
   getWranglerCliEntrypoint,
+  getPagesDevHealthcheckConfig,
+  getPagesDevHealthcheckUrl,
   getWranglerPagesDevArgs,
   stripLeadingArgSeparators,
 } from './start-pages-dev.mjs';
@@ -28,7 +31,34 @@ describe('start pages dev script helpers', () => {
   });
 
   it('points at the local wrangler cli entrypoint', () => {
-    expect(getWranglerCliEntrypoint('/repo')).toBe(path.join('/repo', 'node_modules', 'wrangler', 'bin', 'wrangler.js'));
+    expect(getWranglerCliEntrypoint('/repo')).toBe(
+      path.join('/repo', 'node_modules', 'wrangler', 'bin', 'wrangler.js'),
+    );
+  });
+
+  it('builds a localhost healthcheck URL from pages dev args', () => {
+    expect(getPagesDevHealthcheckUrl(['--', '--ip', '0.0.0.0', '--port', '8815'], { NODE_ENV: 'test' })).toBe(
+      'http://127.0.0.1:8815/api/health',
+    );
+    expect(
+      getPagesDevHealthcheckUrl(['--ip', '127.0.0.1'], {
+        NODE_ENV: 'test',
+        PORT: '8788',
+        BOLT_PAGES_DEV_HEALTHCHECK_PATH: 'healthz',
+      }),
+    ).toBe('http://127.0.0.1:8788/healthz');
+  });
+
+  it('allows the pages dev healthcheck to be disabled', () => {
+    expect(getPagesDevHealthcheckConfig([], { NODE_ENV: 'test', BOLT_PAGES_DEV_HEALTHCHECK: '0' }).enabled).toBe(false);
+  });
+
+  it('treats non-2xx healthcheck responses as unhealthy', async () => {
+    const ok = await checkHealthUrl('http://example.test/health', {
+      fetchImpl: async () => new Response(null, { status: 503 }),
+    });
+
+    expect(ok).toBe(false);
   });
 
   it('redirects wrangler runtime state into a writable home under /tmp', () => {

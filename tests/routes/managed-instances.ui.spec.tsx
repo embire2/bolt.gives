@@ -91,7 +91,7 @@ describe('ManagedInstancesPage', () => {
     render(<ManagedInstancesPage />);
 
     const liveLink = screen.getByRole('link', { name: 'Open live instance' });
-    expect(liveLink.className).toContain('bg-sky-600');
+    expect(liveLink.className).toContain('bg-sky-700');
 
     expect(screen.getByText('Server details').parentElement?.className).toContain('bg-white/95');
   });

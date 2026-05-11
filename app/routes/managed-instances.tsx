@@ -266,7 +266,7 @@ export default function ManagedInstancesPage() {
   const secondaryButtonClass =
     'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 dark:border-bolt-elements-borderColor dark:bg-transparent dark:text-bolt-elements-textPrimary dark:hover:border-bolt-elements-focus dark:hover:bg-bolt-elements-background-depth-1';
   const primaryButtonClass =
-    'rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50';
+    'rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50';
   const preferredHostname = instance ? `${instance.projectName}.${support.rootDomain}` : '';
   const assignedHostnameDiffers = Boolean(
     instance && instance.routeHostname && instance.routeHostname !== preferredHostname,

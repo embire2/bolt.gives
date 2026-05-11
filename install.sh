@@ -897,8 +897,7 @@ cd "\${ROOT_DIR}"
 export NODE_ENV=production
 export PORT="\${PORT:-${APP_PORT}}"
 export NODE_OPTIONS="\${NODE_OPTIONS:---max-old-space-size=${NODE_HEAP_MB}}"
-pnpm run prepare:devvars
-exec pnpm exec wrangler pages dev ./build/client --ip 0.0.0.0 --port "\${PORT}" --no-show-interactive-dev-session
+exec node scripts/start-pages-dev.mjs -- --ip 0.0.0.0 --port "\${PORT}" --no-show-interactive-dev-session
 EOF
 
   cat > "${INSTALL_DIR}/bin/start-collab.sh" <<EOF

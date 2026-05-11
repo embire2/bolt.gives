@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-05
+Last updated: 2026-05-11
 
 Status legend:
 
@@ -36,6 +36,8 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] The public root route serves the project website with current release details, real screenshots, and contributor links while the chat workspace remains available at `/chat`.
 - [x] Managed fleet refresh continues past individual failed Pages deployments so healthy active instances can receive the latest build even when one project is inaccessible.
 - [x] The public homepage includes verbose crawl metadata, structured data, sitemap image discovery, conversion-oriented copy, and a generated search/social image.
+- [x] The self-host app launcher detects a dead local Wrangler Pages listener and exits so systemd can restart `bolt-gives-app` before Caddy keeps returning `502`.
+- [x] Header and managed-instance CTAs use readable light-mode contrast across `bolt.gives` and `create.bolt.gives`.
 
 ## v3.0.9.2 - Shipped Patch
 
