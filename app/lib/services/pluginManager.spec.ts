@@ -87,9 +87,9 @@ describe('PluginManager', () => {
   });
 
   it('normalizes trusted plugin entry URLs', () => {
-    expect(normalizeTrustedPluginEntry('https://RAW.GITHUBUSERCONTENT.COM/embire2/bolt.gives-plugins/main/plugin.mjs')).toBe(
-      'https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/plugin.mjs',
-    );
+    expect(
+      normalizeTrustedPluginEntry('https://RAW.GITHUBUSERCONTENT.COM/embire2/bolt.gives-plugins/main/plugin.mjs'),
+    ).toBe('https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/plugin.mjs');
   });
 
   it('rejects malformed marketplace registries', async () => {
@@ -98,9 +98,9 @@ describe('PluginManager', () => {
       json: async () => ({ plugins: [{ name: 'missing-fields' }] }),
     }) as any;
 
-    await expect(PluginManager.fetchMarketplace('https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/registry.json')).rejects.toThrow(
-      'Plugin marketplace manifest is invalid.',
-    );
+    await expect(
+      PluginManager.fetchMarketplace('https://raw.githubusercontent.com/embire2/bolt.gives-plugins/main/registry.json'),
+    ).rejects.toThrow('Plugin marketplace manifest is invalid.');
   });
 
   it('rejects marketplace indexes from non-allowlisted origins', async () => {

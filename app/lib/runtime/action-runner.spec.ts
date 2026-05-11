@@ -342,7 +342,7 @@ describe('ActionRunner start actions', () => {
     };
 
     runner.addAction(actionData);
-    await runner.runAction(actionData);
+    await expect(runner.runAction(actionData)).rejects.toThrow('Blocked Shell Mutation');
 
     expect(executeCommand).not.toHaveBeenCalled();
     expect(onAlert).toHaveBeenCalledWith(
@@ -389,7 +389,7 @@ describe('ActionRunner start actions', () => {
     };
 
     runner.addAction(actionData);
-    await runner.runAction(actionData);
+    await expect(runner.runAction(actionData)).rejects.toThrow('Blocked Shell Mutation');
 
     expect(executeCommand).not.toHaveBeenCalled();
     expect(onAlert).toHaveBeenCalledWith(
@@ -452,7 +452,7 @@ describe('ActionRunner start actions', () => {
     };
 
     runner.addAction(actionData);
-    await runner.runAction(actionData);
+    await expect(runner.runAction(actionData)).rejects.toThrow('outside workdir');
 
     expect(writeFile).not.toHaveBeenCalled();
     expect(runner.actions.get()['file-outside-workdir-1']?.status).toBe('failed');
@@ -491,7 +491,7 @@ describe('ActionRunner start actions', () => {
     };
 
     runner.addAction(actionData);
-    await runner.runAction(actionData);
+    await expect(runner.runAction(actionData)).rejects.toThrow('outside workdir');
 
     expect(writeFile).not.toHaveBeenCalled();
     expect(runner.actions.get()['file-outside-workdir-traversal-1']?.status).toBe('failed');

@@ -123,6 +123,7 @@ async function fetchCachedModelCatalog(): Promise<ModelInfo[]> {
 
   return models;
 }
+
 const ANSI_ESCAPE_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 const CARRIAGE_RETURN_RE = /\r+/g;
 const loadSessionManager = () => import('~/lib/services/sessionManager');
@@ -694,10 +695,7 @@ export const ChatImpl = memo(
         providerSettings: getProviderSettingsFromCookiesSafe(),
         selectedProvider: provider.name,
         selectedModel: model,
-        files:
-          hostedRuntimeEnabled && typeof workbenchStore.hostedRuntimeSessionId === 'string'
-            ? undefined
-            : files,
+        files: hostedRuntimeEnabled && typeof workbenchStore.hostedRuntimeSessionId === 'string' ? undefined : files,
         hostedRuntimeSessionId: hostedRuntimeEnabled ? workbenchStore.hostedRuntimeSessionId : undefined,
         projectContextId,
         promptId,

@@ -41,14 +41,18 @@ function normalizeOrigin(rawOrigin: string): string | null {
 }
 
 function getAllowedPluginOrigins() {
-  const configuredOrigins = String((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.[
-    ALLOWED_PLUGIN_ORIGINS_ENV_KEY
-  ] || '')
+  const configuredOrigins = String(
+    (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.[ALLOWED_PLUGIN_ORIGINS_ENV_KEY] ||
+      '',
+  )
     .split(',')
     .map((value) => normalizeOrigin(value.trim()))
     .filter((value): value is string => Boolean(value));
 
-  const origins = new Set<string>([...DEFAULT_ALLOWED_PLUGIN_ORIGINS.map((origin) => origin.toLowerCase()), ...configuredOrigins]);
+  const origins = new Set<string>([
+    ...DEFAULT_ALLOWED_PLUGIN_ORIGINS.map((origin) => origin.toLowerCase()),
+    ...configuredOrigins,
+  ]);
 
   if (typeof window !== 'undefined') {
     const windowOrigin = normalizeOrigin(window.location.origin);
@@ -189,6 +193,7 @@ export class PluginManager {
     }
 
     const plugins = Array.isArray(parsed.data) ? parsed.data : parsed.data.plugins;
+
     return plugins.map((plugin) => parsePluginManifest(plugin));
   }
 }

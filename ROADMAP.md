@@ -38,6 +38,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] The public homepage includes verbose crawl metadata, structured data, sitemap image discovery, conversion-oriented copy, and a generated search/social image.
 - [x] The self-host app launcher detects a dead local Wrangler Pages listener and exits so systemd can restart `bolt-gives-app` before Caddy keeps returning `502`.
 - [x] Header and managed-instance CTAs use readable light-mode contrast across `bolt.gives` and `create.bolt.gives`.
+- [x] Failed file and shell actions now propagate rejection to the caller without stalling later queued actions, reducing false-success project creation states.
 
 ## v3.0.9.2 - Shipped Patch
 

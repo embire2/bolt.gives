@@ -247,8 +247,8 @@ export function Shoutbox() {
               </>
             ) : (
               <div className="rounded-xl border border-dashed border-bolt-elements-borderColor p-3 text-xs text-bolt-elements-textSecondary">
-                Shout-out broadcasts are operator-managed. You can read updates here, but only signed-in tenant admins can
-                post new messages.
+                Shout-out broadcasts are operator-managed. You can read updates here, but only signed-in tenant admins
+                can post new messages.
               </div>
             )}
           </div>

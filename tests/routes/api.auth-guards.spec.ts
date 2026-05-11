@@ -7,6 +7,10 @@ const runtimeControlMocks = vi.hoisted(() => ({
   fetchRuntimeControlJson: vi.fn(),
 }));
 
+function assertResponse(value: unknown): asserts value is Response {
+  expect(value).toBeInstanceOf(Response);
+}
+
 vi.mock('~/lib/.server/admin-auth', () => ({
   isTenantAdminAuthorized: adminAuthMocks.isTenantAdminAuthorized,
 }));
@@ -34,6 +38,7 @@ describe('route-local auth guards', () => {
       params: {},
     } as any);
 
+    assertResponse(response);
     expect(response.status).toBe(403);
     expect(runtimeControlMocks.fetchRuntimeControlJson).not.toHaveBeenCalled();
   });
@@ -52,6 +57,7 @@ describe('route-local auth guards', () => {
       params: {},
     } as any);
 
+    assertResponse(response);
     expect(response.status).toBe(403);
     expect(runtimeControlMocks.fetchRuntimeControlJson).not.toHaveBeenCalled();
   });
@@ -65,7 +71,8 @@ describe('route-local auth guards', () => {
       context: {},
       params: {},
     } as any);
-    const payload = await response.json();
+    assertResponse(response);
+    const payload = (await response.json()) as any;
 
     expect(payload.authenticated).toBe(false);
     expect(payload.environment).toBeUndefined();
@@ -81,6 +88,7 @@ describe('route-local auth guards', () => {
       params: {},
     } as any);
 
+    assertResponse(response);
     expect(response.status).toBe(403);
   });
 
@@ -93,7 +101,8 @@ describe('route-local auth guards', () => {
       context: {},
       params: {},
     } as any);
-    const payload = await response.json();
+    assertResponse(response);
+    const payload = (await response.json()) as any;
 
     expect(response.status).toBe(200);
     expect(payload.local).toBeTruthy();

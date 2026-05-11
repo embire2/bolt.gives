@@ -49,19 +49,19 @@ interface GitHubGist {
 }
 
 // These values will be replaced at build time
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __COMMIT_HASH: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_BRANCH: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_COMMIT_TIME: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_AUTHOR: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_EMAIL: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_REMOTE_URL: string;
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 declare const __GIT_REPO_NAME: string;
 
 const PRIVILEGED_ACTIONS = new Set(['getUser', 'getRepos', 'getOrgs', 'getActivity']);
@@ -183,6 +183,7 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
       }
 
       const recentActivity = await callGithub(`/users/${encodeURIComponent(username)}/events?per_page=30`, token);
+
       return json({ recentActivity });
     }
   } catch (error) {
