@@ -37,6 +37,7 @@ Release theme: restore web browsing reliability and make direct website scrape-t
 - [x] Managed fleet refresh continues past individual failed Pages deployments so healthy active instances can receive the latest build even when one project is inaccessible.
 - [x] The public homepage includes verbose crawl metadata, structured data, sitemap image discovery, conversion-oriented copy, and a generated search/social image.
 - [x] The self-host app launcher detects a dead local Wrangler Pages listener and exits so systemd can restart `bolt-gives-app` before Caddy keeps returning `502`.
+- [x] Health-triggered Wrangler Pages shutdowns now exit non-zero so `bolt-gives-app` cannot remain inactive after a clean Wrangler teardown.
 - [x] Header and managed-instance CTAs use readable light-mode contrast across `bolt.gives` and `create.bolt.gives`.
 - [x] Failed file and shell actions now propagate rejection to the caller without stalling later queued actions, reducing false-success project creation states.
 - [x] The public `/tenant` portal uses an internal scroll container so tenant account details and password forms remain reachable on small screens.

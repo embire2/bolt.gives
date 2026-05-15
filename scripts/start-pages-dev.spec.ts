@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import {
   checkHealthUrl,
@@ -8,7 +9,9 @@ import {
   getPagesDevHealthcheckConfig,
   getPagesDevHealthcheckUrl,
   getWranglerPagesDevArgs,
+  startPagesDevHealthMonitor,
   stripLeadingArgSeparators,
+  waitForExit,
 } from './start-pages-dev.mjs';
 
 describe('start pages dev script helpers', () => {
@@ -59,6 +62,69 @@ describe('start pages dev script helpers', () => {
     });
 
     expect(ok).toBe(false);
+  });
+
+  it('marks a health-triggered pages dev shutdown before killing the child process', async () => {
+    const child = new EventEmitter() as EventEmitter & {
+      exitCode: number | null;
+      killed: boolean;
+      kill: (signal: NodeJS.Signals) => boolean;
+    };
+    const events: string[] = [];
+    const timers: Array<() => void> = [];
+
+    child.exitCode = null;
+    child.killed = false;
+    child.kill = (signal) => {
+      events.push(`kill:${signal}`);
+      child.killed = true;
+      child.exitCode = 0;
+      child.emit('exit', 0, null);
+
+      return true;
+    };
+
+    startPagesDevHealthMonitor(
+      child,
+      {
+        enabled: true,
+        url: 'http://127.0.0.1:8788/api/health',
+        startupGraceMs: 1,
+        intervalMs: 15_000,
+        timeoutMs: 1,
+        failureThreshold: 1,
+      },
+      {
+        checkHealthUrlFn: async () => false,
+        setTimeoutFn: ((callback: () => void) => {
+          timers.push(callback);
+
+          return { unref() {} } as NodeJS.Timeout;
+        }) as any,
+        clearTimeoutFn: () => {},
+        setIntervalFn: (() => ({ unref() {} }) as NodeJS.Timeout) as any,
+        clearIntervalFn: () => {},
+        onUnhealthy: () => events.push('unhealthy'),
+      },
+    );
+
+    timers.shift()?.();
+    await Promise.resolve();
+
+    expect(events).toEqual(['unhealthy', 'kill:SIGTERM']);
+  });
+
+  it('treats a clean wrangler exit after a health-triggered shutdown as a failure', async () => {
+    const child = new EventEmitter() as EventEmitter & {
+      once: EventEmitter['once'];
+    };
+    const exitPromise = waitForExit(child, 'wrangler pages dev', {
+      isHealthRestartRequested: (() => true) as any,
+    });
+
+    child.emit('exit', 0, null);
+
+    await expect(exitPromise).rejects.toThrow('healthcheck-triggered restart');
   });
 
   it('redirects wrangler runtime state into a writable home under /tmp', () => {

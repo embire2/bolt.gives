@@ -114,10 +114,12 @@ export function startPagesDevHealthMonitor(
   child,
   config,
   {
+    checkHealthUrlFn = checkHealthUrl,
     setTimeoutFn = setTimeout,
     clearTimeoutFn = clearTimeout,
     setIntervalFn = setInterval,
     clearIntervalFn = clearInterval,
+    onUnhealthy = () => {},
   } = {},
 ) {
   if (!config.enabled) {
@@ -142,7 +144,7 @@ export function startPagesDevHealthMonitor(
       return;
     }
 
-    const healthy = await checkHealthUrl(config.url, { timeoutMs: config.timeoutMs });
+    const healthy = await checkHealthUrlFn(config.url, { timeoutMs: config.timeoutMs });
 
     if (healthy) {
       consecutiveFailures = 0;
@@ -156,6 +158,7 @@ export function startPagesDevHealthMonitor(
 
     if (consecutiveFailures >= config.failureThreshold) {
       console.error('[pages-dev-health] killing wrangler pages dev so systemd can restart the app service');
+      onUnhealthy();
       child.kill('SIGTERM');
 
       const killTimer = setTimeoutFn(() => {
@@ -184,11 +187,16 @@ export function startPagesDevHealthMonitor(
   };
 }
 
-function waitForExit(child, label) {
+export function waitForExit(child, label, { isHealthRestartRequested = () => false } = {}) {
   return new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', (code, signal) => {
       if (code === 0) {
+        if (isHealthRestartRequested()) {
+          reject(new Error(`${label} exited cleanly after a healthcheck-triggered restart request`));
+          return;
+        }
+
         resolve();
         return;
       }
@@ -219,9 +227,17 @@ export async function main(args = process.argv.slice(2)) {
     stdio: 'inherit',
   });
 
-  startPagesDevHealthMonitor(child, getPagesDevHealthcheckConfig(args));
+  let healthRestartRequested = false;
 
-  await waitForExit(child, 'wrangler pages dev');
+  startPagesDevHealthMonitor(child, getPagesDevHealthcheckConfig(args), {
+    onUnhealthy: () => {
+      healthRestartRequested = true;
+    },
+  });
+
+  await waitForExit(child, 'wrangler pages dev', {
+    isHealthRestartRequested: () => healthRestartRequested,
+  });
 }
 
 const invokedAsScript = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href;

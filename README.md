@@ -246,7 +246,7 @@ The installer will:
   - `bolt-gives-webbrowse`
   - `bolt-gives-runtime`
 
-The `bolt-gives-app` launcher health-checks the local Wrangler Pages listener and exits when it stops responding, so systemd can restart the app service instead of leaving Caddy pointed at a dead origin.
+The `bolt-gives-app` launcher health-checks the local Wrangler Pages listener and forces a failed exit when it stops responding, so systemd restarts the app service instead of leaving Caddy pointed at a dead origin.
 
 If the domain or PostgreSQL flags are omitted, the installer now prompts interactively for:
 
