@@ -43,6 +43,8 @@
     "e2e:free-startup": "node scripts/e2e-free-startup-label.mjs",
     "smoke:live": "node scripts/live-release-smoke.mjs",
     "health:postdeploy": "node scripts/post-deploy-health-check.mjs",
+    "smoke:self-host-installer": "node scripts/self-host-installer-smoke.mjs",
+    "budget:client": "node scripts/client-bundle-budget.mjs",
     "typegen": "wrangler types",
     "preview": "pnpm run build && pnpm run start",
     "postinstall": "node scripts/install-playwright.mjs",

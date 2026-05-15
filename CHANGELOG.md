@@ -7,6 +7,19 @@
 ### Changed
 
 - Large hosted model update: the managed `FREE` provider now locks to OpenRouter model `deepseek/deepseek-v4-pro` with the visible `DeepSeek V4 Pro` label across hosted, Pages, and managed-instance startup paths.
+- The Workspace Preview surface now gets more usable space: the chat/workspace split gives the workspace a wider default column, the preview tab compresses status/activity chrome, and the preview pane owns the remaining vertical height.
+
+### Added
+
+- Managed Cloudflare rollout observability now records per-instance deployment history, last-good SHA/deployment URL, healthcheck status, rollback-ready outcome, and fleet summary cards in `admin.bolt.gives`.
+- Managed instance refreshes are now health-verified against the deployed Pages URL before the instance is marked active, so failed deploys keep the previous last-good deployment metadata visible for rollback decisions.
+- First-party template pack acceptance criteria now attach to common app requests such as appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios, giving prompt-to-preview generation concrete smoke signals.
+- A committed `smoke:self-host-installer` check validates the installer syntax/help path, and `budget:client` gives release work a client asset budget gate after builds.
+- Shout Out Box messages can now be reported for operator moderation review.
+
+### Security
+
+- Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
 ## v3.0.9.3 (2026-05-05)
 

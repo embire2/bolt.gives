@@ -17,7 +17,11 @@ import {
   normalizeClientProfileFilters,
   type ClientProfileFilters,
 } from '~/lib/client-profiles';
-import type { ManagedInstanceOperatorRecord, ManagedInstanceSupport } from '~/lib/managed-instances';
+import type {
+  ManagedInstanceFleetSummary,
+  ManagedInstanceOperatorRecord,
+  ManagedInstanceSupport,
+} from '~/lib/managed-instances';
 import { getPublicUrlConfig } from '~/lib/public-urls';
 import { APP_VERSION } from '~/lib/version';
 
@@ -56,6 +60,7 @@ type TenantAdminStatusPayload = {
   supported: boolean;
   tenants: TenantRecord[];
   managedSupport?: ManagedInstanceSupport;
+  managedFleetSummary?: ManagedInstanceFleetSummary;
   managedInstances?: ManagedInstanceOperatorRecord[];
   admin?: TenantAdminRecord;
   clientProfiles?: ClientProfileRecord[];
@@ -81,6 +86,7 @@ type TenantAdminLoaderPayload = {
   admin: TenantAdminRecord;
   tenants: TenantRecord[];
   managedSupport: ManagedInstanceSupport;
+  managedFleetSummary: ManagedInstanceFleetSummary;
   managedInstances: ManagedInstanceOperatorRecord[];
   clientProfiles: ClientProfileRecord[];
   filteredClientProfiles: ClientProfileRecord[];
@@ -146,6 +152,22 @@ function isAuthenticatedAdminSession(
   admin: TenantAdminRecord | undefined,
 ) {
   return Boolean(session?.username && admin?.username && session.username === admin.username);
+}
+
+function requirePrivilegedAdminSession(
+  session: TenantAdminSession | null | undefined,
+  admin: TenantAdminRecord | undefined,
+  actionLabel: string,
+) {
+  if (!isAuthenticatedAdminSession(session, admin)) {
+    return 'Sign in as tenant admin first.';
+  }
+
+  if (admin?.mustChangePassword) {
+    return `Change the default admin password before ${actionLabel}.`;
+  }
+
+  return null;
 }
 
 function getRuntimeControlBaseUrl() {
@@ -216,6 +238,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       },
+      managedFleetSummary: status.managedFleetSummary || {
+        total: 0,
+        active: 0,
+        updating: 0,
+        failed: 0,
+        suspended: 0,
+        expired: 0,
+        healthy: 0,
+        unhealthy: 0,
+        rollbackReady: 0,
+        lastGoodSha: null,
+      },
       managedInstances: authenticated ? status.managedInstances || [] : [],
       clientProfiles,
       filteredClientProfiles,
@@ -259,6 +293,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
         rootDomain: 'pages.dev',
         sourceBranch: 'main',
       } satisfies ManagedInstanceSupport,
+      managedFleetSummary: {
+        total: 0,
+        active: 0,
+        updating: 0,
+        failed: 0,
+        suspended: 0,
+        expired: 0,
+        healthy: 0,
+        unhealthy: 0,
+        rollbackReady: 0,
+        lastGoodSha: null,
+      },
       managedInstances: [] as ManagedInstanceOperatorRecord[],
       clientProfiles: [] as ClientProfileRecord[],
       filteredClientProfiles: [] as ClientProfileRecord[],
@@ -337,8 +383,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, status.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, status.admin, 'creating tenant accounts');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const name = String(formData.get('name') || '').trim();
@@ -401,8 +449,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, statusPayload.admin, 'changing tenant status');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const tenantId = String(formData.get('tenantId') || '').trim();
@@ -430,8 +480,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, statusPayload.admin, 'approving tenants');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const tenantId = String(formData.get('tenantId') || '').trim();
@@ -458,8 +510,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, statusPayload.admin, 'issuing tenant invites');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const tenantId = String(formData.get('tenantId') || '').trim();
@@ -487,8 +541,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, statusPayload.admin, 'resetting tenant passwords');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const tenantId = String(formData.get('tenantId') || '').trim();
@@ -516,8 +572,14 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(
+      session,
+      statusPayload.admin,
+      intent === 'refresh-managed-instance' ? 'refreshing managed instances' : 'suspending managed instances',
+    );
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const slug = String(formData.get('slug') || '').trim();
@@ -560,8 +622,14 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(
+      session,
+      statusPayload.admin,
+      intent === 'clear-smtp' ? 'clearing SMTP settings' : 'changing SMTP settings',
+    );
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const payload =
@@ -598,8 +666,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const statusPayload = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
     const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
 
-    if (!isAuthenticatedAdminSession(session, statusPayload.admin)) {
-      return json({ error: 'Sign in as tenant admin first.' }, { status: 401 });
+    const authError = requirePrivilegedAdminSession(session, statusPayload.admin, 'sending client email');
+
+    if (authError) {
+      return json({ error: authError }, { status: 401 });
     }
 
     const profileEmail = String(formData.get('profileEmail') || '')
@@ -656,6 +726,7 @@ export default function TenantAdminPage() {
     authenticated,
     tenants,
     managedSupport,
+    managedFleetSummary,
     managedInstances,
     clientProfiles,
     filteredClientProfiles,
@@ -678,6 +749,18 @@ export default function TenantAdminPage() {
   const pendingTenantCount = tenants.filter((tenant) => tenant.status === 'pending').length;
   const disabledTenantCount = tenants.filter((tenant) => tenant.status === 'disabled').length;
   const mappedProfileCount = clientProfiles.filter((profile) => profile.lastInstanceSlug).length;
+  const managedFleet = managedFleetSummary || {
+    total: 0,
+    active: 0,
+    updating: 0,
+    failed: 0,
+    suspended: 0,
+    expired: 0,
+    healthy: 0,
+    unhealthy: 0,
+    rollbackReady: 0,
+    lastGoodSha: null,
+  };
   const liveManagedCount = managedInstances.filter((instance) =>
     ['active', 'updating', 'provisioning', 'failed'].includes(instance.status),
   ).length;
@@ -1411,6 +1494,26 @@ export default function TenantAdminPage() {
                     </div>
                   ) : (
                     <div className="mt-5 space-y-3">
+                      <div className="grid gap-3 md:grid-cols-4">
+                        {[
+                          { label: 'Fleet total', value: managedFleet.total },
+                          { label: 'Healthy', value: managedFleet.healthy },
+                          { label: 'Needs rollback', value: managedFleet.rollbackReady },
+                          { label: 'Last good SHA', value: managedFleet.lastGoodSha?.slice(0, 8) || 'none' },
+                        ].map((metric) => (
+                          <div
+                            key={metric.label}
+                            className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-3"
+                          >
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                              {metric.label}
+                            </div>
+                            <div className="mt-1 break-all text-lg font-semibold text-bolt-elements-textPrimary">
+                              {metric.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                       {managedInstances.map((instance) => {
                         const isLive = ['active', 'updating', 'provisioning', 'failed'].includes(instance.status);
 
@@ -1437,6 +1540,54 @@ export default function TenantAdminPage() {
                                   <div className="mt-1 text-xs text-bolt-elements-textTertiary">
                                     Last deploy <span className="font-mono">{instance.lastDeploymentUrl}</span>
                                   </div>
+                                ) : null}
+                                <div className="mt-1 text-xs text-bolt-elements-textTertiary">
+                                  Health{' '}
+                                  <span className="font-mono">
+                                    {instance.lastHealthcheckStatus || 'unknown'}
+                                    {instance.lastHealthcheckAt
+                                      ? ` at ${formatAdminTimestamp(instance.lastHealthcheckAt)}`
+                                      : ''}
+                                  </span>
+                                  {' · '}Last good{' '}
+                                  <span className="font-mono">{instance.lastGoodGitSha?.slice(0, 8) || 'none'}</span>
+                                </div>
+                                {instance.lastRollbackOutcome ? (
+                                  <div className="mt-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                                    {instance.lastRollbackOutcome}
+                                  </div>
+                                ) : null}
+                                {instance.rolloutHistory?.length ? (
+                                  <details className="mt-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+                                    <summary className="cursor-pointer text-bolt-elements-textPrimary">
+                                      Deployment history ({instance.rolloutHistory.length})
+                                    </summary>
+                                    <div className="mt-2 space-y-2">
+                                      {instance.rolloutHistory
+                                        .slice(-4)
+                                        .reverse()
+                                        .map((rollout) => (
+                                          <div
+                                            key={rollout.id}
+                                            className="border-t border-bolt-elements-borderColor pt-2"
+                                          >
+                                            <div className="font-medium text-bolt-elements-textPrimary">
+                                              {rollout.status} · {rollout.reason}
+                                            </div>
+                                            <div>
+                                              Target {rollout.targetGitSha?.slice(0, 8) || 'pending'} · actor{' '}
+                                              {rollout.actor} · {formatAdminTimestamp(rollout.startedAt)}
+                                            </div>
+                                            {rollout.healthcheckUrl ? (
+                                              <div className="break-all">Healthcheck {rollout.healthcheckUrl}</div>
+                                            ) : null}
+                                            {rollout.error ? (
+                                              <div className="text-amber-200">{rollout.error}</div>
+                                            ) : null}
+                                          </div>
+                                        ))}
+                                    </div>
+                                  </details>
                                 ) : null}
                                 {instance.lastError ? (
                                   <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">

@@ -119,8 +119,15 @@ export async function ensureAdminDatabaseSchema() {
             trial_ends_at TIMESTAMPTZ NULL,
             current_git_sha TEXT NULL,
             previous_git_sha TEXT NULL,
+            last_good_git_sha TEXT NULL,
             last_rollout_at TIMESTAMPTZ NULL,
             last_deployment_url TEXT NULL,
+            last_good_deployment_url TEXT NULL,
+            last_healthcheck_at TIMESTAMPTZ NULL,
+            last_healthcheck_status TEXT NULL,
+            last_rollback_at TIMESTAMPTZ NULL,
+            last_rollback_outcome TEXT NULL,
+            rollout_history_json JSONB NULL,
             last_error TEXT NULL,
             suspended_at TIMESTAMPTZ NULL,
             expired_at TIMESTAMPTZ NULL,
@@ -184,6 +191,16 @@ export async function ensureAdminDatabaseSchema() {
           ALTER TABLE bolt_admin_managed_instances
           ALTER COLUMN trial_ends_at DROP NOT NULL;
         `);
+        await client.query(`
+          ALTER TABLE bolt_admin_managed_instances
+          ADD COLUMN IF NOT EXISTS last_good_git_sha TEXT NULL,
+          ADD COLUMN IF NOT EXISTS last_good_deployment_url TEXT NULL,
+          ADD COLUMN IF NOT EXISTS last_healthcheck_at TIMESTAMPTZ NULL,
+          ADD COLUMN IF NOT EXISTS last_healthcheck_status TEXT NULL,
+          ADD COLUMN IF NOT EXISTS last_rollback_at TIMESTAMPTZ NULL,
+          ADD COLUMN IF NOT EXISTS last_rollback_outcome TEXT NULL,
+          ADD COLUMN IF NOT EXISTS rollout_history_json JSONB NULL;
+        `);
       } finally {
         client.release();
       }
@@ -205,7 +222,10 @@ export function normalizeClientProfileInput(input = {}) {
     phone: String(input.phone || '').trim() || null,
     country: String(input.country || '').trim() || null,
     useCase: String(input.useCase || '').trim() || null,
-    requestedSubdomain: String(input.requestedSubdomain || '').trim().toLowerCase() || null,
+    requestedSubdomain:
+      String(input.requestedSubdomain || '')
+        .trim()
+        .toLowerCase() || null,
     registrationSource: String(input.registrationSource || '').trim() || null,
   };
 }
@@ -309,8 +329,15 @@ function mapManagedInstanceRow(row) {
     trialEndsAt: row.trial_ends_at,
     currentGitSha: row.current_git_sha,
     previousGitSha: row.previous_git_sha,
+    lastGoodGitSha: row.last_good_git_sha,
     lastRolloutAt: row.last_rollout_at,
     lastDeploymentUrl: row.last_deployment_url,
+    lastGoodDeploymentUrl: row.last_good_deployment_url,
+    lastHealthcheckAt: row.last_healthcheck_at,
+    lastHealthcheckStatus: row.last_healthcheck_status || 'unknown',
+    lastRollbackAt: row.last_rollback_at,
+    lastRollbackOutcome: row.last_rollback_outcome,
+    rolloutHistory: Array.isArray(row.rollout_history_json) ? row.rollout_history_json : [],
     lastError: row.last_error,
     suspendedAt: row.suspended_at,
     expiredAt: row.expired_at,
@@ -327,13 +354,16 @@ export async function upsertManagedInstanceAssignment(instance) {
     `
       INSERT INTO bolt_admin_managed_instances (
         instance_id, profile_email, name, project_name, route_hostname, pages_url, plan, status,
-        created_at, updated_at, trial_ends_at, current_git_sha, previous_git_sha, last_rollout_at,
-        last_deployment_url, last_error, suspended_at, expired_at, source_branch
+        created_at, updated_at, trial_ends_at, current_git_sha, previous_git_sha, last_good_git_sha,
+        last_rollout_at, last_deployment_url, last_good_deployment_url, last_healthcheck_at,
+        last_healthcheck_status, last_rollback_at, last_rollback_outcome, rollout_history_json,
+        last_error, suspended_at, expired_at, source_branch
       )
       VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19
+        $15,$16,$17,$18,$19,$20,$21,$22::jsonb,
+        $23,$24,$25,$26
       )
       ON CONFLICT (instance_id) DO UPDATE SET
         profile_email = EXCLUDED.profile_email,
@@ -347,8 +377,15 @@ export async function upsertManagedInstanceAssignment(instance) {
         trial_ends_at = EXCLUDED.trial_ends_at,
         current_git_sha = EXCLUDED.current_git_sha,
         previous_git_sha = EXCLUDED.previous_git_sha,
+        last_good_git_sha = EXCLUDED.last_good_git_sha,
         last_rollout_at = EXCLUDED.last_rollout_at,
         last_deployment_url = EXCLUDED.last_deployment_url,
+        last_good_deployment_url = EXCLUDED.last_good_deployment_url,
+        last_healthcheck_at = EXCLUDED.last_healthcheck_at,
+        last_healthcheck_status = EXCLUDED.last_healthcheck_status,
+        last_rollback_at = EXCLUDED.last_rollback_at,
+        last_rollback_outcome = EXCLUDED.last_rollback_outcome,
+        rollout_history_json = EXCLUDED.rollout_history_json,
         last_error = EXCLUDED.last_error,
         suspended_at = EXCLUDED.suspended_at,
         expired_at = EXCLUDED.expired_at,
@@ -369,8 +406,15 @@ export async function upsertManagedInstanceAssignment(instance) {
       instance.trialEndsAt,
       instance.currentGitSha,
       instance.previousGitSha,
+      instance.lastGoodGitSha,
       instance.lastRolloutAt,
       instance.lastDeploymentUrl,
+      instance.lastGoodDeploymentUrl,
+      instance.lastHealthcheckAt,
+      instance.lastHealthcheckStatus || 'unknown',
+      instance.lastRollbackAt,
+      instance.lastRollbackOutcome,
+      JSON.stringify(Array.isArray(instance.rolloutHistory) ? instance.rolloutHistory.slice(-20) : []),
       instance.lastError,
       instance.suspendedAt,
       instance.expiredAt,
@@ -388,7 +432,13 @@ export async function upsertManagedInstanceAssignment(instance) {
         updated_at = GREATEST(updated_at, $5::timestamptz)
       WHERE email = $1
     `,
-    [instance.email, instance.projectName, instance.status, instance.pagesUrl, instance.updatedAt || new Date().toISOString()],
+    [
+      instance.email,
+      instance.projectName,
+      instance.status,
+      instance.pagesUrl,
+      instance.updatedAt || new Date().toISOString(),
+    ],
   );
 
   return mapManagedInstanceRow(result.rows[0]);

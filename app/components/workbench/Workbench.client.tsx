@@ -735,11 +735,23 @@ export const Workbench = memo(
               }}
             />
           </div>
-          <div className="relative flex-1 min-h-0 overflow-hidden">
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {chatStarted ? (
-              <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3 py-2">
-                <div className={`rounded-lg border px-3 py-2 ${getWorkspaceToneClasses(workspaceSummary.tone)}`}>
-                  <div className="mb-2 flex items-center justify-between gap-3">
+              <div
+                className={classNames(
+                  'border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3',
+                  selectedView === 'preview' ? 'py-1' : 'py-2',
+                )}
+              >
+                <div
+                  className={`rounded-lg border px-3 ${selectedView === 'preview' ? 'py-1.5' : 'py-2'} ${getWorkspaceToneClasses(workspaceSummary.tone)}`}
+                >
+                  <div
+                    className={classNames(
+                      'flex items-center justify-between gap-3',
+                      selectedView === 'preview' ? 'mb-0' : 'mb-2',
+                    )}
+                  >
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                         Workspace Status
@@ -756,31 +768,33 @@ export const Workbench = memo(
                           : 'Diff view'}
                     </div>
                   </div>
-                  <div className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:grid-cols-3">
-                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                        Happening now
+                  {selectedView === 'preview' ? null : (
+                    <div className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:grid-cols-3">
+                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                          Happening now
+                        </div>
+                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.current}</div>
                       </div>
-                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.current}</div>
-                    </div>
-                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                        Last visible result
+                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                          Last visible result
+                        </div>
+                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.last}</div>
                       </div>
-                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.last}</div>
-                    </div>
-                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                        Next
+                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                          Next
+                        </div>
+                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.next}</div>
                       </div>
-                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.next}</div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ) : null}
             {hasWorkspaceContent ? (
-              <div className="h-full min-h-0">
+              <div className="min-h-0 flex-1">
                 {selectedView === 'code' ? (
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading code editor" />}>
                     <LazyEditorPanel
@@ -825,13 +839,23 @@ export const Workbench = memo(
             )}
           </div>
           {chatStarted ? (
-            <div className="max-h-44 shrink-0 overflow-hidden border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-2 py-1.5">
+            <div
+              className={classNames(
+                'shrink-0 overflow-hidden border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-2',
+                selectedView === 'preview' ? 'max-h-16 py-1' : 'max-h-44 py-1.5',
+              )}
+            >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                     Workspace Activity
                   </div>
-                  <div className="hidden truncate text-[11px] text-bolt-elements-textTertiary lg:block">
+                  <div
+                    className={classNames(
+                      'hidden truncate text-[11px] text-bolt-elements-textTertiary lg:block',
+                      selectedView === 'preview' ? 'sr-only' : '',
+                    )}
+                  >
                     Live progress stays visible here while files and preview update above.
                   </div>
                 </div>
@@ -839,7 +863,12 @@ export const Workbench = memo(
                   {isStreaming ? 'Working…' : hasWorkspaceContent ? 'Ready' : 'Standing by'}
                 </div>
               </div>
-              <div className="grid max-h-36 min-h-0 gap-2 overflow-hidden md:grid-cols-[0.95fr_1.05fr]">
+              <div
+                className={classNames(
+                  'grid min-h-0 gap-2 overflow-hidden md:grid-cols-[0.95fr_1.05fr]',
+                  selectedView === 'preview' ? 'max-h-0 opacity-0' : 'max-h-36 opacity-100',
+                )}
+              >
                 <div ref={workspaceCommentaryRef} className="max-h-36 overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading live commentary" />}>
                     <LazyCommentaryFeed data={data} scrollRef={workspaceCommentaryRef} />

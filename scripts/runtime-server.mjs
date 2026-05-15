@@ -18,6 +18,8 @@ import {
 } from './runtime-preview.mjs';
 import {
   appendManagedInstanceEvent,
+  appendManagedInstanceRolloutHistory,
+  buildManagedInstanceFleetSummary,
   buildManagedInstancePagesEnvConfig,
   claimManagedInstanceTrial,
   getManagedInstanceBySessionSecret,
@@ -945,6 +947,59 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
   };
 }
 
+async function verifyManagedInstanceDeploymentHealth(deployment, { timeoutMs = 90000, pollMs = 3000 } = {}) {
+  const startedAt = Date.now();
+  const candidates = [
+    deployment?.deploymentUrl ? `${String(deployment.deploymentUrl).replace(/\/$/, '')}/api/health` : null,
+    deployment?.pagesUrl ? `${String(deployment.pagesUrl).replace(/\/$/, '')}/api/health` : null,
+    deployment?.pagesUrl ? `${String(deployment.pagesUrl).replace(/\/$/, '')}/chat` : null,
+  ].filter(Boolean);
+  let lastError = 'No managed instance URL was available for health verification.';
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    for (const url of candidates) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: {
+            Accept: 'text/html,application/json',
+          },
+        });
+
+        if (response.ok) {
+          return {
+            ok: true,
+            url,
+            status: response.status,
+            checkedAt: new Date().toISOString(),
+          };
+        }
+
+        lastError = `${url} returned HTTP ${response.status}`;
+      } catch (error) {
+        lastError = `${url} failed health verification: ${error instanceof Error ? error.message : 'request failed'}`;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  return {
+    ok: false,
+    url: candidates[0] || null,
+    status: null,
+    checkedAt: new Date().toISOString(),
+    error: lastError,
+  };
+}
+
 function getManagedInstanceLockKey(instance) {
   return instance?.projectName || instance?.clientKeyHash || 'managed-instance';
 }
@@ -1051,6 +1106,22 @@ async function refreshManagedInstanceFromCurrentBuild(
   { actor = 'system', reason = 'refresh' } = {},
 ) {
   return await runManagedInstanceOperation(getManagedInstanceLockKey(instance), async () => {
+    const previousGoodSha = instance.lastGoodGitSha || instance.currentGitSha || null;
+    const previousGoodDeploymentUrl = instance.lastGoodDeploymentUrl || instance.lastDeploymentUrl || null;
+    const rolloutEntry = appendManagedInstanceRolloutHistory(instance, {
+      actor,
+      reason,
+      status: 'started',
+      targetGitSha: null,
+      previousGitSha: instance.currentGitSha || null,
+      deploymentUrl: null,
+      healthcheckUrl: null,
+      rollbackOutcome: null,
+      error: null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+    });
+
     instance.status = instance.currentGitSha ? 'updating' : 'provisioning';
     instance.updatedAt = new Date().toISOString();
     instance.lastError = null;
@@ -1058,22 +1129,48 @@ async function refreshManagedInstanceFromCurrentBuild(
 
     try {
       const deployment = await deployManagedInstanceProject(instance, reason);
+      const health = await verifyManagedInstanceDeploymentHealth(deployment);
+
+      rolloutEntry.targetGitSha = deployment.gitSha;
+      rolloutEntry.deploymentUrl = deployment.deploymentUrl;
+      rolloutEntry.healthcheckUrl = health.url;
+      rolloutEntry.finishedAt = new Date().toISOString();
+      instance.lastHealthcheckAt = health.checkedAt;
+
+      if (!health.ok) {
+        instance.lastHealthcheckStatus = 'unhealthy';
+        instance.lastRollbackAt = rolloutEntry.finishedAt;
+        instance.lastRollbackOutcome = previousGoodSha
+          ? `Rollback ready: last good ${previousGoodSha} at ${previousGoodDeploymentUrl || 'previous deployment URL unknown'}.`
+          : 'Rollback skipped: no previous healthy deployment has been recorded yet.';
+        rolloutEntry.status = previousGoodSha ? 'rollback-ready' : 'rollback-skipped';
+        rolloutEntry.rollbackOutcome = instance.lastRollbackOutcome;
+        rolloutEntry.error = health.error || 'Managed instance health verification failed.';
+        throw new Error(rolloutEntry.error);
+      }
 
       instance.previousGitSha = instance.currentGitSha || null;
       instance.currentGitSha = deployment.gitSha;
+      instance.lastGoodGitSha = deployment.gitSha;
       instance.lastRolloutAt = new Date().toISOString();
       instance.updatedAt = new Date().toISOString();
       instance.routeHostname = deployment.routeHostname;
       instance.pagesUrl = deployment.pagesUrl;
       instance.lastDeploymentUrl = deployment.deploymentUrl;
+      instance.lastGoodDeploymentUrl = deployment.deploymentUrl;
+      instance.lastHealthcheckStatus = 'healthy';
+      instance.lastRollbackOutcome = null;
       instance.lastError = null;
       instance.status = 'active';
+      rolloutEntry.status = 'healthy';
+      rolloutEntry.finishedAt = instance.updatedAt;
       appendManagedInstanceEvent(registry, {
         actor,
         action: instance.previousGitSha ? 'managed-instance.rollout' : 'managed-instance.provisioned',
         target: instance.routeHostname,
         details: {
           gitSha: deployment.gitSha,
+          healthcheckUrl: health.url || '',
         },
       });
       await writeManagedInstanceRegistry(registry);
@@ -1083,12 +1180,25 @@ async function refreshManagedInstanceFromCurrentBuild(
       instance.status = 'failed';
       instance.updatedAt = new Date().toISOString();
       instance.lastError = error instanceof Error ? error.message : 'Cloudflare deployment failed.';
+      instance.lastGoodGitSha = previousGoodSha;
+      instance.lastGoodDeploymentUrl = previousGoodDeploymentUrl;
+      instance.lastRollbackAt = instance.lastRollbackAt || new Date().toISOString();
+      instance.lastRollbackOutcome =
+        instance.lastRollbackOutcome ||
+        (previousGoodSha
+          ? `Rollback ready: last good ${previousGoodSha} at ${previousGoodDeploymentUrl || 'previous deployment URL unknown'}.`
+          : 'Rollback skipped: no previous healthy deployment has been recorded yet.');
+      rolloutEntry.status = previousGoodSha ? 'rollback-ready' : 'rollback-skipped';
+      rolloutEntry.finishedAt = instance.updatedAt;
+      rolloutEntry.rollbackOutcome = instance.lastRollbackOutcome;
+      rolloutEntry.error = instance.lastError;
       appendManagedInstanceEvent(registry, {
         actor,
         action: 'managed-instance.failed',
         target: instance.routeHostname,
         details: {
           error: instance.lastError,
+          rollbackOutcome: instance.lastRollbackOutcome,
         },
       });
       await writeManagedInstanceRegistry(registry);
@@ -1170,7 +1280,10 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
       await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
     } catch (error) {
       const target = instance.routeHostname || instance.projectName || instance.id || 'unknown-instance';
-      console.error(`[runtime] managed instance rollout failed for ${target}; continuing with remaining instances.`, error);
+      console.error(
+        `[runtime] managed instance rollout failed for ${target}; continuing with remaining instances.`,
+        error,
+      );
     }
   }
 }
@@ -1224,9 +1337,10 @@ async function ensureShoutboxStore() {
       messages: parsed.messages
         .filter((message) => message && typeof message === 'object')
         .slice(-MAX_SHOUTBOX_MESSAGES),
+      reports: Array.isArray(parsed.reports) ? parsed.reports.filter(Boolean).slice(-200) : [],
     };
   } catch {
-    const initialStore = { messages: [] };
+    const initialStore = { messages: [], reports: [] };
     await writeJsonAtomically(SHOUTBOX_MESSAGES_PATH, JSON.stringify(initialStore, null, 2));
     return initialStore;
   }
@@ -1234,7 +1348,11 @@ async function ensureShoutboxStore() {
 
 async function writeShoutboxStore(store) {
   const normalizedMessages = Array.isArray(store?.messages) ? store.messages.slice(-MAX_SHOUTBOX_MESSAGES) : [];
-  await writeJsonAtomically(SHOUTBOX_MESSAGES_PATH, JSON.stringify({ messages: normalizedMessages }, null, 2));
+  const normalizedReports = Array.isArray(store?.reports) ? store.reports.slice(-200) : [];
+  await writeJsonAtomically(
+    SHOUTBOX_MESSAGES_PATH,
+    JSON.stringify({ messages: normalizedMessages, reports: normalizedReports }, null, 2),
+  );
 }
 
 function sanitizeShoutMessage(message) {
@@ -1275,6 +1393,36 @@ async function appendShoutboxMessage({ author, content }) {
   store.messages.push(message);
   await writeShoutboxStore(store);
   return message;
+}
+
+async function reportShoutboxMessage({ messageId, reporter = 'anonymous', reason = '' }) {
+  const store = await ensureShoutboxStore();
+  const normalizedMessageId = String(messageId || '').trim();
+  const message = store.messages.find((candidate) => String(candidate.id) === normalizedMessageId);
+
+  if (!message) {
+    throw new Error('Shout-out message not found.');
+  }
+
+  const report = {
+    id: crypto.randomUUID(),
+    messageId: normalizedMessageId,
+    reporter:
+      String(reporter || 'anonymous')
+        .trim()
+        .slice(0, 120) || 'anonymous',
+    reason:
+      String(reason || '')
+        .trim()
+        .slice(0, 300) || 'user-report',
+    createdAt: new Date().toISOString(),
+  };
+
+  store.reports = Array.isArray(store.reports) ? store.reports : [];
+  store.reports.push(report);
+  await writeShoutboxStore(store);
+
+  return report;
 }
 
 export function applyPreviewResponseHeaders(rawHeaders = {}) {
@@ -1389,9 +1537,7 @@ function isLifecycleOnlyPreviewAlert(alert) {
     return false;
   }
 
-  const combinedText = normalizePreviewText(
-    `${alert.title || ''}\n${alert.description || ''}\n${alert.content || ''}`,
-  );
+  const combinedText = normalizePreviewText(`${alert.title || ''}\n${alert.description || ''}\n${alert.content || ''}`);
   const hasLifecycleFailure = /\bELIFECYCLE\b/i.test(combinedText) || /\bCommand failed\b/i.test(combinedText);
 
   if (!hasLifecycleFailure) {
@@ -1557,7 +1703,9 @@ function fileMapPackageJsonLooksLikeVite(fileMap) {
     const dependencies =
       packageJson?.dependencies && typeof packageJson.dependencies === 'object' ? packageJson.dependencies : {};
     const devDependencies =
-      packageJson?.devDependencies && typeof packageJson.devDependencies === 'object' ? packageJson.devDependencies : {};
+      packageJson?.devDependencies && typeof packageJson.devDependencies === 'object'
+        ? packageJson.devDependencies
+        : {};
 
     return (
       Object.values(scripts).some((script) => typeof script === 'string' && /\bvite\b/i.test(script)) ||
@@ -1728,8 +1876,7 @@ export function markSessionMutationStart(session) {
 
   const currentFileMap = session.currentFileMap;
   const hasCurrentWorkspaceFiles = currentFileMap && Object.keys(currentFileMap).length > 0;
-  const currentWorkspaceIsStarter =
-    hasCurrentWorkspaceFiles && fileMapContainsStarterPlaceholder(currentFileMap);
+  const currentWorkspaceIsStarter = hasCurrentWorkspaceFiles && fileMapContainsStarterPlaceholder(currentFileMap);
 
   if (session.previewDiagnostics.healthy && hasCurrentWorkspaceFiles && !currentWorkspaceIsStarter) {
     session.restorePointFileMap = cloneFileMap(session.currentFileMap);
@@ -1791,10 +1938,7 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
     const body = shouldReadBody ? await response.text() : '';
     const bodyAlert = extractPreviewAlertFromText(body);
     const existingAlertIsStaleLifecycleNoise =
-      !bodyAlert &&
-      response.status >= 200 &&
-      response.status < 400 &&
-      isLifecycleOnlyPreviewAlert(existingAlert);
+      !bodyAlert && response.status >= 200 && response.status < 400 && isLifecycleOnlyPreviewAlert(existingAlert);
     const alert =
       bodyAlert ||
       (existingAlertIsStaleLifecycleNoise ? null : existingAlert) ||
@@ -2417,7 +2561,9 @@ export function inferHostedWorkspaceStartCommand(packageJson) {
 }
 
 function commandLikelyUsesWorkspaceDependencies(command = '') {
-  const normalized = String(command || '').trim().toLowerCase();
+  const normalized = String(command || '')
+    .trim()
+    .toLowerCase();
 
   if (!normalized) {
     return false;
@@ -2601,8 +2747,8 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
   const scripts = packageJsonRecord.json.scripts || {};
   const usesVite = Boolean(
     packageJsonRecord.json.dependencies?.vite ||
-      packageJsonRecord.json.devDependencies?.vite ||
-      Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
+    packageJsonRecord.json.devDependencies?.vite ||
+    Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
   );
 
   if (!usesVite) {
@@ -2641,9 +2787,9 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
   const needsTsconfigNode = referencedPaths.has('tsconfig.node.json');
   const usesReact = Boolean(
     packageJsonRecord.json.dependencies?.react ||
-      packageJsonRecord.json.devDependencies?.react ||
-      packageJsonRecord.json.dependencies?.['react-dom'] ||
-      packageJsonRecord.json.devDependencies?.['react-dom'],
+    packageJsonRecord.json.devDependencies?.react ||
+    packageJsonRecord.json.dependencies?.['react-dom'] ||
+    packageJsonRecord.json.devDependencies?.['react-dom'],
   );
   const sourceEntries = await walkWorkspaceFiles(session.dir);
   const usesJsSources = sourceEntries.some((entry) => entry.path.startsWith('src/') && /\.jsx?$/.test(entry.path));
@@ -2717,8 +2863,7 @@ export async function ensureHostedWorkspaceProjectBootstrap(session) {
   const appEntry =
     entries.find((entry) => /^src\/App\.tsx$/i.test(entry.path)) ||
     entries.find((entry) => /^src\/App\.jsx$/i.test(entry.path));
-  const mainEntry =
-    entries.find((entry) => /^src\/main\.(?:tsx|jsx|ts|js)$/i.test(entry.path)) || null;
+  const mainEntry = entries.find((entry) => /^src\/main\.(?:tsx|jsx|ts|js)$/i.test(entry.path)) || null;
   const indexHtmlPath = path.join(session.dir, 'index.html');
   const viteConfigTsPath = path.join(session.dir, 'vite.config.ts');
   const viteConfigJsPath = path.join(session.dir, 'vite.config.js');
@@ -2830,8 +2975,8 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   const hasNodeModules = await exists(path.join(session.dir, 'node_modules'));
   const shouldPrepareDependenciesForStart = Boolean(
     inferHostedWorkspaceStartCommand(packageJson) ||
-      bootstrapRepair.inferredStartCommand ||
-      commandLikelyUsesWorkspaceDependencies(startCommand),
+    bootstrapRepair.inferredStartCommand ||
+    commandLikelyUsesWorkspaceDependencies(startCommand),
   );
   const hasTailwindDependency = Boolean(
     packageJson.dependencies?.tailwindcss || packageJson.devDependencies?.tailwindcss,
@@ -4503,6 +4648,7 @@ export function createRuntimeServer() {
         const registry = await ensureTenantRegistry();
         const managedSupport = await buildManagedInstanceSupportState();
         let managedInstances = [];
+        let managedFleetSummary = buildManagedInstanceFleetSummary([]);
         let clientProfiles = [];
         let emailMessages = [];
         let bugReports = [];
@@ -4512,6 +4658,7 @@ export function createRuntimeServer() {
           const managedRegistry = await ensureManagedInstanceRegistry();
           await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
           await syncManagedRegistryToAdminDatabase(managedRegistry);
+          managedFleetSummary = buildManagedInstanceFleetSummary(managedRegistry.instances);
           managedInstances = managedRegistry.instances
             .slice()
             .sort(
@@ -4532,6 +4679,7 @@ export function createRuntimeServer() {
           tenants: registry.tenants || [],
           auditTrail: registry.auditTrail || [],
           managedSupport,
+          managedFleetSummary,
           managedInstances,
           clientProfiles,
           emailMessages,
@@ -4946,6 +5094,25 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 400, error instanceof Error ? error.message : 'Failed to send the shout-out message.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/shout/report') {
+      try {
+        const body = await readJsonBody(req);
+        const report = await reportShoutboxMessage({
+          messageId: String(body.messageId || '').trim(),
+          reporter: String(body.reporter || '').trim(),
+          reason: String(body.reason || '').trim(),
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          report,
+        });
+      } catch (error) {
+        sendText(res, 400, error instanceof Error ? error.message : 'Failed to report the shout-out message.');
       }
       return;
     }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appendManagedInstanceRolloutHistory,
+  buildManagedInstanceFleetSummary,
   buildManagedInstancePagesEnvConfig,
   buildManagedInstanceHostname,
   claimManagedInstanceTrial,
@@ -180,6 +182,78 @@ describe('managed instance registry helpers', () => {
 
     expect(claim.instance.trialEndsAt).toBeNull();
     expect(claim.instance.plan).toBe('experimental-free-indefinite');
+  });
+
+  it('normalizes rollout observability metadata for operator and client views', () => {
+    const registry = normalizeManagedInstanceRegistry({
+      instances: [
+        {
+          id: 'inst-1',
+          name: 'Clinic',
+          email: 'clinic@example.com',
+          projectName: 'clinic',
+          routeHostname: 'clinic.pages.dev',
+          pagesUrl: 'https://clinic.pages.dev',
+          plan: 'experimental-free-indefinite',
+          status: 'failed',
+          createdAt: '2026-05-15T10:00:00.000Z',
+          updatedAt: '2026-05-15T10:10:00.000Z',
+          currentGitSha: 'bad-sha',
+          lastGoodGitSha: 'good-sha',
+          lastHealthcheckStatus: 'unhealthy',
+          lastRollbackOutcome: 'Rollback ready: last good good-sha.',
+          rolloutHistory: [
+            {
+              actor: 'admin',
+              reason: 'test',
+              status: 'rollback-ready',
+              targetGitSha: 'bad-sha',
+              previousGitSha: 'good-sha',
+              startedAt: '2026-05-15T10:00:00.000Z',
+            },
+          ],
+        },
+      ],
+    });
+
+    const instance = sanitizeManagedInstanceForOperator(registry.instances[0]);
+
+    expect(instance.lastGoodGitSha).toBe('good-sha');
+    expect(instance.lastHealthcheckStatus).toBe('unhealthy');
+    expect(instance.lastRollbackOutcome).toContain('Rollback ready');
+    expect(instance.rolloutHistory[0].status).toBe('rollback-ready');
+  });
+
+  it('builds fleet summaries from health and rollback state', () => {
+    const registry = normalizeManagedInstanceRegistry({
+      instances: [
+        { projectName: 'a', email: 'a@example.com', status: 'active', lastHealthcheckStatus: 'healthy' },
+        {
+          projectName: 'b',
+          email: 'b@example.com',
+          status: 'failed',
+          lastGoodGitSha: 'good-sha',
+          lastHealthcheckStatus: 'unhealthy',
+        },
+      ],
+    });
+
+    appendManagedInstanceRolloutHistory(registry.instances[1], {
+      actor: 'system',
+      reason: 'interval-sync',
+      status: 'rollback-ready',
+      targetGitSha: 'bad-sha',
+      previousGitSha: 'good-sha',
+      startedAt: '2026-05-15T10:00:00.000Z',
+    });
+
+    const summary = buildManagedInstanceFleetSummary(registry.instances);
+
+    expect(summary.total).toBe(2);
+    expect(summary.healthy).toBe(1);
+    expect(summary.unhealthy).toBe(1);
+    expect(summary.rollbackReady).toBe(1);
+    expect(summary.lastGoodSha).toBe('good-sha');
   });
 
   it('prefers the actual Cloudflare-assigned subdomain when resolving the live Pages host', () => {

@@ -90,8 +90,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
           plan: support.trialDays > 0 ? `experimental-free-${support.trialDays}d` : 'experimental-free-indefinite',
           currentGitSha: session.currentGitSha || null,
           previousGitSha: null,
+          lastGoodGitSha: session.currentGitSha || null,
           lastRolloutAt: session.issuedAt,
           lastDeploymentUrl: session.pagesUrl,
+          lastGoodDeploymentUrl: session.pagesUrl,
+          lastHealthcheckAt: session.issuedAt,
+          lastHealthcheckStatus: 'unknown',
+          lastRollbackAt: null,
+          lastRollbackOutcome: null,
+          rolloutHistory: [],
           status: session.status || 'active',
           createdAt: session.issuedAt,
           updatedAt: session.issuedAt,
@@ -283,6 +290,13 @@ export default function ManagedInstancesPage() {
             : 'Indefinite for now',
         },
         { label: 'Current git SHA', value: instance.currentGitSha || 'pending first rollout' },
+        { label: 'Last good SHA', value: instance.lastGoodGitSha || 'pending health verification' },
+        {
+          label: 'Health',
+          value: `${instance.lastHealthcheckStatus || 'unknown'}${
+            instance.lastHealthcheckAt ? ` at ${new Date(instance.lastHealthcheckAt).toLocaleString()}` : ''
+          }`,
+        },
         { label: 'Support email', value: instance.email },
       ]
     : [];
@@ -360,6 +374,11 @@ export default function ManagedInstancesPage() {
                       {instance.lastError ? (
                         <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
                           Last runtime error: {instance.lastError}
+                        </div>
+                      ) : null}
+                      {instance.lastRollbackOutcome ? (
+                        <div className="mt-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-400/40 dark:bg-sky-500/10 dark:text-sky-100">
+                          {instance.lastRollbackOutcome}
                         </div>
                       ) : null}
                     </div>

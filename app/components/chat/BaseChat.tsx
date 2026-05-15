@@ -1080,7 +1080,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 role="tabpanel"
                 aria-labelledby="workspace-surface-tab"
                 aria-hidden={activeSurface !== 'workspace'}
-                className={classNames('h-full min-h-0 overflow-hidden py-3', {
+                className={classNames('h-full min-h-0 overflow-hidden py-1.5', {
                   hidden: activeSurface !== 'workspace',
                 })}
               >

@@ -160,6 +160,28 @@ export function Shoutbox() {
     }
   };
 
+  const reportMessage = async (message: ShoutMessage) => {
+    try {
+      const response = await fetch('/api/shout/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId: message.id,
+          reporter: getShoutboxAuthor(),
+          reason: 'user-report',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to report the shout-out message.');
+      }
+
+      toast.success('Shout-out reported for operator review.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to report the shout-out message.');
+    }
+  };
+
   if (!enabled) {
     return null;
   }
@@ -221,6 +243,13 @@ export function Shoutbox() {
                     <div className="mt-2 whitespace-pre-wrap text-xs text-bolt-elements-textSecondary">
                       {message.content}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => void reportMessage(message)}
+                      className="mt-2 text-[11px] text-bolt-elements-textTertiary underline-offset-2 hover:text-bolt-elements-textPrimary hover:underline"
+                    >
+                      Report
+                    </button>
                   </div>
                 ))
             )}

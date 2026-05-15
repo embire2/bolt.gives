@@ -27,6 +27,15 @@ describe('install.sh', () => {
   it('contains recovery paths for dependencies, builds, and first health check startup', () => {
     expect(installScript).toContain('repair_repo_dependencies');
     expect(installScript).toContain('Build failed on first attempt; clearing generated artifacts and retrying once');
-    expect(installScript).toContain('Application health check failed after first startup; restarting the service stack once');
+    expect(installScript).toContain(
+      'Application health check failed after first startup; restarting the service stack once',
+    );
+  });
+
+  it('has a committed self-host installer smoke command', () => {
+    const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+
+    expect(packageJson).toContain('"smoke:self-host-installer"');
+    expect(packageJson).toContain('scripts/self-host-installer-smoke.mjs');
   });
 });

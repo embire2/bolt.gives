@@ -2,6 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
+import { buildFirstPartyTemplatePackInstructions, selectFirstPartyTemplatePack } from './firstPartyTemplatePacks';
 import { getLocalStarterTemplateFallback, getLocalStarterTemplateFiles } from './localStarterTemplates';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
@@ -390,6 +391,12 @@ ${templatePromptFile.content}
   }
 
   const normalizedOriginalRequest = (originalRequest || '').trim();
+  const firstPartyTemplatePack = selectFirstPartyTemplatePack(normalizedOriginalRequest);
+  const firstPartyTemplatePackInstructions = buildFirstPartyTemplatePackInstructions(firstPartyTemplatePack);
+
+  if (firstPartyTemplatePackInstructions) {
+    userMessage += firstPartyTemplatePackInstructions;
+  }
 
   if (usingLocalFallback) {
     userMessage += `Fallback starter note:

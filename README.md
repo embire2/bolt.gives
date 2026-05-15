@@ -70,9 +70,9 @@ Follow-up prompts are history-aware. They use a stable project-context id, deter
 
 After a hosted preview is verified healthy, the active chat stream is allowed to finish instead of staying open for inspection-only recovery loops, so users can immediately send follow-up improvements against the current project.
 
-Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, automatic fleet refreshes are serialized to avoid overlapping startup/interval deployments, new instances are spawned from the same live build plus the protected hosted FREE relay secret, and release validation creates a fresh instance through `https://create.bolt.gives` before verifying preview plus follow-up prompt behavior.
+Managed Cloudflare instances are registration-first, one-client / one-instance environments. Active instances are refreshed from the current release SHA by the runtime rollout controller, automatic fleet refreshes are serialized to avoid overlapping startup/interval deployments, refreshes are health-verified before being marked active, and failed rollouts retain last-good SHA/deployment metadata for rollback decisions. New instances are spawned from the same live build plus the protected hosted FREE relay secret, and release validation creates a fresh instance through `https://create.bolt.gives` before verifying preview plus follow-up prompt behavior.
 
-The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
+The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, fleet summary cards, deployment history, last-good SHA, healthcheck and rollback outcome visibility, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, Caddy-managed HTTPS, and a committed installer smoke command.
 
 ## Roadmap to v3.1.0
 
@@ -80,12 +80,12 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 ### Launch blockers
 
-- Add deployment history, last good SHA, health-verified refreshes, and rollback outcomes to the managed-instance/operator surfaces.
-- Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC.
-- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline.
+- Add deployment history, last good SHA, health-verified refreshes, and rollback outcomes to the managed-instance/operator surfaces. Initial implementation is now in progress.
+- Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC. Privileged operator actions now refuse to run while the default admin password must still be changed.
+- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline. Initial pack criteria now cover appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios.
 - Keep commentary task-specific in both `Chat` and `Workspace`, driven from real runtime/file/command events instead of generic filler.
-- Reduce the remaining browser-heavy editor/PDF/git/terminal paths so long sessions stay responsive.
-- Keep the self-host installer resilient enough to recover from common package, dependency, build, and service-start failures without forcing the user to start over.
+- Reduce the remaining browser-heavy editor/PDF/git/terminal paths so long sessions stay responsive. The Preview workspace now gets a larger usable pane and a client bundle budget script is available.
+- Keep the self-host installer resilient enough to recover from common package, dependency, build, and service-start failures without forcing the user to start over. `pnpm run smoke:self-host-installer` now validates the committed installer entry path.
 
 ### Key improvements planned
 

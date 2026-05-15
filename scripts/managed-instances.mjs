@@ -3,6 +3,83 @@
 import crypto from 'node:crypto';
 
 const MANAGED_INSTANCE_STATUSES = new Set(['provisioning', 'active', 'updating', 'failed', 'suspended', 'expired']);
+const MANAGED_ROLLOUT_STATUSES = new Set(['started', 'healthy', 'failed', 'rollback-skipped', 'rollback-ready']);
+
+function normalizeManagedInstanceRolloutHistoryEntry(entry) {
+  return {
+    id: String(entry?.id || crypto.randomUUID()),
+    actor: String(entry?.actor || 'system'),
+    reason: String(entry?.reason || 'rollout'),
+    status: MANAGED_ROLLOUT_STATUSES.has(entry?.status) ? entry.status : 'started',
+    targetGitSha: typeof entry?.targetGitSha === 'string' && entry.targetGitSha ? entry.targetGitSha : null,
+    previousGitSha: typeof entry?.previousGitSha === 'string' && entry.previousGitSha ? entry.previousGitSha : null,
+    deploymentUrl: typeof entry?.deploymentUrl === 'string' && entry.deploymentUrl ? entry.deploymentUrl : null,
+    healthcheckUrl: typeof entry?.healthcheckUrl === 'string' && entry.healthcheckUrl ? entry.healthcheckUrl : null,
+    rollbackOutcome: typeof entry?.rollbackOutcome === 'string' && entry.rollbackOutcome ? entry.rollbackOutcome : null,
+    error: typeof entry?.error === 'string' && entry.error ? entry.error : null,
+    startedAt: typeof entry?.startedAt === 'string' && entry.startedAt ? entry.startedAt : new Date().toISOString(),
+    finishedAt: typeof entry?.finishedAt === 'string' && entry.finishedAt ? entry.finishedAt : null,
+  };
+}
+
+function normalizeManagedInstanceRolloutHistory(entries) {
+  return (Array.isArray(entries) ? entries : []).map(normalizeManagedInstanceRolloutHistoryEntry).slice(-20);
+}
+
+export function appendManagedInstanceRolloutHistory(instance, entry) {
+  const history = normalizeManagedInstanceRolloutHistory(instance?.rolloutHistory);
+  const nextEntry = normalizeManagedInstanceRolloutHistoryEntry(entry);
+
+  history.push(nextEntry);
+  instance.rolloutHistory = history.slice(-20);
+
+  return nextEntry;
+}
+
+export function buildManagedInstanceFleetSummary(instances = []) {
+  const summary = {
+    total: instances.length,
+    active: 0,
+    updating: 0,
+    failed: 0,
+    suspended: 0,
+    expired: 0,
+    healthy: 0,
+    unhealthy: 0,
+    rollbackReady: 0,
+    lastGoodSha: null,
+  };
+
+  for (const instance of instances) {
+    if (instance.status === 'active') {
+      summary.active += 1;
+    } else if (instance.status === 'updating' || instance.status === 'provisioning') {
+      summary.updating += 1;
+    } else if (instance.status === 'failed') {
+      summary.failed += 1;
+    } else if (instance.status === 'suspended') {
+      summary.suspended += 1;
+    } else if (instance.status === 'expired') {
+      summary.expired += 1;
+    }
+
+    if (instance.lastHealthcheckStatus === 'healthy') {
+      summary.healthy += 1;
+    } else if (instance.lastHealthcheckStatus === 'unhealthy') {
+      summary.unhealthy += 1;
+    }
+
+    if (instance.lastGoodGitSha && instance.status === 'failed') {
+      summary.rollbackReady += 1;
+    }
+
+    if (!summary.lastGoodSha && instance.lastGoodGitSha) {
+      summary.lastGoodSha = instance.lastGoodGitSha;
+    }
+  }
+
+  return summary;
+}
 
 export function hashManagedInstanceValue(value) {
   return crypto
@@ -38,7 +115,9 @@ export function buildManagedInstanceHostname(projectName, rootDomain = 'pages.de
 }
 
 function normalizeManagedInstanceHostCandidate(value) {
-  const raw = String(value || '').trim().toLowerCase();
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase();
 
   if (!raw) {
     return '';
@@ -154,8 +233,15 @@ function buildSanitizedManagedInstance(instance) {
     trialEndsAt: instance.trialEndsAt,
     currentGitSha: instance.currentGitSha || null,
     previousGitSha: instance.previousGitSha || null,
+    lastGoodGitSha: instance.lastGoodGitSha || null,
     lastRolloutAt: instance.lastRolloutAt || null,
     lastDeploymentUrl: instance.lastDeploymentUrl || null,
+    lastGoodDeploymentUrl: instance.lastGoodDeploymentUrl || null,
+    lastHealthcheckAt: instance.lastHealthcheckAt || null,
+    lastHealthcheckStatus: instance.lastHealthcheckStatus || 'unknown',
+    lastRollbackAt: instance.lastRollbackAt || null,
+    lastRollbackOutcome: instance.lastRollbackOutcome || null,
+    rolloutHistory: normalizeManagedInstanceRolloutHistory(instance.rolloutHistory),
     lastError: instance.lastError || null,
     suspendedAt: instance.suspendedAt || null,
     expiredAt: instance.expiredAt || null,
@@ -237,12 +323,39 @@ export function normalizeManagedInstanceRegistry(
           typeof instance.currentGitSha === 'string' && instance.currentGitSha ? instance.currentGitSha : null,
         previousGitSha:
           typeof instance.previousGitSha === 'string' && instance.previousGitSha ? instance.previousGitSha : null,
+        lastGoodGitSha:
+          typeof instance.lastGoodGitSha === 'string' && instance.lastGoodGitSha
+            ? instance.lastGoodGitSha
+            : typeof instance.currentGitSha === 'string' && instance.currentGitSha
+              ? instance.currentGitSha
+              : null,
         lastRolloutAt:
           typeof instance.lastRolloutAt === 'string' && instance.lastRolloutAt ? instance.lastRolloutAt : null,
         lastDeploymentUrl:
           typeof instance.lastDeploymentUrl === 'string' && instance.lastDeploymentUrl
             ? instance.lastDeploymentUrl
             : null,
+        lastGoodDeploymentUrl:
+          typeof instance.lastGoodDeploymentUrl === 'string' && instance.lastGoodDeploymentUrl
+            ? instance.lastGoodDeploymentUrl
+            : typeof instance.lastDeploymentUrl === 'string' && instance.lastDeploymentUrl
+              ? instance.lastDeploymentUrl
+              : null,
+        lastHealthcheckAt:
+          typeof instance.lastHealthcheckAt === 'string' && instance.lastHealthcheckAt
+            ? instance.lastHealthcheckAt
+            : null,
+        lastHealthcheckStatus:
+          instance.lastHealthcheckStatus === 'healthy' || instance.lastHealthcheckStatus === 'unhealthy'
+            ? instance.lastHealthcheckStatus
+            : 'unknown',
+        lastRollbackAt:
+          typeof instance.lastRollbackAt === 'string' && instance.lastRollbackAt ? instance.lastRollbackAt : null,
+        lastRollbackOutcome:
+          typeof instance.lastRollbackOutcome === 'string' && instance.lastRollbackOutcome
+            ? instance.lastRollbackOutcome
+            : null,
+        rolloutHistory: normalizeManagedInstanceRolloutHistory(instance.rolloutHistory),
         lastError: typeof instance.lastError === 'string' && instance.lastError ? instance.lastError : null,
         suspendedAt: typeof instance.suspendedAt === 'string' && instance.suspendedAt ? instance.suspendedAt : null,
         expiredAt: typeof instance.expiredAt === 'string' && instance.expiredAt ? instance.expiredAt : null,
@@ -292,8 +405,7 @@ export function claimManagedInstanceTrial(
   const clientKeyHash = hashManagedInstanceValue(normalizedEmail);
   const sessionSecretHash = sessionSecret ? hashManagedInstanceValue(sessionSecret) : null;
   const existingSessionInstance =
-    sessionSecretHash &&
-    registry.instances.find((instance) => instance.clientSessionSecretHash === sessionSecretHash);
+    sessionSecretHash && registry.instances.find((instance) => instance.clientSessionSecretHash === sessionSecretHash);
 
   if (existingSessionInstance) {
     return {
@@ -355,8 +467,15 @@ export function claimManagedInstanceTrial(
     trialEndsAt: createManagedInstanceTrialExpiry(trialDays),
     currentGitSha: null,
     previousGitSha: null,
+    lastGoodGitSha: null,
     lastRolloutAt: null,
     lastDeploymentUrl: null,
+    lastGoodDeploymentUrl: null,
+    lastHealthcheckAt: null,
+    lastHealthcheckStatus: 'unknown',
+    lastRollbackAt: null,
+    lastRollbackOutcome: null,
+    rolloutHistory: [],
     lastError: null,
     suspendedAt: null,
     expiredAt: null,

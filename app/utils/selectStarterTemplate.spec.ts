@@ -54,6 +54,21 @@ describe('getTemplates', () => {
     expect(result?.userMessage).toContain('Build a todo app with Google Calendar sync');
   });
 
+  it('adds first-party template pack acceptance criteria for common app requests', async () => {
+    vi.stubGlobal('fetch', vi.fn() as unknown as typeof fetch);
+
+    const result = await getTemplates(
+      'Vite React',
+      'Clinic Scheduler',
+      'Build a doctor appointment scheduling website with calendar slots and patient intake.',
+    );
+
+    expect(result?.userMessage).toContain('FIRST-PARTY TEMPLATE PACK: Appointment Scheduler');
+    expect(result?.userMessage).toContain('calendar or day-slot view');
+    expect(result?.userMessage).toContain('patient');
+    expect(result?.userMessage).toContain('Do not finish until the Preview shows these signals');
+  });
+
   it('prefers local starter files for templates that have a bundled fallback', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(

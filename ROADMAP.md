@@ -125,44 +125,44 @@ Release theme: turn the current hosted reliability baseline into a more observab
 
 1. Managed Cloudflare rollout observability
 
-- [ ] Add operator-visible deployment history, last good SHA, and rollback outcome per managed instance.
-- [ ] Make active-instance refresh health-verified and reversible, not just deploy-command successful.
-- [ ] Add capacity and fleet state summaries to `admin.bolt.gives`.
-- [ ] Record startup-sync and interval-sync results in durable operator-visible history.
+- [~] Add operator-visible deployment history, last good SHA, and rollback outcome per managed instance.
+- [~] Make active-instance refresh health-verified and reversible, not just deploy-command successful.
+- [x] Add capacity and fleet state summaries to `admin.bolt.gives`.
+- [~] Record startup-sync and interval-sync results in durable operator-visible history.
 
 2. Tenant and account hardening
 
-- [ ] Replace the bootstrap-only tenant/admin baseline with production-safe account and RBAC rules.
+- [~] Replace the bootstrap-only tenant/admin baseline with production-safe account and RBAC rules.
 - [ ] Add approval history, invite lifecycle, password reset lifecycle, and auditable state transitions.
-- [ ] Add safer admin credential rotation and clearer operator session management.
-- [ ] Add stronger authorization checks around SMTP transport changes, managed refresh, suspend, and export actions.
+- [~] Add safer admin credential rotation and clearer operator session management.
+- [x] Add stronger authorization checks around SMTP transport changes, managed refresh, suspend, and export actions.
 
 3. Prompt-to-preview quality
 
 - [x] Upgrade the managed hosted `FREE` model to OpenRouter `deepseek/deepseek-v4-pro` / `DeepSeek V4 Pro` across default startup, managed-instance, and E2E paths.
-- [ ] Ship first-party template packs for the most common app requests.
-- [ ] Add CI smoke coverage for each first-party template pack.
-- [ ] Reduce empty scaffold / starter-only outcomes on real user requests.
+- [~] Ship first-party template packs for the most common app requests.
+- [~] Add CI smoke coverage for each first-party template pack.
+- [~] Reduce empty scaffold / starter-only outcomes on real user requests.
 - [ ] Broaden Architect recovery signatures beyond preview restore into dependency, build, and routing failures.
 
 4. Browser weight and runtime offload
 
-- [ ] Push more preview/log reconciliation state entirely to the server.
+- [~] Push more preview/log reconciliation state entirely to the server.
 - [ ] Continue reducing heavy editor, PDF, git, terminal, and deploy chunks from startup paths.
-- [ ] Add bundle budgets in CI so browser weight cannot silently regress.
-- [ ] Keep longer hosted sessions responsive on lower-end machines.
+- [~] Add bundle budgets in CI so browser weight cannot silently regress.
+- [~] Keep longer hosted sessions responsive on lower-end machines.
 
 5. Self-host installer resilience
 
-- [ ] Add repeatable no-db and full-db installer smoke paths to release validation.
-- [ ] Improve automatic repair for apt, dependency, build, Caddy, and service-start failures.
+- [~] Add repeatable no-db and full-db installer smoke paths to release validation.
+- [~] Improve automatic repair for apt, dependency, build, Caddy, and service-start failures.
 - [ ] Keep interactive install prompts recoverable and clear when a VPS is partially configured.
 
 6. Transparency and moderation
 
-- [ ] Eliminate remaining generic keep-alive commentary and keep progress derived from concrete runtime/file/command events.
-- [ ] Keep the same status model visible in both `Chat` and `Workspace`.
-- [ ] Add broadcast communication moderation and abuse/reporting controls for the Shout Out Box.
+- [~] Eliminate remaining generic keep-alive commentary and keep progress derived from concrete runtime/file/command events.
+- [x] Keep the same status model visible in both `Chat` and `Workspace`.
+- [~] Add broadcast communication moderation and abuse/reporting controls for the Shout Out Box.
 
 ### P1 Improvements
 
