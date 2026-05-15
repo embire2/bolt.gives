@@ -128,6 +128,7 @@ Release theme: turn the current hosted reliability baseline into a more observab
 - [~] Add operator-visible deployment history, last good SHA, and rollback outcome per managed instance.
 - [~] Make active-instance refresh health-verified and reversible, not just deploy-command successful.
 - [x] Add capacity and fleet state summaries to `admin.bolt.gives`.
+- [x] Keep recoverable failed instances eligible for the next rollout so transient deployment failures can be patched by a later healthy build.
 - [~] Record startup-sync and interval-sync results in durable operator-visible history.
 
 2. Tenant and account hardening

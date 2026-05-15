@@ -184,9 +184,7 @@ describe('runtime server workspace isolation', () => {
     expect(shouldRefreshManagedInstanceForRollout({ status: 'suspended', currentGitSha: 'old-sha' }, gitSha)).toBe(
       false,
     );
-    expect(shouldRefreshManagedInstanceForRollout({ status: 'failed', currentGitSha: 'old-sha' }, gitSha)).toBe(
-      false,
-    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'failed', currentGitSha: 'old-sha' }, gitSha)).toBe(true);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: gitSha }, gitSha)).toBe(false);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: 'old-sha' }, gitSha)).toBe(
       true,

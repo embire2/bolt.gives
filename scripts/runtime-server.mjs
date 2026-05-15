@@ -1249,7 +1249,7 @@ async function suspendManagedInstanceRecord(
 export function shouldRefreshManagedInstanceForRollout(instance, gitSha) {
   const status = String(instance?.status || '').toLowerCase();
 
-  if (status === 'expired' || status === 'suspended' || status === 'failed') {
+  if (status === 'expired' || status === 'suspended') {
     return false;
   }
 

@@ -11,6 +11,7 @@
 - Hosted `FREE` managed-instance runs now use deterministic starter bootstrap before model continuation, preventing empty runtime workspaces when a model initially emits inspection-only shell actions.
 - The Appointment Scheduler first-party template pack now materializes a real React first-pass app with calendar slots,
   patient booking, doctor selection, SMTP reminder settings, and the requested visible heading before model continuation.
+- Managed Cloudflare fleet rollout now treats failed-but-recoverable instances as refresh candidates, so a previous failed deployment state does not strand healthy client Pages projects on an older SHA.
 
 ### Added
 
