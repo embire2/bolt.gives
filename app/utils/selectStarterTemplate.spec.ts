@@ -60,13 +60,17 @@ describe('getTemplates', () => {
     const result = await getTemplates(
       'Vite React',
       'Clinic Scheduler',
-      'Build a doctor appointment scheduling website with calendar slots and patient intake.',
+      'Build a doctor appointment scheduling website with calendar slots and patient intake. Include visible heading "LUMA_TEST_TOKEN".',
     );
 
     expect(result?.userMessage).toContain('FIRST-PARTY TEMPLATE PACK: Appointment Scheduler');
     expect(result?.userMessage).toContain('calendar or day-slot view');
     expect(result?.userMessage).toContain('patient');
     expect(result?.userMessage).toContain('Do not finish until the Preview shows these signals');
+    expect(result?.assistantMessage).toContain('filePath="src/App.tsx"');
+    expect(result?.assistantMessage).toContain('LUMA_TEST_TOKEN');
+    expect(result?.assistantMessage).toContain('SMTP reminder settings');
+    expect(result?.assistantMessage).not.toContain('Your fallback starter is ready.');
   });
 
   it('prefers local starter files for templates that have a bundled fallback', async () => {

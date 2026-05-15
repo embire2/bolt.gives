@@ -2,7 +2,11 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
-import { buildFirstPartyTemplatePackInstructions, selectFirstPartyTemplatePack } from './firstPartyTemplatePacks';
+import {
+  buildFirstPartyTemplatePackFiles,
+  buildFirstPartyTemplatePackInstructions,
+  selectFirstPartyTemplatePack,
+} from './firstPartyTemplatePacks';
 import { getLocalStarterTemplateFallback, getLocalStarterTemplateFiles } from './localStarterTemplates';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
@@ -335,8 +339,21 @@ export async function getTemplates(
   // check for ignore file in .bolt folder
   const templateIgnoreFile = files.find((x) => x.path.startsWith('.bolt') && x.name == 'ignore');
 
+  const normalizedOriginalRequest = (originalRequest || '').trim();
+  const firstPartyTemplatePack = selectFirstPartyTemplatePack(normalizedOriginalRequest);
+  const firstPartyTemplateFiles = buildFirstPartyTemplatePackFiles(firstPartyTemplatePack, normalizedOriginalRequest);
+  const mergedFiles =
+    firstPartyTemplateFiles.length > 0
+      ? [
+          ...filteredFiles.filter(
+            (file) => !firstPartyTemplateFiles.some((firstPartyFile) => firstPartyFile.path === file.path),
+          ),
+          ...firstPartyTemplateFiles,
+        ]
+      : filteredFiles;
+
   const filesToImport = {
-    files: filteredFiles,
+    files: mergedFiles,
     ignoreFile: [] as typeof filteredFiles,
   };
 
@@ -348,7 +365,7 @@ export async function getTemplates(
     // filteredFiles = filteredFiles.filter(x => !ig.ignores(x.path))
     const ignoredFiles = filteredFiles.filter((x) => ig.ignores(x.path));
 
-    filesToImport.files = filteredFiles;
+    filesToImport.files = mergedFiles;
     filesToImport.ignoreFile = ignoredFiles;
   }
 
@@ -390,8 +407,6 @@ ${templatePromptFile.content}
 `;
   }
 
-  const normalizedOriginalRequest = (originalRequest || '').trim();
-  const firstPartyTemplatePack = selectFirstPartyTemplatePack(normalizedOriginalRequest);
   const firstPartyTemplatePackInstructions = buildFirstPartyTemplatePackInstructions(firstPartyTemplatePack);
 
   if (firstPartyTemplatePackInstructions) {

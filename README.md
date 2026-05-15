@@ -82,7 +82,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 - Add deployment history, last good SHA, health-verified refreshes, and rollback outcomes to the managed-instance/operator surfaces. Initial implementation is now in progress.
 - Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC. Privileged operator actions now refuse to run while the default admin password must still be changed.
-- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline. Initial pack criteria now cover appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios.
+- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline. Initial pack criteria now cover appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios; appointment scheduler prompts also receive a real first-pass React implementation before model continuation.
 - Keep commentary task-specific in both `Chat` and `Workspace`, driven from real runtime/file/command events instead of generic filler.
 - Reduce the remaining browser-heavy editor/PDF/git/terminal paths so long sessions stay responsive. The Preview workspace now gets a larger usable pane and a client bundle budget script is available.
 - Keep the self-host installer resilient enough to recover from common package, dependency, build, and service-start failures without forcing the user to start over. `pnpm run smoke:self-host-installer` now validates the committed installer entry path.
