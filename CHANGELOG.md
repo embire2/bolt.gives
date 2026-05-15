@@ -4,6 +4,10 @@
 
 - `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
 
+### Changed
+
+- Large hosted model update: the managed `FREE` provider now locks to OpenRouter model `deepseek/deepseek-v4-pro` with the visible `DeepSeek V4 Pro` label across hosted, Pages, and managed-instance startup paths.
+
 ## v3.0.9.3 (2026-05-05)
 
 ### Fixed

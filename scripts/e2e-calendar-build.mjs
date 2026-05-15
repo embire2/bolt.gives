@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8788';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
 const providerName = process.env.E2E_PROVIDER || 'FREE';
-const modelName = process.env.E2E_MODEL || 'deepseek/deepseek-v3.2';
+const modelName = process.env.E2E_MODEL || 'deepseek/deepseek-v4-pro';
 const appToken = `CAL_${Date.now().toString(36)}`.toUpperCase();
 const requireFollowUp = process.env.E2E_REQUIRE_FOLLOWUP === '1';
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toUpperCase() : null;

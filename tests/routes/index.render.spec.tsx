@@ -57,7 +57,7 @@ describe('index route fallback shell', () => {
       ),
     ).toBeTruthy();
     expect(screen.getAllByText('FREE').length).toBeGreaterThan(0);
-    expect(screen.getByText(/DeepSeek V3\.2/i)).toBeTruthy();
+    expect(screen.getByText(/DeepSeek V4 Pro/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
   });
 });

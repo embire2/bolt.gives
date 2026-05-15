@@ -48,7 +48,7 @@ describe('admin-db', () => {
         summary: '  Preview stalled  ',
         issue: '  The preview never recovered.  ',
         provider: ' FREE ',
-        model: ' deepseek/deepseek-v3.2 ',
+        model: ' deepseek/deepseek-v4-pro ',
       }),
     ).toMatchObject({
       fullName: 'Ada Lovelace',
@@ -56,7 +56,7 @@ describe('admin-db', () => {
       summary: 'Preview stalled',
       issue: 'The preview never recovered.',
       provider: 'FREE',
-      model: 'deepseek/deepseek-v3.2',
+      model: 'deepseek/deepseek-v4-pro',
       status: 'new',
       notificationStatus: 'draft',
     });

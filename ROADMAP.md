@@ -69,7 +69,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 
 1. Prompt-to-preview reliability
 
-- [x] Hosted `FREE` stays locked to `deepseek/deepseek-v3.2` through the protected server-side runtime path.
+- [x] Hosted `FREE` stays locked to `deepseek/deepseek-v4-pro` through the protected server-side runtime path.
 - [x] `/api/chat` uses the required same-origin CSRF header on hosted surfaces, so live project creation does not fail at request start.
 - [x] Generated hosted files are applied to the managed runtime before preview verification, so health checks inspect the actual current project instead of partial package-only state.
 - [x] Hosted runtime command replay finishes on the runtime `exit` event even when transport streams stay open.
@@ -139,6 +139,7 @@ Release theme: turn the current hosted reliability baseline into a more observab
 
 3. Prompt-to-preview quality
 
+- [x] Upgrade the managed hosted `FREE` model to OpenRouter `deepseek/deepseek-v4-pro` / `DeepSeek V4 Pro` across default startup, managed-instance, and E2E paths.
 - [ ] Ship first-party template packs for the most common app requests.
 - [ ] Add CI smoke coverage for each first-party template pack.
 - [ ] Reduce empty scaffold / starter-only outcomes on real user requests.

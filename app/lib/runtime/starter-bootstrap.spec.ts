@@ -42,7 +42,7 @@ describe('shouldUseClientStarterBootstrap', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
-        modelName: 'deepseek/deepseek-v3.2',
+        modelName: 'deepseek/deepseek-v4-pro',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
       }),
@@ -53,7 +53,7 @@ describe('shouldUseClientStarterBootstrap', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
-        modelName: 'deepseek/deepseek-v3.2',
+        modelName: 'deepseek/deepseek-v4-pro',
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: false,
       }),

@@ -19,7 +19,7 @@ await page.addInitScript(({ provider, model }) => {
     JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
   );
   localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
-}, { provider: 'FREE', model: 'deepseek/deepseek-v3.2' });
+}, { provider: 'FREE', model: 'deepseek/deepseek-v4-pro' });
 
 await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForSelector('textarea', { timeout: 60000 });
@@ -34,7 +34,7 @@ const { status, bytes, err } = await page.evaluate(async () => {
         { role: 'user', content: 'Build a React calendar app with month view and an Add Event button. Render a visible heading "CAL_DIAG". Implement it.' }
       ],
       providerName: 'FREE',
-      modelName: 'deepseek/deepseek-v3.2',
+      modelName: 'deepseek/deepseek-v4-pro',
       chatId: 'diag-' + Date.now(),
       files: {},
       promptId: 'default',

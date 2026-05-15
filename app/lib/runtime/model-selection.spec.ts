@@ -172,8 +172,8 @@ describe('model-selection utilities', () => {
   it('replaces a stale hidden FREE fallback selection with the visible hosted FREE model', () => {
     const models: ModelInfo[] = [
       {
-        name: 'deepseek/deepseek-v3.2',
-        label: 'DeepSeek V3.2',
+        name: 'deepseek/deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
         provider: 'FREE',
         maxTokenAllowed: 64000,
         maxCompletionTokens: 8192,
@@ -183,11 +183,11 @@ describe('model-selection utilities', () => {
     const resolved = resolvePreferredModelName({
       providerName: 'FREE',
       models,
-      rememberedModelName: 'deepseek/deepseek-v3.2',
-      savedModelName: 'deepseek/deepseek-v3.2',
+      rememberedModelName: 'deepseek/deepseek-v4-pro',
+      savedModelName: 'deepseek/deepseek-v4-pro',
     });
 
-    expect(resolved).toBe('deepseek/deepseek-v3.2');
+    expect(resolved).toBe('deepseek/deepseek-v4-pro');
   });
 
   it('stores and retrieves provider model selections', () => {

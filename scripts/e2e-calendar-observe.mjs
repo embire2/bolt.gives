@@ -24,7 +24,7 @@ await page.addInitScript(({ provider, model }) => {
   // Expose workbench for diagnostics
   const orig = Object.defineProperty;
   // nothing - we'll import via eval later
-}, { provider: 'FREE', model: 'deepseek/deepseek-v3.2' });
+}, { provider: 'FREE', model: 'deepseek/deepseek-v4-pro' });
 
 let sseDone = false;
 const sseChunks = [];

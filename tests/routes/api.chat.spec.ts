@@ -151,7 +151,7 @@ describe('shouldReplayLocalRuntimeHandoff', () => {
 describe('buildRunContinuationPrompt', () => {
   it('names the starter entry blocker and forbids shell-first verification when the starter file is unchanged', () => {
     const prompt = buildRunContinuationPrompt({
-      model: 'deepseek/deepseek-v3.2',
+      model: 'deepseek/deepseek-v4-pro',
       provider: 'FREE',
       originalRequest: 'Build a calendar app and run it.',
       starterEntryTarget: '/home/project/src/App.tsx',
@@ -166,7 +166,7 @@ describe('buildRunContinuationPrompt', () => {
 
   it('requires a real start action instead of a background shell start', () => {
     const prompt = buildRunContinuationPrompt({
-      model: 'deepseek/deepseek-v3.2',
+      model: 'deepseek/deepseek-v4-pro',
       provider: 'FREE',
       originalRequest: 'Build a calendar app and run it.',
       starterEntryTarget: '/home/project/src/App.tsx',
@@ -191,7 +191,7 @@ describe('extractLatestUserGoal', () => {
         {
           id: 'hidden-user',
           role: 'user',
-          content: '[Model: deepseek/deepseek-v3.2]\n\nContinue from the current workspace state.',
+          content: '[Model: deepseek/deepseek-v4-pro]\n\nContinue from the current workspace state.',
           annotations: ['hidden'],
         },
       ] as any),
@@ -204,7 +204,7 @@ describe('extractLatestUserGoal', () => {
         {
           id: 'hidden-user',
           role: 'user',
-          content: '[Model: deepseek/deepseek-v3.2]\n\nContinue from the current workspace state.',
+          content: '[Model: deepseek/deepseek-v4-pro]\n\nContinue from the current workspace state.',
           annotations: ['hidden'],
         },
       ] as any),

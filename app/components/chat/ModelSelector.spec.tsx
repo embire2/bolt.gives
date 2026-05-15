@@ -28,8 +28,8 @@ const freeProvider: ProviderInfo = {
   allowsUserApiKey: false,
   staticModels: [
     {
-      name: 'deepseek/deepseek-v3.2',
-      label: 'DeepSeek V3.2',
+      name: 'deepseek/deepseek-v4-pro',
+      label: 'DeepSeek V4 Pro',
       provider: 'FREE',
       maxTokenAllowed: 64000,
     },
@@ -65,13 +65,13 @@ describe('ModelSelector', () => {
       <ModelSelector
         provider={freeProvider}
         providerList={[freeProvider]}
-        model="deepseek/deepseek-v3.2"
+        model="deepseek/deepseek-v4-pro"
         modelList={[]}
         apiKeys={{}}
       />,
     );
 
-    expect(screen.getAllByRole('combobox')[1].textContent).toContain('DeepSeek V3.2');
+    expect(screen.getAllByRole('combobox')[1].textContent).toContain('DeepSeek V4 Pro');
     expect(screen.queryByText('Select model')).toBeNull();
   });
 });

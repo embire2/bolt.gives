@@ -42,7 +42,7 @@ The current hosted product baseline is:
 - Preview auto-recovery via server-side health checks
 - Managed `FREE` provider locked to one hosted model:
   - provider: `FREE`
-  - model: `deepseek/deepseek-v3.2`
+  - model: `deepseek/deepseek-v4-pro`
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`

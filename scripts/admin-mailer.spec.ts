@@ -100,7 +100,7 @@ describe('admin-mailer', () => {
       summary: 'Preview stalled',
       issue: 'Preview never became available after the install completed.',
       provider: 'FREE',
-      model: 'deepseek/deepseek-v3.2',
+      model: 'deepseek/deepseek-v4-pro',
       browser: 'Firefox',
     } as any);
 

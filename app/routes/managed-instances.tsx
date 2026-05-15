@@ -511,7 +511,7 @@ export default function ManagedInstancesPage() {
                   <li>One client gets one Pages-hosted experimental instance.</li>
                   <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                   <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
-                  <li>The FREE provider now boots with DeepSeek V3.2 preselected.</li>
+                  <li>The FREE provider now boots with DeepSeek V4 Pro preselected.</li>
                   <li>
                     Your registration profile, including your email address, is stored in the private admin panel for
                     operator support and messaging.

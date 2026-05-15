@@ -34,7 +34,7 @@ describe('ensureFreeProviderAvailability', () => {
         status: 429,
         json: async () => ({
           error: {
-            message: 'deepseek/deepseek-v3.2 is temporarily rate-limited upstream.',
+            message: 'deepseek/deepseek-v4-pro is temporarily rate-limited upstream.',
           },
         }),
       }),

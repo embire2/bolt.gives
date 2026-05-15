@@ -9,7 +9,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', provider: 'FREE' }],
+            staticModels: [{ name: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', provider: 'FREE' }],
           },
         ],
         [
@@ -30,7 +30,7 @@ describe('LLMManager.updateModelList', () => {
     });
 
     expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual([
-      'FREE:deepseek/deepseek-v3.2',
+      'FREE:deepseek/deepseek-v4-pro',
       'OpenAI:gpt-5.4',
     ]);
   });
@@ -42,7 +42,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', provider: 'FREE' }],
+            staticModels: [{ name: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', provider: 'FREE' }],
           },
         ],
         [
@@ -63,6 +63,6 @@ describe('LLMManager.updateModelList', () => {
       },
     });
 
-    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:deepseek/deepseek-v3.2']);
+    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:deepseek/deepseek-v4-pro']);
   });
 });

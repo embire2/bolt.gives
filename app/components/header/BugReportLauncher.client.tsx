@@ -42,7 +42,7 @@ function getCurrentProvider() {
 }
 
 function getCurrentModel() {
-  return Cookies.get('selectedModel') || 'deepseek/deepseek-v3.2';
+  return Cookies.get('selectedModel') || 'deepseek/deepseek-v4-pro';
 }
 
 function getBrowserLabel() {

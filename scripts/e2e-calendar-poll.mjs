@@ -20,7 +20,7 @@ await page.addInitScript(({ provider, model }) => {
     JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
   );
   localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
-}, { provider: 'FREE', model: 'deepseek/deepseek-v3.2' });
+}, { provider: 'FREE', model: 'deepseek/deepseek-v4-pro' });
 
 const started = Date.now();
 function t() { return ((Date.now() - started) / 1000).toFixed(1); }

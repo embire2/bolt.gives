@@ -23,7 +23,7 @@ const SEO_KEYWORDS = [
   'Cloudflare Pages AI app',
   'transparent agentic coding',
   'browser based coding agent',
-  'DeepSeek V3.2 coding workspace',
+  'DeepSeek V4 Pro coding workspace',
   'bolt.gives contributor project',
 ].join(', ');
 

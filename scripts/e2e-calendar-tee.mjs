@@ -19,7 +19,7 @@ await page.addInitScript(({ provider, model }) => {
     JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
   );
   localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
-}, { provider: 'FREE', model: 'deepseek/deepseek-v3.2' });
+}, { provider: 'FREE', model: 'deepseek/deepseek-v4-pro' });
 
 // CDP-based SSE tee: use Fetch.enable + Fetch.requestPaused
 const client = await ctx.newCDPSession(page);

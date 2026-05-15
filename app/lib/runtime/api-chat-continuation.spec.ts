@@ -270,7 +270,7 @@ describe('api.chat continuation helpers', () => {
 
   it('includes the latest execution failure details in the continuation prompt', () => {
     const prompt = buildRunContinuationPrompt({
-      model: 'deepseek/deepseek-v3.2',
+      model: 'deepseek/deepseek-v4-pro',
       provider: 'FREE',
       originalRequest: 'Build a calendar app.',
       starterEntryTarget: 'src/App.tsx',
