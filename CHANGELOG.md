@@ -8,6 +8,7 @@
 
 - Large hosted model update: the managed `FREE` provider now locks to OpenRouter model `deepseek/deepseek-v4-pro` with the visible `DeepSeek V4 Pro` label across hosted, Pages, and managed-instance startup paths.
 - The Workspace Preview surface now gets more usable space: the chat/workspace split gives the workspace a wider default column, the preview tab compresses status/activity chrome, and the preview pane owns the remaining vertical height.
+- Hosted `FREE` managed-instance runs now use deterministic starter bootstrap before model continuation, preventing empty runtime workspaces when a model initially emits inspection-only shell actions.
 
 ### Added
 

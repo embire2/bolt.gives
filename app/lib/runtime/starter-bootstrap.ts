@@ -17,7 +17,7 @@ export function shouldUseClientStarterBootstrap(options: StarterBootstrapDecisio
   }
 
   if (providerName === 'FREE') {
-    return !options.hostedRuntimeEnabled;
+    return true;
   }
 
   if (LOCAL_PROVIDER_SET.has(providerName)) {

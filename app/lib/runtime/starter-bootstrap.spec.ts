@@ -38,7 +38,7 @@ describe('shouldUseClientStarterBootstrap', () => {
     ).toBe(false);
   });
 
-  it('skips client bootstrap for hosted FREE so server-side recovery owns the run', () => {
+  it('uses client bootstrap for hosted FREE so managed instances never start from an empty workspace', () => {
     expect(
       shouldUseClientStarterBootstrap({
         providerName: 'FREE',
@@ -46,7 +46,7 @@ describe('shouldUseClientStarterBootstrap', () => {
         message: 'Build a React appointment scheduling app for a doctor office',
         hostedRuntimeEnabled: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('keeps client bootstrap available for FREE when hosted runtime is unavailable', () => {
