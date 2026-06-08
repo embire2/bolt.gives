@@ -140,7 +140,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Header-level `Shout Out Box` messaging lets users on the same deployment broadcast short updates to other active users, with an unread badge and a per-user settings toggle.
 - Managed-instance rollout now refuses to start when the live runtime checkout is behind `origin/main`, which prevents silent stale-fleet refreshes from the wrong git SHA.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.
-- Live release validation already includes real browser startup and preview-recovery smoke coverage.
+
 
 ## Screenshots
 
