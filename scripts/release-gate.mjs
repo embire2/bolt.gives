@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { getScreenshotMinimumBytes } from './release-gate-utils.mjs';
 
 const rootDir = path.resolve(new URL('..', import.meta.url).pathname);
 const pkg = JSON.parse(await fs.readFile(path.join(rootDir, 'package.json'), 'utf8'));
@@ -48,7 +49,10 @@ async function checkDomain(domain) {
 
   assert(homeText.includes(`bolt.gives ${versionLabel}`), `${domain}: expected home title/version ${versionLabel}`);
   assert(changelogVersionPattern.test(changelogText), `${domain}: expected changelog version ${versionLabel}`);
-  assert(!/server error|error details|custom error/i.test(homeText), `${domain}: unexpected server error marker on home`);
+  assert(
+    !/server error|error details|custom error/i.test(homeText),
+    `${domain}: unexpected server error marker on home`,
+  );
   assert(
     !/server error|error details|custom error/i.test(changelogText),
     `${domain}: unexpected server error marker on changelog`,
@@ -108,11 +112,14 @@ function parsePngSize(buffer) {
 async function checkScreenshot(filePath) {
   const buffer = await fs.readFile(filePath);
   const { width, height } = parsePngSize(buffer);
-  const minBytes = 60_000;
+  const minBytes = getScreenshotMinimumBytes(filePath);
 
   assert(width === 1600, `${path.basename(filePath)}: expected width 1600, received ${width}`);
   assert(height >= 900, `${path.basename(filePath)}: expected height >= 900, received ${height}`);
-  assert(buffer.length >= minBytes, `${path.basename(filePath)}: expected >= ${minBytes} bytes, received ${buffer.length}`);
+  assert(
+    buffer.length >= minBytes,
+    `${path.basename(filePath)}: expected >= ${minBytes} bytes, received ${buffer.length}`,
+  );
 }
 
 async function checkScreenshots(baseUrl) {
