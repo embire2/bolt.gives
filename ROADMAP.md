@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-15
+Last updated: 2026-06-23
 
 Status legend:
 
@@ -10,13 +10,28 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.3`
+- [x] `v3.0.9.4`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.3 - Current Patch
+## v3.0.9.4 - Current Patch
+
+Release theme: reduce workspace startup weight and refresh user-configured coding models.
+
+### Shipped in v3.0.9.4
+
+- [x] Add MiniMax as a first-class BYOK provider with `MiniMax-M3`, `MiniMax-M2.7`, `MiniMax-M2.7-highspeed`, and dynamic OpenAI-compatible model listing.
+- [x] Refresh static coding model defaults across OpenAI, Anthropic, Google, DeepSeek, Groq, Mistral, and xAI.
+- [x] Keep the workspace terminal closed by default and load it only after the user explicitly opens terminal tooling.
+- [x] Make the workspace performance monitor opt-in instead of loading and polling during every project session.
+- [x] Lazy-load chat export persistence from the code toolbar instead of pulling it into the Workbench shell.
+- [x] Remove the full diff package from Workbench file-change badges, keeping detailed diff rendering isolated to the explicit Diff view.
+- [x] Update preferred-model scoring so current coding models rank ahead of old GPT/Claude fallback names.
+- [x] Preserve the managed hosted `FREE` path on server-side `deepseek/deepseek-v4-pro`.
+
+## v3.0.9.3 - Shipped Patch
 
 Release theme: restore web browsing reliability and make direct website scrape-to-build prompts work without manual preloading.
 

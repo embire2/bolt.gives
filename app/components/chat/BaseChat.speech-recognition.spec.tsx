@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('remix-utils/client-only', () => {
   return {
@@ -37,8 +37,6 @@ vi.mock('./ProgressCompilation', () => ({ default: () => null }));
 vi.mock('./StepRunnerFeed', () => ({ StepRunnerFeed: () => null }));
 vi.mock('./ChatBox', () => ({ ChatBox: () => null }));
 
-let BaseChat: (typeof import('./BaseChat'))['BaseChat'];
-
 let lastRecognition: any;
 
 class MockSpeechRecognition {
@@ -56,16 +54,13 @@ class MockSpeechRecognition {
   }
 }
 
+(window as any).__vite_plugin_react_preamble_installed__ = true;
+(window as any).SpeechRecognition = MockSpeechRecognition;
+(window as any).webkitSpeechRecognition = MockSpeechRecognition;
+
+const { BaseChat } = await import('./BaseChat');
+
 describe('BaseChat speech recognition', () => {
-  beforeAll(async () => {
-    (window as any).__vite_plugin_react_preamble_installed__ = true;
-
-    (window as any).SpeechRecognition = MockSpeechRecognition;
-    (window as any).webkitSpeechRecognition = MockSpeechRecognition;
-
-    BaseChat = (await import('./BaseChat')).BaseChat;
-  });
-
   afterEach(() => {
     cleanup();
     lastRecognition = undefined;

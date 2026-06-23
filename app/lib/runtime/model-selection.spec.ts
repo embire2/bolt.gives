@@ -128,13 +128,13 @@ describe('model-selection utilities', () => {
   it('resolves model preference as remembered -> saved -> preferred fallback', () => {
     const models: ModelInfo[] = [
       { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },
-      { name: 'gpt-5-codex', label: 'GPT-5 Codex', provider: 'OpenAI', maxTokenAllowed: 128000 },
+      { name: 'gpt-5.3-codex', label: 'GPT-5.3 Codex', provider: 'OpenAI', maxTokenAllowed: 400000 },
     ];
 
     const rememberedFirst = resolvePreferredModelName({
       providerName: 'OpenAI',
       models,
-      rememberedModelName: 'gpt-5-codex',
+      rememberedModelName: 'gpt-5.3-codex',
       savedModelName: 'gpt-4o',
     });
     const savedSecond = resolvePreferredModelName({
@@ -147,16 +147,29 @@ describe('model-selection utilities', () => {
       models,
     });
 
-    expect(rememberedFirst).toBe('gpt-5-codex');
+    expect(rememberedFirst).toBe('gpt-5.3-codex');
     expect(savedSecond).toBe('gpt-4o');
-    expect(fallbackThird).toBe('gpt-5-codex');
+    expect(fallbackThird).toBe('gpt-5.3-codex');
   });
 
   it('prefers a stronger default model instead of alphabetical fallback when saved models are invalid', () => {
     const models: ModelInfo[] = [
       { name: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI', maxTokenAllowed: 16000 },
       { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },
-      { name: 'gpt-5.4', label: 'GPT-5.4', provider: 'OpenAI', maxTokenAllowed: 128000, maxCompletionTokens: 12000 },
+      {
+        name: 'gpt-5.5',
+        label: 'GPT-5.5',
+        provider: 'OpenAI',
+        maxTokenAllowed: 1000000,
+        maxCompletionTokens: 128000,
+      },
+      {
+        name: 'gpt-5.4',
+        label: 'GPT-5.4',
+        provider: 'OpenAI',
+        maxTokenAllowed: 1000000,
+        maxCompletionTokens: 128000,
+      },
     ];
 
     const resolved = resolvePreferredModelName({
@@ -166,7 +179,21 @@ describe('model-selection utilities', () => {
       savedModelName: 'also-missing',
     });
 
-    expect(resolved).toBe('gpt-5.4');
+    expect(resolved).toBe('gpt-5.5');
+  });
+
+  it('prefers current agentic coding models from newer providers', () => {
+    const models: ModelInfo[] = [
+      { name: 'MiniMax-M2.7', label: 'MiniMax M2.7', provider: 'MiniMax', maxTokenAllowed: 204800 },
+      { name: 'MiniMax-M3', label: 'MiniMax M3', provider: 'MiniMax', maxTokenAllowed: 1000000 },
+    ];
+
+    const resolved = resolvePreferredModelName({
+      providerName: 'MiniMax',
+      models,
+    });
+
+    expect(resolved).toBe('MiniMax-M3');
   });
 
   it('replaces a stale hidden FREE fallback selection with the visible hosted FREE model', () => {
@@ -192,9 +219,9 @@ describe('model-selection utilities', () => {
 
   it('stores and retrieves provider model selections', () => {
     const storage = createMemoryStorage();
-    rememberProviderModelSelection('OpenAI', 'gpt-5-codex', storage);
+    rememberProviderModelSelection('OpenAI', 'gpt-5.3-codex', storage);
 
-    expect(getRememberedProviderModel('OpenAI', storage)).toBe('gpt-5-codex');
+    expect(getRememberedProviderModel('OpenAI', storage)).toBe('gpt-5.3-codex');
   });
 
   it('stores and retrieves per-instance provider/model selection', () => {
@@ -205,7 +232,7 @@ describe('model-selection utilities', () => {
       {
         hostname,
         providerName: 'OpenAI',
-        modelName: 'gpt-5-codex',
+        modelName: 'gpt-5.3-codex',
       },
       storage,
     );
@@ -213,7 +240,7 @@ describe('model-selection utilities', () => {
     expect(buildInstanceSelectionStorageKey(hostname)).toBe('bolt_instance_selection_v1:alpha1.bolt.gives');
     expect(readInstanceSelection(hostname, storage)).toMatchObject({
       providerName: 'OpenAI',
-      modelName: 'gpt-5-codex',
+      modelName: 'gpt-5.3-codex',
     });
   });
 

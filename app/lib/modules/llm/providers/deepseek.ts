@@ -14,39 +14,18 @@ export default class DeepseekProvider extends BaseProvider {
 
   staticModels: ModelInfo[] = [
     {
-      name: 'deepseek-coder',
-      label: 'Deepseek-Coder',
+      name: 'deepseek-v4-pro',
+      label: 'DeepSeek V4 Pro',
       provider: 'Deepseek',
-      maxTokenAllowed: 8000,
-      maxCompletionTokens: 8192,
+      maxTokenAllowed: 1000000,
+      maxCompletionTokens: 384000,
     },
     {
-      name: 'deepseek-chat',
-      label: 'Deepseek-Chat',
+      name: 'deepseek-v4-flash',
+      label: 'DeepSeek V4 Flash',
       provider: 'Deepseek',
-      maxTokenAllowed: 8000,
-      maxCompletionTokens: 8192,
-    },
-    {
-      name: 'deepseek-reasoner',
-      label: 'Deepseek-Reasoner',
-      provider: 'Deepseek',
-      maxTokenAllowed: 8000,
-      maxCompletionTokens: 8192,
-    },
-    {
-      name: 'deepseek-v3.2',
-      label: 'DeepSeek V3.2 (Coding + Tool Use)',
-      provider: 'Deepseek',
-      maxTokenAllowed: 64000,
-      maxCompletionTokens: 8192,
-    },
-    {
-      name: 'deepseek-v3.2-speciale',
-      label: 'DeepSeek V3.2 Speciale (High-Compute)',
-      provider: 'Deepseek',
-      maxTokenAllowed: 64000,
-      maxCompletionTokens: 8192,
+      maxTokenAllowed: 1000000,
+      maxCompletionTokens: 384000,
     },
   ];
 
@@ -91,8 +70,8 @@ export default class DeepseekProvider extends BaseProvider {
             name: m.id,
             label: `${m.id} (Dynamic)`,
             provider: this.name,
-            maxTokenAllowed: 64000, // Default, adjust per model if available
-            maxCompletionTokens: 8192,
+            maxTokenAllowed: m.id?.startsWith('deepseek-v4') ? 1000000 : 64000,
+            maxCompletionTokens: m.id?.startsWith('deepseek-v4') ? 384000 : 8192,
           })) || [];
 
       return dynamicModels;

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { action } = await import('../../app/routes/contribute');
+
 describe('/contribute action', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -20,7 +21,6 @@ describe('/contribute action', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../../app/routes/contribute');
     const formData = new FormData();
     formData.set('fullName', 'Ada Lovelace');
     formData.set('email', 'ADA@example.com');
@@ -66,7 +66,6 @@ describe('/contribute action', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../../app/routes/contribute');
     const formData = new FormData();
     formData.set('fullName', 'A');
     formData.set('email', 'not-an-email');

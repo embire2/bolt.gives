@@ -25,6 +25,20 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.4 (2026-06-23)
+
+### Added
+
+- Added first-class MiniMax bring-your-own-key support with `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` through MiniMax's OpenAI-compatible endpoint and dynamic `/v1/models` listing.
+- Refreshed coding-capable provider defaults for OpenAI, Anthropic, Google Gemini, DeepSeek, Groq, Mistral, and xAI so users can configure current model API names from the UI instead of stale/deprecated defaults.
+
+### Changed
+
+- The workspace terminal now starts closed and only loads when the user explicitly opens it, keeping fresh project creation focused on chat, files, and preview first.
+- The workspace performance monitor is now opt-in from the header instead of mounting and polling immediately on every workspace load.
+- Chat-export persistence now lazy-loads through the code toolbar, and file-change counters no longer pull the full diff package into the Workbench shell.
+- Preferred-model selection now ranks current coding models such as `gpt-5.5`, `gpt-5.3-codex`, Claude 4.8/4.6/Fable 5, MiniMax M3, DeepSeek V4 Pro, Gemini 3.1 Pro, and Grok Build ahead of older fallback names.
+
 ## v3.0.9.3 (2026-05-05)
 
 ### Fixed

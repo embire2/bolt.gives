@@ -26,7 +26,7 @@ describe('shouldUseClientStarterBootstrap', () => {
 
   it('skips client bootstrap for larger capable models', () => {
     expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-5.4', message: '' })).toBe(false);
-    expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-5-codex', message: '' })).toBe(
+    expect(shouldUseClientStarterBootstrap({ providerName: 'OpenAI', modelName: 'gpt-5.3-codex', message: '' })).toBe(
       false,
     );
     expect(

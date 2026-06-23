@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { action } = await import('../../app/routes/tenant-admin');
+
 describe('tenant-admin action auth flow', () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -14,8 +15,6 @@ describe('tenant-admin action auth flow', () => {
     });
 
     vi.stubGlobal('fetch', fetchMock);
-
-    const { action } = await import('../../app/routes/tenant-admin');
 
     const request = new Request('https://admin.bolt.gives/tenant-admin', {
       method: 'POST',
@@ -33,7 +32,7 @@ describe('tenant-admin action auth flow', () => {
     expect(response.status).toBe(303);
     expect(response.headers.get('Set-Cookie')).toContain('bolt_tenant_admin=');
     expect(response.headers.get('Location')).toBe('/tenant-admin');
-  }, 15000);
+  });
 
   it('forwards smtp configuration writes to the runtime endpoint for authenticated admins', async () => {
     const fetchMock = vi
@@ -75,8 +74,6 @@ describe('tenant-admin action auth flow', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../../app/routes/tenant-admin');
-
     const loginRequest = new Request('https://admin.bolt.gives/tenant-admin', {
       method: 'POST',
       headers: {
@@ -114,7 +111,7 @@ describe('tenant-admin action auth flow', () => {
     expect(response.status).toBe(303);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[2]?.[0]).toContain('/tenant-admin/mail/config');
-  }, 15000);
+  });
 
   it('blocks privileged operator actions while the default admin password must be changed', async () => {
     const fetchMock = vi
@@ -151,7 +148,6 @@ describe('tenant-admin action auth flow', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../../app/routes/tenant-admin');
     const loginRequest = new Request('https://admin.bolt.gives/tenant-admin', {
       method: 'POST',
       headers: {
@@ -185,5 +181,5 @@ describe('tenant-admin action auth flow', () => {
     expect(response.status).toBe(401);
     expect(payload.error).toContain('Change the default admin password');
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  }, 15000);
+  });
 });

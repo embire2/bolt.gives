@@ -13,10 +13,6 @@ export default class GroqProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
-    /*
-     * Essential fallback models - only the most stable/reliable ones
-     * Llama 3.1 8B: 128k context, fast and efficient
-     */
     {
       name: 'llama-3.1-8b-instant',
       label: 'Llama 3.1 8B',
@@ -24,14 +20,54 @@ export default class GroqProvider extends BaseProvider {
       maxTokenAllowed: 128000,
       maxCompletionTokens: 8192,
     },
-
-    // Llama 3.3 70B: 128k context, most capable model
     {
       name: 'llama-3.3-70b-versatile',
       label: 'Llama 3.3 70B',
       provider: 'Groq',
       maxTokenAllowed: 128000,
       maxCompletionTokens: 8192,
+    },
+    {
+      name: 'openai/gpt-oss-120b',
+      label: 'GPT-OSS 120B',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'openai/gpt-oss-20b',
+      label: 'GPT-OSS 20B',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'groq/compound',
+      label: 'Groq Compound',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'groq/compound-mini',
+      label: 'Groq Compound Mini',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'qwen/qwen3-32b',
+      label: 'Qwen3 32B',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'qwen/qwen3.6-27b',
+      label: 'Qwen3.6 27B',
+      provider: 'Groq',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: 65536,
     },
   ];
 
@@ -68,8 +104,8 @@ export default class GroqProvider extends BaseProvider {
       name: m.id,
       label: `${m.id} - context ${m.context_window ? Math.floor(m.context_window / 1000) + 'k' : 'N/A'} [ by ${m.owned_by}]`,
       provider: this.name,
-      maxTokenAllowed: Math.min(m.context_window || 8192, 16384),
-      maxCompletionTokens: 8192,
+      maxTokenAllowed: Math.min(m.context_window || 8192, 131072),
+      maxCompletionTokens: Math.min(m.max_completion_tokens || 65536, 131072),
     }));
   }
 

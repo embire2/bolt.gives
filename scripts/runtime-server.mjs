@@ -2951,7 +2951,11 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 }
 
 export async function prepareHostedWorkspaceForStart(session, options = {}) {
-  const { writeEvent = null, startCommand = '' } = options;
+  const {
+    writeEvent = null,
+    startCommand = '',
+    dependencyInstallCommand = 'pnpm install --reporter=append-only --no-frozen-lockfile',
+  } = options;
   const bootstrapRepair = await ensureHostedWorkspaceProjectBootstrap(session);
   let packageJsonRecord = await readWorkspacePackageJson(session);
 
@@ -3025,7 +3029,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
 
       try {
         await new Promise((resolve, reject) => {
-          const child = spawn('bash', ['-lc', 'pnpm install --reporter=append-only --no-frozen-lockfile'], {
+          const child = spawn('bash', ['-lc', dependencyInstallCommand], {
             cwd: session.dir,
             env: {
               ...process.env,

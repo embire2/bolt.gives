@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('~/lib/hooks/useSettings', () => {
   return {
@@ -69,17 +69,11 @@ vi.mock('react-toastify', () => {
   };
 });
 
-let FeaturesTab: (typeof import('./FeaturesTab'))['default'];
+(window as any).__vite_plugin_react_preamble_installed__ = true;
+
+const FeaturesTab = (await import('./FeaturesTab')).default;
 
 describe('FeaturesTab deployment wizard', () => {
-  beforeAll(() => {
-    (window as any).__vite_plugin_react_preamble_installed__ = true;
-  });
-
-  beforeAll(async () => {
-    FeaturesTab = (await import('./FeaturesTab')).default;
-  });
-
   afterEach(() => {
     cleanup();
     createFile.mockClear();

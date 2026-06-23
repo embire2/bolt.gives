@@ -70,24 +70,60 @@ function scorePreferredModel(model: ModelInfo): number {
 
   let score = 0;
 
+  if (normalized.includes('gpt-5.5')) {
+    score += 980;
+  }
+
   if (normalized.includes('gpt-5.4')) {
+    score += 950;
+  }
+
+  if (normalized.includes('gpt-5.3-codex')) {
+    score += 930;
+  }
+
+  if (normalized.includes('claude-fable-5')) {
+    score += 920;
+  }
+
+  if (normalized.includes('claude-opus-4-8')) {
+    score += 910;
+  }
+
+  if (normalized.includes('claude-sonnet-4-6')) {
     score += 900;
   }
 
-  if (normalized.includes('gpt-5.2-codex')) {
+  if (normalized.includes('minimax-m3')) {
+    score += 890;
+  }
+
+  if (normalized.includes('grok-build')) {
+    score += 880;
+  }
+
+  if (normalized.includes('deepseek-v4-pro')) {
+    score += 870;
+  }
+
+  if (normalized.includes('gemini-3.1-pro')) {
+    score += 860;
+  }
+
+  if (normalized.includes('mistral-medium')) {
     score += 850;
   }
 
-  if (normalized.includes('gpt-5-codex')) {
-    score += 825;
+  if (normalized.includes('gpt-5.2-codex') || normalized.includes('gpt-5-codex')) {
+    score += 760;
   }
 
   if (normalized.includes('codex')) {
-    score += 800;
+    score += 740;
   }
 
   if (normalized.includes('gpt-5')) {
-    score += 760;
+    score += 720;
   }
 
   if (normalized.includes('claude-3-7')) {

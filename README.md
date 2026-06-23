@@ -54,9 +54,13 @@ Applications are sent to the operator inbox and applicants receive a formatted t
 
 The hosted contributor form scrolls inside the app shell, so applicants can reach the full form on desktop and mobile without losing the site header.
 
-## Current Release (`v3.0.9.3`)
+## Current Release (`v3.0.9.4`)
 
-`v3.0.9.3` is the current stable hosted release. This patch restores web browsing reliability and makes direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.
+`v3.0.9.4` is the current stable hosted release. This patch focuses on the complaints from live users and GitHub issues: the workspace now starts lighter, the terminal stays closed until requested, the performance monitor is opt-in instead of polling immediately, and export-chat persistence loads only when the code toolbar needs it. The goal is a smoother prompt-to-preview loop where users can see the generated files and preview sooner instead of waiting on nonessential workspace tools.
+
+Bring-your-own-key model support has also been refreshed for current coding-capable providers. The static provider catalog now includes OpenAI `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, and `gpt-5.3-codex`; Anthropic `claude-fable-5`, `claude-opus-4-8`, `claude-sonnet-4-6`, and `claude-haiku-4-5-20251001`; Google `gemini-3.1-pro-preview`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite`; DeepSeek `deepseek-v4-pro` and `deepseek-v4-flash`; Groq GPT-OSS, Compound, Llama, and Qwen coding models; Mistral Medium/Small/Codestral current aliases; xAI `grok-4.3`, `grok-build-0.1`, and `grok-code-fast-1`; and first-class MiniMax `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` via `MINIMAX_API_KEY`.
+
+`v3.0.9.3` restored web browsing reliability and made direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.
 
 Large hosted model update: the managed `FREE` provider now uses OpenRouter model `deepseek/deepseek-v4-pro`, displayed as `DeepSeek V4 Pro`, through the protected server-side route. Managed instances and self-hosted deployments that configure `FREE_OPENROUTER_API_KEY` inherit that same locked model without exposing the operator-funded key to the browser.
 
@@ -95,10 +99,12 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.3`)
+## Current Platform Baseline (`v3.0.9.4`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
+- User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
+- The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.
 - Managed Cloudflare trial instances use the same protected hosted `FREE` relay path and can generate previewable apps plus follow-up improvements without requiring users to bring their own model API key.
 - The live chat request path now uses the same protected CSRF handshake as the rest of the control plane, so hosted `FREE` project requests do not die at request start with a silent `403` before generation begins.
 - The workspace shell now survives initial load reliably after the token-usage performance monitor was moved onto a stable external-store subscription instead of a hook path that could invalidate hydration.
@@ -140,7 +146,6 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Header-level `Shout Out Box` messaging lets users on the same deployment broadcast short updates to other active users, with an unread badge and a per-user settings toggle.
 - Managed-instance rollout now refuses to start when the live runtime checkout is behind `origin/main`, which prevents silent stale-fleet refreshes from the wrong git SHA.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.
-
 
 ## Screenshots
 

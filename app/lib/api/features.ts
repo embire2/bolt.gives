@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.4',
+    name: 'v3.0.9.4 model refresh and workspace responsiveness',
+    description:
+      'User-configured model providers now include refreshed coding-capable model defaults plus MiniMax M3/M2.7 support, while the workspace keeps terminal, performance monitor, and export tooling off the startup path so project previews and file editing feel lighter.',
+    releaseDate: '2026-06-23',
+  },
+  {
     id: 'release-v3.0.9.3',
     name: 'v3.0.9.3 web browsing and scrape-to-build restore',
     description:

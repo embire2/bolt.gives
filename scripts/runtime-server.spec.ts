@@ -178,20 +178,14 @@ describe('runtime server workspace isolation', () => {
   it('skips inactive and already-current managed instances during full-fleet rollout', () => {
     const gitSha = '21cffb14b66e4d08461b61e3fb6a2de7eb61a3c1';
 
-    expect(shouldRefreshManagedInstanceForRollout({ status: 'expired', currentGitSha: 'old-sha' }, gitSha)).toBe(
-      false,
-    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'expired', currentGitSha: 'old-sha' }, gitSha)).toBe(false);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'suspended', currentGitSha: 'old-sha' }, gitSha)).toBe(
       false,
     );
     expect(shouldRefreshManagedInstanceForRollout({ status: 'failed', currentGitSha: 'old-sha' }, gitSha)).toBe(true);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: gitSha }, gitSha)).toBe(false);
-    expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: 'old-sha' }, gitSha)).toBe(
-      true,
-    );
-    expect(shouldRefreshManagedInstanceForRollout({ status: 'provisioning', currentGitSha: null }, gitSha)).toBe(
-      true,
-    );
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: 'old-sha' }, gitSha)).toBe(true);
+    expect(shouldRefreshManagedInstanceForRollout({ status: 'provisioning', currentGitSha: null }, gitSha)).toBe(true);
   });
 
   it('requires a project manifest for package-manager workspace commands only', () => {
@@ -916,13 +910,10 @@ describe('runtime server workspace isolation', () => {
 
   it('repairs unsafe JSX angle text entities generated inside simple elements', () => {
     expect(
-      repairUnsafeJsxTextEntities(
-        '<button onClick={prevMonth} className="nav-button"><</button><button>></button>',
-      ),
+      repairUnsafeJsxTextEntities('<button onClick={prevMonth} className="nav-button"><</button><button>></button>'),
     ).toEqual({
       changed: true,
-      content:
-        '<button onClick={prevMonth} className="nav-button">&lt;</button><button>&gt;</button>',
+      content: '<button onClick={prevMonth} className="nav-button">&lt;</button><button>&gt;</button>',
     });
   });
 
@@ -1280,7 +1271,7 @@ The latest release of react-calendar is "6.0.1".`),
       '"dev": "vite --host 0.0.0.0 --port 5173"',
     );
     await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain(
-      "@vitejs/plugin-react",
+      '@vitejs/plugin-react',
     );
     await expect(workspaceHasOwnProjectManifest(workspace)).resolves.toBe(true);
   });
@@ -1329,6 +1320,12 @@ The latest release of react-calendar is "6.0.1".`),
 
   it('reinstalls workspace dependencies and clears stale vite cache when package.json changes', async () => {
     const workspace = await makeTempDir('bolt-runtime-reinstall-');
+    const dependencyInstallCommand = [
+      'mkdir -p node_modules/.bin node_modules/react node_modules/react-dom node_modules/vite node_modules/date-fns',
+      "printf '#!/bin/sh\\n' > node_modules/.bin/vite",
+      "printf 'lockfileVersion: 9.0\\n' > pnpm-lock.yaml",
+    ].join(' && ');
+
     await fs.writeFile(
       path.join(workspace, 'package.json'),
       JSON.stringify({
@@ -1353,7 +1350,9 @@ The latest release of react-calendar is "6.0.1".`),
       lastPreparedDependencyFingerprint: null,
     };
 
-    await prepareHostedWorkspaceForStart(session as { dir: string; lastPreparedDependencyFingerprint: string | null }, {});
+    await prepareHostedWorkspaceForStart(session as { dir: string; lastPreparedDependencyFingerprint: string | null }, {
+      dependencyInstallCommand,
+    });
     await fs.mkdir(path.join(workspace, 'node_modules', '.vite'), { recursive: true });
     await fs.writeFile(path.join(workspace, 'node_modules', '.vite', 'stale.txt'), 'stale-cache', 'utf8');
 
@@ -1377,7 +1376,9 @@ The latest release of react-calendar is "6.0.1".`),
       'utf8',
     );
 
-    await prepareHostedWorkspaceForStart(session as { dir: string; lastPreparedDependencyFingerprint: string | null }, {});
+    await prepareHostedWorkspaceForStart(session as { dir: string; lastPreparedDependencyFingerprint: string | null }, {
+      dependencyInstallCommand,
+    });
 
     await expect(fs.access(path.join(workspace, 'node_modules', '.vite', 'stale.txt'))).rejects.toThrow();
     await expect(fs.access(path.join(workspace, 'node_modules', 'date-fns'))).resolves.toBeUndefined();
@@ -1543,7 +1544,8 @@ The latest release of react-calendar is "6.0.1".`),
     const alert = buildHostedWorkspaceBootstrapAlert({
       '/home/project/index.html': {
         type: 'file',
-        content: '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+        content:
+          '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
         isBinary: false,
       },
       '/home/project/src/App.tsx': {
@@ -1718,15 +1720,21 @@ The latest release of react-calendar is "6.0.1".`),
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     try {
-      const first = runSerializedManagedInstanceRollout(async () => {
-        events.push('first:start');
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        events.push('first:end');
-      }, { reason: 'startup-sync' });
+      const first = runSerializedManagedInstanceRollout(
+        async () => {
+          events.push('first:start');
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          events.push('first:end');
+        },
+        { reason: 'startup-sync' },
+      );
 
-      const second = runSerializedManagedInstanceRollout(async () => {
-        events.push('second:start');
-      }, { reason: 'interval-sync' });
+      const second = runSerializedManagedInstanceRollout(
+        async () => {
+          events.push('second:start');
+        },
+        { reason: 'interval-sync' },
+      );
 
       await Promise.all([first, second]);
       expect(warn).toHaveBeenCalledWith(

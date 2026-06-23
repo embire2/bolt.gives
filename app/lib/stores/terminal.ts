@@ -78,7 +78,7 @@ export class TerminalStore {
   #runtimeTerminalBridge = createDeferredBoltTerminal();
   #runtimeTerminalInitPromise: Promise<void> | undefined;
 
-  showTerminal: WritableAtom<boolean> = hotData?.showTerminal ?? atom(true);
+  showTerminal: WritableAtom<boolean> = hotData?.showTerminal ?? atom(false);
 
   constructor(webcontainerPromise: Promise<WebContainer>) {
     this.#webcontainer = webcontainerPromise;

@@ -13,11 +13,27 @@ export default class XAIProvider extends BaseProvider {
   };
 
   staticModels: ModelInfo[] = [
-    { name: 'grok-4', label: 'xAI Grok 4', provider: 'xAI', maxTokenAllowed: 256000 },
-    { name: 'grok-4-07-09', label: 'xAI Grok 4 (07-09)', provider: 'xAI', maxTokenAllowed: 256000 },
-    { name: 'grok-3-mini', label: 'xAI Grok 3 Mini', provider: 'xAI', maxTokenAllowed: 131000 },
-    { name: 'grok-3-mini-fast', label: 'xAI Grok 3 Mini Fast', provider: 'xAI', maxTokenAllowed: 131000 },
-    { name: 'grok-code-fast-1', label: 'xAI Grok Code Fast 1', provider: 'xAI', maxTokenAllowed: 131000 },
+    {
+      name: 'grok-4.3',
+      label: 'xAI Grok 4.3',
+      provider: 'xAI',
+      maxTokenAllowed: 256000,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'grok-build-0.1',
+      label: 'xAI Grok Build 0.1',
+      provider: 'xAI',
+      maxTokenAllowed: 256000,
+      maxCompletionTokens: 65536,
+    },
+    {
+      name: 'grok-code-fast-1',
+      label: 'xAI Grok Code Fast 1',
+      provider: 'xAI',
+      maxTokenAllowed: 131000,
+      maxCompletionTokens: 32768,
+    },
   ];
 
   getModelInstance(options: {
@@ -44,6 +60,10 @@ export default class XAIProvider extends BaseProvider {
       baseURL: 'https://api.x.ai/v1',
       apiKey,
     });
+
+    if (model === 'grok-4.3' || model.startsWith('grok-build-')) {
+      return openai.responses(model as any);
+    }
 
     return openai(model);
   }

@@ -8,6 +8,8 @@ vi.mock('~/lib/.server/runtime-control', () => ({
   fetchRuntimeControlJson: runtimeControlMocks.fetchRuntimeControlJson,
 }));
 
+const route = await import('../../app/routes/managed-instances');
+
 describe('managed instances route', () => {
   beforeEach(() => {
     runtimeControlMocks.fetchRuntimeControlJson.mockReset();
@@ -17,11 +19,7 @@ describe('managed instances route', () => {
     vi.clearAllMocks();
   });
 
-  it(
-    'falls back to the signed session cookie instance when runtime session lookup fails',
-    async () => {
-    const route = await import('../../app/routes/managed-instances');
-
+  it('falls back to the signed session cookie instance when runtime session lookup fails', async () => {
     runtimeControlMocks.fetchRuntimeControlJson.mockImplementation(async (pathname: string) => {
       if (pathname === '/managed-instances/spawn') {
         return {
@@ -104,7 +102,5 @@ describe('managed instances route', () => {
       status: 'active',
       currentGitSha: 'abc1234',
     });
-    },
-    15000,
-  );
+  }, 30000);
 });

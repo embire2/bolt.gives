@@ -4,7 +4,6 @@ import { computed } from 'nanostores';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
-import { diffLines, type Change } from 'diff';
 import { getLanguageFromExtension } from '~/utils/getLanguageFromExtension';
 import type { FileHistory } from '~/types/actions';
 import type { JSONValue } from 'ai';
@@ -23,8 +22,6 @@ import useViewport from '~/lib/hooks';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
-import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
-import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type {
@@ -45,6 +42,9 @@ const LazyPerformanceMonitor = lazy(() =>
   import('./PerformanceMonitor').then((module) => ({ default: module.PerformanceMonitor })),
 );
 const LazyEditorPanel = lazy(() => import('./EditorPanel').then((module) => ({ default: module.EditorPanel })));
+const LazyWorkbenchExportButton = lazy(() =>
+  import('./WorkbenchExportButton').then((module) => ({ default: module.WorkbenchExportButton })),
+);
 const LazyCommentaryFeed = lazy(() =>
   import('~/components/chat/CommentaryFeed').then((module) => ({ default: module.CommentaryFeed })),
 );
@@ -181,6 +181,40 @@ function getWorkspaceToneClasses(tone: 'warning' | 'active' | 'ready' | 'idle') 
     default:
       return 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-3';
   }
+}
+
+function splitComparableLines(value: string): string[] {
+  const normalized = value.replace(/\r\n/g, '\n');
+  return normalized.length > 0 ? normalized.split('\n') : [];
+}
+
+function countChangedLines(originalContent: string, currentContent: string) {
+  const originalLines = splitComparableLines(originalContent);
+  const currentLines = splitComparableLines(currentContent);
+  let prefix = 0;
+
+  while (
+    prefix < originalLines.length &&
+    prefix < currentLines.length &&
+    originalLines[prefix] === currentLines[prefix]
+  ) {
+    prefix++;
+  }
+
+  let suffix = 0;
+
+  while (
+    suffix + prefix < originalLines.length &&
+    suffix + prefix < currentLines.length &&
+    originalLines[originalLines.length - 1 - suffix] === currentLines[currentLines.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  return {
+    additions: Math.max(0, currentLines.length - prefix - suffix),
+    deletions: Math.max(0, originalLines.length - prefix - suffix),
+  };
 }
 
 interface WorkspaceProps {
@@ -360,26 +394,7 @@ const FileModifiedDropdown = memo(
                                           return { additions: 0, deletions: 0 };
                                         }
 
-                                        const changes = diffLines(normalizedOriginal, normalizedCurrent, {
-                                          newlineIsToken: false,
-                                          ignoreWhitespace: true,
-                                          ignoreCase: false,
-                                        });
-
-                                        return changes.reduce(
-                                          (acc: { additions: number; deletions: number }, change: Change) => {
-                                            if (change.added) {
-                                              acc.additions += change.value.split('\n').length;
-                                            }
-
-                                            if (change.removed) {
-                                              acc.deletions += change.value.split('\n').length;
-                                            }
-
-                                            return acc;
-                                          },
-                                          { additions: 0, deletions: 0 },
-                                        );
+                                        return countChangedLines(normalizedOriginal, normalizedCurrent);
                                       })();
 
                                       const showStats = additions > 0 || deletions > 0;
@@ -476,8 +491,8 @@ export const Workbench = memo(
     const isSmallViewport = useViewport(1280);
     const streaming = useStore(streamingState);
     const testAndScanRunning = useStore(workbenchStore.testAndScanRunning);
-    const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
+    const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
     const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const actionAlert = useStore(workbenchStore.actionAlert);
     const stepRunnerEvents = useStore(workbenchStore.interactiveStepEvents);
@@ -606,15 +621,35 @@ export const Workbench = memo(
               }}
             />
             <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
-            <div className="ml-auto mr-2">
-              <Suspense fallback={<div className="text-xs text-bolt-elements-textTertiary">Perf…</div>}>
-                <LazyPerformanceMonitor />
-              </Suspense>
+            <div className="ml-auto mr-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPerformanceMonitor((value) => !value)}
+                className={classNames(
+                  'rounded-md border border-bolt-elements-borderColor px-2 py-1 text-xs text-bolt-elements-textSecondary',
+                  'bg-bolt-elements-background-depth-1 hover:bg-bolt-elements-background-depth-3 hover:text-bolt-elements-textPrimary',
+                )}
+                title="Toggle performance monitor"
+              >
+                Perf
+              </button>
+              {showPerformanceMonitor ? (
+                <Suspense fallback={<div className="text-xs text-bolt-elements-textTertiary">Perf…</div>}>
+                  <LazyPerformanceMonitor />
+                </Suspense>
+              ) : null}
             </div>
             {selectedView === 'code' && (
               <div className="flex overflow-y-auto">
-                {/* Export Chat Button */}
-                <ExportChatButton exportChat={exportChat} />
+                <Suspense
+                  fallback={
+                    <div className="flex items-center rounded-md border border-bolt-elements-borderColor px-3 py-1.5 text-xs text-bolt-elements-textTertiary">
+                      Export…
+                    </div>
+                  }
+                >
+                  <LazyWorkbenchExportButton />
+                </Suspense>
 
                 {/* Sync Button */}
                 <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden ml-1">
