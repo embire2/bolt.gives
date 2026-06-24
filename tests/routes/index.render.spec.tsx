@@ -35,7 +35,7 @@ describe('index route fallback shell', () => {
     expect(screen.getByText(/The transparent AI coding workspace/i)).toBeTruthy();
     expect(screen.getByText(/From prompt to production preview/i)).toBeTruthy();
     expect(screen.getByText(/Questions people ask before building with bolt\.gives/i)).toBeTruthy();
-    expect(screen.getAllByText('Contribute to Project').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Contribute on GitHub').length).toBeGreaterThan(0);
     expect(screen.getByText('Create managed instance')).toBeTruthy();
     expect(screen.getByText('Real screenshots')).toBeTruthy();
     expect(screen.getByAltText(/Generated bolt\.gives SEO image/i)).toBeTruthy();

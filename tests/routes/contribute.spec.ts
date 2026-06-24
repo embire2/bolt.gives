@@ -12,13 +12,8 @@ describe('/contribute action', () => {
     vi.unstubAllGlobals();
   });
 
-  it('forwards contributor applications to the runtime control plane', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        notification: { status: 'sent' },
-      }),
-    });
+  it('rejects contributor application posts without contacting the runtime control plane', async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const formData = new FormData();
@@ -48,45 +43,28 @@ describe('/contribute action', () => {
     } as never);
     const payload = (await response.json()) as any;
 
-    expect(response.status).toBe(200);
-    expect(payload).toEqual({
-      success: true,
-      notificationStatus: 'sent',
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4321/runtime/contributor-applications');
-
-    const forwardedPayload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(forwardedPayload.email).toBe('ada@example.com');
-    expect(forwardedPayload.githubUsername).toBe('ada-dev');
-    expect(forwardedPayload.sourceUrl).toBe('https://bolt.gives/contribute');
+    expect(response.status).toBe(410);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('application form has been retired');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('rejects incomplete contributor applications before contacting the runtime', async () => {
+  it('rejects non-post action calls as unsupported', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const formData = new FormData();
-    formData.set('fullName', 'A');
-    formData.set('email', 'not-an-email');
-    formData.set('githubUsername', '');
-    formData.set('experience', 'short');
-    formData.set('contributionAreas', '');
-    formData.set('why', 'short');
-
     const response = await action({
       request: new Request('https://bolt.gives/contribute', {
-        method: 'POST',
-        body: formData,
+        method: 'PUT',
       }),
       context: { cloudflare: {} as never },
       params: {},
     } as never);
     const payload = (await response.json()) as any;
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(405);
     expect(payload.success).toBe(false);
-    expect(payload.error).toContain('highlighted');
+    expect(payload.error).toContain('Method not allowed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

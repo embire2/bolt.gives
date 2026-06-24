@@ -30,7 +30,7 @@ const SEO_KEYWORDS = [
 const screenshotCards = [
   {
     title: 'Public home',
-    description: 'The public project website with release notes, links, and contributor pathway.',
+    description: 'The public project website with release notes, links, and GitHub contribution path.',
     src: `${SCREENSHOT_BASE_URL}/home.png`,
   },
   {
@@ -61,7 +61,7 @@ const platformHighlights = [
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
   'Follow-up prompts keep project history, runtime snapshots, and current workspace context.',
-  'Contributors can apply through the public pathway and join roadmap-aligned PR work.',
+  'Contributors can join through GitHub issues and roadmap-aligned pull requests.',
 ];
 
 const conversionCards = [
@@ -146,7 +146,7 @@ const faqItems = [
   {
     question: 'How do I contribute to bolt.gives?',
     answer:
-      'Open the contributor pathway at https://bolt.gives/contribute, share your GitHub username, experience, profile details, and why you want to help build the project.',
+      'Use the public GitHub workflow at https://github.com/embire2/bolt.gives: discuss an issue, open a focused pull request, and include tests or live evidence for the behavior change.',
   },
 ];
 
@@ -382,10 +382,10 @@ export default function Index() {
                   Create managed instance
                 </a>
                 <a
-                  href="/contribute"
+                  href="https://github.com/embire2/bolt.gives"
                   className="rounded-2xl border border-amber-700/30 bg-amber-100 px-5 py-3 text-sm font-black text-amber-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-200"
                 >
-                  Contribute to Project
+                  Contribute on GitHub
                 </a>
               </div>
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 text-sm">
@@ -479,8 +479,11 @@ export default function Index() {
                 >
                   GitHub repository
                 </a>
-                <a href="/contribute" className="text-sm font-black text-teal-800 underline underline-offset-4">
-                  Contributor pathway
+                <a
+                  href="https://github.com/embire2/bolt.gives"
+                  className="text-sm font-black text-teal-800 underline underline-offset-4"
+                >
+                  Contribute on GitHub
                 </a>
               </div>
             </div>
@@ -561,8 +564,8 @@ export default function Index() {
                 </h2>
                 <p className="mt-4 text-base leading-7 text-slate-700">
                   The public site is conversion-oriented without hiding the engineering reality. Pick the path that
-                  matches your intent: build in the shared workspace, spawn a managed Cloudflare instance, or contribute
-                  pull requests to the open-source platform.
+                  matches your intent: build in the shared workspace, spawn a managed Cloudflare instance, or open
+                  focused pull requests against the open-source platform.
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
@@ -603,13 +606,13 @@ export default function Index() {
               </p>
             </a>
             <a
-              href="/contribute"
+              href="https://github.com/embire2/bolt.gives"
               className="rounded-[2rem] border border-amber-700/20 bg-amber-100 p-7 shadow-sm transition hover:-translate-y-0.5"
             >
               <div className="text-sm font-black uppercase tracking-[0.22em] text-amber-900">Contribute</div>
-              <h3 className="mt-4 text-2xl font-black">Contribute to Project</h3>
+              <h3 className="mt-4 text-2xl font-black">Contribute on GitHub</h3>
               <p className="mt-3 text-sm leading-6 text-amber-950/75">
-                Apply with your GitHub username, experience, profile details, and why you want to help.
+                Discuss issues, open tested pull requests, and help move the roadmap forward in public.
               </p>
             </a>
           </div>

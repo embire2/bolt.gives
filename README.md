@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="https://create.bolt.gives">create a managed instance</a> ·
-  <a href="https://bolt.gives/contribute">contribute</a> ·
+  <a href="https://github.com/embire2/bolt.gives">contribute on GitHub</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
   <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
@@ -24,7 +24,7 @@
 ## Start Here
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
-- [Apply to become a contributor](https://bolt.gives/contribute)
+- [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Open the live alpha environment](https://alpha1.bolt.gives)
 - [Review the roadmap](ROADMAP.md)
 - [Read the changelog](CHANGELOG.md)
@@ -37,22 +37,18 @@ Managed Pages instances also use `https://bolt.gives` as the canonical hosted `F
 
 Cloudflare Pages edge functions also retry runtime-control calls through `https://bolt.gives/runtime` when the edge rejects the local loopback fallback, which keeps public Pages previews from surfacing avoidable runtime-control console errors.
 
-The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, contributor pathway, real product screenshots, crawler-friendly structured data, and a generated search/social image at `/seo/bolt-gives-agentic-coding-platform.png`. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.
+The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, GitHub contribution path, real product screenshots, crawler-friendly structured data, and a generated search/social image at `/seo/bolt-gives-agentic-coding-platform.png`. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.
 
 ## Contribution Pathway
 
-`bolt.gives` is open source and actively looking for contributors. Start at [`https://bolt.gives/contribute`](https://bolt.gives/contribute), complete the contributor application, and include:
+`bolt.gives` is open source and accepts contributions through the public GitHub workflow at [`https://github.com/embire2/bolt.gives`](https://github.com/embire2/bolt.gives). The old public application form has been retired to stop automated spam; `/contribute` no longer collects names, email addresses, GitHub usernames, or private contributor applications.
 
-- your full name and email address
-- your GitHub username
-- profile, portfolio, role, timezone, and availability details
-- relevant experience with React, Remix, Cloudflare, runtime tooling, AI coding systems, design, testing, docs, or open-source maintenance
-- the areas where you want to help
-- why you want to become a `bolt.gives` contributor
+- Open or comment on an issue before starting broad work.
+- Keep pull requests focused and include the behavior, tests, and deployment impact.
+- Prioritize prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and visible execution.
+- Never include secrets, API keys, cookies, private logs, or customer data in issues or pull requests.
 
-Applications are sent to the operator inbox and applicants receive a formatted thank-you email when SMTP is configured. Approved contributors can open pull requests against the GitHub project, pick up roadmap-aligned issues, and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
-
-The hosted contributor form scrolls inside the app shell, so applicants can reach the full form on desktop and mobile without losing the site header.
+Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
 ## Current Release (`v3.0.9.5`)
 
