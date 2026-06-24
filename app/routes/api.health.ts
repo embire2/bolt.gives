@@ -1,4 +1,5 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { APP_VERSION } from '~/lib/version';
 
 /*
  * Split health endpoint.
@@ -51,7 +52,7 @@ async function timedCheck(name: string, run: () => Promise<void>, timeoutMs: num
 export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const wantsReadiness = url.searchParams.has('ready') || url.searchParams.has('readiness');
-  const version = ((context as any)?.cloudflare?.env ?? (context as any)?.env)?.APP_VERSION ?? 'dev';
+  const version = ((context as any)?.cloudflare?.env ?? (context as any)?.env)?.APP_VERSION ?? APP_VERSION;
 
   // Liveness: cheap + dependency-free.
   if (!wantsReadiness) {
