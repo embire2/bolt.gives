@@ -25,6 +25,17 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.5 (2026-06-24)
+
+### Fixed
+
+- Restored the hosted `FREE` DeepSeek V4 Pro path on the canonical Cloudflare Pages deployment by syncing the server-side relay secret and control origin to Pages project config, preventing `401 Invalid or missing API key` on `bolt-gives.pages.dev`.
+- Added `pnpm run smoke:free-provider`, a live regression check that POSTs to the locked `FREE` model and fails if any target asks users for an API key.
+
+### Added
+
+- Added `pnpm run cloudflare:sync-free-provider`, which syncs the hosted FREE relay config to the canonical Pages project and, when requested, active managed Pages projects without copying `FREE_OPENROUTER_API_KEY` into managed/customer projects.
+
 ## v3.0.9.4 (2026-06-23)
 
 ### Added

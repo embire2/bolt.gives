@@ -6,7 +6,7 @@
   "license": "MIT",
   "sideEffects": false,
   "type": "module",
-  "version": "3.0.9.4",
+  "version": "3.0.9.5",
   "author": {
     "name": "bolt.gives team",
     "email": "maintainers@bolt.gives"
@@ -42,7 +42,9 @@
     "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
     "e2e:free-startup": "node scripts/e2e-free-startup-label.mjs",
     "smoke:live": "node scripts/live-release-smoke.mjs",
+    "smoke:free-provider": "node scripts/free-provider-live-smoke.mjs",
     "health:postdeploy": "node scripts/post-deploy-health-check.mjs",
+    "cloudflare:sync-free-provider": "node scripts/cloudflare-free-provider-config.mjs",
     "smoke:self-host-installer": "node scripts/self-host-installer-smoke.mjs",
     "budget:client": "node scripts/client-bundle-budget.mjs",
     "typegen": "wrangler types",

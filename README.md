@@ -54,9 +54,11 @@ Applications are sent to the operator inbox and applicants receive a formatted t
 
 The hosted contributor form scrolls inside the app shell, so applicants can reach the full form on desktop and mobile without losing the site header.
 
-## Current Release (`v3.0.9.4`)
+## Current Release (`v3.0.9.5`)
 
-`v3.0.9.4` is the current stable hosted release. This patch focuses on the complaints from live users and GitHub issues: the workspace now starts lighter, the terminal stays closed until requested, the performance monitor is opt-in instead of polling immediately, and export-chat persistence loads only when the code toolbar needs it. The goal is a smoother prompt-to-preview loop where users can see the generated files and preview sooner instead of waiting on nonessential workspace tools.
+`v3.0.9.5` is the current stable hosted release. This hotfix restores the hosted `FREE` DeepSeek V4 Pro path on the canonical Cloudflare Pages deployment by syncing the server-side relay secret/control origin to Pages projects and adding a live `FREE` smoke check that fails on the exact `401 Invalid or missing API key` regression. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay credentials, not the model key itself.
+
+`v3.0.9.4` focused on the complaints from live users and GitHub issues: the workspace now starts lighter, the terminal stays closed until requested, the performance monitor is opt-in instead of polling immediately, and export-chat persistence loads only when the code toolbar needs it. The goal is a smoother prompt-to-preview loop where users can see the generated files and preview sooner instead of waiting on nonessential workspace tools.
 
 Bring-your-own-key model support has also been refreshed for current coding-capable providers. The static provider catalog now includes OpenAI `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, and `gpt-5.3-codex`; Anthropic `claude-fable-5`, `claude-opus-4-8`, `claude-sonnet-4-6`, and `claude-haiku-4-5-20251001`; Google `gemini-3.1-pro-preview`, `gemini-3.5-flash`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, and `gemini-2.5-flash-lite`; DeepSeek `deepseek-v4-pro` and `deepseek-v4-flash`; Groq GPT-OSS, Compound, Llama, and Qwen coding models; Mistral Medium/Small/Codestral current aliases; xAI `grok-4.3`, `grok-build-0.1`, and `grok-code-fast-1`; and first-class MiniMax `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` via `MINIMAX_API_KEY`.
 
@@ -99,10 +101,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.4`)
+## Current Platform Baseline (`v3.0.9.5`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
+- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
 - The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.
 - Managed Cloudflare trial instances use the same protected hosted `FREE` relay path and can generate previewable apps plus follow-up improvements without requiring users to bring their own model API key.
@@ -338,6 +341,7 @@ Hosted-instance note:
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
 - The hosted `FREE` coder is pinned to `deepseek/deepseek-v4-pro`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
 - Managed Cloudflare instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
+- Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
 - Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V4 Pro` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
 - Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
@@ -633,6 +637,8 @@ If the build runs out of memory:
 If the UI loads but the FREE provider does not work:
 
 - confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
+- for the hosted operator fleet, run `pnpm run cloudflare:sync-free-provider -- --include-managed` so Pages projects receive the relay secret/control origin while keeping the upstream model key on the operator host
+- run `pnpm run smoke:free-provider` and check that each target returns `200`
 - redeploy the project after saving env changes
 - for managed Cloudflare instances, refresh the deployment from the operator/runtime control plane so the Pages relay secret is applied; end users should never need to enter a FREE API key manually
 

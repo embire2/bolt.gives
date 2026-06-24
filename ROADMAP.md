@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24
 
 Status legend:
 
@@ -10,13 +10,24 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.4`
+- [x] `v3.0.9.5`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.4 - Current Patch
+## v3.0.9.5 - Current Patch
+
+Release theme: keep hosted FREE usable on every live Pages surface without exposing the upstream model key.
+
+### Shipped in v3.0.9.5
+
+- [x] Sync the canonical Cloudflare Pages project with the hosted FREE relay secret and control origin so `bolt-gives.pages.dev` no longer falls through to `401 Invalid or missing API key`.
+- [x] Add a reusable Cloudflare FREE-provider sync command for the canonical project and active managed Pages projects.
+- [x] Add a live `FREE` smoke command that verifies `DeepSeek V4 Pro` returns successfully on hosted targets instead of asking users for an API key.
+- [x] Preserve the security boundary: managed/customer Pages projects receive relay credentials, not `FREE_OPENROUTER_API_KEY`.
+
+## v3.0.9.4 - Shipped Patch
 
 Release theme: reduce workspace startup weight and refresh user-configured coding models.
 

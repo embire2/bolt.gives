@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.5',
+    name: 'v3.0.9.5 hosted FREE Pages credential hardening',
+    description:
+      'Cloudflare Pages deployments now have a dedicated FREE-provider config sync and live smoke path so the locked DeepSeek V4 Pro route stays server-side and does not regress into asking users for an API key.',
+    releaseDate: '2026-06-24',
+  },
+  {
     id: 'release-v3.0.9.4',
     name: 'v3.0.9.4 model refresh and workspace responsiveness',
     description:
