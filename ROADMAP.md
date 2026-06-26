@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-24
+Last updated: 2026-06-26
 
 Status legend:
 
@@ -10,13 +10,26 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.5`
+- [x] `v3.0.9.6`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.5 - Current Patch
+## v3.0.9.6 - Current Patch
+
+Release theme: keep hosted FREE funded and usable without allowing unbounded operator spend.
+
+### Shipped in v3.0.9.6
+
+- [x] Enforce a protected `$1` per-person daily hosted FREE coding cap before `/api/chat` and `/api/llmcall` generation begins.
+- [x] Reset hosted FREE daily quota at `00:00 GMT+2`.
+- [x] Record successful FREE token usage against a server-side runtime ledger after generation.
+- [x] Return a clear daily-limit message telling users to bring their own provider key or wait for reset instead of asking for a FREE API key.
+- [x] Forward managed Pages client identity signals through the hosted FREE relay so each Cloudflare instance uses per-user quota buckets.
+- [x] Preserve the security boundary: managed/customer Pages projects receive relay credentials, not `FREE_OPENROUTER_API_KEY`.
+
+## v3.0.9.5 - Shipped Patch
 
 Release theme: keep hosted FREE usable on every live Pages surface without exposing the upstream model key.
 

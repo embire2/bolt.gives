@@ -26,6 +26,22 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.6 (2026-06-26)
+
+### Fixed
+
+- The hosted `FREE` DeepSeek V4 Pro path now fails with a clear daily-limit message instead of falling through to an API-key prompt when a user has exhausted the operator-funded quota.
+- Hosted FREE relay requests now forward client identity signals to the canonical origin so managed Cloudflare instances do not share one quota bucket.
+
+### Added
+
+- Added a protected runtime FREE usage ledger with a default `$1` per-person daily coding cap, reset at `00:00 GMT+2`.
+- Added app-side quota prechecks for `/api/chat` and `/api/llmcall`, plus post-run token-cost recording for successful FREE generations.
+
+### Security
+
+- The operator-funded OpenRouter key remains server-side only. Managed/customer Pages deployments still receive relay credentials and runtime-control origin, not `FREE_OPENROUTER_API_KEY`.
+
 ## v3.0.9.5 (2026-06-24)
 
 ### Fixed

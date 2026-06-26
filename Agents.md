@@ -2,15 +2,15 @@
 
 ## Mission
 
-Ship `v1.0.3` as a commentary-first release where agent work is continuously visible, understandable, and verifiable in real time.
+Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is continuously visible, understandable, and verifiable in real time.
 
-Secondary objective: lay architecture foundations for `v1.0.4` client-hosted private instances with Teams collaboration.
+Secondary objective: continue the `v3.1.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v1.0.3`
-- In progress: `v1.0.4`
-- Next: `v1.0.4` (client-hosted + Teams)
+- Stable: `v3.0.9.6`
+- In progress: `v3.1.0`
+- Next: `v3.1.0` (managed-instance hardening + prompt-to-preview reliability)
 
 ## Operating Principles
 
@@ -30,7 +30,7 @@ If changes are risky:
 2. Validate E2E on `alpha1`
 3. Fast-forward/merge into `main`
 
-## v1.0.3 Execution Priorities
+## v3.0.9.6 Execution Priorities
 
 ### P0 (Must ship)
 - [x] Commentary phase model and dedicated commentary cards
@@ -72,7 +72,7 @@ When touching chat streaming, tool execution, action runner, or timeline:
 For behavior changes, update in same change set:
 - `CHANGELOG.md`
 - `README.md` (if setup/usage changed)
-- `v1.0.3.md` (status + checkboxes + commit refs)
+- `CHANGELOG.md` and `ROADMAP.md` (status + checkboxes + commit refs)
 
 Checkbox status format:
 - `[x]` complete
@@ -85,7 +85,7 @@ Checkbox status format:
 - Keep secrets in environment variables or `.env.local` only.
 - Redact sensitive values from screenshots, logs, and commit text.
 
-## v1.0.4 Foundation Backlog (Do Not Skip)
+## v3.1.0 Foundation Backlog (Do Not Skip)
 
 - [ ] Instance isolation model (compute + storage + config boundaries)
 - [ ] Client-hosted deployment bundle and runbook

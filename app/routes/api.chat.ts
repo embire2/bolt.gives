@@ -51,6 +51,12 @@ import {
   verifyHostedFreeRelayAuthorization,
 } from '~/lib/.server/llm/hosted-free-relay';
 import {
+  assertFreeUsageQuotaAllowed,
+  buildFreeUsageQuotaLimitMessage,
+  getFreeUsageQuotaErrorCode,
+  recordFreeUsageQuotaForRequest,
+} from '~/lib/.server/llm/free-usage-quota';
+import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
   sanitizeSelectionWithApiKeys,
@@ -736,6 +742,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     logger.info(`chat request started ${JSON.stringify(requestDebugContext)}`);
 
+    await assertFreeUsageQuotaAllowed({
+      request,
+      runtimeEnv,
+      providerName: selectedProvider,
+    });
+
     const mcpService = MCPService.getInstance();
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
@@ -883,6 +895,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             totalTokens: cumulativeUsage.totalTokens,
             timestamp: new Date().toISOString(),
           };
+          void recordFreeUsageQuotaForRequest({
+            request,
+            runtimeEnv,
+            providerName: provider,
+            modelName: model,
+            usage: cumulativeUsage,
+            runId,
+          }).catch((quotaError) => {
+            logger.warn(
+              `Failed to record hosted FREE quota usage: ${
+                quotaError instanceof Error ? quotaError.message : String(quotaError)
+              }`,
+            );
+          });
+
           const runMetricsEvent: AgentRunMetricsDataEvent = {
             type: 'run-metrics',
             runId,
@@ -2651,6 +2678,10 @@ Next: I am sending the final result now.`,
           return 'Custom error: The selected provider is not configured for this instance yet. Select a provider with a valid key and retry.';
         }
 
+        if (errorMessage.includes(getFreeUsageQuotaErrorCode())) {
+          return `Custom error: ${buildFreeUsageQuotaLimitMessage()}`;
+        }
+
         if (errorMessage.includes('FREE_PROVIDER_RATE_LIMITED')) {
           return 'Custom error: The hosted FREE coder is temporarily rate-limited upstream. Please retry shortly, or switch to OpenRouter with your own key for uninterrupted access.';
         }
@@ -2753,6 +2784,22 @@ Next: I am sending the final result now.`,
       isRetryable: error.isRetryable !== false, // Default to retryable unless explicitly false
       provider: error.provider || 'unknown',
     };
+
+    if (error.message?.includes(getFreeUsageQuotaErrorCode())) {
+      return new Response(
+        JSON.stringify({
+          ...errorResponse,
+          message: buildFreeUsageQuotaLimitMessage(),
+          statusCode: 429,
+          isRetryable: false,
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Hosted FREE Daily Limit Reached',
+        },
+      );
+    }
 
     if (error.message?.includes('API key')) {
       return new Response(

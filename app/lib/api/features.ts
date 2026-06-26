@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.6',
+    name: 'v3.0.9.6 hosted FREE daily spend cap',
+    description:
+      'The hosted FREE DeepSeek V4 Pro path now checks a server-side $1 per-person daily quota before coding starts, resets at 00:00 GMT+2, and tells users to bring their own provider key or wait for reset when the cap is reached.',
+    releaseDate: '2026-06-26',
+  },
+  {
     id: 'release-v3.0.9.5',
     name: 'v3.0.9.5 hosted FREE Pages credential hardening',
     description:

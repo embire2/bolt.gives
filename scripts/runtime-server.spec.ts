@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
   applyUnavailablePackageVersionRepair,
+  authorizeFreeUsageQuotaSecret,
   authorizeHostedFreeRelaySecret,
   buildHostedWorkspaceBootstrapAlert,
+  buildFreeUsageQuotaDecision,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildWorkspaceFileMapFromDisk,
@@ -16,12 +18,15 @@ import {
   collectMissingWorkspacePackages,
   ensureHostedWorkspaceProjectBootstrap,
   extractUnavailablePackageVersionRepair,
+  getFreeUsageQuotaDayKey,
+  getFreeUsageQuotaResetAt,
   inferHostedWorkspaceStartCommand,
   isPreviewPortReserved,
   mergeWorkspaceFileMap,
   markSessionMutationStart,
   normalizeSessionId,
   normalizeIncomingPreviewAlert,
+  normalizeFreeUsageQuotaLedger,
   normalizePackageImportSpecifier,
   normalizeTenantRegistry,
   prepareHostedWorkspaceForStart,
@@ -73,6 +78,68 @@ describe('runtime server workspace isolation', () => {
     expect(authorizeHostedFreeRelaySecret('expected-secret', 'expected-secret')).toBe(true);
     expect(authorizeHostedFreeRelaySecret('wrong-secret', 'expected-secret')).toBe(false);
     expect(authorizeHostedFreeRelaySecret('', 'expected-secret')).toBe(false);
+  });
+
+  it('authorizes hosted FREE quota writes with the same exact-match secret discipline', () => {
+    expect(authorizeFreeUsageQuotaSecret('quota-secret', 'quota-secret')).toBe(true);
+    expect(authorizeFreeUsageQuotaSecret('relay-secret', 'quota-secret')).toBe(false);
+    expect(authorizeFreeUsageQuotaSecret('', 'quota-secret')).toBe(false);
+  });
+
+  it('resets hosted FREE usage at midnight GMT+2', () => {
+    expect(getFreeUsageQuotaDayKey(new Date('2026-06-26T21:59:00.000Z'))).toBe('2026-06-26');
+    expect(getFreeUsageQuotaResetAt(new Date('2026-06-26T21:59:00.000Z'))).toBe('2026-06-26T22:00:00.000Z');
+    expect(getFreeUsageQuotaDayKey(new Date('2026-06-26T22:00:01.000Z'))).toBe('2026-06-27');
+    expect(getFreeUsageQuotaResetAt(new Date('2026-06-26T22:00:01.000Z'))).toBe('2026-06-27T22:00:00.000Z');
+  });
+
+  it('blocks hosted FREE usage when the daily dollar cap is reached', () => {
+    const decision = buildFreeUsageQuotaDecision(
+      { costUsd: 1 },
+      { limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.remainingUsd).toBe(0);
+    expect(decision.message).toContain('FREE daily coding limit');
+    expect(decision.message).toContain('00:00 GMT+2');
+  });
+
+  it('normalizes hosted FREE usage ledgers without retaining invalid subjects', () => {
+    const validSubject = 'a'.repeat(64);
+    const ledger = normalizeFreeUsageQuotaLedger({
+      days: {
+        '2026-06-26': {
+          [validSubject]: {
+            costUsd: '0.25',
+            requests: '2',
+            promptTokens: '100',
+            completionTokens: '50',
+            totalTokens: '150',
+            updatedAt: '2026-06-26T10:00:00.000Z',
+          },
+          invalid: {
+            costUsd: 999,
+          },
+        },
+        nope: {
+          [validSubject]: {
+            costUsd: 999,
+          },
+        },
+      },
+    });
+    const days = ledger.days as Record<string, Record<string, any>>;
+
+    expect(days['2026-06-26'][validSubject]).toMatchObject({
+      costUsd: 0.25,
+      requests: 2,
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    });
+    expect(days['2026-06-26']).not.toHaveProperty('invalid');
+    expect(days).not.toHaveProperty('nope');
   });
 
   it('uses an explicit runtime workspace root when provided', () => {

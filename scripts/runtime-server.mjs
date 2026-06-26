@@ -128,6 +128,13 @@ const MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL =
   'https://bolt.gives/runtime';
 const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
   process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
+const FREE_USAGE_QUOTA_SECRET =
+  process.env.BOLT_FREE_USAGE_QUOTA_SECRET ||
+  process.env.FREE_USAGE_QUOTA_SECRET ||
+  MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET;
+const FREE_USAGE_QUOTA_PATH =
+  process.env.RUNTIME_FREE_USAGE_QUOTA_PATH || path.join(PERSIST_ROOT, 'free-usage-quota.json');
+const FREE_USAGE_DAILY_LIMIT_USD = Number(process.env.BOLT_FREE_DAILY_USD_LIMIT || process.env.FREE_DAILY_USD_LIMIT || '1');
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
 const SHOUTBOX_MESSAGES_PATH =
@@ -223,6 +230,197 @@ export function authorizeHostedFreeRelaySecret(
   }
 
   return normalizedProvidedSecret === normalizedExpectedSecret;
+}
+
+export function authorizeFreeUsageQuotaSecret(providedSecret, expectedSecret = FREE_USAGE_QUOTA_SECRET) {
+  return authorizeHostedFreeRelaySecret(providedSecret, expectedSecret);
+}
+
+export function getFreeUsageQuotaDayKey(now = new Date()) {
+  return new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export function getFreeUsageQuotaResetAt(now = new Date()) {
+  const shifted = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const nextLocalMidnight = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  );
+
+  return new Date(nextLocalMidnight - 2 * 60 * 60 * 1000).toISOString();
+}
+
+function normalizeFreeUsageLimitUsd(value = FREE_USAGE_DAILY_LIMIT_USD) {
+  const limit = Number(value);
+  return Number.isFinite(limit) && limit > 0 ? limit : 1;
+}
+
+function normalizeFreeUsageCostUsd(value) {
+  const cost = Number(value);
+  return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+function normalizeFreeUsageTokens(value) {
+  const tokens = Number(value);
+  return Number.isFinite(tokens) && tokens > 0 ? tokens : 0;
+}
+
+export function normalizeFreeUsageQuotaLedger(input) {
+  const days = {};
+
+  if (!input || typeof input !== 'object' || !input.days || typeof input.days !== 'object') {
+    return { version: 1, days };
+  }
+
+  for (const [dayKey, rawSubjects] of Object.entries(input.days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !rawSubjects || typeof rawSubjects !== 'object') {
+      continue;
+    }
+
+    const subjects = {};
+
+    for (const [subjectHash, rawEntry] of Object.entries(rawSubjects)) {
+      if (!/^[a-f0-9]{64}$/i.test(subjectHash) || !rawEntry || typeof rawEntry !== 'object') {
+        continue;
+      }
+
+      subjects[subjectHash] = {
+        costUsd: normalizeFreeUsageCostUsd(rawEntry.costUsd),
+        requests: Math.max(0, Math.floor(Number(rawEntry.requests) || 0)),
+        promptTokens: normalizeFreeUsageTokens(rawEntry.promptTokens),
+        completionTokens: normalizeFreeUsageTokens(rawEntry.completionTokens),
+        totalTokens: normalizeFreeUsageTokens(rawEntry.totalTokens),
+        updatedAt: typeof rawEntry.updatedAt === 'string' ? rawEntry.updatedAt : null,
+      };
+    }
+
+    days[dayKey] = subjects;
+  }
+
+  return { version: 1, days };
+}
+
+export function buildFreeUsageQuotaDecision(entry = {}, options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const limitUsd = normalizeFreeUsageLimitUsd(options.limitUsd);
+  const usedUsd = normalizeFreeUsageCostUsd(entry?.costUsd);
+  const remainingUsd = Math.max(0, limitUsd - usedUsd);
+  const allowed = usedUsd < limitUsd;
+  const message = allowed
+    ? null
+    : 'You have hit your FREE daily coding limit for today. You can use your own API key from any provider or wait for the limit to reset at 00:00 GMT+2.';
+
+  return {
+    allowed,
+    usedUsd,
+    remainingUsd,
+    limitUsd,
+    resetAt: getFreeUsageQuotaResetAt(now),
+    resetTimezone: 'GMT+2',
+    message,
+  };
+}
+
+async function readFreeUsageQuotaLedger() {
+  try {
+    const raw = await fs.readFile(FREE_USAGE_QUOTA_PATH, 'utf8');
+    return normalizeFreeUsageQuotaLedger(JSON.parse(raw));
+  } catch {
+    return normalizeFreeUsageQuotaLedger(null);
+  }
+}
+
+async function writeFreeUsageQuotaLedger(ledger) {
+  await fs.mkdir(path.dirname(FREE_USAGE_QUOTA_PATH), { recursive: true });
+  await writeJsonAtomically(FREE_USAGE_QUOTA_PATH, JSON.stringify(normalizeFreeUsageQuotaLedger(ledger), null, 2));
+}
+
+function pruneFreeUsageQuotaLedger(ledger, activeDayKey) {
+  for (const dayKey of Object.keys(ledger.days)) {
+    if (dayKey !== activeDayKey) {
+      delete ledger.days[dayKey];
+    }
+  }
+}
+
+function assertValidFreeUsageQuotaSubject(subjectHash) {
+  const normalized = String(subjectHash || '').trim().toLowerCase();
+
+  if (!/^[a-f0-9]{64}$/.test(normalized)) {
+    throw new Error('Invalid FREE quota subject.');
+  }
+
+  return normalized;
+}
+
+function normalizeFreeUsageQuotaUsage(usage) {
+  if (!usage || typeof usage !== 'object') {
+    return {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+  }
+
+  const promptTokens = normalizeFreeUsageTokens(usage.promptTokens ?? usage.inputTokens ?? usage.prompt_tokens);
+  const completionTokens = normalizeFreeUsageTokens(
+    usage.completionTokens ?? usage.outputTokens ?? usage.completion_tokens,
+  );
+  const totalTokens = Math.max(
+    normalizeFreeUsageTokens(usage.totalTokens ?? usage.total_tokens),
+    promptTokens + completionTokens,
+  );
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  };
+}
+
+export async function checkFreeUsageQuota({ subjectHash, limitUsd, now = new Date() } = {}) {
+  const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
+  const dayKey = getFreeUsageQuotaDayKey(now);
+  const ledger = await readFreeUsageQuotaLedger();
+  pruneFreeUsageQuotaLedger(ledger, dayKey);
+  const entry = ledger.days[dayKey]?.[normalizedSubjectHash] || {};
+
+  return buildFreeUsageQuotaDecision(entry, { limitUsd, now });
+}
+
+export async function recordFreeUsageQuota({ subjectHash, costUsd, usage, limitUsd, now = new Date() } = {}) {
+  const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
+  const dayKey = getFreeUsageQuotaDayKey(now);
+  const ledger = await readFreeUsageQuotaLedger();
+  pruneFreeUsageQuotaLedger(ledger, dayKey);
+  const day = ledger.days[dayKey] || {};
+  const entry = day[normalizedSubjectHash] || {
+    costUsd: 0,
+    requests: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    updatedAt: null,
+  };
+  const normalizedUsage = normalizeFreeUsageQuotaUsage(usage);
+
+  entry.costUsd = normalizeFreeUsageCostUsd(entry.costUsd) + normalizeFreeUsageCostUsd(costUsd);
+  entry.requests = Math.max(0, Math.floor(Number(entry.requests) || 0)) + 1;
+  entry.promptTokens = normalizeFreeUsageTokens(entry.promptTokens) + normalizedUsage.promptTokens;
+  entry.completionTokens = normalizeFreeUsageTokens(entry.completionTokens) + normalizedUsage.completionTokens;
+  entry.totalTokens = normalizeFreeUsageTokens(entry.totalTokens) + normalizedUsage.totalTokens;
+  entry.updatedAt = now.toISOString();
+  day[normalizedSubjectHash] = entry;
+  ledger.days[dayKey] = day;
+
+  await writeFreeUsageQuotaLedger(ledger);
+
+  return buildFreeUsageQuotaDecision(entry, { limitUsd, now });
 }
 
 function buildClientRegistrationSource(hostname = '') {
@@ -4413,6 +4611,65 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to verify the hosted FREE relay secret.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/internal/free-usage-quota/check') {
+      try {
+        const providedSecret = String(req.headers['x-bolt-hosted-free-relay-secret'] || '');
+
+        if (!authorizeFreeUsageQuotaSecret(providedSecret)) {
+          sendJson(res, 403, { ok: false, message: 'Invalid hosted FREE quota credentials.' });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const quota = await checkFreeUsageQuota({
+          subjectHash: body?.subjectHash,
+          limitUsd: body?.limitUsd,
+        });
+
+        sendJson(res, quota.allowed ? 200 : 429, {
+          ok: quota.allowed,
+          quota,
+          message: quota.message,
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok: false,
+          message: error instanceof Error ? error.message : 'Failed to inspect hosted FREE quota.',
+        });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/internal/free-usage-quota/record') {
+      try {
+        const providedSecret = String(req.headers['x-bolt-hosted-free-relay-secret'] || '');
+
+        if (!authorizeFreeUsageQuotaSecret(providedSecret)) {
+          sendJson(res, 403, { ok: false, message: 'Invalid hosted FREE quota credentials.' });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const quota = await recordFreeUsageQuota({
+          subjectHash: body?.subjectHash,
+          costUsd: body?.costUsd,
+          usage: body?.usage,
+          limitUsd: body?.limitUsd,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          quota,
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok: false,
+          message: error instanceof Error ? error.message : 'Failed to record hosted FREE quota.',
+        });
       }
       return;
     }

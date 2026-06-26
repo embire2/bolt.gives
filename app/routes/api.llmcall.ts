@@ -17,6 +17,12 @@ import {
   resolveHostedFreeRelayOrigin,
   verifyHostedFreeRelayAuthorization,
 } from '~/lib/.server/llm/hosted-free-relay';
+import {
+  assertFreeUsageQuotaAllowed,
+  buildFreeUsageQuotaLimitMessage,
+  getFreeUsageQuotaErrorCode,
+  recordFreeUsageQuotaForRequest,
+} from '~/lib/.server/llm/free-usage-quota';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -154,6 +160,12 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
   if (streamOutput) {
     try {
+      await assertFreeUsageQuotaAllowed({
+        request,
+        runtimeEnv,
+        providerName,
+      });
+
       const result = await streamText({
         options: {
           system,
@@ -185,6 +197,13 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         });
       }
 
+      if (error instanceof Error && error.message?.includes(getFreeUsageQuotaErrorCode())) {
+        throw new Response(buildFreeUsageQuotaLimitMessage(), {
+          status: 429,
+          statusText: 'Hosted FREE Daily Limit Reached',
+        });
+      }
+
       // Handle token limit errors with helpful messages
       if (
         error instanceof Error &&
@@ -209,6 +228,12 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   } else {
     try {
+      await assertFreeUsageQuotaAllowed({
+        request,
+        runtimeEnv,
+        providerName,
+      });
+
       const models = await getModelList({ apiKeys, providerSettings, serverEnv: runtimeEnv });
       const modelDetails = models.find((m: ModelInfo) => m.name === model);
 
@@ -299,6 +324,20 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       const result = await generateText(finalParams);
       logger.info(`Generated response`);
 
+      await recordFreeUsageQuotaForRequest({
+        request,
+        runtimeEnv,
+        providerName: provider.name,
+        modelName: modelDetails.name,
+        usage: result.usage as any,
+      }).catch((quotaError) => {
+        logger.warn(
+          `Failed to record hosted FREE quota usage: ${
+            quotaError instanceof Error ? quotaError.message : String(quotaError)
+          }`,
+        );
+      });
+
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: {
@@ -315,6 +354,22 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         isRetryable: (error as any).isRetryable !== false,
         provider: (error as any).provider || 'unknown',
       };
+
+      if (error instanceof Error && error.message?.includes(getFreeUsageQuotaErrorCode())) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message: buildFreeUsageQuotaLimitMessage(),
+            statusCode: 429,
+            isRetryable: false,
+          }),
+          {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Hosted FREE Daily Limit Reached',
+          },
+        );
+      }
 
       if (error instanceof Error && error.message?.includes('API key')) {
         return new Response(

@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.5`)
+## Current Release (`v3.0.9.6`)
 
-`v3.0.9.5` is the current stable hosted release. This hotfix restores the hosted `FREE` DeepSeek V4 Pro path on the canonical Cloudflare Pages deployment by syncing the server-side relay secret/control origin to Pages projects and adding a live `FREE` smoke check that fails on the exact `401 Invalid or missing API key` regression. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay credentials, not the model key itself.
+`v3.0.9.6` is the current stable hosted release. The hosted `FREE` DeepSeek V4 Pro path now enforces a server-side `$1` per-person daily coding cap before generation starts, records actual token-estimated spend after successful runs, and resets at `00:00 GMT+2` daily. When the cap is reached, users are told to use their own API key from any supported provider or wait for the reset. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay credentials, not the model key itself.
+
+`v3.0.9.5` restored the hosted `FREE` DeepSeek V4 Pro path on the canonical Cloudflare Pages deployment by syncing the server-side relay secret/control origin to Pages projects and adding a live `FREE` smoke check that fails on the exact `401 Invalid or missing API key` regression.
 
 `v3.0.9.4` focused on the complaints from live users and GitHub issues: the workspace now starts lighter, the terminal stays closed until requested, the performance monitor is opt-in instead of polling immediately, and export-chat persistence loads only when the code toolbar needs it. The goal is a smoother prompt-to-preview loop where users can see the generated files and preview sooner instead of waiting on nonessential workspace tools.
 
@@ -97,7 +99,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.5`)
+## Current Platform Baseline (`v3.0.9.6`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
@@ -569,6 +571,12 @@ Optional, depending on how they want the AI runtime to behave:
   - Use this only if they want the built-in hosted `FREE` provider to work on **their** deployment.
   - This stays server-side in Cloudflare. It is **not** exposed to browser users.
   - The shipped FREE path is locked to `deepseek/deepseek-v4-pro`.
+- `BOLT_FREE_DAILY_USD_LIMIT=1`
+  - Optional override for hosted `FREE` daily spend per person.
+  - The default is `$1` and the ledger resets at `00:00 GMT+2`.
+- `BOLT_FREE_USAGE_QUOTA_SECRET=...`
+  - Optional dedicated secret for app-to-runtime quota writes.
+  - If unset, the hosted FREE relay secret is reused.
 - `OPENAI_API_KEY=...`
   - Optional if they want OpenAI available server-side by default on their own instance.
 - `OPEN_ROUTER_API_KEY=...`
@@ -579,6 +587,7 @@ Important:
 
 - The open-source app does **not** expose `FREE_OPENROUTER_API_KEY` to end users.
 - If a user wants their deployment to ship with a working FREE coder immediately after install, they need to set `FREE_OPENROUTER_API_KEY` in Cloudflare for their own project.
+- Hosted operator deployments should keep `FREE_OPENROUTER_API_KEY` only on the canonical server/runtime and send managed Pages projects relay credentials instead.
 
 ### 6. First deploy
 
@@ -633,6 +642,7 @@ If the build runs out of memory:
 If the UI loads but the FREE provider does not work:
 
 - confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
+- confirm the canonical runtime has a hosted FREE quota secret available through `BOLT_FREE_USAGE_QUOTA_SECRET` or `BOLT_HOSTED_FREE_RELAY_SECRET`
 - for the hosted operator fleet, run `pnpm run cloudflare:sync-free-provider -- --include-managed` so Pages projects receive the relay secret/control origin while keeping the upstream model key on the operator host
 - run `pnpm run smoke:free-provider` and check that each target returns `200`
 - redeploy the project after saving env changes

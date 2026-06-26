@@ -51,6 +51,11 @@ function buildRelayHeaders(request: Request) {
   const contentType = request.headers.get('Content-Type');
   const accept = request.headers.get('Accept');
   const cookie = request.headers.get('Cookie');
+  const userAgent = request.headers.get('User-Agent');
+  const acceptLanguage = request.headers.get('Accept-Language');
+  const cfConnectingIp = request.headers.get('CF-Connecting-IP');
+  const forwardedFor = request.headers.get('X-Forwarded-For');
+  const realIp = request.headers.get('X-Real-IP');
 
   if (contentType) {
     headers.set('Content-Type', contentType);
@@ -62,6 +67,26 @@ function buildRelayHeaders(request: Request) {
 
   if (cookie) {
     headers.set('Cookie', cookie);
+  }
+
+  if (userAgent) {
+    headers.set('User-Agent', userAgent);
+  }
+
+  if (acceptLanguage) {
+    headers.set('Accept-Language', acceptLanguage);
+  }
+
+  if (cfConnectingIp) {
+    headers.set('CF-Connecting-IP', cfConnectingIp);
+  }
+
+  if (forwardedFor) {
+    headers.set('X-Forwarded-For', forwardedFor);
+  }
+
+  if (realIp) {
+    headers.set('X-Real-IP', realIp);
   }
 
   headers.set(HOSTED_FREE_RELAY_HEADER, '1');
