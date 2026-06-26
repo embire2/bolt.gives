@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFreeProviderSecretValues,
   buildHostedFreeRelayPlainEnv,
   mergePagesDeploymentConfigs,
   parseCloudflareFreeProviderConfigArgs,
@@ -19,6 +20,31 @@ describe('cloudflare FREE provider config helpers', () => {
       BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://bolt.gives/runtime',
     });
     expect(plainEnv).not.toHaveProperty('FREE_OPENROUTER_API_KEY');
+  });
+
+  it('syncs relay and quota secrets without using the upstream model key', () => {
+    const secrets = buildFreeProviderSecretValues({
+      BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
+      FREE_OPENROUTER_API_KEY: 'must-not-be-used',
+    });
+
+    expect(secrets).toEqual({
+      BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
+    });
+    expect(JSON.stringify(secrets)).not.toContain('must-not-be-used');
+  });
+
+  it('falls back to the relay secret when no dedicated quota secret is configured', () => {
+    expect(
+      buildFreeProviderSecretValues({
+        BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      }),
+    ).toEqual({
+      BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+      BOLT_FREE_USAGE_QUOTA_SECRET: 'relay-secret',
+    });
   });
 
   it('merges relay env into preview and production without dropping existing env vars', () => {

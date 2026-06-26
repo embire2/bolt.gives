@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.6`)
+## Current Release (`v3.0.9.7`)
 
-`v3.0.9.6` is the current stable hosted release. The hosted `FREE` DeepSeek V4 Pro path now enforces a server-side `$1` per-person daily coding cap before generation starts, records actual token-estimated spend after successful runs, and resets at `00:00 GMT+2` daily. When the cap is reached, users are told to use their own API key from any supported provider or wait for the reset. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay credentials, not the model key itself.
+`v3.0.9.7` is the current stable hosted release. It hardens the hosted `FREE` DeepSeek V4 Pro rollout by syncing both the server-side relay secret and the FREE quota secret to Cloudflare Pages projects, then redeploying the canonical Pages build and active managed fleet. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay/quota credentials, not the model key itself.
+
+`v3.0.9.6` added the server-side `$1` per-person daily coding cap for the hosted `FREE` path before generation starts, records actual token-estimated spend after successful runs, and resets at `00:00 GMT+2` daily. When the cap is reached, users are told to use their own API key from any supported provider or wait for the reset.
 
 `v3.0.9.5` restored the hosted `FREE` DeepSeek V4 Pro path on the canonical Cloudflare Pages deployment by syncing the server-side relay secret/control origin to Pages projects and adding a live `FREE` smoke check that fails on the exact `401 Invalid or missing API key` regression.
 
@@ -99,11 +101,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.6`)
+## Current Platform Baseline (`v3.0.9.7`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
-- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
+- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
 - The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.
 - Managed Cloudflare trial instances use the same protected hosted `FREE` relay path and can generate previewable apps plus follow-up improvements without requiring users to bring their own model API key.
@@ -339,7 +341,7 @@ Hosted-instance note:
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
 - The hosted `FREE` coder is pinned to `deepseek/deepseek-v4-pro`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
 - Managed Cloudflare instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
-- Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
+- Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay and quota config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
 - Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V4 Pro` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
 - Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
@@ -643,7 +645,7 @@ If the UI loads but the FREE provider does not work:
 
 - confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
 - confirm the canonical runtime has a hosted FREE quota secret available through `BOLT_FREE_USAGE_QUOTA_SECRET` or `BOLT_HOSTED_FREE_RELAY_SECRET`
-- for the hosted operator fleet, run `pnpm run cloudflare:sync-free-provider -- --include-managed` so Pages projects receive the relay secret/control origin while keeping the upstream model key on the operator host
+- for the hosted operator fleet, run `pnpm run cloudflare:sync-free-provider -- --include-managed` so Pages projects receive the relay secret, quota secret, and control origin while keeping the upstream model key on the operator host
 - run `pnpm run smoke:free-provider` and check that each target returns `200`
 - redeploy the project after saving env changes
 - for managed Cloudflare instances, refresh the deployment from the operator/runtime control plane so the Pages relay secret is applied; end users should never need to enter a FREE API key manually

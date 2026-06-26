@@ -10,6 +10,7 @@ const DEFAULT_RELAY_ORIGIN = 'https://bolt.gives';
 const DEFAULT_RUNTIME_CONTROL_URL = 'https://bolt.gives/runtime';
 const DEFAULT_REGISTRY_PATH = '/srv/bolt-gives-runtime-workspaces/managed-instance-registry.json';
 const HOSTED_FREE_RELAY_SECRET_NAME = 'BOLT_HOSTED_FREE_RELAY_SECRET';
+const FREE_USAGE_QUOTA_SECRET_NAME = 'BOLT_FREE_USAGE_QUOTA_SECRET';
 const STAGES = ['preview', 'production'];
 
 function normalizeListValue(value) {
@@ -290,6 +291,18 @@ async function upsertPagesSecret({ projectName, secretName, secretValue, env, dr
   };
 }
 
+export function buildFreeProviderSecretValues(env = {}) {
+  const hostedFreeRelaySecret = String(env.BOLT_HOSTED_FREE_RELAY_SECRET || '').trim();
+  const freeUsageQuotaSecret = String(
+    env.BOLT_FREE_USAGE_QUOTA_SECRET || env.FREE_USAGE_QUOTA_SECRET || hostedFreeRelaySecret,
+  ).trim();
+
+  return {
+    [HOSTED_FREE_RELAY_SECRET_NAME]: hostedFreeRelaySecret,
+    [FREE_USAGE_QUOTA_SECRET_NAME]: freeUsageQuotaSecret,
+  };
+}
+
 export async function syncFreeProviderConfigForProject({ projectName, env, plainEnv, dryRun = false }) {
   const project = await fetchCloudflarePagesProject({
     accountId: env.CLOUDFLARE_ACCOUNT_ID,
@@ -297,14 +310,18 @@ export async function syncFreeProviderConfigForProject({ projectName, env, plain
     projectName,
   });
   const nextDeploymentConfigs = mergePagesDeploymentConfigs(project?.deployment_configs || {}, plainEnv);
+  const secretValues = buildFreeProviderSecretValues(env);
+  const secretNames = Object.keys(secretValues).sort();
 
-  await upsertPagesSecret({
-    projectName,
-    secretName: HOSTED_FREE_RELAY_SECRET_NAME,
-    secretValue: env.BOLT_HOSTED_FREE_RELAY_SECRET,
-    env,
-    dryRun,
-  });
+  for (const [secretName, secretValue] of Object.entries(secretValues)) {
+    await upsertPagesSecret({
+      projectName,
+      secretName,
+      secretValue,
+      env,
+      dryRun,
+    });
+  }
 
   if (!dryRun) {
     await patchCloudflarePagesProjectEnv({
@@ -318,6 +335,7 @@ export async function syncFreeProviderConfigForProject({ projectName, env, plain
   return {
     projectName,
     secretName: HOSTED_FREE_RELAY_SECRET_NAME,
+    secretNames,
     dryRun,
     plainEnvKeys: Object.keys(plainEnv).sort(),
     deploymentConfigSummary: sanitizeConfigSummary(nextDeploymentConfigs),
@@ -331,6 +349,10 @@ function assertRequiredEnv(env) {
     if (!String(env[key] || '').trim()) {
       missing.push(key);
     }
+  }
+
+  if (!String(env.BOLT_FREE_USAGE_QUOTA_SECRET || env.FREE_USAGE_QUOTA_SECRET || env.BOLT_HOSTED_FREE_RELAY_SECRET).trim()) {
+    missing.push('BOLT_FREE_USAGE_QUOTA_SECRET');
   }
 
   if (!String(env.FREE_OPENROUTER_API_KEY || '').trim()) {
@@ -352,6 +374,7 @@ Required server env:
   CLOUDFLARE_ACCOUNT_ID
   FREE_OPENROUTER_API_KEY
   BOLT_HOSTED_FREE_RELAY_SECRET
+  BOLT_FREE_USAGE_QUOTA_SECRET (or FREE_USAGE_QUOTA_SECRET; falls back to relay secret)
 
 Optional env:
   BOLT_HOSTED_FREE_RELAY_ORIGIN      default: ${DEFAULT_RELAY_ORIGIN}

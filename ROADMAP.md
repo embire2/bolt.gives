@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.6`
+- [x] `v3.0.9.7`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.6 - Current Patch
+## v3.0.9.7 - Current Patch
+
+Release theme: keep hosted FREE quota enforcement deployed consistently across canonical Pages and managed fleet projects.
+
+### Shipped in v3.0.9.7
+
+- [x] Sync both hosted FREE relay and quota secrets to canonical and active managed Cloudflare Pages projects.
+- [x] Keep `FREE_OPENROUTER_API_KEY` only on the operator host; managed/customer Pages projects receive relay/quota credentials only.
+- [x] Verify canonical Pages, app domains, and managed fleet health after the rollout.
+
+## v3.0.9.6 - Shipped Patch
 
 Release theme: keep hosted FREE funded and usable without allowing unbounded operator spend.
 

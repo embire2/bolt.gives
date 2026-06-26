@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.7',
+    name: 'v3.0.9.7 FREE quota deployment hardening',
+    description:
+      'Cloudflare Pages and managed fleet sync now provisions both the hosted FREE relay secret and the quota secret, keeping the locked DeepSeek V4 Pro path usable on direct Pages URLs and managed instances without exposing the upstream key.',
+    releaseDate: '2026-06-26',
+  },
+  {
     id: 'release-v3.0.9.6',
     name: 'v3.0.9.6 hosted FREE daily spend cap',
     description:

@@ -26,6 +26,16 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.7 (2026-06-26)
+
+### Fixed
+
+- Hardened the Cloudflare FREE-provider sync so canonical Pages and active managed Pages projects receive both `BOLT_HOSTED_FREE_RELAY_SECRET` and `BOLT_FREE_USAGE_QUOTA_SECRET`, preventing direct Pages deployments from falling back to a missing-key or missing-quota-secret error.
+
+### Security
+
+- The sync still keeps `FREE_OPENROUTER_API_KEY` off managed/customer Cloudflare projects; Pages receives only relay/quota credentials needed to call the operator runtime.
+
 ## v3.0.9.6 (2026-06-26)
 
 ### Fixed
