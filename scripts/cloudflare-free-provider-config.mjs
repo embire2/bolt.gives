@@ -105,7 +105,7 @@ export function buildHostedFreeRelayPlainEnv(options = {}) {
   };
 }
 
-export function mergePagesDeploymentConfigs(existingDeploymentConfigs = {}, plainEnv = {}) {
+export function mergePagesDeploymentConfigs(existingDeploymentConfigs = {}, plainEnv = {}, secretEnv = {}) {
   const nextDeploymentConfigs = {
     ...(existingDeploymentConfigs || {}),
   };
@@ -126,6 +126,19 @@ export function mergePagesDeploymentConfigs(existingDeploymentConfigs = {}, plai
 
       nextEnvVars[key] = {
         type: 'plain_text',
+        value: normalizedValue,
+      };
+    }
+
+    for (const [key, value] of Object.entries(secretEnv)) {
+      const normalizedValue = String(value || '').trim();
+
+      if (!normalizedValue) {
+        continue;
+      }
+
+      nextEnvVars[key] = {
+        type: 'secret_text',
         value: normalizedValue,
       };
     }
@@ -309,9 +322,9 @@ export async function syncFreeProviderConfigForProject({ projectName, env, plain
     apiToken: env.CLOUDFLARE_API_TOKEN,
     projectName,
   });
-  const nextDeploymentConfigs = mergePagesDeploymentConfigs(project?.deployment_configs || {}, plainEnv);
   const secretValues = buildFreeProviderSecretValues(env);
   const secretNames = Object.keys(secretValues).sort();
+  const nextDeploymentConfigs = mergePagesDeploymentConfigs(project?.deployment_configs || {}, plainEnv, secretValues);
 
   for (const [secretName, secretValue] of Object.entries(secretValues)) {
     await upsertPagesSecret({

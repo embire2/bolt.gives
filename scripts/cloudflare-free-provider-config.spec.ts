@@ -47,7 +47,7 @@ describe('cloudflare FREE provider config helpers', () => {
     });
   });
 
-  it('merges relay env into preview and production without dropping existing env vars', () => {
+  it('merges relay and secret env into preview and production without dropping existing env vars', () => {
     const merged = mergePagesDeploymentConfigs(
       {
         production: {
@@ -63,11 +63,23 @@ describe('cloudflare FREE provider config helpers', () => {
         BOLT_HOSTED_FREE_RELAY_ORIGIN: 'https://bolt.gives',
         BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://bolt.gives/runtime',
       },
+      {
+        BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
+        BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
+      },
     ) as any;
 
     expect(merged.production.env_vars.EXISTING_FLAG.value).toBe('1');
     expect(merged.production.env_vars.BOLT_HOSTED_FREE_RELAY_ORIGIN.value).toBe('https://bolt.gives');
     expect(merged.preview.env_vars.BOLT_RUNTIME_CONTROL_PUBLIC_URL.value).toBe('https://bolt.gives/runtime');
+    expect(merged.production.env_vars.BOLT_HOSTED_FREE_RELAY_SECRET).toEqual({
+      type: 'secret_text',
+      value: 'relay-secret',
+    });
+    expect(merged.preview.env_vars.BOLT_FREE_USAGE_QUOTA_SECRET).toEqual({
+      type: 'secret_text',
+      value: 'quota-secret',
+    });
     expect(JSON.stringify(merged)).not.toContain('FREE_OPENROUTER_API_KEY');
   });
 

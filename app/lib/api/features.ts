@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.8',
+    name: 'v3.0.9.8 Pages FREE secret binding repair',
+    description:
+      'Cloudflare Pages sync now writes relay and quota secrets directly into production and preview deployment configs, fixing direct Pages FREE requests that had a secret present but failed runtime quota authorization.',
+    releaseDate: '2026-06-26',
+  },
+  {
     id: 'release-v3.0.9.7',
     name: 'v3.0.9.7 FREE quota deployment hardening',
     description:

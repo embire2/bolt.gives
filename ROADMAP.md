@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.7`
+- [x] `v3.0.9.8`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.7 - Current Patch
+## v3.0.9.8 - Current Patch
+
+Release theme: make direct Cloudflare Pages FREE quota authorization match the operator runtime exactly.
+
+### Shipped in v3.0.9.8
+
+- [x] Write hosted FREE relay and quota secrets directly into production and preview Pages deployment configs as `secret_text`.
+- [x] Repair direct Pages `FREE_PROVIDER_DAILY_LIMIT_UNAVAILABLE: quota service returned 403` failures.
+- [x] Preserve the security boundary: `FREE_OPENROUTER_API_KEY` stays only on the operator host.
+
+## v3.0.9.7 - Shipped Patch
 
 Release theme: keep hosted FREE quota enforcement deployed consistently across canonical Pages and managed fleet projects.
 

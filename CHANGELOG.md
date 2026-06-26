@@ -26,6 +26,16 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.8 (2026-06-26)
+
+### Fixed
+
+- Cloudflare FREE-provider sync now writes relay and quota secrets into both production and preview Pages deployment configs as `secret_text`, fixing direct Pages builds that had a quota secret binding but received `403` from the runtime quota service.
+
+### Security
+
+- Pages deployment configs receive only relay/quota secrets; `FREE_OPENROUTER_API_KEY` remains on the operator host.
+
 ## v3.0.9.7 (2026-06-26)
 
 ### Fixed
