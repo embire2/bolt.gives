@@ -1,4 +1,4 @@
-<p align="center">
+<p align="center">.
   <img src="public/boltlogo2.png" alt="bolt.gives" width="360" />
 </p>
 
