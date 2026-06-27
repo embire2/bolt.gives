@@ -10,13 +10,24 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.13`
+- [x] `v3.0.9.14`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.13 - Current Patch
+## v3.0.9.14 - Current Patch
+
+Release theme: make follow-up prompts reliably improve the current project instead of stopping at an old healthy preview.
+
+### Shipped in v3.0.9.14
+
+- [x] Detect mutating follow-up prompts such as improve/add/change/fix existing app requests.
+- [x] Keep server-side continuation active for those follow-ups even when a prior hosted preview is already healthy.
+- [x] Require recovery continuations for mutating follow-ups to start with a concrete file edit.
+- [x] Add regressions for mutating follow-up intent and hosted-preview continuation suppression.
+
+## v3.0.9.13 - Shipped Patch
 
 Release theme: keep follow-up iteration available and prevent artifact stream corruption from breaking generated apps.
 

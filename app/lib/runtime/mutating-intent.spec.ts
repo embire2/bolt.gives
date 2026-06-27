@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requestLikelyNeedsMutatingActions } from './mutating-intent';
+import { requestLikelyNeedsMutatingActions, requestLikelyNeedsProjectFileChanges } from './mutating-intent';
 
 describe('requestLikelyNeedsMutatingActions', () => {
   it('returns true for scaffold/build prompts', () => {
@@ -10,6 +10,14 @@ describe('requestLikelyNeedsMutatingActions', () => {
 
   it('returns true for template-driven prompts picked by starter heuristics', () => {
     expect(requestLikelyNeedsMutatingActions('Build me a Next.js dashboard starter')).toBe(true);
+  });
+
+  it('returns true for follow-up project changes', () => {
+    const prompt =
+      'Improve the existing calendar project without restarting from scratch and add a visible agenda sidebar label.';
+
+    expect(requestLikelyNeedsProjectFileChanges(prompt)).toBe(true);
+    expect(requestLikelyNeedsMutatingActions(prompt)).toBe(true);
   });
 
   it('returns false for read-only informational prompts', () => {

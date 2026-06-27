@@ -118,6 +118,19 @@ describe('api.chat continuation helpers', () => {
     ).toBe(false);
   });
 
+  it('keeps continuing mutating follow-ups even when the existing hosted preview is verified', () => {
+    expect(
+      shouldContinueRunIntentAfterHostedPreviewReady({
+        shouldContinueForRunIntent: true,
+        continuationReason: 'no-bolt-actions',
+        previewCheckpointObserved: true,
+        hostedRuntimeSessionId: 'session-123',
+        lastUserContent:
+          'Improve the existing calendar project and add a visible agenda sidebar label without restarting from scratch.',
+      }),
+    ).toBe(true);
+  });
+
   it('still allows inspection-only continuation before hosted preview verification succeeds', () => {
     expect(
       shouldContinueRunIntentAfterHostedPreviewReady({

@@ -69,6 +69,7 @@ import {
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 import { extractLatestUserGoal, findLatestUserMessage } from '~/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '~/lib/runtime/file-paths';
+import { requestLikelyNeedsProjectFileChanges } from '~/lib/runtime/mutating-intent';
 import { parseCookies } from '~/lib/api/cookies';
 
 export async function action(args: ActionFunctionArgs) {
@@ -156,6 +157,7 @@ export function shouldContinueRunIntentAfterHostedPreviewReady(options: {
   continuationReason: ContinuationReason;
   previewCheckpointObserved: boolean;
   hostedRuntimeSessionId?: string | null;
+  lastUserContent?: string;
 }) {
   if (!options.shouldContinueForRunIntent) {
     return false;
@@ -169,6 +171,10 @@ export function shouldContinueRunIntentAfterHostedPreviewReady(options: {
     options.previewCheckpointObserved &&
     HOSTED_PREVIEW_READY_SUPPRESSED_CONTINUATION_REASONS.has(options.continuationReason)
   ) {
+    if (requestLikelyNeedsProjectFileChanges(options.lastUserContent || '')) {
+      return true;
+    }
+
     return false;
   }
 
@@ -201,16 +207,26 @@ export function buildRunContinuationPrompt(options: {
     continuationReason === 'scaffold-without-start' ||
     continuationReason === 'bootstrap-only-shell-actions' ||
     continuationReason === 'preview-not-verified';
+  const isFollowUpFileChange =
+    requestLikelyNeedsProjectFileChanges(originalRequest) &&
+    (continuationReason === 'no-bolt-actions' ||
+      continuationReason === 'inspection-only-shell-actions' ||
+      continuationReason === 'run-intent-without-start');
 
-  const blockerText = requiresStarterEntryReplacement
+  const blockerText = isFollowUpFileChange
     ? `Concrete blocker:
+- The user asked to change the existing project, but the previous response did not apply a meaningful file edit.
+- A healthy existing preview is not enough; continue until the requested follow-up change is visible in the current app.
+- Your next response must start with a <boltAction type="file"> edit to the relevant existing source file.`
+    : requiresStarterEntryReplacement
+      ? `Concrete blocker:
 - ${starterEntryTarget} is still the active starter entry and must be replaced first.
 - Do not spend the next turn on curl/sleep/background shell verification before that file is overwritten.`
-    : mustUseStartAction
-      ? `Concrete blocker:
+      : mustUseStartAction
+        ? `Concrete blocker:
 - You must launch the dev server with <boltAction type="start">...</boltAction>.
 - Do not use background shell commands like npm run dev & or shell-only verification loops as a substitute for a start action.`
-      : `Concrete blocker:
+        : `Concrete blocker:
 - Continue from the current project files and fix the missing implementation/runtime step directly.`;
 
   const failureDetails = latestExecutionFailure
@@ -230,7 +246,7 @@ ${(latestExecutionFailure.stderr || '').slice(0, 1200)}
 
 [Provider: ${provider}]
 
-You scaffolded a project but did not complete the requested implementation.
+${isFollowUpFileChange ? 'You were asked to improve the existing project, but the requested follow-up edit was not applied.' : 'You scaffolded a project but did not complete the requested implementation.'}
 ${blockerText}
 ${failureDetails ? `\n\n${failureDetails}` : ''}
 
@@ -238,7 +254,11 @@ Continue now and do ALL of the following:
 1) continue from the current project files (do NOT re-run create-vite/create-react-app if package.json already exists).
 2) implement the requested product requirements from the original user request:
    ${originalRequest}
-3) your FIRST executable action must be a <boltAction type="file"> that replaces ${starterEntryTarget} if the starter screen is still active there.
+3) your FIRST executable action must be a <boltAction type="file"> that ${
+      isFollowUpFileChange
+        ? 'edits the relevant existing app source file for the requested follow-up change'
+        : `replaces ${starterEntryTarget} if the starter screen is still active there`
+    }.
 4) install dependencies only if missing.
 5) include a <boltAction type="start"> command that launches the dev server.
 6) never use background shell jobs, curl polling, or sleep-based verification as a substitute for the required file replacement and start action.
@@ -2011,6 +2031,7 @@ Next: I am returning the finished result with the verified preview ready for ins
               continuationReason: runContinuationDecision.reason,
               previewCheckpointObserved,
               hostedRuntimeSessionId,
+              lastUserContent: latestUserGoal || lastUserContent,
             });
             const shouldContinueForUnverifiedPreview = shouldContinuePendingHostedPreviewVerification({
               chatMode: effectiveChatMode,

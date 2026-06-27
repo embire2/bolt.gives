@@ -26,6 +26,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.14 (2026-06-27)
+
+### Fixed
+
+- History-aware follow-up prompts now keep continuing when the user asks to improve, add, change, or fix the existing project and the assistant produces no meaningful file edit, even if the previous preview is already healthy.
+- Hidden timeout/stall recovery prompts now get a stricter server continuation prompt that requires the next response to begin with a file edit for the requested follow-up change.
+- Added regression coverage for mutating follow-up intent and hosted-preview continuation suppression.
+
 ## v3.0.9.13 (2026-06-27)
 
 ### Fixed

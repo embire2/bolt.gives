@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.14',
+    name: 'v3.0.9.14 history-aware follow-up reliability',
+    description:
+      'Follow-up prompts that ask to improve, add, change, or fix the existing project now keep continuing until a meaningful file edit is applied, instead of treating an already-healthy old preview as success.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.13',
     name: 'v3.0.9.13 follow-up composer and artifact stream repair',
     description:
