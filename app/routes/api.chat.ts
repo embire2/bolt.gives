@@ -18,7 +18,7 @@ import type {
   SubAgentEvent,
   UsageDataEvent,
 } from '~/types/context';
-import { WORK_DIR } from '~/utils/constants';
+import { MODEL_REGEX, PROVIDER_REGEX, WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage, selectDeterministicContextFiles } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
@@ -67,7 +67,7 @@ import {
   waitForHostedRuntimePreviewVerificationForRequest,
 } from '~/lib/.server/hosted-runtime-snapshot';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
-import { extractLatestUserGoal, findLatestUserMessage } from '~/lib/runtime/user-goal';
+import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '~/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '~/lib/runtime/file-paths';
 import { requestLikelyNeedsProjectFileChanges } from '~/lib/runtime/mutating-intent';
 import { parseCookies } from '~/lib/api/cookies';
@@ -83,9 +83,17 @@ const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type=(["'])file\1/i;
 const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementation\s+plan|plan:|next\s+steps)\b/i;
 const QUOTED_VISIBLE_TEXT_RE = /(["'`])([^"'`\r\n]{2,160})\1/g;
+const UNQUOTED_VISIBLE_TEXT_RE =
+  /\b(?:exact(?:ly)?\s+(?:visible\s+)?text|containing\s+the\s+exact\s+text)[\s:=-]{1,40}["'`]?(\\?[A-Za-z0-9][A-Za-z0-9_.:-]{2,160})/gi;
 const VISIBLE_TEXT_REQUIREMENT_CONTEXT_RE =
-  /\b(exact|exactly|visible|show|display|render|contain|contains|containing|label|heading|text|copy|token|sidebar)\b/i;
+  /\b(visible|show|display|render|contain|contains|containing|label|heading|copy|token|sidebar|button|section|panel)\b/i;
 const UI_TEXT_SOURCE_FILE_RE = /\.(?:tsx?|jsx?|html?|mdx?|vue|svelte|astro)$/i;
+const REQUEST_ENVELOPE_LITERAL_KEYS_RE = /^(?:content|parts|text|type|role|id|annotations)$/i;
+const FILE_PATH_LITERAL_RE =
+  /(?:^|\/)[\w.-]+\.(?:tsx?|jsx?|css|scss|json|html?|mdx?|vue|svelte|astro|svg|png|jpe?g|gif|webp)$/i;
+const PROJECT_OBJECTIVE_CANDIDATES_KEY = '__bolt_project_objective_candidates_v1';
+const MAX_PROJECT_OBJECTIVE_KEYS = 200;
+const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
 
 type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
 
@@ -162,6 +170,7 @@ export function shouldContinueRunIntentAfterHostedPreviewReady(options: {
   previewCheckpointObserved: boolean;
   hostedRuntimeSessionId?: string | null;
   lastUserContent?: string;
+  missingRequiredVisibleText?: string[];
 }) {
   if (!options.shouldContinueForRunIntent) {
     return false;
@@ -175,6 +184,10 @@ export function shouldContinueRunIntentAfterHostedPreviewReady(options: {
     options.previewCheckpointObserved &&
     HOSTED_PREVIEW_READY_SUPPRESSED_CONTINUATION_REASONS.has(options.continuationReason)
   ) {
+    if ((options.missingRequiredVisibleText || []).length > 0) {
+      return true;
+    }
+
     if (requestLikelyNeedsProjectFileChanges(options.lastUserContent || '')) {
       return true;
     }
@@ -382,7 +395,7 @@ export function resolveContinuationFiles(options: {
 }
 
 export function extractRequiredVisibleTextLiterals(request: string | undefined): string[] {
-  const source = String(request || '');
+  const source = String(request || '').replace(/\\(["'`])/g, '$1');
 
   if (!source.trim()) {
     return [];
@@ -396,7 +409,13 @@ export function extractRequiredVisibleTextLiterals(request: string | undefined):
   while ((match = QUOTED_VISIBLE_TEXT_RE.exec(source))) {
     const literal = match[2]?.trim();
 
-    if (!literal || literal.length < 2 || /[<>]/.test(literal)) {
+    if (
+      !literal ||
+      literal.length < 2 ||
+      /[<>]/.test(literal) ||
+      REQUEST_ENVELOPE_LITERAL_KEYS_RE.test(literal) ||
+      FILE_PATH_LITERAL_RE.test(literal)
+    ) {
       continue;
     }
 
@@ -408,7 +427,234 @@ export function extractRequiredVisibleTextLiterals(request: string | undefined):
     }
   }
 
+  UNQUOTED_VISIBLE_TEXT_RE.lastIndex = 0;
+
+  while ((match = UNQUOTED_VISIBLE_TEXT_RE.exec(source))) {
+    const literal = match[1]
+      ?.trim()
+      .replace(/^\\+/, '')
+      .replace(/[.,;:!?)}\]]+$/, '');
+
+    if (
+      !literal ||
+      literal.length < 2 ||
+      /[<>"'`]/.test(literal) ||
+      REQUEST_ENVELOPE_LITERAL_KEYS_RE.test(literal) ||
+      FILE_PATH_LITERAL_RE.test(literal)
+    ) {
+      continue;
+    }
+
+    const before = source.slice(Math.max(0, match.index - 120), match.index);
+    const after = source.slice(match.index, match.index + match[0].length + 80);
+
+    if (VISIBLE_TEXT_REQUIREMENT_CONTEXT_RE.test(`${before} ${after}`)) {
+      literals.add(literal);
+    }
+  }
+
   return [...literals];
+}
+
+function collectTextFragments(value: unknown, depth = 0): string[] {
+  if (depth > 4 || value == null) {
+    return [];
+  }
+
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  if (typeof value !== 'object') {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectTextFragments(item, depth + 1));
+  }
+
+  const record = value as Record<string, unknown>;
+  const fragments: string[] = [];
+
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (/^(data|url|src|href|mimeType|type)$/i.test(key)) {
+      continue;
+    }
+
+    if (
+      typeof nestedValue === 'string' &&
+      /^(text|content|message|prompt|input|value|description|summary)$/i.test(key)
+    ) {
+      fragments.push(nestedValue);
+      continue;
+    }
+
+    if (Array.isArray(nestedValue) || (nestedValue && typeof nestedValue === 'object')) {
+      fragments.push(...collectTextFragments(nestedValue, depth + 1));
+    }
+  }
+
+  return fragments;
+}
+
+export function extractUserRequestTextFromMessage(message: Partial<Messages[number]> | undefined): string {
+  if (!message) {
+    return '';
+  }
+
+  const fragments = [
+    ...collectTextFragments(message.content),
+    ...collectTextFragments((message as Partial<Messages[number]> & { parts?: unknown }).parts),
+  ];
+  const cleanedFragments = fragments
+    .map((fragment) =>
+      String(fragment || '')
+        .replace(MODEL_REGEX, '')
+        .replace(PROVIDER_REGEX, '')
+        .trim(),
+    )
+    .filter(Boolean);
+
+  return [...new Set(cleanedFragments)].join('\n');
+}
+
+export function collectUserRequestCandidates(
+  messages: Messages,
+  options?: {
+    includeHidden?: boolean;
+  },
+): string[] {
+  const includeHidden = options?.includeHidden ?? true;
+
+  return [
+    ...new Set(
+      messages
+        .filter((message) => shouldCollectUserRequestMessage(message, includeHidden))
+        .map((message) => extractUserRequestTextFromMessage(message))
+        .map((content) => content.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function shouldCollectUserRequestMessage(message: Messages[number], includeHidden: boolean): boolean {
+  if (message.role !== 'user') {
+    return false;
+  }
+
+  if (includeHidden) {
+    return true;
+  }
+
+  return !hasMessageAnnotation(message, 'hidden') && !hasMessageAnnotation(message, 'no-store');
+}
+
+export function collectUserRequestEnvelopeCandidates(
+  messages: Messages,
+  options?: {
+    includeHidden?: boolean;
+  },
+): string[] {
+  const includeHidden = options?.includeHidden ?? true;
+
+  return [
+    ...new Set(
+      messages
+        .filter((message) => shouldCollectUserRequestMessage(message, includeHidden))
+        .map((message) =>
+          JSON.stringify({
+            content: message.content,
+            parts: (message as Messages[number] & { parts?: unknown }).parts,
+          }),
+        )
+        .map((content) => content.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+export function collectRequestObjectiveCandidatesFromPayload(payload: {
+  messages?: Messages;
+  projectMemory?: {
+    summary?: string;
+    architecture?: string;
+    latestGoal?: string;
+  } | null;
+  latestUserGoal?: string;
+}): string[] {
+  const payloadFragments = collectTextFragments({
+    messages: payload.messages,
+    projectMemory: payload.projectMemory
+      ? {
+          summary: payload.projectMemory.summary,
+          architecture: payload.projectMemory.architecture,
+          latestGoal: payload.projectMemory.latestGoal,
+        }
+      : undefined,
+    latestUserGoal: payload.latestUserGoal,
+  });
+
+  return [
+    ...new Set(
+      payloadFragments
+        .map((candidate) =>
+          String(candidate || '')
+            .replace(MODEL_REGEX, '')
+            .replace(PROVIDER_REGEX, '')
+            .trim(),
+        )
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function getProjectObjectiveCandidateStore(): Map<string, string[]> {
+  const g = globalThis as typeof globalThis & {
+    [PROJECT_OBJECTIVE_CANDIDATES_KEY]?: Map<string, string[]>;
+  };
+
+  if (!g[PROJECT_OBJECTIVE_CANDIDATES_KEY]) {
+    g[PROJECT_OBJECTIVE_CANDIDATES_KEY] = new Map<string, string[]>();
+  }
+
+  return g[PROJECT_OBJECTIVE_CANDIDATES_KEY];
+}
+
+export function getProjectObjectiveCandidates(projectKey: string): string[] {
+  return getProjectObjectiveCandidateStore().get(projectKey) || [];
+}
+
+export function rememberProjectObjectiveCandidates(projectKey: string, candidates: Array<string | undefined>) {
+  const normalizedCandidates = candidates.map((candidate) => String(candidate || '').trim()).filter(Boolean);
+
+  if (!projectKey || normalizedCandidates.length === 0) {
+    return getProjectObjectiveCandidates(projectKey);
+  }
+
+  const store = getProjectObjectiveCandidateStore();
+
+  if (!store.has(projectKey) && store.size >= MAX_PROJECT_OBJECTIVE_KEYS) {
+    const oldestKey = store.keys().next().value;
+
+    if (oldestKey) {
+      store.delete(oldestKey);
+    }
+  }
+
+  const merged = [...new Set([...(store.get(projectKey) || []), ...normalizedCandidates])].slice(
+    -MAX_PROJECT_OBJECTIVE_CANDIDATES,
+  );
+  store.set(projectKey, merged);
+
+  return merged;
+}
+
+export function resetProjectObjectiveCandidatesForTests() {
+  const g = globalThis as typeof globalThis & {
+    [PROJECT_OBJECTIVE_CANDIDATES_KEY]?: Map<string, string[]>;
+  };
+
+  g[PROJECT_OBJECTIVE_CANDIDATES_KEY] = new Map<string, string[]>();
 }
 
 export function findMissingRequiredVisibleTextLiterals(options: {
@@ -437,10 +683,6 @@ export function findMissingRequiredVisibleTextLiteralsForRequests(options: {
   const requests = [...new Set(options.requests.map((request) => String(request || '').trim()).filter(Boolean))];
 
   for (const request of requests) {
-    if (!requestLikelyNeedsProjectFileChanges(request)) {
-      continue;
-    }
-
     for (const literal of findMissingRequiredVisibleTextLiterals({ request, files: options.files })) {
       missing.add(literal);
     }
@@ -832,11 +1074,26 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   };
   const manualInterventionDetected = detectManualIntervention(messages);
   const latestUserGoal = extractLatestUserGoal(messages);
+  const visibleUserRequestCandidates = collectUserRequestCandidates(messages, { includeHidden: false });
+  const allInitialUserRequestCandidates = collectUserRequestCandidates(messages);
+  const visibleUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(messages, { includeHidden: false });
+  const allInitialUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(messages);
+  const rawRequestObjectiveCandidates = collectRequestObjectiveCandidatesFromPayload({
+    messages,
+    projectMemory,
+    latestUserGoal,
+  });
+  const latestVisibleUserObjective = visibleUserRequestCandidates.at(-1) || latestUserGoal;
   const projectKey = deriveProjectMemoryKey({
     files,
     projectContextId,
     hostedRuntimeSessionId,
   });
+  const cachedProjectObjectiveCandidates = rememberProjectObjectiveCandidates(projectKey, [
+    ...visibleUserRequestCandidates,
+    ...visibleUserRequestEnvelopeCandidates,
+    ...rawRequestObjectiveCandidates,
+  ]);
   const cachedProjectMemory = getProjectMemory(projectKey);
   const effectiveProjectMemory =
     projectMemory && projectMemory.projectKey === projectKey ? projectMemory : cachedProjectMemory;
@@ -1621,9 +1878,10 @@ Next: I will recover and continue from the latest stable point.`,
             const extractedLastUser = extractPropertiesFromMessage(lastUserMessage);
             const { model, provider } = extractedLastUser;
             const lastUserContent =
-              typeof extractedLastUser.content === 'string'
+              extractUserRequestTextFromMessage(lastUserMessage) ||
+              (typeof extractedLastUser.content === 'string'
                 ? extractedLastUser.content
-                : JSON.stringify(extractedLastUser.content);
+                : JSON.stringify(extractedLastUser.content));
             const shouldForceFinalize = finishReason === 'tool-calls' || forceFinalizeRequested;
 
             if (shouldForceFinalize && !forceFinalizeAttempted) {
@@ -2096,17 +2354,23 @@ Next: I am returning the finished result with the verified preview ready for ins
 
             latestProjectMemoryFiles = continuationFiles || files;
 
-            const extractUserMessageContent = (message: (typeof processedMessages)[number]) => {
-              const extracted = extractPropertiesFromMessage(message);
-
-              return typeof extracted.content === 'string' ? extracted.content : JSON.stringify(extracted.content);
-            };
-            const latestVisibleUserRequest = latestUserGoal || lastUserContent;
+            const processedUserRequestCandidates = collectUserRequestCandidates(processedMessages);
+            const processedUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(processedMessages);
+            const latestVisibleUserRequest = latestVisibleUserObjective || latestUserGoal || lastUserContent;
             const latestUserRequestCandidates = [
               lastUserContent,
               latestUserGoal,
-              ...processedMessages.filter((message) => message.role === 'user').map(extractUserMessageContent),
-              ...messages.filter((message) => message.role === 'user').map(extractUserMessageContent),
+              latestVisibleUserObjective,
+              ...visibleUserRequestCandidates,
+              ...allInitialUserRequestCandidates,
+              ...visibleUserRequestEnvelopeCandidates,
+              ...allInitialUserRequestEnvelopeCandidates,
+              ...rawRequestObjectiveCandidates,
+              ...cachedProjectObjectiveCandidates,
+              ...processedUserRequestCandidates,
+              ...processedUserRequestEnvelopeCandidates,
+              ...collectUserRequestCandidates(messages),
+              ...collectUserRequestEnvelopeCandidates(messages),
             ];
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
@@ -2163,7 +2427,8 @@ Next: I am returning the finished result with the verified preview ready for ins
               continuationReason: effectiveRunContinuationDecision.reason,
               previewCheckpointObserved,
               hostedRuntimeSessionId,
-              lastUserContent: latestVisibleUserRequest,
+              lastUserContent: literalObjectiveRequest,
+              missingRequiredVisibleText,
             });
             const shouldContinueForUnverifiedPreview = shouldContinuePendingHostedPreviewVerification({
               chatMode: effectiveChatMode,

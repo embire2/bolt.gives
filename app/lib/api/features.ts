@@ -12,6 +12,20 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.19',
+    name: 'v3.0.9.19 visible follow-up queue',
+    description:
+      'Follow-up prompts now stay usable while hidden preview recovery is still running: typed prompts queue visibly and send after the active run is idle, while exact-text guards ignore file-path false positives.',
+    releaseDate: '2026-06-27',
+  },
+  {
+    id: 'release-v3.0.9.18',
+    name: 'v3.0.9.18 recovered follow-up objective guard',
+    description:
+      'Google Calendar-style follow-ups now keep their exact visible UI requirements through hidden preview recovery, including structured message parts and already-healthy old previews.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.17',
     name: 'v3.0.9.17 full-history exact follow-up guard',
     description:

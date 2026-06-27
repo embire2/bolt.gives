@@ -165,6 +165,29 @@ describe('BaseChat surface tabs', () => {
     );
   });
 
+  it('renders a visible queued follow-up status below the prompt box', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(
+      <BaseChat
+        chatStarted
+        queuedVisibleFollowUp={{
+          content: 'Add an agenda sidebar with the exact text CAL_FUP_123.',
+          queuedAt: Date.now(),
+        }}
+      />,
+    );
+
+    expect(await screen.findByText(/Follow-up queued:/)).toBeTruthy();
+    expect(screen.getByText(/CAL_FUP_123/)).toBeTruthy();
+  });
+
   it('auto-switches to the workspace when execution activity starts', async () => {
     vi.stubGlobal(
       'fetch',

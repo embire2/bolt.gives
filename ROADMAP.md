@@ -10,13 +10,34 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.17`
+- [x] `v3.0.9.19`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.17 - Current Patch
+## v3.0.9.19 - Current Patch
+
+Release theme: keep visible follow-up prompts usable while hidden preview recovery finishes.
+
+### Shipped in v3.0.9.19
+
+- [x] Queue typed follow-up prompts visibly when an active or hidden run is still streaming.
+- [x] Send queued follow-ups automatically as soon as the current run becomes idle.
+- [x] Keep empty-input Stop behavior while making typed Enter/click submit a queued follow-up instead of cancelling work.
+- [x] Ignore source file paths when detecting exact visible UI text requirements.
+
+## v3.0.9.18 - Shipped Patch
+
+Release theme: keep exact follow-up objective checks alive after hidden preview recovery.
+
+### Shipped in v3.0.9.18
+
+- [x] Extract follow-up objectives from structured message `parts` as well as plain message content.
+- [x] Preserve the last visible human follow-up when hidden recovery prompts are appended.
+- [x] Treat missing exact visible UI literals as a hard continuation signal even when an old hosted preview is already healthy.
+
+## v3.0.9.17 - Shipped Patch
 
 Release theme: keep exact follow-up objective checks attached across hidden continuation/recovery streams.
 

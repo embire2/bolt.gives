@@ -207,6 +207,7 @@ interface BaseChatProps {
   setAutonomyMode?: (mode: AutonomyMode) => void;
   latestRunMetrics?: AgentRunMetricsDataEvent | null;
   latestUsage?: UsageDataEvent | null;
+  queuedVisibleFollowUp?: { content: string; queuedAt: number } | null;
   onApiKeysUpdated?: (payload: {
     apiKeys: Record<string, string>;
     providerName: string;
@@ -332,6 +333,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setAutonomyMode,
       latestRunMetrics,
       latestUsage,
+      queuedVisibleFollowUp,
       onApiKeysUpdated,
     },
     ref,
@@ -850,6 +852,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           autonomyMode={autonomyMode}
           setAutonomyMode={setAutonomyMode}
         />
+        {queuedVisibleFollowUp ? (
+          <div className="mx-auto w-full max-w-chat rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+            <span className="font-medium text-bolt-elements-textPrimary">Follow-up queued:</span>{' '}
+            {queuedVisibleFollowUp.content.slice(0, 180)}
+            {queuedVisibleFollowUp.content.length > 180 ? '...' : ''}
+          </div>
+        ) : null}
         <div
           className={classNames(
             'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary',

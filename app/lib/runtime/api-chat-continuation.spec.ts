@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRunContinuationPrompt,
+  collectRequestObjectiveCandidatesFromPayload,
+  collectUserRequestCandidates,
+  collectUserRequestEnvelopeCandidates,
   detectRestoredHostedRuntimeHandoffMismatch,
   extractRequiredVisibleTextLiterals,
+  extractUserRequestTextFromMessage,
   findMissingRequiredVisibleTextLiterals,
   findMissingRequiredVisibleTextLiteralsForRequests,
+  getProjectObjectiveCandidates,
+  rememberProjectObjectiveCandidates,
+  resetProjectObjectiveCandidatesForTests,
   shouldAllowSynthesizedRunHandoff,
   shouldApplyHostedRuntimeHandoffBeforePreviewVerification,
   shouldContinueAfterBlockedSynthesizedRunHandoff,
@@ -135,6 +142,19 @@ describe('api.chat continuation helpers', () => {
     ).toBe(true);
   });
 
+  it('keeps continuing exact visible text repairs even when hosted preview is verified', () => {
+    expect(
+      shouldContinueRunIntentAfterHostedPreviewReady({
+        shouldContinueForRunIntent: true,
+        continuationReason: 'no-bolt-actions',
+        previewCheckpointObserved: true,
+        hostedRuntimeSessionId: 'session-123',
+        lastUserContent: 'The hosted preview is healthy after recovery.',
+        missingRequiredVisibleText: ['CAL_FUP_123'],
+      }),
+    ).toBe(true);
+  });
+
   it('detects missing exact visible text requirements in follow-up workspace files', () => {
     const request =
       'Improve the existing calendar project without restarting from scratch. Add a visible agenda sidebar label containing the exact text "CAL_FUP_123".';
@@ -184,6 +204,173 @@ describe('api.chat continuation helpers', () => {
         files,
       }),
     ).toEqual(['CAL_FUP_123']);
+  });
+
+  it('extracts visible text requirements from structured message parts', () => {
+    const message = {
+      role: 'user',
+      content: '',
+      parts: [
+        {
+          type: 'text',
+          text: '[Model: deepseek/deepseek-v4-pro]\n\n[Provider: FREE]\n\nAdd a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+        },
+      ],
+    } as any;
+
+    const extracted = extractUserRequestTextFromMessage(message);
+
+    expect(extracted).toContain('CAL_FUP_123');
+    expect(extracted).not.toContain('[Model:');
+    expect(extractRequiredVisibleTextLiterals(extracted)).toEqual(['CAL_FUP_123']);
+  });
+
+  it('collects visible user request candidates without hidden recovery prompts shadowing follow-ups', () => {
+    const messages = [
+      {
+        id: 'initial',
+        role: 'user',
+        content: 'Build a calendar and render a visible heading containing the exact text "CAL_INITIAL".',
+      },
+      {
+        id: 'assistant',
+        role: 'assistant',
+        content: 'done',
+      },
+      {
+        id: 'follow-up',
+        role: 'user',
+        content:
+          'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+      },
+      {
+        id: 'hidden',
+        role: 'user',
+        content: 'The hosted preview is still not healthy after the previous execution pass.',
+        annotations: ['hidden'],
+      },
+    ] as any;
+
+    expect(collectUserRequestCandidates(messages, { includeHidden: false })).toEqual([
+      'Build a calendar and render a visible heading containing the exact text "CAL_INITIAL".',
+      'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+    ]);
+  });
+
+  it('detects exact visible text requirements from JSON-escaped request envelopes', () => {
+    const messages = [
+      {
+        id: 'follow-up',
+        role: 'user',
+        content:
+          'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+      },
+    ] as any;
+    const files = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){ return <h1>Calendar</h1>; }',
+        isBinary: false,
+      },
+    } as const;
+
+    expect(extractRequiredVisibleTextLiterals(collectUserRequestEnvelopeCandidates(messages)[0])).toEqual([
+      'CAL_FUP_123',
+    ]);
+    expect(
+      findMissingRequiredVisibleTextLiteralsForRequests({
+        requests: collectUserRequestEnvelopeCandidates(messages),
+        files,
+      }),
+    ).toEqual(['CAL_FUP_123']);
+  });
+
+  it('keeps hosted follow-up exact text requirements from the raw request payload', () => {
+    const requests = collectRequestObjectiveCandidatesFromPayload({
+      latestUserGoal:
+        'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+      messages: [
+        {
+          id: 'initial',
+          role: 'user',
+          content: 'Build a calendar and render a visible heading containing the exact text "CAL_INITIAL".',
+        },
+        {
+          id: 'assistant',
+          role: 'assistant',
+          content: 'Built a working calendar with CAL_INITIAL.',
+        },
+        {
+          id: 'follow-up',
+          role: 'user',
+          content: '',
+          parts: [
+            {
+              type: 'text',
+              text: '[Model: deepseek/deepseek-v4-pro]\n\n[Provider: FREE]\n\nImprove the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+            },
+          ],
+        },
+      ] as any,
+      projectMemory: {
+        latestGoal:
+          'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+      },
+    });
+    const files = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){ return <h1>CAL_INITIAL</h1>; }',
+        isBinary: false,
+      },
+    } as const;
+
+    expect(requests.some((request) => request.includes('CAL_FUP_123'))).toBe(true);
+    expect(
+      findMissingRequiredVisibleTextLiteralsForRequests({
+        requests,
+        files,
+      }),
+    ).toEqual(['CAL_FUP_123']);
+  });
+
+  it('remembers visible objectives for later hidden continuation requests in the same project', () => {
+    resetProjectObjectiveCandidatesForTests();
+
+    const projectKey = 'project-calendar';
+    rememberProjectObjectiveCandidates(projectKey, [
+      'Build a calendar with a visible heading containing the exact text "CAL_INITIAL".',
+    ]);
+    rememberProjectObjectiveCandidates(projectKey, [
+      'Improve the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+    ]);
+
+    const files = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){ return <h1>CAL_INITIAL</h1>; }',
+        isBinary: false,
+      },
+    } as const;
+
+    expect(
+      findMissingRequiredVisibleTextLiteralsForRequests({
+        requests: getProjectObjectiveCandidates(projectKey),
+        files,
+      }),
+    ).toEqual(['CAL_FUP_123']);
+  });
+
+  it('does not treat non-UI exact-text discussion quotes as required rendered literals', () => {
+    expect(extractRequiredVisibleTextLiterals('Explain why the exact text "CAL_FUP_123" is useful.')).toEqual([]);
+  });
+
+  it('does not treat source file paths as required visible text literals', () => {
+    expect(
+      extractRequiredVisibleTextLiterals(
+        'Edit the exact files "src/App.tsx" and "src/App.css" before checking the preview.',
+      ),
+    ).toEqual([]);
   });
 
   it('still allows inspection-only continuation before hosted preview verification succeeds', () => {

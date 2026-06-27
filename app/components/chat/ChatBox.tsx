@@ -80,6 +80,8 @@ interface ChatBoxProps {
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
+  const hasPromptDraft = props.input.trim().length > 0 || props.uploadedFiles.length > 0;
+
   return (
     <div
       className={classNames(
@@ -270,7 +272,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
 
               event.preventDefault();
 
-              if (props.isStreaming) {
+              if (props.isStreaming && !hasPromptDraft) {
                 props.handleStop?.();
                 return;
               }
@@ -301,15 +303,15 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
           {() => (
             <SendButton
               show={props.input.length > 0 || props.isStreaming || props.uploadedFiles.length > 0}
-              isStreaming={props.isStreaming}
+              isStreaming={props.isStreaming && !hasPromptDraft}
               disabled={!props.providerList || props.providerList.length === 0}
               onClick={(event) => {
-                if (props.isStreaming) {
+                if (props.isStreaming && !hasPromptDraft) {
                   props.handleStop?.();
                   return;
                 }
 
-                if (props.input.length > 0 || props.uploadedFiles.length > 0) {
+                if (hasPromptDraft) {
                   props.handleSendMessage?.(event);
                 }
               }}

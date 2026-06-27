@@ -50,9 +50,15 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.17`)
+## Current Release (`v3.0.9.19`)
 
-`v3.0.9.17` is the current stable hosted release. It closes the Google Calendar follow-up gap by checking exact visible text requirements across all user-message history available to the active stream and against the current UI source files. If a user asks to improve an existing generated app and add a specific visible label or token, server-side continuation keeps working until that literal text is actually present in the project instead of accepting an old healthy preview, stale project goal, hidden recovery prompt, or shell-only verification as success.
+`v3.0.9.19` is the current stable hosted release. It fixes the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
+
+This release also tightens exact visible text recovery by ignoring source file paths such as `src/App.tsx` and `src/App.css` when deciding whether a requested UI label is missing. That keeps Google Calendar-style repair passes focused on real visible UI requirements rather than incidental implementation instructions.
+
+`v3.0.9.18` closed the Google Calendar follow-up recovery gap by extracting user objectives from structured message parts, preserving the last visible human follow-up when hidden recovery prompts are inserted, and treating missing exact visible UI text as a hard continuation signal even if the hosted preview is already healthy. If a user asks to improve an existing generated app and add a specific visible label or token, server-side continuation keeps working until that literal text is actually present in the project instead of accepting an old healthy preview, stale project goal, hidden recovery prompt, or shell-only verification as success.
+
+`v3.0.9.17` expanded the exact visible text guard to scan all user-message history available to the active stream.
 
 `v3.0.9.16` expanded the exact visible text guard to check multiple latest-user-request candidates.
 
@@ -121,7 +127,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.17`)
+## Current Platform Baseline (`v3.0.9.19`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

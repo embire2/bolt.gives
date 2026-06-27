@@ -26,6 +26,20 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.19 (2026-06-27)
+
+### Fixed
+
+- Follow-up prompts typed while hidden preview recovery is still running now queue visibly instead of stopping the active run or being shadowed by automatic continuation prompts.
+- The chat composer remains usable from the active project surface: Enter/click with typed text queues the follow-up, while empty input during streaming still acts as Stop.
+- Exact visible text recovery now ignores source file paths such as `src/App.tsx` and `src/App.css`, preventing false continuation targets during Google Calendar-style repair passes.
+
+## v3.0.9.18 (2026-06-27)
+
+### Fixed
+
+- Google Calendar-style follow-up recovery now extracts the user objective from structured message `parts`, keeps the last visible human follow-up from being shadowed by hidden recovery prompts, and forces continuation when requested exact visible UI text is still missing from source files, even after an old hosted preview reports healthy.
+
 ## v3.0.9.17 (2026-06-27)
 
 ### Fixed

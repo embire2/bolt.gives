@@ -158,6 +158,11 @@ type QueuedHiddenContinuation = {
   scheduledAt: number;
 };
 
+type QueuedVisibleFollowUp = {
+  content: string;
+  queuedAt: number;
+};
+
 function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean {
   if (!fileMap) {
     return false;
@@ -804,6 +809,7 @@ export const ChatImpl = memo(
     const appliedSyntheticRunHandoffsRef = useRef(new Set<string>());
     const pendingSyntheticRunHandoffRef = useRef<SyntheticRunHandoffDataEvent | null>(null);
     const [queuedHiddenContinuation, setQueuedHiddenContinuation] = useState<QueuedHiddenContinuation | null>(null);
+    const [queuedVisibleFollowUp, setQueuedVisibleFollowUp] = useState<QueuedVisibleFollowUp | null>(null);
 
     useEffect(() => {
       isLoadingRef.current = isLoading;
@@ -2661,16 +2667,32 @@ Requirements:
         return;
       }
 
-      if (isLoading) {
-        abort();
-        return;
-      }
-
       const finalMessageContent = mergePromptContext({
         content: messageContent,
         selectedElement,
         sketchElements,
       });
+
+      if (chatStarted) {
+        setQueuedHiddenContinuation(null);
+        pendingStarterContinuationRef.current = null;
+        starterBootstrapQueuedAtRef.current = null;
+        starterContinuationTriggeredRef.current = true;
+      }
+
+      if (isLoading || fakeLoading) {
+        setQueuedVisibleFollowUp({
+          content: finalMessageContent,
+          queuedAt: Date.now(),
+        });
+        setInput('');
+        Cookies.remove(PROMPT_COOKIE_KEY);
+        resetEnhancer();
+        toast.info('Follow-up queued. It will send as soon as the current run is idle.');
+
+        return;
+      }
+
       requestLifecycleStartedAtRef.current = Date.now();
       lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
       lastAssistantProgressSignatureRef.current = '';
@@ -3051,6 +3073,22 @@ CONTINUE IMMEDIATELY:
 
       textareaRef.current?.blur();
     };
+
+    useEffect(() => {
+      if (!queuedVisibleFollowUp || isLoading || fakeLoading) {
+        return undefined;
+      }
+
+      const timer = window.setTimeout(() => {
+        const queued = queuedVisibleFollowUp;
+        setQueuedVisibleFollowUp(null);
+        void sendMessage({} as React.UIEvent, queued.content);
+      }, 250);
+
+      return () => {
+        window.clearTimeout(timer);
+      };
+    }, [fakeLoading, isLoading, queuedVisibleFollowUp, sendMessage]);
 
     useEffect(() => {
       if (actionAlert) {
@@ -3537,6 +3575,7 @@ CONTINUE IMMEDIATELY:
         setAutonomyMode={(mode: AutonomyMode) => workbenchStore.setAutonomyMode(mode)}
         latestRunMetrics={latestRunMetrics}
         latestUsage={latestUsage}
+        queuedVisibleFollowUp={queuedVisibleFollowUp}
         onApiKeysUpdated={handleApiKeysUpdated}
       />
     );
