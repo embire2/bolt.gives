@@ -26,6 +26,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.16 (2026-06-27)
+
+### Fixed
+
+- Exact visible text follow-up completion now checks all relevant latest-user-request candidates, so continuation streams do not lose the follow-up label behind an older summarized project goal.
+- Recovery prompts now prefer the request candidate that contains the missing literal text, keeping Google Calendar follow-up repairs pointed at the exact agenda/sidebar requirement.
+
 ## v3.0.9.15 (2026-06-27)
 
 ### Fixed

@@ -4,6 +4,7 @@ import {
   detectRestoredHostedRuntimeHandoffMismatch,
   extractRequiredVisibleTextLiterals,
   findMissingRequiredVisibleTextLiterals,
+  findMissingRequiredVisibleTextLiteralsForRequests,
   shouldAllowSynthesizedRunHandoff,
   shouldApplyHostedRuntimeHandoffBeforePreviewVerification,
   shouldContinueAfterBlockedSynthesizedRunHandoff,
@@ -163,6 +164,26 @@ describe('api.chat continuation helpers', () => {
 
     expect(findMissingRequiredVisibleTextLiterals({ request, files })).toEqual([]);
     expect(shouldContinueForMissingRequiredVisibleText({ lastUserContent: request, currentFiles: files })).toBe(false);
+  });
+
+  it('checks all candidate user requests when detecting missing exact follow-up text', () => {
+    const firstRequest = 'Build a calendar app and render a visible heading containing the exact text "CAL_INITIAL".';
+    const followUpRequest =
+      'Improve the existing calendar project and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".';
+    const files = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){ return <h1>CAL_INITIAL</h1>; }',
+        isBinary: false,
+      },
+    } as const;
+
+    expect(
+      findMissingRequiredVisibleTextLiteralsForRequests({
+        requests: [firstRequest, followUpRequest],
+        files,
+      }),
+    ).toEqual(['CAL_FUP_123']);
   });
 
   it('still allows inspection-only continuation before hosted preview verification succeeds', () => {

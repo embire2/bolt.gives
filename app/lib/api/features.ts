@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.16',
+    name: 'v3.0.9.16 robust exact follow-up guard',
+    description:
+      'The exact visible text guard now checks every relevant latest-user-request candidate, so follow-up labels requested during continuation cannot be lost behind an older project goal.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.15',
     name: 'v3.0.9.15 exact follow-up outcome guard',
     description:

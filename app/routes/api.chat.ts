@@ -429,16 +429,33 @@ export function findMissingRequiredVisibleTextLiterals(options: {
   return requiredLiterals.filter((literal) => !fileContents.includes(literal));
 }
 
+export function findMissingRequiredVisibleTextLiteralsForRequests(options: {
+  requests: Array<string | undefined>;
+  files?: FileMap | null;
+}): string[] {
+  const missing = new Set<string>();
+  const requests = [...new Set(options.requests.map((request) => String(request || '').trim()).filter(Boolean))];
+
+  for (const request of requests) {
+    if (!requestLikelyNeedsProjectFileChanges(request)) {
+      continue;
+    }
+
+    for (const literal of findMissingRequiredVisibleTextLiterals({ request, files: options.files })) {
+      missing.add(literal);
+    }
+  }
+
+  return [...missing];
+}
+
 export function shouldContinueForMissingRequiredVisibleText(options: {
   lastUserContent?: string;
   currentFiles?: FileMap | null;
 }) {
-  const lastUserContent = options.lastUserContent || '';
-
   return (
-    requestLikelyNeedsProjectFileChanges(lastUserContent) &&
-    findMissingRequiredVisibleTextLiterals({
-      request: lastUserContent,
+    findMissingRequiredVisibleTextLiteralsForRequests({
+      requests: [options.lastUserContent],
       files: options.currentFiles,
     }).length > 0
   );
@@ -2080,6 +2097,7 @@ Next: I am returning the finished result with the verified preview ready for ins
             latestProjectMemoryFiles = continuationFiles || files;
 
             const latestVisibleUserRequest = latestUserGoal || lastUserContent;
+            const latestUserRequestCandidates = [lastUserContent, latestUserGoal];
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
               lastUserContent: latestVisibleUserRequest,
@@ -2087,12 +2105,24 @@ Next: I am returning the finished result with the verified preview ready for ins
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
               currentFiles: continuationFiles,
             });
-            const missingRequiredVisibleText = findMissingRequiredVisibleTextLiterals({
-              request: latestVisibleUserRequest,
+            const missingRequiredVisibleText = findMissingRequiredVisibleTextLiteralsForRequests({
+              requests: latestUserRequestCandidates,
               files: continuationFiles,
             });
-            const shouldContinueForMissingVisibleText =
-              missingRequiredVisibleText.length > 0 && requestLikelyNeedsProjectFileChanges(latestVisibleUserRequest);
+            const shouldContinueForMissingVisibleText = missingRequiredVisibleText.length > 0;
+            const literalObjectiveRequest =
+              missingRequiredVisibleText.length > 0
+                ? latestUserRequestCandidates.find((request) => {
+                    const candidate = String(request || '').trim();
+
+                    return (
+                      candidate.length > 0 &&
+                      missingRequiredVisibleText.some((literal) =>
+                        extractRequiredVisibleTextLiterals(candidate).includes(literal),
+                      )
+                    );
+                  }) || latestVisibleUserRequest
+                : latestVisibleUserRequest;
             const effectiveRunContinuationDecision = shouldContinueForMissingVisibleText
               ? {
                   ...runContinuationDecision,
@@ -2418,7 +2448,7 @@ Next: I am continuing from the current workspace state and tightening the previe
                             content: buildHostedPreviewRecoveryPrompt({
                               model,
                               provider,
-                              originalRequest: latestVisibleUserRequest,
+                              originalRequest: literalObjectiveRequest,
                               failureSummary: previewAlertMessage,
                               attempt: runContinuationAttempts,
                               maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
@@ -2582,7 +2612,7 @@ Next: I will keep working from the existing project state until the app is runni
                   ? buildHostedPreviewRecoveryPrompt({
                       model,
                       provider,
-                      originalRequest: latestVisibleUserRequest,
+                      originalRequest: literalObjectiveRequest,
                       failureSummary:
                         directHostedPreviewFailureSummary ||
                         'The hosted preview verification ended unhealthy after the latest response.',
@@ -2592,7 +2622,7 @@ Next: I will keep working from the existing project state until the app is runni
                   : buildRunContinuationPrompt({
                       model,
                       provider,
-                      originalRequest: latestVisibleUserRequest,
+                      originalRequest: literalObjectiveRequest,
                       starterEntryTarget,
                       continuationReason,
                       shouldContinueForRunIntent,

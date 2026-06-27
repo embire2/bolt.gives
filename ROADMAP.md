@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.15`
+- [x] `v3.0.9.16`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.15 - Current Patch
+## v3.0.9.16 - Current Patch
+
+Release theme: keep exact follow-up outcome checks attached to the real latest user request.
+
+### Shipped in v3.0.9.16
+
+- [x] Check all latest-user-request candidates for exact visible text requirements during stream finalization.
+- [x] Prefer the candidate that contains the missing literal when building recovery prompts.
+- [x] Add a regression for stale first-request plus missing follow-up label detection.
+
+## v3.0.9.15 - Shipped Patch
 
 Release theme: make exact follow-up outcomes verifiable against the current project files.
 
