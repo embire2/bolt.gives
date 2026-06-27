@@ -1754,6 +1754,36 @@ function isLifecycleOnlyPreviewAlert(alert) {
   return !hardFailurePatterns.some((pattern) => pattern.test(combinedText));
 }
 
+function isStarterPlaceholderPreviewAlert(alert) {
+  if (!alert || typeof alert !== 'object') {
+    return false;
+  }
+
+  const combinedText = normalizePreviewText(`${alert.title || ''}\n${alert.description || ''}\n${alert.content || ''}`);
+
+  return /Starter Placeholder Still Visible/i.test(combinedText) || combinedText.includes(STARTER_PLACEHOLDER_TEXT);
+}
+
+function canClearPreviewAlertAfterHealthyResponse(session, alert, normalizedBody) {
+  if (!alert) {
+    return true;
+  }
+
+  if (isLifecycleOnlyPreviewAlert(alert)) {
+    return true;
+  }
+
+  if (!isStarterPlaceholderPreviewAlert(alert)) {
+    return false;
+  }
+
+  if (normalizedBody.includes(STARTER_PLACEHOLDER_TEXT)) {
+    return false;
+  }
+
+  return !fileMapContainsStarterPlaceholder(session.currentFileMap);
+}
+
 function extractPreviewAlertFromText(rawText) {
   const combinedText = normalizePreviewText(rawText);
 
@@ -2139,12 +2169,16 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
       requestPath === '/' ||
       requestPath.endsWith('.html');
     const body = shouldReadBody ? await response.text() : '';
+    const normalizedBody = normalizePreviewText(body);
     const bodyAlert = extractPreviewAlertFromText(body);
-    const existingAlertIsStaleLifecycleNoise =
-      !bodyAlert && response.status >= 200 && response.status < 400 && isLifecycleOnlyPreviewAlert(existingAlert);
+    const responseHasHealthyStatus = response.status >= 200 && response.status < 400;
+    const existingAlertCanBeCleared =
+      !bodyAlert &&
+      responseHasHealthyStatus &&
+      canClearPreviewAlertAfterHealthyResponse(session, existingAlert, normalizedBody);
     const alert =
       bodyAlert ||
-      (existingAlertIsStaleLifecycleNoise ? null : existingAlert) ||
+      (existingAlertCanBeCleared ? null : existingAlert) ||
       (response.status >= 500
         ? {
             type: 'error',
@@ -2157,7 +2191,7 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
         : null);
 
     return {
-      healthy: !alert && response.status >= 200 && response.status < 400,
+      healthy: !alert && responseHasHealthyStatus,
       statusCode: response.status,
       alert,
     };
@@ -2440,7 +2474,7 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath, c
     !(
       session.previewDiagnostics?.status === 'error' &&
       session.previewDiagnostics?.alert &&
-      !isLifecycleOnlyPreviewAlert(session.previewDiagnostics.alert)
+      !canClearPreviewAlertAfterHealthyResponse(session, session.previewDiagnostics.alert, normalizedBody)
     )
   ) {
     touchPreviewDiagnostics(session, {

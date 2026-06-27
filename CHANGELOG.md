@@ -26,6 +26,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.12 (2026-06-27)
+
+### Fixed
+
+- Hosted runtime preview health now clears stale `Starter Placeholder Still Visible` Recovery state once generated workspace files replace the fallback starter and the preview responds with a healthy document.
+- Preview status probes keep real compile/runtime errors sticky, but no longer preserve obsolete starter-placeholder warnings after the requested app is visible.
+
 ## v3.0.9.11 (2026-06-27)
 
 ### Fixed

@@ -10,13 +10,22 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.11`
+- [x] `v3.0.9.12`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.11 - Current Patch
+## v3.0.9.12 - Current Patch
+
+Release theme: keep preview Recovery/status aligned with the generated app currently running.
+
+### Shipped in v3.0.9.12
+
+- [x] Clear stale starter-placeholder Recovery status after generated files replace the fallback starter.
+- [x] Preserve sticky behavior for real preview compile/runtime errors.
+
+## v3.0.9.11 - Shipped Patch
 
 Release theme: ensure hosted FREE starter bootstrap continues into a real generated project.
 

@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.11`)
+## Current Release (`v3.0.9.12`)
 
-`v3.0.9.11` is the current stable hosted release. It fixes hosted `FREE` project starts that imported the Vite starter, showed a fallback preview, and then failed to send the hidden model continuation needed to implement the user request.
+`v3.0.9.12` is the current stable hosted release. It fixes stale Recovery/preview-status warnings that could keep reporting `Starter Placeholder Still Visible` after the generated app had already replaced the fallback starter and loaded successfully.
+
+`v3.0.9.11` fixes hosted `FREE` project starts that imported the Vite starter, showed a fallback preview, and then failed to send the hidden model continuation needed to implement the user request.
 
 `v3.0.9.10` keeps active managed Cloudflare fleet refreshes moving from the live rsync checkout by passing `--commit-dirty=true` to Wrangler Pages deploys, while preserving health verification before instances are marked active.
 
@@ -109,7 +111,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.11`)
+## Current Platform Baseline (`v3.0.9.12`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.

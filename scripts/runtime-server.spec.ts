@@ -838,6 +838,101 @@ describe('runtime server workspace isolation', () => {
     expect(session.previewDiagnostics.alert).toBeNull();
   });
 
+  it('clears stale starter-placeholder alerts once generated workspace files replace the starter', () => {
+    const session = {
+      id: 'session-clear-starter',
+      preview: {
+        port: 4112,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-clear-starter/4112',
+      },
+      currentFileMap: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return <h1>Generated App</h1>; }',
+          isBinary: false,
+        },
+      },
+      previewSubscribers: new Set(),
+      previewDiagnostics: {
+        status: 'error',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: {
+          type: 'warning',
+          title: 'Starter Placeholder Still Visible',
+          description: 'The preview is still showing the built-in fallback starter instead of the requested app.',
+          content: 'Vite + React\nYour fallback starter is ready.',
+          source: 'preview',
+        },
+      },
+      previewRecovery: {
+        state: 'idle',
+        token: 0,
+        message: null,
+        updatedAt: null,
+      },
+    };
+
+    recordPreviewResponse(
+      session as any,
+      '<!doctype html><div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+      200,
+      '/',
+      'text/html; charset=utf-8',
+    );
+
+    expect(session.previewDiagnostics.status).toBe('ready');
+    expect(session.previewDiagnostics.healthy).toBe(true);
+    expect(session.previewDiagnostics.alert).toBeNull();
+  });
+
+  it('does not clear starter-placeholder alerts while the current workspace still contains the starter', () => {
+    const session = {
+      id: 'session-keep-starter',
+      preview: {
+        port: 4113,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-keep-starter/4113',
+      },
+      currentFileMap: {
+        '/home/project/src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return <p>Your fallback starter is ready.</p>; }',
+          isBinary: false,
+        },
+      },
+      previewDiagnostics: {
+        status: 'error',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: {
+          type: 'warning',
+          title: 'Starter Placeholder Still Visible',
+          description: 'The preview is still showing the built-in fallback starter instead of the requested app.',
+          content: 'Vite + React\nYour fallback starter is ready.',
+          source: 'preview',
+        },
+      },
+    };
+
+    recordPreviewResponse(
+      session as any,
+      '<!doctype html><div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+      200,
+      '/',
+      'text/html; charset=utf-8',
+    );
+
+    expect(session.previewDiagnostics.status).toBe('error');
+    expect(session.previewDiagnostics.healthy).toBe(false);
+    expect(session.previewDiagnostics.alert).toEqual(
+      expect.objectContaining({
+        title: 'Starter Placeholder Still Visible',
+      }),
+    );
+  });
+
   it('detects missing vite bootstrap files before trusting the preview shell', async () => {
     const workspace = await makeTempDir('bolt-runtime-probe-bootstrap-');
     await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
