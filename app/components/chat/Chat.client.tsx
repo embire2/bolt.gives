@@ -80,6 +80,7 @@ import {
   shouldWaitForStarterBootstrapObservation,
   shouldWaitForStarterContinuation,
   shouldRunImmediateStarterBootstrapRuntime,
+  shouldUseClientStarterContinuation,
   type StarterBootstrapRuntimeAction,
 } from './starter-bootstrap-runtime';
 import {
@@ -816,31 +817,6 @@ export const ChatImpl = memo(
       messagesRef.current = messages;
     }, [messages]);
 
-    const clearHostedFreeStarterContinuation = useCallback((reason: string) => {
-      const hadPendingStarterContinuation = Boolean(
-        pendingStarterContinuationRef.current ||
-        starterBootstrapCommandsRef.current ||
-        starterBootstrapQueuedAtRef.current !== null,
-      );
-
-      pendingStarterContinuationRef.current = null;
-      starterContinuationTriggeredRef.current = false;
-      starterBootstrapCommandsRef.current = null;
-      starterBootstrapQueuedAtRef.current = null;
-      starterStartRecoveryTriggeredRef.current = false;
-
-      if (!hadPendingStarterContinuation) {
-        return;
-      }
-
-      appendStepRunnerEvent({
-        type: 'telemetry',
-        timestamp: new Date().toISOString(),
-        description: 'Hosted FREE server recovery owns starter continuation',
-        output: reason,
-      });
-    }, []);
-
     useEffect(() => {
       if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
         const isPreview = actionAlert.source === 'preview';
@@ -1012,19 +988,18 @@ export const ChatImpl = memo(
         const activeRunContext = runContextRef.current;
         const starterPlaceholderStillPresent = hasFallbackStarterPlaceholder(workbenchStore.files.get());
 
-        if (!pendingStarterContext || starterContinuationTriggeredRef.current) {
+        if (
+          !shouldUseClientStarterContinuation({
+            providerName: activeRunContext.providerName,
+            hostedRuntimeEnabled,
+            hasPendingStarterRequest: Boolean(pendingStarterContext),
+            starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
+          })
+        ) {
           return false;
         }
 
-        if (hostedRuntimeEnabled && activeRunContext.providerName === 'FREE') {
-          clearHostedFreeStarterContinuation(
-            `Skipped ${reason} client starter continuation because hosted FREE uses server-side preview recovery.`,
-          );
-
-          return false;
-        }
-
-        const normalizedRequest = pendingStarterContext.trim() || latestUserRequestRef.current.trim();
+        const normalizedRequest = (pendingStarterContext ?? '').trim() || latestUserRequestRef.current.trim();
 
         if (!normalizedRequest) {
           pendingStarterContinuationRef.current = null;
@@ -1096,7 +1071,7 @@ Requirements:
 
         return dispatched;
       },
-      [clearHostedFreeStarterContinuation, dispatchAutoContinuation, hostedRuntimeEnabled],
+      [dispatchAutoContinuation, hostedRuntimeEnabled],
     );
 
     useEffect(() => {
@@ -1278,11 +1253,7 @@ Requirements:
         port: hostedPreviewCheckpoint.previewPort,
         baseUrl: hostedPreviewCheckpoint.previewBaseUrl,
       });
-
-      if (hostedRuntimeEnabled && runContextRef.current.providerName === 'FREE') {
-        clearHostedFreeStarterContinuation('Hosted preview was verified by server-side FREE recovery.');
-      }
-    }, [boundedChatData, clearHostedFreeStarterContinuation, hostedRuntimeEnabled]);
+    }, [boundedChatData]);
 
     useEffect(() => {
       const bootstrapCommands = starterBootstrapCommandsRef.current;
@@ -1593,12 +1564,6 @@ Requirements:
         return undefined;
       }
 
-      if (hostedRuntimeEnabled && runContextRef.current.providerName === 'FREE') {
-        clearHostedFreeStarterContinuation('Skipped idle client starter continuation after hosted FREE response.');
-
-        return undefined;
-      }
-
       let cancelled = false;
 
       const evaluateStarterContinuation = async () => {
@@ -1652,7 +1617,6 @@ Requirements:
       };
     }, [
       actionAlert?.source,
-      clearHostedFreeStarterContinuation,
       dispatchStarterContinuation,
       fakeLoading,
       files,
@@ -3199,18 +3163,6 @@ CONTINUE IMMEDIATELY:
 
         const alertKey = buildActionAlertKey(actionAlert);
 
-        if (hostedRuntimeEnabled && provider.name === 'FREE') {
-          appendArchitectTimelineEvent({
-            type: 'telemetry',
-            description: `${ARCHITECT_NAME} auto-heal skipped`,
-            output: `${diagnosis.title} (${diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
-          });
-          setPendingArchitectAutoHeal(null);
-          setArchitectAutoHealStatus(null);
-
-          return;
-        }
-
         const alertPromptGeneration =
           architectAlertPromptGenerationRef.current[alertKey] ?? manualPromptGenerationRef.current;
         architectAlertPromptGenerationRef.current[alertKey] = alertPromptGeneration;
@@ -3246,6 +3198,18 @@ CONTINUE IMMEDIATELY:
             starterContinuationTriggeredRef.current = false;
             dispatchStarterContinuation('stream-finished');
           }
+
+          return;
+        }
+
+        if (hostedRuntimeEnabled && provider.name === 'FREE') {
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            output: `${diagnosis.title} (${diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
+          });
+          setPendingArchitectAutoHeal(null);
+          setArchitectAutoHealStatus(null);
 
           return;
         }

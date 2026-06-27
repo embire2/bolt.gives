@@ -10,13 +10,22 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.10`
+- [x] `v3.0.9.11`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.10 - Current Patch
+## v3.0.9.11 - Current Patch
+
+Release theme: ensure hosted FREE starter bootstrap continues into a real generated project.
+
+### Shipped in v3.0.9.11
+
+- [x] Keep hosted FREE starter continuation enabled after the fallback starter workspace is imported.
+- [x] Prevent fallback preview readiness from clearing the pending model continuation before the requested app is implemented.
+
+## v3.0.9.10 - Shipped Patch
 
 Release theme: keep managed Cloudflare fleet rollouts compatible with the live rsync checkout model.
 

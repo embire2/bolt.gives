@@ -6,6 +6,7 @@ import {
   shouldWaitForStarterBootstrapObservation,
   shouldWaitForStarterContinuation,
   shouldRunImmediateStarterBootstrapRuntime,
+  shouldUseClientStarterContinuation,
 } from './starter-bootstrap-runtime';
 
 describe('selectMissingStarterBootstrapRuntimeActions', () => {
@@ -213,6 +214,36 @@ describe('selectMissingStarterBootstrapRuntimeActions', () => {
         startStatus: 'idle',
         queuedAt: 1000,
         now: 1000 + 1000,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps hosted FREE starter continuation enabled after the starter workspace is imported', () => {
+    expect(
+      shouldUseClientStarterContinuation({
+        providerName: 'FREE',
+        hostedRuntimeEnabled: true,
+        hasPendingStarterRequest: true,
+        starterContinuationAlreadyTriggered: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not dispatch starter continuation without a pending request or after one already started', () => {
+    expect(
+      shouldUseClientStarterContinuation({
+        providerName: 'FREE',
+        hostedRuntimeEnabled: true,
+        hasPendingStarterRequest: false,
+        starterContinuationAlreadyTriggered: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldUseClientStarterContinuation({
+        providerName: 'FREE',
+        hostedRuntimeEnabled: true,
+        hasPendingStarterRequest: true,
+        starterContinuationAlreadyTriggered: true,
       }),
     ).toBe(false);
   });

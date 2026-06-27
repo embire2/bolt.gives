@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.11',
+    name: 'v3.0.9.11 hosted FREE starter continuation repair',
+    description:
+      'Hosted FREE project starts now continue after starter import and send the hidden model follow-up that replaces the fallback Vite screen with the requested generated app.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.10',
     name: 'v3.0.9.10 managed fleet rollout repair',
     description:

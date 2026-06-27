@@ -26,6 +26,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.11 (2026-06-27)
+
+### Fixed
+
+- Hosted `FREE` starter bootstrap now dispatches the hidden model continuation after importing starter files, so new projects continue into a real implementation instead of stopping at the fallback `Vite + React` preview.
+- Starter placeholder preview checkpoints no longer clear the pending FREE continuation just because a dev server is running; the requested app must still replace the starter UI.
+
 ## v3.0.9.10 (2026-06-27)
 
 ### Fixed

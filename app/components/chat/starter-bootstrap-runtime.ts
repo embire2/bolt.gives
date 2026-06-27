@@ -11,6 +11,13 @@ export type StarterBootstrapRuntimeAction = {
   status?: ActionStatus;
 };
 
+type StarterContinuationDecisionOptions = {
+  providerName: string | undefined;
+  hostedRuntimeEnabled?: boolean;
+  hasPendingStarterRequest: boolean;
+  starterContinuationAlreadyTriggered: boolean;
+};
+
 export const STARTER_BOOTSTRAP_OBSERVATION_TIMEOUT_MS = 8000;
 
 export function normalizeStarterBootstrapCommand(command: string | undefined): string | null {
@@ -71,6 +78,19 @@ export function shouldWaitForStarterContinuation(options: {
   return (
     options.installStatus === 'pending' || options.installStatus === 'running' || options.startStatus === 'pending'
   );
+}
+
+export function shouldUseClientStarterContinuation(options: StarterContinuationDecisionOptions): boolean {
+  if (!options.hasPendingStarterRequest || options.starterContinuationAlreadyTriggered) {
+    return false;
+  }
+
+  /*
+   * Hosted FREE still needs a model continuation after starter files are
+   * imported. Server-side recovery can repair runtime failures later, but it
+   * cannot implement the user request if no follow-up model request is sent.
+   */
+  return true;
 }
 
 export function shouldWaitForStarterBootstrapObservation(options: {
