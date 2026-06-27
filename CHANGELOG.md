@@ -26,6 +26,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.15 (2026-06-27)
+
+### Fixed
+
+- Follow-up prompts that request exact visible text now keep continuing until the literal string appears in the current UI source files, preventing a healthy old preview from hiding an incomplete Google Calendar improvement.
+- Continuation prompts now list any missing exact visible UI text requirements, forcing the next recovery pass to edit source files instead of drifting into shell-only verification.
+- Added regression coverage for missing and satisfied exact visible text requirements in history-aware follow-up prompts.
+
 ## v3.0.9.14 (2026-06-27)
 
 ### Fixed

@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.14`
+- [x] `v3.0.9.15`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.14 - Current Patch
+## v3.0.9.15 - Current Patch
+
+Release theme: make exact follow-up outcomes verifiable against the current project files.
+
+### Shipped in v3.0.9.15
+
+- [x] Detect exact visible text requirements in follow-up prompts, including quoted labels/tokens requested for generated UI.
+- [x] Keep server-side continuation active until those literal UI strings appear in current source files.
+- [x] Add regressions for missing and satisfied exact visible text requirements.
+
+## v3.0.9.14 - Shipped Patch
 
 Release theme: make follow-up prompts reliably improve the current project instead of stopping at an old healthy preview.
 

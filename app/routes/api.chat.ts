@@ -82,6 +82,10 @@ const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type=(["'])file\1/i;
 const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementation\s+plan|plan:|next\s+steps)\b/i;
+const QUOTED_VISIBLE_TEXT_RE = /(["'`])([^"'`\r\n]{2,160})\1/g;
+const VISIBLE_TEXT_REQUIREMENT_CONTEXT_RE =
+  /\b(exact|exactly|visible|show|display|render|contain|contains|containing|label|heading|text|copy|token|sidebar)\b/i;
+const UI_TEXT_SOURCE_FILE_RE = /\.(?:tsx?|jsx?|html?|mdx?|vue|svelte|astro)$/i;
 
 type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
 
@@ -189,6 +193,7 @@ export function buildRunContinuationPrompt(options: {
   continuationReason: ContinuationReason;
   shouldContinueForRunIntent: boolean;
   latestExecutionFailure?: ReturnType<typeof extractExecutionFailure>;
+  missingRequiredVisibleText?: string[];
 }) {
   const {
     model,
@@ -198,6 +203,7 @@ export function buildRunContinuationPrompt(options: {
     continuationReason,
     shouldContinueForRunIntent,
     latestExecutionFailure,
+    missingRequiredVisibleText = [],
   } = options;
 
   const requiresStarterEntryReplacement =
@@ -240,6 +246,12 @@ ${(latestExecutionFailure.stderr || '').slice(0, 1200)}
 \`\`\`
 - Repair the file or command that caused this failure before replaying install/start steps.`
     : '';
+  const missingVisibleTextDetails =
+    missingRequiredVisibleText.length > 0
+      ? `Missing exact visible text requirements in the current source files:
+${missingRequiredVisibleText.map((literal) => `- ${JSON.stringify(literal)}`).join('\n')}
+- Add these literal strings to the rendered UI before declaring the follow-up complete.`
+      : '';
 
   if (shouldContinueForRunIntent) {
     return `[Model: ${model}]
@@ -249,6 +261,7 @@ ${(latestExecutionFailure.stderr || '').slice(0, 1200)}
 ${isFollowUpFileChange ? 'You were asked to improve the existing project, but the requested follow-up edit was not applied.' : 'You scaffolded a project but did not complete the requested implementation.'}
 ${blockerText}
 ${failureDetails ? `\n\n${failureDetails}` : ''}
+${missingVisibleTextDetails ? `\n\n${missingVisibleTextDetails}` : ''}
 
 Continue now and do ALL of the following:
 1) continue from the current project files (do NOT re-run create-vite/create-react-app if package.json already exists).
@@ -277,6 +290,7 @@ Continue now and do ALL of the following:
 The previous run ended without a preview-ready checkpoint.
 ${blockerText}
 ${failureDetails ? `\n\n${failureDetails}` : ''}
+${missingVisibleTextDetails ? `\n\n${missingVisibleTextDetails}` : ''}
 
 Continue from the current project state right now and do ALL of the following:
 1) do not re-scaffold the project if package.json or app files already exist.
@@ -365,6 +379,69 @@ export function resolveContinuationFiles(options: {
   }
 
   return requestFiles;
+}
+
+export function extractRequiredVisibleTextLiterals(request: string | undefined): string[] {
+  const source = String(request || '');
+
+  if (!source.trim()) {
+    return [];
+  }
+
+  const literals = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  QUOTED_VISIBLE_TEXT_RE.lastIndex = 0;
+
+  while ((match = QUOTED_VISIBLE_TEXT_RE.exec(source))) {
+    const literal = match[2]?.trim();
+
+    if (!literal || literal.length < 2 || /[<>]/.test(literal)) {
+      continue;
+    }
+
+    const before = source.slice(Math.max(0, match.index - 120), match.index);
+    const after = source.slice(match.index + match[0].length, match.index + match[0].length + 80);
+
+    if (VISIBLE_TEXT_REQUIREMENT_CONTEXT_RE.test(`${before} ${after}`)) {
+      literals.add(literal);
+    }
+  }
+
+  return [...literals];
+}
+
+export function findMissingRequiredVisibleTextLiterals(options: {
+  request: string | undefined;
+  files?: FileMap | null;
+}): string[] {
+  const requiredLiterals = extractRequiredVisibleTextLiterals(options.request);
+
+  if (requiredLiterals.length === 0) {
+    return [];
+  }
+
+  const fileContents = Object.entries(options.files || {})
+    .filter(([filePath, entry]) => entry?.type === 'file' && !entry.isBinary && UI_TEXT_SOURCE_FILE_RE.test(filePath))
+    .map(([, entry]) => (entry?.type === 'file' ? entry.content : ''))
+    .join('\n');
+
+  return requiredLiterals.filter((literal) => !fileContents.includes(literal));
+}
+
+export function shouldContinueForMissingRequiredVisibleText(options: {
+  lastUserContent?: string;
+  currentFiles?: FileMap | null;
+}) {
+  const lastUserContent = options.lastUserContent || '';
+
+  return (
+    requestLikelyNeedsProjectFileChanges(lastUserContent) &&
+    findMissingRequiredVisibleTextLiterals({
+      request: lastUserContent,
+      files: options.currentFiles,
+    }).length > 0
+  );
 }
 
 const HOSTED_HANDOFF_PERSISTENCE_FILE_RE =
@@ -2002,36 +2079,51 @@ Next: I am returning the finished result with the verified preview ready for ins
 
             latestProjectMemoryFiles = continuationFiles || files;
 
+            const latestVisibleUserRequest = latestUserGoal || lastUserContent;
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
-              lastUserContent: latestUserGoal || lastUserContent,
+              lastUserContent: latestVisibleUserRequest,
               assistantContent: content,
               alreadyAttempted: runContinuationAttempts >= MAX_RUN_CONTINUATION_ATTEMPTS,
               currentFiles: continuationFiles,
             });
+            const missingRequiredVisibleText = findMissingRequiredVisibleTextLiterals({
+              request: latestVisibleUserRequest,
+              files: continuationFiles,
+            });
+            const shouldContinueForMissingVisibleText =
+              missingRequiredVisibleText.length > 0 && requestLikelyNeedsProjectFileChanges(latestVisibleUserRequest);
+            const effectiveRunContinuationDecision = shouldContinueForMissingVisibleText
+              ? {
+                  ...runContinuationDecision,
+                  shouldContinue: true,
+                  reason: 'no-bolt-actions' as const,
+                }
+              : runContinuationDecision;
             logger.info(
               `run continuation analysis ${JSON.stringify({
                 runId,
                 provider,
                 model,
-                reason: runContinuationDecision.reason,
-                shouldContinue: runContinuationDecision.shouldContinue,
+                reason: effectiveRunContinuationDecision.reason,
+                shouldContinue: effectiveRunContinuationDecision.shouldContinue,
+                missingRequiredVisibleText,
                 attempt: runContinuationAttempts,
                 maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
                 previewCheckpointObserved,
                 hasExecutionFailures,
-                starterEntryFilePath: runContinuationDecision.starterEntryFilePath || null,
+                starterEntryFilePath: effectiveRunContinuationDecision.starterEntryFilePath || null,
                 continuationFileSource:
                   hostedRuntimeSnapshot && Object.keys(hostedRuntimeSnapshot).length > 0 ? 'hosted-runtime' : 'request',
               })}`,
             );
 
             const shouldContinueForRunIntent = shouldContinueRunIntentAfterHostedPreviewReady({
-              shouldContinueForRunIntent: runContinuationDecision.shouldContinue,
-              continuationReason: runContinuationDecision.reason,
+              shouldContinueForRunIntent: effectiveRunContinuationDecision.shouldContinue,
+              continuationReason: effectiveRunContinuationDecision.reason,
               previewCheckpointObserved,
               hostedRuntimeSessionId,
-              lastUserContent: latestUserGoal || lastUserContent,
+              lastUserContent: latestVisibleUserRequest,
             });
             const shouldContinueForUnverifiedPreview = shouldContinuePendingHostedPreviewVerification({
               chatMode: effectiveChatMode,
@@ -2049,7 +2141,7 @@ Next: I am returning the finished result with the verified preview ready for ins
             });
 
             const continuationReason: ContinuationReason = shouldContinueForRunIntent
-              ? runContinuationDecision.reason
+              ? effectiveRunContinuationDecision.reason
               : 'preview-not-verified';
             allowSynthesizedRunHandoff = shouldAllowSynthesizedRunHandoff({
               assistantContent: content,
@@ -2085,7 +2177,7 @@ Next: I am returning the finished result with the verified preview ready for ins
               shouldContinueAfterBlockedSynthesizedRunHandoffNow
             ) {
               const starterEntryTarget =
-                runContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
+                effectiveRunContinuationDecision.starterEntryFilePath || 'src/App.tsx or the active entry UI file';
 
               if (
                 synthesizedRunHandoff &&
@@ -2326,7 +2418,7 @@ Next: I am continuing from the current workspace state and tightening the previe
                             content: buildHostedPreviewRecoveryPrompt({
                               model,
                               provider,
-                              originalRequest: latestUserGoal || lastUserContent,
+                              originalRequest: latestVisibleUserRequest,
                               failureSummary: previewAlertMessage,
                               attempt: runContinuationAttempts,
                               maxAttempts: MAX_RUN_CONTINUATION_ATTEMPTS,
@@ -2490,7 +2582,7 @@ Next: I will keep working from the existing project state until the app is runni
                   ? buildHostedPreviewRecoveryPrompt({
                       model,
                       provider,
-                      originalRequest: latestUserGoal || lastUserContent,
+                      originalRequest: latestVisibleUserRequest,
                       failureSummary:
                         directHostedPreviewFailureSummary ||
                         'The hosted preview verification ended unhealthy after the latest response.',
@@ -2500,11 +2592,12 @@ Next: I will keep working from the existing project state until the app is runni
                   : buildRunContinuationPrompt({
                       model,
                       provider,
-                      originalRequest: latestUserGoal || lastUserContent,
+                      originalRequest: latestVisibleUserRequest,
                       starterEntryTarget,
                       continuationReason,
                       shouldContinueForRunIntent,
                       latestExecutionFailure,
+                      missingRequiredVisibleText,
                     }),
               });
 
@@ -2541,7 +2634,7 @@ Next: I will keep working from the existing project state until the app is runni
             logger.debug(
               `run continuation not required ${JSON.stringify({
                 runId,
-                reason: runContinuationDecision.reason,
+                reason: effectiveRunContinuationDecision.reason,
                 provider,
                 model,
                 continuationAttempts: runContinuationAttempts,

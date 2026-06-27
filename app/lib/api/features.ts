@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.15',
+    name: 'v3.0.9.15 exact follow-up outcome guard',
+    description:
+      'Follow-up prompts that request exact visible text, such as adding an agenda label to a generated calendar, now keep continuing until that literal text is present in the current UI source files.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.14',
     name: 'v3.0.9.14 history-aware follow-up reliability',
     description:

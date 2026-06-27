@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.14`)
+## Current Release (`v3.0.9.15`)
 
-`v3.0.9.14` is the current stable hosted release. It fixes history-aware follow-up reliability for generated apps: when a user asks to improve, add, change, or fix the existing project, server-side recovery no longer treats an already-healthy old preview as success unless a meaningful file edit for the requested follow-up lands. This specifically protects flows such as improving a generated Google Calendar app while keeping the same runtime preview and project context.
+`v3.0.9.15` is the current stable hosted release. It closes the Google Calendar follow-up gap by checking exact visible text requirements against the current UI source files. If a user asks to improve an existing generated app and add a specific visible label or token, server-side continuation keeps working until that literal text is actually present in the project instead of accepting an old healthy preview or shell-only verification as success.
+
+`v3.0.9.14` fixed history-aware follow-up reliability for generated apps: when a user asks to improve, add, change, or fix the existing project, server-side recovery no longer treats an already-healthy old preview as success unless a meaningful file edit for the requested follow-up lands. This specifically protects flows such as improving a generated Google Calendar app while keeping the same runtime preview and project context.
 
 `v3.0.9.13` fixed the Google Calendar-style preview failure where raw `<boltArtifact>` / `<boltAction>` stream markup could be written into generated source files after a model restarted an artifact mid-file, and it keeps the follow-up chat prompt visible from both `Chat` and `Workspace` after a project starts.
 
@@ -115,10 +117,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.14`)
+## Current Platform Baseline (`v3.0.9.15`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
+- Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
