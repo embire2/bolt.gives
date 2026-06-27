@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.17',
+    name: 'v3.0.9.17 full-history exact follow-up guard',
+    description:
+      'Exact visible follow-up requirements are now checked across all user-message history available to the active stream, keeping recovery attached to the real follow-up prompt.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.16',
     name: 'v3.0.9.16 robust exact follow-up guard',
     description:

@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.16`)
+## Current Release (`v3.0.9.17`)
 
-`v3.0.9.16` is the current stable hosted release. It closes the Google Calendar follow-up gap by checking exact visible text requirements across all relevant latest-user-request candidates and against the current UI source files. If a user asks to improve an existing generated app and add a specific visible label or token, server-side continuation keeps working until that literal text is actually present in the project instead of accepting an old healthy preview, stale project goal, or shell-only verification as success.
+`v3.0.9.17` is the current stable hosted release. It closes the Google Calendar follow-up gap by checking exact visible text requirements across all user-message history available to the active stream and against the current UI source files. If a user asks to improve an existing generated app and add a specific visible label or token, server-side continuation keeps working until that literal text is actually present in the project instead of accepting an old healthy preview, stale project goal, hidden recovery prompt, or shell-only verification as success.
+
+`v3.0.9.16` expanded the exact visible text guard to check multiple latest-user-request candidates.
 
 `v3.0.9.15` introduced the exact visible text completion guard for generated follow-up prompts.
 
@@ -119,7 +121,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.16`)
+## Current Platform Baseline (`v3.0.9.17`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

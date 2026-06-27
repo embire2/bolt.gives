@@ -2096,8 +2096,18 @@ Next: I am returning the finished result with the verified preview ready for ins
 
             latestProjectMemoryFiles = continuationFiles || files;
 
+            const extractUserMessageContent = (message: (typeof processedMessages)[number]) => {
+              const extracted = extractPropertiesFromMessage(message);
+
+              return typeof extracted.content === 'string' ? extracted.content : JSON.stringify(extracted.content);
+            };
             const latestVisibleUserRequest = latestUserGoal || lastUserContent;
-            const latestUserRequestCandidates = [lastUserContent, latestUserGoal];
+            const latestUserRequestCandidates = [
+              lastUserContent,
+              latestUserGoal,
+              ...processedMessages.filter((message) => message.role === 'user').map(extractUserMessageContent),
+              ...messages.filter((message) => message.role === 'user').map(extractUserMessageContent),
+            ];
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',
               lastUserContent: latestVisibleUserRequest,

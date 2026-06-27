@@ -26,6 +26,12 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.17 (2026-06-27)
+
+### Fixed
+
+- Exact visible text follow-up completion now scans all user-message history available to the active stream, not only the route-level visible goal and final user message, so hidden continuation/recovery passes keep the original follow-up label attached.
+
 ## v3.0.9.16 (2026-06-27)
 
 ### Fixed

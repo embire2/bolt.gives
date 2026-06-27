@@ -10,13 +10,22 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.16`
+- [x] `v3.0.9.17`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.16 - Current Patch
+## v3.0.9.17 - Current Patch
+
+Release theme: keep exact follow-up objective checks attached across hidden continuation/recovery streams.
+
+### Shipped in v3.0.9.17
+
+- [x] Scan all user-message history available to the active stream for exact visible text requirements.
+- [x] Preserve the Google Calendar follow-up label objective even after automatic continuation prompts are inserted.
+
+## v3.0.9.16 - Shipped Patch
 
 Release theme: keep exact follow-up outcome checks attached to the real latest user request.
 

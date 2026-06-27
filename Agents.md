@@ -8,7 +8,7 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.0.9.16`
+- Stable: `v3.0.9.17`
 - In progress: `v3.1.0`
 - Next: `v3.1.0` (managed-instance hardening + prompt-to-preview reliability)
 
@@ -30,7 +30,7 @@ If changes are risky:
 2. Validate E2E on `alpha1`
 3. Fast-forward/merge into `main`
 
-## v3.0.9.16 Execution Priorities
+## v3.0.9.17 Execution Priorities
 
 ### P0 (Must ship)
 - [x] Commentary phase model and dedicated commentary cards
