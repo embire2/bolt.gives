@@ -26,6 +26,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.10 (2026-06-27)
+
+### Fixed
+
+- Managed Cloudflare instance refreshes now pass `--commit-dirty=true` to Wrangler Pages deploys, matching the live rsync deployment model and preventing fleet rollouts from failing on benign uncommitted-live-tree warnings.
+- Active managed-instance fleet rollouts can now continue cleanly after the hosted FREE start-project hotfix instead of stranding tenants on the previous SHA.
+
 ## v3.0.9.9 (2026-06-27)
 
 ### Fixed

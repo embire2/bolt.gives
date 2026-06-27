@@ -10,13 +10,22 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.9`
+- [x] `v3.0.9.10`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.9 - Current Patch
+## v3.0.9.10 - Current Patch
+
+Release theme: keep managed Cloudflare fleet rollouts compatible with the live rsync checkout model.
+
+### Shipped in v3.0.9.10
+
+- [x] Pass `--commit-dirty=true` for managed Pages deploys so Wrangler does not reject the live deployment tree during fleet refreshes.
+- [x] Preserve health-verified managed-instance rollout behavior while allowing the fleet to advance to the latest hosted FREE resilience fix.
+
+## v3.0.9.9 - Shipped Patch
 
 Release theme: keep hosted FREE project starts resilient when the upstream DeepSeek route returns transient internal-reference errors.
 

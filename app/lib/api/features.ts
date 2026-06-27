@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.10',
+    name: 'v3.0.9.10 managed fleet rollout repair',
+    description:
+      'Managed Cloudflare refreshes now pass Wrangler commit-dirty consent for the live rsync checkout model, so active tenant Pages projects can roll forward to the latest health-verified build instead of failing on benign dirty-tree warnings.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.9',
     name: 'v3.0.9.9 hosted FREE start-project resilience',
     description:

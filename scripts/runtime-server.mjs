@@ -1087,6 +1087,25 @@ async function ensureManagedInstanceProjectExists(instance) {
   return await fetchCloudflarePagesProject(instance.projectName);
 }
 
+export function buildManagedInstanceDeployArgs(instance, config, gitSha, reason = 'manual-refresh') {
+  return [
+    'exec',
+    'wrangler',
+    'pages',
+    'deploy',
+    MANAGED_INSTANCE_DEPLOY_DIR,
+    '--project-name',
+    instance.projectName,
+    '--branch',
+    config.sourceBranch,
+    '--commit-hash',
+    gitSha,
+    '--commit-message',
+    `[managed-instance] ${reason}: ${instance.projectName}`,
+    '--commit-dirty=true',
+  ];
+}
+
 async function deployManagedInstanceProject(instance, reason = 'manual-refresh') {
   const config = getManagedInstanceCloudflareConfig();
   const gitSha = await resolveCurrentGitSha();
@@ -1102,21 +1121,7 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
 
   const result = await runManagedInstanceProcess(
     'pnpm',
-    [
-      'exec',
-      'wrangler',
-      'pages',
-      'deploy',
-      MANAGED_INSTANCE_DEPLOY_DIR,
-      '--project-name',
-      instance.projectName,
-      '--branch',
-      config.sourceBranch,
-      '--commit-hash',
-      gitSha,
-      '--commit-message',
-      `[managed-instance] ${reason}: ${instance.projectName}`,
-    ],
+    buildManagedInstanceDeployArgs(instance, config, gitSha, reason),
     {
       env: {
         CLOUDFLARE_API_TOKEN: config.apiToken,

@@ -9,6 +9,7 @@ import {
   authorizeHostedFreeRelaySecret,
   buildHostedWorkspaceBootstrapAlert,
   buildFreeUsageQuotaDecision,
+  buildManagedInstanceDeployArgs,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildWorkspaceFileMapFromDisk,
@@ -240,6 +241,29 @@ describe('runtime server workspace isolation', () => {
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain('behind origin/main');
     expect(decision.behindCount).toBe(3);
+  });
+
+  it('allows managed Cloudflare deploys from the live rsync checkout', () => {
+    const args = buildManagedInstanceDeployArgs(
+      { projectName: 'tenant-preview' },
+      { sourceBranch: 'main' },
+      '3d400050b6d8529edc2a994e9a9bbbf650974029',
+      'startup-sync',
+    );
+
+    expect(args).toContain('--commit-dirty=true');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        'pages',
+        'deploy',
+        '--project-name',
+        'tenant-preview',
+        '--branch',
+        'main',
+        '--commit-hash',
+        '3d400050b6d8529edc2a994e9a9bbbf650974029',
+      ]),
+    );
   });
 
   it('skips inactive and already-current managed instances during full-fleet rollout', () => {
