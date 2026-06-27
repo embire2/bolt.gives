@@ -16,6 +16,7 @@ import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
 import { shouldEnableBuiltInWebTools } from './tool-intent';
 import { ensureFreeProviderAvailability } from './free-provider-preflight';
+import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 
 export type Messages = Message[];
@@ -34,6 +35,8 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 const logger = createScopedLogger('stream-text');
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const LONG_THINK_BUILD_MAX_COMPLETION_TOKENS = 6000;
+const DEFAULT_HOSTED_FREE_STREAM_RETRIES = 2;
+const DEFAULT_HOSTED_FREE_STREAM_RETRY_DELAY_MS = 900;
 
 function isNonGeneralPurposeModel(name: string): boolean {
   const normalized = name.toLowerCase();
@@ -136,6 +139,63 @@ function sanitizeText(text: string): string {
   sanitized = sanitized.replace(/<boltAction type="file" filePath="package-lock\.json">[\s\S]*?<\/boltAction>/g, '');
 
   return sanitized.trim();
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
+
+export function isTransientHostedFreeStreamError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    /internal error;\s*reference\s*=/.test(message) ||
+    message.includes('upstream error') ||
+    message.includes('temporarily unavailable') ||
+    message.includes('service unavailable') ||
+    message.includes('bad gateway') ||
+    message.includes('gateway timeout') ||
+    message.includes('fetch failed') ||
+    /\b50[234]\b/.test(message)
+  );
+}
+
+function normalizeHostedFreeStreamError(error: unknown, modelName: string) {
+  const message = getErrorMessage(error);
+
+  if (
+    message.includes('FREE_PROVIDER_RATE_LIMITED') ||
+    message.includes('FREE_PROVIDER_CREDITS_EXHAUSTED') ||
+    message.includes('FREE_PROVIDER_UNAVAILABLE')
+  ) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error(`FREE_PROVIDER_UNAVAILABLE: ${modelName}(${message})`);
+}
+
+function getHostedFreeStreamRetryCount(env?: Env) {
+  const envRecord = env as Record<string, string | undefined> | undefined;
+  const configured = Number(envRecord?.BOLT_FREE_STREAM_RETRIES || process?.env?.BOLT_FREE_STREAM_RETRIES);
+
+  return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_HOSTED_FREE_STREAM_RETRIES;
+}
+
+function getHostedFreeStreamRetryDelayMs(env?: Env) {
+  const envRecord = env as Record<string, string | undefined> | undefined;
+  const configured = Number(
+    envRecord?.BOLT_FREE_STREAM_RETRY_DELAY_MS || process?.env?.BOLT_FREE_STREAM_RETRY_DELAY_MS,
+  );
+
+  return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_HOSTED_FREE_STREAM_RETRY_DELAY_MS;
+}
+
+async function wait(ms: number) {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function streamText(props: {
@@ -466,7 +526,7 @@ export async function streamText(props: {
     ),
   );
 
-  if (provider.name === 'FREE') {
+  if (provider.name === FREE_PROVIDER_NAME) {
     const envRecord = serverEnv as Record<string, string | undefined> | undefined;
     const preflightApiKey =
       normalizeCredential(apiKeys?.[provider.name]) ||
@@ -515,5 +575,38 @@ export async function streamText(props: {
     ),
   );
 
-  return await _streamText(streamParams);
+  if (provider.name !== FREE_PROVIDER_NAME) {
+    return await _streamText(streamParams);
+  }
+
+  const maxAttempts = getHostedFreeStreamRetryCount(serverEnv) + 1;
+  const retryDelayMs = getHostedFreeStreamRetryDelayMs(serverEnv);
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (attempt > 1) {
+        logger.warn(
+          `Retrying hosted FREE stream after transient upstream failure ${JSON.stringify({
+            model: modelDetails.name,
+            attempt,
+            maxAttempts,
+            retryDelayMs,
+          })}`,
+        );
+      }
+
+      return await _streamText(streamParams);
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientHostedFreeStreamError(error) || attempt >= maxAttempts) {
+        throw normalizeHostedFreeStreamError(error, modelDetails.name);
+      }
+
+      await wait(retryDelayMs * attempt);
+    }
+  }
+
+  throw normalizeHostedFreeStreamError(lastError, modelDetails.name);
 }

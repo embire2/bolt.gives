@@ -26,6 +26,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.9 (2026-06-27)
+
+### Fixed
+
+- Hosted `FREE` project creation now retries transient OpenRouter/DeepSeek internal-reference failures before returning an error, preventing common first-run `internal error; reference = ...` failures from stopping new projects immediately.
+- `/api/chat` now returns clear hosted-FREE rate-limit, credits, or temporary-unavailable messages when retries are exhausted instead of surfacing a cryptic generic 500.
+- The browser no longer records ignored late stream disconnects as `chat generation failed` after a run already completed or produced a preview-ready checkpoint, so Workspace status does not show a false Recovery failure over a healthy preview.
+
 ## v3.0.9.8 (2026-06-26)
 
 ### Fixed

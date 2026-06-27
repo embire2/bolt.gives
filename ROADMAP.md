@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 Status legend:
 
@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.8`
+- [x] `v3.0.9.9`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.8 - Current Patch
+## v3.0.9.9 - Current Patch
+
+Release theme: keep hosted FREE project starts resilient when the upstream DeepSeek route returns transient internal-reference errors.
+
+### Shipped in v3.0.9.9
+
+- [x] Retry transient hosted FREE stream failures such as `internal error; reference = ...` before returning a user-visible error.
+- [x] Normalize exhausted hosted FREE failures into clear rate-limit, credits-exhausted, or temporarily-unavailable responses.
+- [x] Stop ignored late stream disconnects from poisoning Workspace status after preview-ready completion.
+
+## v3.0.9.8 - Shipped Patch
 
 Release theme: make direct Cloudflare Pages FREE quota authorization match the operator runtime exactly.
 

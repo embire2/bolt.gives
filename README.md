@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.8`)
+## Current Release (`v3.0.9.9`)
 
-`v3.0.9.8` is the current stable hosted release. It writes hosted `FREE` relay and quota secrets directly into Cloudflare Pages production and preview deployment configs as `secret_text`, then redeploys the canonical Pages build and active managed fleet so direct Pages FREE requests authorize correctly against the runtime quota service. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay/quota credentials, not the model key itself.
+`v3.0.9.9` is the current stable hosted release. It hardens the hosted `FREE` DeepSeek V4 Pro start-project path by retrying transient OpenRouter internal-reference failures before surfacing an error, normalizing exhausted hosted-FREE failures into clear user-facing messages, and preventing ignored late stream disconnects from being shown as false Workspace Recovery failures after preview-ready completion.
+
+`v3.0.9.8` wrote hosted `FREE` relay and quota secrets directly into Cloudflare Pages production and preview deployment configs as `secret_text`, then redeployed the canonical Pages build and active managed fleet so direct Pages FREE requests authorize correctly against the runtime quota service. The upstream OpenRouter key remains server-side only; managed/customer Pages projects receive relay/quota credentials, not the model key itself.
 
 `v3.0.9.7` hardened the hosted `FREE` DeepSeek V4 Pro rollout by syncing both the server-side relay secret and the FREE quota secret to Cloudflare Pages projects.
 
@@ -103,7 +105,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.8`)
+## Current Platform Baseline (`v3.0.9.9`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.

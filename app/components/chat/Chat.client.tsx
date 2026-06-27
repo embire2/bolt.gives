@@ -1921,37 +1921,6 @@ Requirements:
           title = 'Server Error';
         }
 
-        logStore.logError(`${context} request failed`, error, {
-          component: 'Chat',
-          action: 'request',
-          error: errorInfo.message,
-          context,
-          retryable: errorInfo.isRetryable,
-          errorType,
-          provider: diagnostics.provider,
-          diagnostics,
-        });
-
-        appendStepRunnerEvent({
-          type: 'error',
-          timestamp: new Date().toISOString(),
-          description: `${context} generation failed`,
-          error: errorInfo.message,
-          output: JSON.stringify(
-            {
-              provider: diagnostics.provider,
-              model: diagnostics.model,
-              route: diagnostics.route,
-              messageCount: diagnostics.messageCount,
-              isLoading: diagnostics.isLoading,
-              errorName: diagnostics.errorName,
-              errorMessage: diagnostics.errorMessage,
-            },
-            null,
-            2,
-          ),
-        });
-
         const { timeoutLike: timeoutLikeError, disconnectLike: disconnectLikeError } = classifyRecoverableStreamError(
           errorInfo.message,
         );
@@ -1985,6 +1954,37 @@ Requirements:
 
           return;
         }
+
+        logStore.logError(`${context} request failed`, error, {
+          component: 'Chat',
+          action: 'request',
+          error: errorInfo.message,
+          context,
+          retryable: errorInfo.isRetryable,
+          errorType,
+          provider: diagnostics.provider,
+          diagnostics,
+        });
+
+        appendStepRunnerEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: `${context} generation failed`,
+          error: errorInfo.message,
+          output: JSON.stringify(
+            {
+              provider: diagnostics.provider,
+              model: diagnostics.model,
+              route: diagnostics.route,
+              messageCount: diagnostics.messageCount,
+              isLoading: diagnostics.isLoading,
+              errorName: diagnostics.errorName,
+              errorMessage: diagnostics.errorMessage,
+            },
+            null,
+            2,
+          ),
+        });
 
         let queuedAutoRecovery = false;
 

@@ -2801,6 +2801,60 @@ Next: I am sending the final result now.`,
       );
     }
 
+    if (error.message?.includes('FREE_PROVIDER_RATE_LIMITED')) {
+      return new Response(
+        JSON.stringify({
+          ...errorResponse,
+          message:
+            'The hosted FREE coder is temporarily rate-limited upstream. Please retry shortly, or switch to another provider with your own API key.',
+          statusCode: 429,
+          isRetryable: true,
+          provider: 'FREE',
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Hosted FREE Rate Limited',
+        },
+      );
+    }
+
+    if (error.message?.includes('FREE_PROVIDER_CREDITS_EXHAUSTED')) {
+      return new Response(
+        JSON.stringify({
+          ...errorResponse,
+          message:
+            'The hosted FREE model is temporarily unavailable because the operator-funded route is out of credits. Use your own provider API key or try again after the hosted route is replenished.',
+          statusCode: 402,
+          isRetryable: false,
+          provider: 'FREE',
+        }),
+        {
+          status: 402,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Hosted FREE Credits Exhausted',
+        },
+      );
+    }
+
+    if (error.message?.includes('FREE_PROVIDER_UNAVAILABLE')) {
+      return new Response(
+        JSON.stringify({
+          ...errorResponse,
+          message:
+            'The hosted FREE coder hit a temporary upstream internal error. The system retried automatically but could not complete this request. Please retry, or use your own API key from any provider.',
+          statusCode: 503,
+          isRetryable: true,
+          provider: 'FREE',
+        }),
+        {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+          statusText: 'Hosted FREE Temporarily Unavailable',
+        },
+      );
+    }
+
     if (error.message?.includes('API key')) {
       return new Response(
         JSON.stringify({

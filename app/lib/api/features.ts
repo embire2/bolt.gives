@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.9',
+    name: 'v3.0.9.9 hosted FREE start-project resilience',
+    description:
+      'Hosted FREE project creation now retries transient DeepSeek/OpenRouter internal-reference failures, returns clear FREE availability messages when retries are exhausted, and prevents ignored late stream disconnects from appearing as false Workspace failures after preview-ready completion.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.8',
     name: 'v3.0.9.8 Pages FREE secret binding repair',
     description:
