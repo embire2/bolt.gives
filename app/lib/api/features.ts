@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.13',
+    name: 'v3.0.9.13 follow-up composer and artifact stream repair',
+    description:
+      'Follow-up prompts now stay visible from both Chat and Workspace, and the artifact parser recovers when a model restarts an artifact inside an open file action instead of saving raw artifact tags into project files.',
+    releaseDate: '2026-06-27',
+  },
+  {
     id: 'release-v3.0.9.12',
     name: 'v3.0.9.12 starter recovery status repair',
     description:

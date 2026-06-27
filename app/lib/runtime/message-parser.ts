@@ -72,6 +72,11 @@ interface MessageState {
   actionId: number;
 }
 
+type NestedActionBoundary = {
+  index: number;
+  kind: 'artifact' | 'action';
+};
+
 function cleanoutMarkdownSyntax(content: string) {
   const codeBlockRegex = /^\s*```\w*\n([\s\S]*?)\n\s*```\s*$/;
   const match = content.match(codeBlockRegex);
@@ -95,6 +100,18 @@ function normalizeArtifactTags(input: string) {
     .replace(new RegExp(CODY_ARTIFACT_TAG_CLOSE, 'g'), ARTIFACT_TAG_CLOSE)
     .replace(new RegExp(CODY_ACTION_TAG_OPEN, 'g'), ARTIFACT_ACTION_TAG_OPEN)
     .replace(new RegExp(CODY_ACTION_TAG_CLOSE, 'g'), ARTIFACT_ACTION_TAG_CLOSE);
+}
+
+function sliceActionContentBeforeNestedBoundary(input: string, start: number, boundaryIndex: number) {
+  const content = input.slice(start, boundaryIndex);
+  const lastNewlineIndex = content.lastIndexOf('\n');
+  const trailingLine = content.slice(lastNewlineIndex + 1);
+
+  if (trailingLine.trim().length > 0) {
+    return lastNewlineIndex === -1 ? '' : content.slice(0, lastNewlineIndex + 1);
+  }
+
+  return content;
 }
 
 export class StreamingMessageParser {
@@ -166,39 +183,35 @@ export class StreamingMessageParser {
 
         if (state.insideAction) {
           const closeIndex = input.indexOf(ARTIFACT_ACTION_TAG_CLOSE, i);
-
           const currentAction = state.currentAction;
+          const contentEndIndex = closeIndex === -1 ? input.length : closeIndex;
+          const nestedBoundary = this.#findNestedActionBoundary(input, i, contentEndIndex);
+
+          if (nestedBoundary) {
+            currentAction.content += sliceActionContentBeforeNestedBoundary(input, i, nestedBoundary.index);
+            this.#emitActionClose(state, currentArtifact, messageId);
+
+            state.insideAction = false;
+            state.currentAction = { content: '' };
+
+            if (nestedBoundary.kind === 'artifact') {
+              this._options.callbacks?.onArtifactClose?.({
+                messageId,
+                artifactId: currentArtifact.id,
+                ...currentArtifact,
+              });
+
+              state.insideArtifact = false;
+              state.currentArtifact = undefined;
+            }
+
+            i = nestedBoundary.index;
+            continue;
+          }
 
           if (closeIndex !== -1) {
             currentAction.content += input.slice(i, closeIndex);
-
-            let content = currentAction.content.trim();
-
-            if ('type' in currentAction && currentAction.type === 'file') {
-              // Remove markdown code block syntax if present and file is not markdown
-              if (currentAction.filePath && !currentAction.filePath.endsWith('.md')) {
-                content = cleanoutMarkdownSyntax(content);
-                content = cleanEscapedTags(content);
-              }
-
-              content += '\n';
-            }
-
-            currentAction.content = content;
-
-            this._options.callbacks?.onActionClose?.({
-              artifactId: currentArtifact.id,
-              messageId,
-
-              /**
-               * We decrement the id because it's been incremented already
-               * when `onActionOpen` was emitted to make sure the ids are
-               * the same.
-               */
-              actionId: String(state.actionId - 1),
-
-              action: currentAction as BoltAction,
-            });
+            this.#emitActionClose(state, currentArtifact, messageId);
 
             state.insideAction = false;
             state.currentAction = { content: '' };
@@ -363,6 +376,53 @@ export class StreamingMessageParser {
 
   resetMessage(messageId: string) {
     this.#messages.delete(messageId);
+  }
+
+  #findNestedActionBoundary(input: string, start: number, endExclusive: number): NestedActionBoundary | undefined {
+    const artifactOpenIndex = input.indexOf(ARTIFACT_TAG_OPEN, start);
+    const actionOpenIndex = input.indexOf(ARTIFACT_ACTION_TAG_OPEN, start);
+    const candidates: NestedActionBoundary[] = [];
+
+    if (artifactOpenIndex !== -1 && artifactOpenIndex < endExclusive) {
+      candidates.push({ index: artifactOpenIndex, kind: 'artifact' });
+    }
+
+    if (actionOpenIndex !== -1 && actionOpenIndex < endExclusive) {
+      candidates.push({ index: actionOpenIndex, kind: 'action' });
+    }
+
+    return candidates.sort((left, right) => left.index - right.index)[0];
+  }
+
+  #emitActionClose(state: MessageState, currentArtifact: BoltArtifactData, messageId: string) {
+    const currentAction = state.currentAction;
+    let content = currentAction.content.trim();
+
+    if ('type' in currentAction && currentAction.type === 'file') {
+      // Remove markdown code block syntax if present and file is not markdown.
+      if (currentAction.filePath && !currentAction.filePath.endsWith('.md')) {
+        content = cleanoutMarkdownSyntax(content);
+        content = cleanEscapedTags(content);
+      }
+
+      content += '\n';
+    }
+
+    currentAction.content = content;
+
+    this._options.callbacks?.onActionClose?.({
+      artifactId: currentArtifact.id,
+      messageId,
+
+      /**
+       * We decrement the id because it's been incremented already
+       * when `onActionOpen` was emitted to make sure the ids are
+       * the same.
+       */
+      actionId: String(state.actionId - 1),
+
+      action: currentAction as BoltAction,
+    });
   }
 
   #parseActionTag(input: string, actionOpenIndex: number, actionEndIndex: number) {

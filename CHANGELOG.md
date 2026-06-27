@@ -26,6 +26,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.13 (2026-06-27)
+
+### Fixed
+
+- Follow-up prompts now render in a persistent composer after project creation, so users can keep typing improvements while viewing `Workspace`, files, terminal output, or Preview.
+- The artifact stream parser now recovers when model output restarts an artifact or file action inside an open file action, preventing raw `<boltArtifact>` / `<boltAction>` metadata from being saved into generated source files.
+- Added regression coverage for the Google Calendar corruption pattern where artifact markup leaked into `.tsx` / `.css` files and broke preview builds.
+
 ## v3.0.9.12 (2026-06-27)
 
 ### Fixed

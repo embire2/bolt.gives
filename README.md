@@ -50,9 +50,11 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.12`)
+## Current Release (`v3.0.9.13`)
 
-`v3.0.9.12` is the current stable hosted release. It fixes stale Recovery/preview-status warnings that could keep reporting `Starter Placeholder Still Visible` after the generated app had already replaced the fallback starter and loaded successfully.
+`v3.0.9.13` is the current stable hosted release. It fixes the Google Calendar-style preview failure where raw `<boltArtifact>` / `<boltAction>` stream markup could be written into generated source files after a model restarted an artifact mid-file, and it keeps the follow-up chat prompt visible from both `Chat` and `Workspace` after a project starts.
+
+`v3.0.9.12` fixed stale Recovery/preview-status warnings that could keep reporting `Starter Placeholder Still Visible` after the generated app had already replaced the fallback starter and loaded successfully.
 
 `v3.0.9.11` fixes hosted `FREE` project starts that imported the Vite starter, showed a fallback preview, and then failed to send the hidden model continuation needed to implement the user request.
 
@@ -111,9 +113,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.12`)
+## Current Platform Baseline (`v3.0.9.13`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
+- Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
+- Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
 - Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.

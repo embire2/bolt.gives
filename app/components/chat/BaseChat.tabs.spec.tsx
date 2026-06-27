@@ -241,7 +241,8 @@ describe('BaseChat surface tabs', () => {
     expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
       true,
     );
-    expect(hasClassToken(screen.getByTestId('chat-input-region').closest('#chat-surface-panel'), 'hidden')).toBe(false);
+    expect(screen.getByTestId('persistent-chat-composer')).toBeTruthy();
+    expect(screen.getByTestId('chat-input-region').closest('#chat-surface-panel')).toBeNull();
   });
 
   it('boots into chat even if workspace was the last persisted active surface', async () => {
@@ -277,7 +278,7 @@ describe('BaseChat surface tabs', () => {
     expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
   });
 
-  it('keeps the chat surface mounted when the workspace tab is active', async () => {
+  it('keeps the follow-up prompt visible when the workspace tab is active', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -293,7 +294,8 @@ describe('BaseChat surface tabs', () => {
     });
 
     const chatInputRegion = screen.getByTestId('chat-input-region');
-    expect(hasClassToken(chatInputRegion.closest('#chat-surface-panel'), 'hidden')).toBe(false);
+    expect(screen.getByTestId('persistent-chat-composer').contains(chatInputRegion)).toBe(true);
+    expect(chatInputRegion.closest('#chat-surface-panel')).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
 
@@ -303,7 +305,7 @@ describe('BaseChat surface tabs', () => {
       );
     });
 
-    expect(hasClassToken(screen.getByTestId('chat-input-region').closest('#chat-surface-panel'), 'hidden')).toBe(true);
+    expect(screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('chat-input-region'))).toBe(true);
     expect(chatInputRegion.isConnected).toBe(true);
   });
 });

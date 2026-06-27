@@ -10,13 +10,23 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.12`
+- [x] `v3.0.9.13`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.12 - Current Patch
+## v3.0.9.13 - Current Patch
+
+Release theme: keep follow-up iteration available and prevent artifact stream corruption from breaking generated apps.
+
+### Shipped in v3.0.9.13
+
+- [x] Keep the follow-up prompt visible in a persistent composer across `Chat` and `Workspace` after project creation.
+- [x] Recover when a model restarts an artifact/action stream inside an open file action instead of saving raw `<boltArtifact>` / `<boltAction>` tags into source files.
+- [x] Add parser and tab-layout regressions for the Google Calendar corruption pattern and Workspace-visible prompt behavior.
+
+## v3.0.9.12 - Shipped Patch
 
 Release theme: keep preview Recovery/status aligned with the generated app currently running.
 

@@ -163,6 +163,42 @@ describe('StreamingMessageParser', () => {
     ])('should correctly parse chunks and strip out bolt artifacts (%#)', (input, expected) => {
       runTest(input, expected);
     });
+
+    it('recovers when a restarted artifact is streamed inside an open file action', () => {
+      const onActionClose = vi.fn();
+      const parser = new StreamingMessageParser({
+        callbacks: {
+          onActionClose,
+        },
+        artifactElement: () => '',
+      });
+
+      parser.parse(
+        'calendar_recovery',
+        [
+          '<boltArtifact title="Calendar" id="calendar-app">',
+          '<boltAction type="file" filePath="src/components/MonthView.css">',
+          '.month-cell {',
+          '\n  align<boltArtifact title="Calendar Continued" id="calendar-app-continued">',
+          '<boltAction type="file" filePath="src/components/EventModal.tsx">',
+          'export function EventModal() { return null; }',
+          '</boltAction>',
+          '</boltArtifact>',
+        ].join(''),
+      );
+
+      expect(onActionClose).toHaveBeenCalledTimes(2);
+
+      const firstFile = onActionClose.mock.calls[0][0].action;
+      expect(firstFile.filePath).toBe('src/components/MonthView.css');
+      expect(firstFile.content).not.toContain('<boltArtifact');
+      expect(firstFile.content).not.toContain('<boltAction');
+      expect(firstFile.content).not.toContain('align');
+
+      const secondFile = onActionClose.mock.calls[1][0].action;
+      expect(secondFile.filePath).toBe('src/components/EventModal.tsx');
+      expect(secondFile.content).toContain('export function EventModal');
+    });
   });
 });
 

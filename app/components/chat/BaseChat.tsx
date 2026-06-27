@@ -728,6 +728,153 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const visibleSurfaceTabs = SURFACE_TABS.filter((tab) => openSurfaces.includes(tab.id));
     const hiddenSurfaceTabs = SURFACE_TABS.filter((tab) => tab.closable && !openSurfaces.includes(tab.id));
 
+    const alertStack = (
+      <div className="flex flex-col gap-2">
+        {deployAlert && (
+          <Suspense fallback={<LazyPanelFallback title="Deployment Alert" />}>
+            <LazyDeployChatAlert
+              alert={deployAlert}
+              clearAlert={() => clearDeployAlert?.()}
+              postMessage={(message: string | undefined) => {
+                sendMessage?.({} as any, message);
+                clearSupabaseAlert?.();
+              }}
+            />
+          </Suspense>
+        )}
+        {supabaseAlert && (
+          <Suspense fallback={<LazyPanelFallback title="Supabase Alert" />}>
+            <LazySupabaseChatAlert
+              alert={supabaseAlert}
+              clearAlert={() => clearSupabaseAlert?.()}
+              postMessage={(message) => {
+                sendMessage?.({} as any, message);
+                clearSupabaseAlert?.();
+              }}
+            />
+          </Suspense>
+        )}
+        {actionAlert && (
+          <ChatAlert
+            alert={actionAlert}
+            autoFixState={actionAlertAutoFixState}
+            clearAlert={() => clearAlert?.()}
+            postMessage={(message) => {
+              sendMessage?.({} as any, message);
+              clearAlert?.();
+            }}
+          />
+        )}
+        {llmErrorAlert && (
+          <Suspense fallback={<LazyPanelFallback title="Provider Alert" />}>
+            <LazyLlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />
+          </Suspense>
+        )}
+      </div>
+    );
+
+    const activityFeeds = chatStarted ? (
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="min-w-0">
+          <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
+            <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+          </Suspense>
+        </div>
+        <div className="min-w-0">
+          <TechnicalFeedContent
+            data={data}
+            progressAnnotations={progressAnnotations}
+            model={model}
+            provider={provider}
+            isStreaming={isStreaming}
+            autonomyMode={autonomyMode}
+            latestRunMetrics={latestRunMetrics}
+            latestUsage={latestUsage}
+            technicalFeedRef={technicalFeedRef}
+          />
+        </div>
+      </div>
+    ) : null;
+
+    const renderChatInputRegion = () => (
+      <div data-testid="chat-input-region" className="flex flex-col gap-2">
+        <ChatBox
+          isModelSettingsCollapsed={isModelSettingsCollapsed}
+          setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
+          provider={provider}
+          setProvider={setProvider}
+          onProviderSelection={onProviderSelection}
+          providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
+          model={model}
+          setModel={setModel}
+          modelList={modelList}
+          apiKeys={apiKeys}
+          isModelLoading={isModelLoading}
+          onApiKeysChange={onApiKeysChange}
+          uploadedFiles={uploadedFiles}
+          setUploadedFiles={setUploadedFiles}
+          imageDataList={imageDataList}
+          setImageDataList={setImageDataList}
+          textareaRef={textareaRef}
+          input={input}
+          handleInputChange={handleInputChange}
+          handlePaste={handlePaste}
+          TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
+          TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
+          isStreaming={isStreaming}
+          handleStop={handleStop}
+          handleSendMessage={handleSendMessage}
+          enhancingPrompt={enhancingPrompt}
+          enhancePrompt={enhancePrompt}
+          isListening={isListening}
+          startListening={startListening}
+          stopListening={stopListening}
+          chatStarted={chatStarted}
+          exportChat={exportChat}
+          qrModalOpen={qrModalOpen}
+          setQrModalOpen={setQrModalOpen}
+          handleFileUpload={handleFileUpload}
+          chatMode={chatMode}
+          setChatMode={setChatMode}
+          designScheme={designScheme}
+          setDesignScheme={setDesignScheme}
+          selectedElement={selectedElement}
+          setSelectedElement={setSelectedElement}
+          onWebSearchResult={onWebSearchResult}
+          onSaveSession={onSaveSession}
+          onResumeSession={onResumeSession}
+          onShareSession={onShareSession}
+          agentMode={agentMode}
+          setAgentMode={setAgentMode}
+          onSketchChange={onSketchChange}
+          autonomyMode={autonomyMode}
+          setAutonomyMode={setAutonomyMode}
+        />
+        <div
+          className={classNames(
+            'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary',
+            chatStarted ? 'px-3 py-1.5 text-[11px]' : 'px-3 py-2 text-xs',
+          )}
+        >
+          <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives can
+          browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code> file with
+          its understanding of the full API environment. No setup is required.
+        </div>
+      </div>
+    );
+
+    const renderPromptBlock = (placement: 'intro' | 'persistent') => (
+      <div
+        className={classNames('z-prompt mx-auto flex w-full flex-col gap-3', {
+          'my-auto mb-6': placement === 'intro',
+          'py-2': placement === 'persistent',
+        })}
+      >
+        {alertStack}
+        {renderChatInputRegion()}
+      </div>
+    );
+
     const chatSurface = (
       <div
         className={classNames(
@@ -774,142 +921,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             </ClientOnly>
             <ScrollToBottom />
           </StickToBottom.Content>
-          <div
-            className={classNames('z-prompt mx-auto flex w-full flex-col gap-3', {
-              'my-auto mb-6': !chatStarted,
-              'mt-2': chatStarted,
-            })}
-          >
-            <div className="flex flex-col gap-2">
-              {deployAlert && (
-                <Suspense fallback={<LazyPanelFallback title="Deployment Alert" />}>
-                  <LazyDeployChatAlert
-                    alert={deployAlert}
-                    clearAlert={() => clearDeployAlert?.()}
-                    postMessage={(message: string | undefined) => {
-                      sendMessage?.({} as any, message);
-                      clearSupabaseAlert?.();
-                    }}
-                  />
-                </Suspense>
-              )}
-              {supabaseAlert && (
-                <Suspense fallback={<LazyPanelFallback title="Supabase Alert" />}>
-                  <LazySupabaseChatAlert
-                    alert={supabaseAlert}
-                    clearAlert={() => clearSupabaseAlert?.()}
-                    postMessage={(message) => {
-                      sendMessage?.({} as any, message);
-                      clearSupabaseAlert?.();
-                    }}
-                  />
-                </Suspense>
-              )}
-              {actionAlert && (
-                <ChatAlert
-                  alert={actionAlert}
-                  autoFixState={actionAlertAutoFixState}
-                  clearAlert={() => clearAlert?.()}
-                  postMessage={(message) => {
-                    sendMessage?.({} as any, message);
-                    clearAlert?.();
-                  }}
-                />
-              )}
-              {llmErrorAlert && (
-                <Suspense fallback={<LazyPanelFallback title="Provider Alert" />}>
-                  <LazyLlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />
-                </Suspense>
-              )}
-            </div>
-            {chatStarted ? (
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-                <div className="min-w-0">
-                  <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
-                    <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
-                  </Suspense>
-                </div>
-                <div className="min-w-0">
-                  <TechnicalFeedContent
-                    data={data}
-                    progressAnnotations={progressAnnotations}
-                    model={model}
-                    provider={provider}
-                    isStreaming={isStreaming}
-                    autonomyMode={autonomyMode}
-                    latestRunMetrics={latestRunMetrics}
-                    latestUsage={latestUsage}
-                    technicalFeedRef={technicalFeedRef}
-                  />
-                </div>
-              </div>
-            ) : null}
-            <div data-testid="chat-input-region" className="flex flex-col gap-2">
-              <ChatBox
-                isModelSettingsCollapsed={isModelSettingsCollapsed}
-                setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
-                provider={provider}
-                setProvider={setProvider}
-                onProviderSelection={onProviderSelection}
-                providerList={providerList || (PROVIDER_LIST as ProviderInfo[])}
-                model={model}
-                setModel={setModel}
-                modelList={modelList}
-                apiKeys={apiKeys}
-                isModelLoading={isModelLoading}
-                onApiKeysChange={onApiKeysChange}
-                uploadedFiles={uploadedFiles}
-                setUploadedFiles={setUploadedFiles}
-                imageDataList={imageDataList}
-                setImageDataList={setImageDataList}
-                textareaRef={textareaRef}
-                input={input}
-                handleInputChange={handleInputChange}
-                handlePaste={handlePaste}
-                TEXTAREA_MIN_HEIGHT={TEXTAREA_MIN_HEIGHT}
-                TEXTAREA_MAX_HEIGHT={TEXTAREA_MAX_HEIGHT}
-                isStreaming={isStreaming}
-                handleStop={handleStop}
-                handleSendMessage={handleSendMessage}
-                enhancingPrompt={enhancingPrompt}
-                enhancePrompt={enhancePrompt}
-                isListening={isListening}
-                startListening={startListening}
-                stopListening={stopListening}
-                chatStarted={chatStarted}
-                exportChat={exportChat}
-                qrModalOpen={qrModalOpen}
-                setQrModalOpen={setQrModalOpen}
-                handleFileUpload={handleFileUpload}
-                chatMode={chatMode}
-                setChatMode={setChatMode}
-                designScheme={designScheme}
-                setDesignScheme={setDesignScheme}
-                selectedElement={selectedElement}
-                setSelectedElement={setSelectedElement}
-                onWebSearchResult={onWebSearchResult}
-                onSaveSession={onSaveSession}
-                onResumeSession={onResumeSession}
-                onShareSession={onShareSession}
-                agentMode={agentMode}
-                setAgentMode={setAgentMode}
-                onSketchChange={onSketchChange}
-                autonomyMode={autonomyMode}
-                setAutonomyMode={setAutonomyMode}
-              />
-              <div
-                className={classNames(
-                  'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary',
-                  chatStarted ? 'px-3 py-1.5 text-[11px]' : 'px-3 py-2 text-xs',
-                )}
-              >
-                <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives
-                can browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code>{' '}
-                file with its understanding of the full API environment. No setup is required.
-              </div>
-            </div>
-          </div>
+          {!chatStarted ? renderPromptBlock('intro') : null}
         </StickToBottom>
+        {chatStarted ? (
+          <div className="mx-auto w-full max-w-[980px] px-3 pb-4 sm:px-6 lg:px-8">{activityFeeds}</div>
+        ) : null}
         <div className="flex flex-col justify-center px-3 pb-4 sm:px-6 lg:px-8">
           {!chatStarted && (
             <div className="flex justify-center gap-2">
@@ -1107,6 +1123,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             ) : null}
           </div>
+          {chatStarted ? (
+            <div
+              data-testid="persistent-chat-composer"
+              className="shrink-0 border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 shadow-[0_-12px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:px-4"
+            >
+              <div className="mx-auto max-h-[42vh] w-full max-w-[980px] overflow-y-auto modern-scrollbar">
+                {renderPromptBlock('persistent')}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     );

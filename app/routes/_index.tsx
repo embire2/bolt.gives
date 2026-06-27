@@ -56,7 +56,9 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable hosted release v3.0.9.12 with v3.1.0 platform hardening in progress.',
+  'Stable hosted release v3.0.9.13 with v3.1.0 platform hardening in progress.',
+  'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
+  'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
   `Hosted ${FREE_PROVIDER_NAME} provider locked to ${FREE_HOSTED_MODEL_LABEL} through the protected server-side path.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
