@@ -56,6 +56,25 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there.
 
+### Linux release package
+
+The `v3.0.9.20` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+
+- Release: [`v3.0.9.20`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.20)
+- Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.20/install.sh)
+- Release commit: `41836f7f38af93f594b33660e1dcf06b8e231b6a`
+
+Pinned Linux install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.20/install.sh -o install-bolt-gives.sh
+chmod +x install-bolt-gives.sh
+./install-bolt-gives.sh
+```
+
+The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
+
 `v3.0.9.19` fixed the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
 
 This release also tightens exact visible text recovery by ignoring source file paths such as `src/App.tsx` and `src/App.css` when deciding whether a requested UI label is missing. That keeps Google Calendar-style repair passes focused on real visible UI requirements rather than incidental implementation instructions.
