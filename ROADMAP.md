@@ -16,6 +16,19 @@ Next release target:
 
 - [~] `v3.1.0`
 
+## v3.1.0 - In Progress
+
+Release theme: harden hosted operations, updater safety, managed fleet observability, and prompt-to-preview reliability.
+
+### Shipped toward v3.1.0
+
+- [x] Add a built-in web app updater banner at the top of every page when a newer release is available.
+- [x] Support optional updates that users can dismiss per version.
+- [x] Support mandatory update policy that opens a blocking modal and shows release features before coding can continue.
+- [x] Stream live update progress with status/log events while the instance fetches, preserves local changes, installs dependencies, builds, and schedules restart.
+- [x] Add release policy parsing from GitHub release notes plus server env overrides for operators.
+- [x] Add regression coverage for update policy parsing and optional/mandatory updater UI behavior.
+
 ## v3.0.9.20 - Current Patch
 
 Release theme: keep Workspace focused while preserving full Chat controls.

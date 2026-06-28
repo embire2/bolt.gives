@@ -84,9 +84,6 @@ const LazySupabaseChatAlert = React.lazy(() =>
   import('~/components/chat/SupabaseAlert').then((module) => ({ default: module.SupabaseChatAlert })),
 );
 const LazyLlmErrorAlert = React.lazy(() => import('./LLMApiAlert').then((module) => ({ default: module.default })));
-const LazyUpdateBanner = React.lazy(() =>
-  import('./UpdateBanner').then((module) => ({ default: module.UpdateBanner })),
-);
 
 function LazyPanelFallback({ title }: { title: string }) {
   return (
@@ -374,9 +371,6 @@ function TechnicalFeedContent({
         </Suspense>
         <Suspense fallback={<LazyPanelFallback title="Execution Status" />}>
           <LazyExecutionStickyFooter data={data} model={model} provider={provider} isStreaming={isStreaming} />
-        </Suspense>
-        <Suspense fallback={null}>
-          <LazyUpdateBanner />
         </Suspense>
       </div>
     </div>

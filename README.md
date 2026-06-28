@@ -56,6 +56,26 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there.
 
+### Built-in web app updater
+
+Self-hosted Node/systemd deployments include a built-in updater at `/api/update`. When a newer GitHub Release is available, a banner appears at the top of every page with an `Update Now` button. The user is told the instance will automatically update to the target version and may disconnect while services restart. A modal shows live progress, update logs, rollback status, and release features.
+
+Operators can mark a release as optional or mandatory in the GitHub Release body:
+
+```text
+Update policy: optional
+```
+
+or:
+
+```text
+Update policy: mandatory
+```
+
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.1.0`.
+
+The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
+
 ### Linux release package
 
 The `v3.0.9.20` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:

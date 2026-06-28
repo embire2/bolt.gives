@@ -16,6 +16,9 @@
 
 ### Added
 
+- Built-in web app updater now exposes a root-level update banner on every page, supports optional dismissal, blocks the app with a mandatory update modal when release policy requires it, shows release features, and streams live update progress over Server-Sent Events.
+- The self-update flow now creates a rollback checkpoint, preserves local working tree changes in a git stash before resetting to `origin/main`, installs dependencies, builds the updated app, and schedules service restart for production systemd deployments.
+- Release policy parsing now lets operators mark GitHub Releases as `Update policy: optional` or `Update policy: mandatory`, with `BOLT_UPDATE_POLICY` and `BOLT_MANDATORY_UPDATE_VERSION` overrides for self-hosted/operator environments.
 - Managed Cloudflare rollout observability now records per-instance deployment history, last-good SHA/deployment URL, healthcheck status, rollback-ready outcome, and fleet summary cards in `admin.bolt.gives`.
 - Managed instance refreshes are now health-verified against the deployed Pages URL before the instance is marked active, so failed deploys keep the previous last-good deployment metadata visible for rollback decisions.
 - First-party template pack acceptance criteria now attach to common app requests such as appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios, giving prompt-to-preview generation concrete smoke signals.

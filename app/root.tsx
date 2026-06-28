@@ -6,7 +6,7 @@ import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from './lib/stores/theme';
 import { stripIndents } from './utils/stripIndent';
 import { createHead } from 'remix-island';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { cssTransition, ToastContainer } from 'react-toastify';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
@@ -23,6 +23,10 @@ const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
   exit: 'animated fadeOutRight',
 });
+
+const LazyUpdateBanner = lazy(() =>
+  import('./components/chat/UpdateBanner').then((module) => ({ default: module.UpdateBanner })),
+);
 
 export const links: LinksFunction = () => [
   {
@@ -98,6 +102,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <ClientOnly>{() => <CursorGlow />}</ClientOnly>
+      <ClientOnly>
+        {() => (
+          <Suspense fallback={null}>
+            <LazyUpdateBanner />
+          </Suspense>
+        )}
+      </ClientOnly>
       {children}
       <ToastContainer
         closeButton={({ closeToast }) => {
