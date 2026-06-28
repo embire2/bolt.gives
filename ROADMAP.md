@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
 Status legend:
 
@@ -10,13 +10,24 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.19`
+- [x] `v3.0.9.20`
 
 Next release target:
 
 - [~] `v3.1.0`
 
-## v3.0.9.19 - Current Patch
+## v3.0.9.20 - Current Patch
+
+Release theme: keep Workspace focused while preserving full Chat controls.
+
+### Shipped in v3.0.9.20
+
+- [x] Replace the full persistent composer with a compact prompt bar when `Workspace` is active.
+- [x] Preserve the full provider/tools prompt composer when `Chat` is active.
+- [x] Keep follow-up prompt entry available from Workspace without covering files, Preview, or execution status.
+- [x] Add regression coverage for switching between full Chat prompt and compact Workspace prompt.
+
+## v3.0.9.19 - Shipped Patch
 
 Release theme: keep visible follow-up prompts usable while hidden preview recovery finishes.
 

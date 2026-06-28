@@ -228,6 +228,115 @@ interface TechnicalFeedContentProps {
   technicalFeedRef?: React.Ref<HTMLDivElement>;
 }
 
+interface WorkspaceCompactPromptProps {
+  input: string;
+  textareaRef?: React.RefObject<HTMLTextAreaElement> | undefined;
+  provider?: ProviderInfo;
+  model?: string;
+  isStreaming: boolean;
+  handleInputChange?: ((event: React.ChangeEvent<HTMLTextAreaElement>) => void) | undefined;
+  handlePaste: (event: React.ClipboardEvent) => void;
+  handleSendMessage: (event: React.UIEvent, messageInput?: string) => void;
+  handleStop?: (() => void) | undefined;
+  queuedVisibleFollowUp?: { content: string; queuedAt: number } | null;
+}
+
+function WorkspaceCompactPrompt({
+  input,
+  textareaRef,
+  provider,
+  model,
+  isStreaming,
+  handleInputChange,
+  handlePaste,
+  handleSendMessage,
+  handleStop,
+  queuedVisibleFollowUp,
+}: WorkspaceCompactPromptProps) {
+  const hasPromptDraft = input.trim().length > 0;
+  const buttonLabel = isStreaming && !hasPromptDraft ? 'Stop current run' : 'Send workspace prompt';
+
+  return (
+    <div data-testid="workspace-compact-prompt" className="z-prompt mx-auto w-full max-w-[980px] py-1.5">
+      <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/95 px-2.5 py-2 shadow-[0_-8px_26px_rgba(15,23,42,0.10)] backdrop-blur">
+        <div className="flex items-center gap-2">
+          <div className="hidden min-w-0 shrink-0 items-center gap-1.5 text-[11px] text-bolt-elements-textTertiary sm:flex">
+            <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary">
+              {(provider as any)?.label || provider?.name || 'Provider'}
+            </span>
+            {model ? <span className="max-w-[170px] truncate">{model}</span> : null}
+          </div>
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              ref={textareaRef}
+              className="modern-scrollbar block max-h-20 min-h-[42px] w-full resize-none rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2.5 pr-12 text-sm text-bolt-elements-textPrimary outline-none transition-colors placeholder:text-bolt-elements-textTertiary focus:border-bolt-elements-focus"
+              value={input}
+              onChange={(event) => handleInputChange?.(event)}
+              onPaste={handlePaste}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.shiftKey) {
+                  return;
+                }
+
+                event.preventDefault();
+
+                if (event.nativeEvent.isComposing) {
+                  return;
+                }
+
+                if (isStreaming && !hasPromptDraft) {
+                  handleStop?.();
+                  return;
+                }
+
+                if (hasPromptDraft) {
+                  handleSendMessage(event);
+                }
+              }}
+              placeholder="Ask Cody to change this project..."
+              rows={1}
+              translate="no"
+            />
+            <button
+              type="button"
+              className={classNames(
+                'absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border text-sm transition-colors',
+                hasPromptDraft
+                  ? 'border-bolt-elements-focus bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover'
+                  : isStreaming
+                    ? 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:border-bolt-elements-focus'
+                    : 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textTertiary',
+              )}
+              aria-label={buttonLabel}
+              title={buttonLabel}
+              disabled={!hasPromptDraft && !isStreaming}
+              onClick={(event) => {
+                if (isStreaming && !hasPromptDraft) {
+                  handleStop?.();
+                  return;
+                }
+
+                if (hasPromptDraft) {
+                  handleSendMessage(event);
+                }
+              }}
+            >
+              <span className={isStreaming && !hasPromptDraft ? 'i-ph:stop-fill' : 'i-ph:paper-plane-tilt-fill'} />
+            </button>
+          </div>
+        </div>
+        {queuedVisibleFollowUp ? (
+          <div className="mt-1 truncate px-1 text-[11px] text-bolt-elements-textTertiary">
+            <span className="font-medium text-bolt-elements-textSecondary">Queued:</span>{' '}
+            {queuedVisibleFollowUp.content.slice(0, 160)}
+            {queuedVisibleFollowUp.content.length > 160 ? '...' : ''}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function TechnicalFeedContent({
   data,
   progressAnnotations,
@@ -872,6 +981,21 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       </div>
     );
 
+    const renderWorkspaceCompactPrompt = () => (
+      <WorkspaceCompactPrompt
+        input={input}
+        textareaRef={textareaRef}
+        provider={provider}
+        model={model}
+        isStreaming={isStreaming}
+        handleInputChange={handleInputChange}
+        handlePaste={handlePaste}
+        handleSendMessage={handleSendMessage}
+        handleStop={handleStop}
+        queuedVisibleFollowUp={queuedVisibleFollowUp}
+      />
+    );
+
     const renderPromptBlock = (placement: 'intro' | 'persistent') => (
       <div
         className={classNames('z-prompt mx-auto flex w-full flex-col gap-3', {
@@ -1137,8 +1261,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               data-testid="persistent-chat-composer"
               className="shrink-0 border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 shadow-[0_-12px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:px-4"
             >
-              <div className="mx-auto max-h-[42vh] w-full max-w-[980px] overflow-y-auto modern-scrollbar">
-                {renderPromptBlock('persistent')}
+              <div
+                className={classNames(
+                  'mx-auto w-full max-w-[980px] modern-scrollbar',
+                  activeSurface === 'workspace' ? 'max-h-[92px] overflow-hidden' : 'max-h-[42vh] overflow-y-auto',
+                )}
+              >
+                {activeSurface === 'workspace' ? renderWorkspaceCompactPrompt() : renderPromptBlock('persistent')}
               </div>
             </div>
           ) : null}

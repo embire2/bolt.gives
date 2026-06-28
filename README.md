@@ -50,9 +50,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.19`)
+## Current Release (`v3.0.9.20`)
 
-`v3.0.9.19` is the current stable hosted release. It fixes the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
+`v3.0.9.20` is the current stable hosted release. It makes the Workspace feel more like a focused build surface: when users switch to `Workspace`, the large full-feature chat composer is replaced by a compact follow-up prompt bar at the bottom of the screen. Users can still type any improvement request, press Enter, and keep working, but files, Preview, and runtime status stay visible instead of being crowded out by provider controls and tool buttons.
+
+The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there.
+
+`v3.0.9.19` fixed the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
 
 This release also tightens exact visible text recovery by ignoring source file paths such as `src/App.tsx` and `src/App.css` when deciding whether a requested UI label is missing. That keeps Google Calendar-style repair passes focused on real visible UI requirements rather than incidental implementation instructions.
 
@@ -127,7 +131,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.19`)
+## Current Platform Baseline (`v3.0.9.20`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

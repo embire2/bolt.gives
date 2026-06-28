@@ -221,7 +221,10 @@ describe('BaseChat surface tabs', () => {
     );
     expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textSecondary');
     expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textPrimary');
-    expect(screen.getByTestId('chat-input-region').className).not.toContain('sticky');
+    expect(
+      screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('workspace-compact-prompt')),
+    ).toBe(true);
+    expect(screen.queryByTestId('chat-input-region')).toBeNull();
   });
 
   it('returns to chat after an auto-opened workspace run settles', async () => {
@@ -319,6 +322,7 @@ describe('BaseChat surface tabs', () => {
     const chatInputRegion = screen.getByTestId('chat-input-region');
     expect(screen.getByTestId('persistent-chat-composer').contains(chatInputRegion)).toBe(true);
     expect(chatInputRegion.closest('#chat-surface-panel')).toBeNull();
+    expect(screen.queryByTestId('workspace-compact-prompt')).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
 
@@ -328,7 +332,14 @@ describe('BaseChat surface tabs', () => {
       );
     });
 
+    const compactPrompt = screen.getByTestId('workspace-compact-prompt');
+    expect(screen.getByTestId('persistent-chat-composer').contains(compactPrompt)).toBe(true);
+    expect(screen.queryByTestId('chat-input-region')).toBeNull();
+    expect(screen.getByPlaceholderText('Ask Cody to change this project...')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+
     expect(screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('chat-input-region'))).toBe(true);
-    expect(chatInputRegion.isConnected).toBe(true);
+    expect(screen.queryByTestId('workspace-compact-prompt')).toBeNull();
   });
 });

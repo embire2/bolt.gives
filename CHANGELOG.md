@@ -26,6 +26,17 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.20 (2026-06-28)
+
+### Changed
+
+- Workspace now renders a compact follow-up prompt bar after a project starts, keeping files, Preview, and execution state visible while users type quick improvement prompts.
+- Chat keeps the full prompt composer with provider/model controls, attachments, web research, prompt enhancement, mode toggles, and session actions.
+
+### Fixed
+
+- The persistent prompt no longer consumes the Workspace viewport with full Chat-only controls, matching the focused build-surface behavior users expect when iterating on an existing project.
+
 ## v3.0.9.19 (2026-06-27)
 
 ### Fixed

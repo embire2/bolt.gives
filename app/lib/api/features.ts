@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.20',
+    name: 'v3.0.9.20 compact Workspace prompt',
+    description:
+      'Workspace now uses a small follow-up prompt bar so files, Preview, and execution status stay visible, while Chat keeps the full provider/tools composer.',
+    releaseDate: '2026-06-28',
+  },
+  {
     id: 'release-v3.0.9.19',
     name: 'v3.0.9.19 visible follow-up queue',
     description:
