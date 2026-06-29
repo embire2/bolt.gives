@@ -50,11 +50,19 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.20`)
+## Current Release (`v3.0.9.21`)
 
-`v3.0.9.20` is the current stable hosted release. It makes the Workspace feel more like a focused build surface: when users switch to `Workspace`, the large full-feature chat composer is replaced by a compact follow-up prompt bar at the bottom of the screen. Users can still type any improvement request, press Enter, and keep working, but files, Preview, and runtime status stay visible instead of being crowded out by provider controls and tool buttons.
+`v3.0.9.21` is the current stable hosted release. It makes first-pass app creation and Workspace iteration easier: `Preview` and `Code` now get the main screen space, the compact follow-up prompt remains visible for guidance, and manual Code/Diff selection is no longer overridden by preview refreshes.
 
-The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there.
+The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
+
+### In-progress v3.1.0 preview/code reliability
+
+The `v3.1.0` line is tightening first-pass project creation and Workspace usability. `Preview` and `Code` now take priority over supporting panels: focused views collapse repair/working state into a small status chip, remove the large Workspace Activity drawer from the bottom of the work surface, and keep the compact follow-up prompt visible for guidance.
+
+Workbench tab selection is user-respecting. The app may still auto-open `Preview` the first time a preview becomes available, but after a user clicks `Code` or `Diff`, runtime preview refreshes and repair-loop status updates no longer force the workbench back to `Preview`.
+
+Google Calendar-style prompts now use a deterministic first-party Calendar Planner starter before model continuation. It is plain React/CSS with a week grid, agenda panel, calendar list, and create-event action, avoiding dependency-heavy first-pass failures such as fragile FullCalendar CSS subpath imports.
 
 ### Built-in web app updater
 
@@ -78,17 +86,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.20` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.21` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.20`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.20)
+- Release: [`v3.0.9.21`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.21)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.20/install.sh)
-- Release commit: `41836f7f38af93f594b33660e1dcf06b8e231b6a`
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.21/install.sh)
+- Release commit: see the `v3.0.9.21` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.20/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.21/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -170,10 +178,12 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.20`)
+## Current Platform Baseline (`v3.0.9.21`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
+- Preview and Code are focused workspace surfaces: status and activity chrome stay compact, the preview defaults to a desktop/full-width canvas, and user-selected workbench tabs are not overridden by preview recovery refreshes.
+- Google Calendar-style app prompts now start from a deterministic first-party React/CSS Calendar Planner pack with visible calendar, agenda, and create-event smoke signals.
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.

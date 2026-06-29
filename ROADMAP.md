@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.20`
+- [x] `v3.0.9.21`
 
 Next release target:
 
@@ -28,8 +28,25 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Stream live update progress with status/log events while the instance fetches, preserves local changes, installs dependencies, builds, and schedules restart.
 - [x] Add release policy parsing from GitHub release notes plus server env overrides for operators.
 - [x] Add regression coverage for update policy parsing and optional/mandatory updater UI behavior.
+- [x] Make `Preview` and `Code` focused Workspace surfaces by collapsing status/activity chrome and giving the app/editor the main viewport.
+- [x] Respect manual workbench tab selection so preview recovery/status refreshes do not force users out of `Code` or `Diff`.
+- [x] Add a deterministic first-party Calendar Planner starter for Google Calendar-style prompts, with week grid, agenda, and create-event smoke signals.
+- [x] Add regression coverage for sticky workbench tab selection and Calendar Planner template selection.
 
-## v3.0.9.20 - Current Patch
+## v3.0.9.21 - Current Patch
+
+Release theme: make first-pass app previews usable and keep the Workspace focused.
+
+### Shipped in v3.0.9.21
+
+- [x] Give `Preview` and `Code` focused Workspace layouts with compact status chrome and no oversized activity drawer.
+- [x] Keep the compact prompt visible for guidance while the app/editor gets the primary viewport.
+- [x] Preserve manual `Code`/`Diff` tab selection when preview refresh or repair status updates arrive.
+- [x] Default preview to full-width desktop instead of a phone-sized frame.
+- [x] Add deterministic Google Calendar-style first-pass generation that preserves explicit visible heading text.
+- [x] Lower the production build heap cap so release builds complete on the current host instead of being killed by the kernel.
+
+## v3.0.9.20 - Shipped Patch
 
 Release theme: keep Workspace focused while preserving full Chat controls.
 

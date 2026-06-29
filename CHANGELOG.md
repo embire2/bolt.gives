@@ -8,7 +8,6 @@
 
 - Large hosted model update: the managed `FREE` provider now locks to OpenRouter model `deepseek/deepseek-v4-pro` with the visible `DeepSeek V4 Pro` label across hosted, Pages, and managed-instance startup paths.
 - The public contributor application form has been retired to stop spam. `/contribute` now renders a no-form GitHub contribution page and POST submissions return `410 Gone` without emailing the operator inbox.
-- The Workspace Preview surface now gets more usable space: the chat/workspace split gives the workspace a wider default column, the preview tab compresses status/activity chrome, and the preview pane owns the remaining vertical height.
 - Hosted `FREE` managed-instance runs now use deterministic starter bootstrap before model continuation, preventing empty runtime workspaces when a model initially emits inspection-only shell actions.
 - The Appointment Scheduler first-party template pack now materializes a real React first-pass app with calendar slots,
   patient booking, doctor selection, SMTP reminder settings, and the requested visible heading before model continuation.
@@ -28,6 +27,20 @@
 ### Security
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
+
+## v3.0.9.21 (2026-06-29)
+
+### Changed
+
+- `Preview` and `Code` now run as focused Workspace surfaces: status chrome is compact, the bottom activity drawer no longer takes over the work surface, and the persistent guidance prompt remains available without crowding the app/editor.
+- Preview defaults now favor a desktop/full-width canvas instead of an iPhone-sized device preview, and responsive preview resizing can reach 100% width.
+- Workbench tab selection now respects user intent. After a user clicks `Code` or `Diff`, preview refresh/recovery updates no longer steal focus back to `Preview`; users can still click `Preview` explicitly.
+
+### Fixed
+
+- Google Calendar-style prompts now receive a deterministic first-party Calendar Planner React/CSS starter with a week grid, agenda panel, and create-event affordance before model continuation, reducing dependency-driven first-pass failures.
+- The Calendar Planner starter now preserves explicit visible-heading requests such as `visible heading that contains the exact text "..."`, so smoke/e2e checks verify the actual requested output instead of accepting a generic calendar screen.
+- The default production build heap cap now fits the current deployment host, preventing `pnpm run build` from being killed with exit `137` during chunk rendering on 14 GiB RAM servers.
 
 ## v3.0.9.20 (2026-06-28)
 

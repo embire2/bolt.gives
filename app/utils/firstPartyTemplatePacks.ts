@@ -23,6 +23,15 @@ export const FIRST_PARTY_TEMPLATE_PACKS: FirstPartyTemplatePack[] = [
     smokeSignals: ['appointment', 'patient', 'schedule'],
   },
   {
+    id: 'calendar-planner',
+    label: 'Calendar Planner',
+    match: [/\bgoogle\s+calendar\b/i, /\bcalendar\b/i, /\bplanner\b/i, /\bevents?\b/i, /\bmeeting\b/i],
+    requiredSections: ['week calendar grid', 'event list or agenda', 'create event affordance'],
+    visualDirection:
+      'polished productivity calendar with Google Calendar-inspired structure, clear dates, and roomy event cards',
+    smokeSignals: ['calendar', 'agenda', 'create event'],
+  },
+  {
     id: 'saas-dashboard',
     label: 'SaaS Dashboard',
     match: [/\bdashboard\b/i, /\banalytics\b/i, /\bmetrics\b/i, /\badmin\b/i, /\bcrm\b/i],
@@ -84,14 +93,26 @@ Do not finish until the Preview shows these signals instead of a generic starter
 `;
 }
 
-function extractVisibleHeading(prompt: string): string {
-  const quotedHeading = prompt.match(/visible\s+heading\s+["“]([^"”]+)["”]/i)?.[1]?.trim();
+const DEFAULT_APPOINTMENT_HEADING = 'Clinic Appointment Studio';
+const DEFAULT_CALENDAR_HEADING = 'Calendar Command Center';
 
-  if (quotedHeading) {
-    return quotedHeading;
+function extractVisibleHeading(prompt: string, fallback = DEFAULT_APPOINTMENT_HEADING): string {
+  const patterns = [
+    /visible\s+heading\s+["“]([^"”]+)["”]/i,
+    /visible\s+heading\b[^"“”]*(?:contains?|include|with|exact\s+text|exactly)\b[^"“”]*["“]([^"”]+)["”]/i,
+    /exact\s+(?:visible\s+)?(?:heading\s+)?text\s+["“]([^"”]+)["”]/i,
+    /(?:visible\s+text|heading)\b[^"“”]*["“]([^"”]+)["”]/i,
+  ];
+
+  for (const pattern of patterns) {
+    const quotedHeading = prompt.match(pattern)?.[1]?.trim();
+
+    if (quotedHeading) {
+      return quotedHeading;
+    }
   }
 
-  return 'Clinic Appointment Studio';
+  return fallback;
 }
 
 function buildAppointmentSchedulerFiles(originalRequest: string): FirstPartyTemplatePackFile[] {
@@ -338,6 +359,421 @@ select {
   ];
 }
 
+function buildCalendarPlannerFiles(originalRequest: string): FirstPartyTemplatePackFile[] {
+  const displayHeading = extractVisibleHeading(originalRequest, DEFAULT_CALENDAR_HEADING);
+
+  return [
+    {
+      name: 'App.tsx',
+      path: 'src/App.tsx',
+      content: `import { useState } from 'react';
+import './App.css';
+
+const days = ['Mon 24', 'Tue 25', 'Wed 26', 'Thu 27', 'Fri 28', 'Sat 29', 'Sun 30'];
+const hours = ['8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM'];
+const calendars = ['Personal', 'Team', 'Launch', 'Focus'];
+const events = [
+  { day: 'Mon 24', time: '9 AM', title: 'Design sync', calendar: 'Team', span: 2 },
+  { day: 'Tue 25', time: '11 AM', title: 'Content review', calendar: 'Launch', span: 1 },
+  { day: 'Wed 26', time: '1 PM', title: 'Deep work block', calendar: 'Focus', span: 2 },
+  { day: 'Thu 27', time: '10 AM', title: 'Partner demo', calendar: 'Team', span: 1 },
+  { day: 'Fri 28', time: '2 PM', title: 'Weekly planning', calendar: 'Personal', span: 2 },
+];
+
+export default function App() {
+  const [selectedDay, setSelectedDay] = useState(days[2]);
+
+  const selectedEvents = events.filter((event) => event.day === selectedDay);
+
+  return (
+    <main className="calendar-shell">
+      <aside className="sidebar">
+        <button className="create-button">+ Create event</button>
+        <section className="mini-card">
+          <p className="eyebrow">June 2026</p>
+          <div className="mini-grid">
+            {Array.from({ length: 35 }, (_, index) => (
+              <button
+                key={index}
+                className={index === 16 ? 'today' : index === 18 ? 'selected' : ''}
+                aria-label={String(index + 1)}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="calendar-list">
+          <p className="eyebrow">My calendars</p>
+          {calendars.map((calendar) => (
+            <label key={calendar}>
+              <input type="checkbox" defaultChecked />
+              <span>{calendar}</span>
+            </label>
+          ))}
+        </section>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Google Calendar style planner</p>
+            <h1>${displayHeading}</h1>
+          </div>
+          <div className="topbar-actions">
+            <button>Today</button>
+            <button className="ghost">Week</button>
+          </div>
+        </header>
+
+        <nav className="day-strip" aria-label="Week days">
+          {days.map((day) => (
+            <button key={day} className={day === selectedDay ? 'active' : ''} onClick={() => setSelectedDay(day)}>
+              <span>{day.split(' ')[0]}</span>
+              <strong>{day.split(' ')[1]}</strong>
+            </button>
+          ))}
+        </nav>
+
+        <div className="calendar-board">
+          <div className="time-column">
+            {hours.map((hour) => (
+              <span key={hour}>{hour}</span>
+            ))}
+          </div>
+          <div className="grid-column">
+            {hours.map((hour) => (
+              <div key={hour} className="time-row" />
+            ))}
+            {events.map((event, index) => (
+              <article
+                key={event.title}
+                className={event.day === selectedDay ? 'event-card selected-event' : 'event-card'}
+                style={{
+                  top: String(hours.indexOf(event.time) * 68 + 12) + 'px',
+                  height: String(event.span * 58) + 'px',
+                  left: String((index % 5) * 17 + 2) + '%',
+                }}
+              >
+                <strong>{event.title}</strong>
+                <span>{event.time} - {event.calendar}</span>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <aside className="agenda-panel">
+        <p className="eyebrow">Agenda</p>
+        <h2>{selectedDay}</h2>
+        {selectedEvents.length > 0 ? (
+          selectedEvents.map((event) => (
+            <article key={event.title} className="agenda-item">
+              <span>{event.time}</span>
+              <strong>{event.title}</strong>
+              <p>{event.calendar} calendar</p>
+            </article>
+          ))
+        ) : (
+          <article className="agenda-item empty">
+            <strong>No meetings yet</strong>
+            <p>Use Create event to add a focused block or team meeting.</p>
+          </article>
+        )}
+      </aside>
+    </main>
+  );
+}
+`,
+    },
+    {
+      name: 'App.css',
+      path: 'src/App.css',
+      content: `:root {
+  color: #18212f;
+  background: #f5f7fb;
+  font-family:
+    Avenir Next,
+    Trebuchet MS,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.calendar-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 18px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(66, 133, 244, 0.18), transparent 32rem),
+    linear-gradient(135deg, #ffffff 0%, #eef3ff 52%, #f6fff9 100%);
+}
+
+.sidebar,
+.workspace,
+.agenda-panel {
+  border: 1px solid rgba(42, 58, 82, 0.12);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 24px 70px rgba(35, 48, 73, 0.12);
+}
+
+.sidebar,
+.agenda-panel {
+  padding: 18px;
+}
+
+.create-button,
+.topbar-actions button {
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 13px 16px;
+}
+
+.mini-card,
+.calendar-list,
+.agenda-item {
+  margin-top: 18px;
+  border-radius: 22px;
+  background: #f7faff;
+  padding: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: #526179;
+  font-size: 0.73rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.mini-grid button {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #344052;
+  cursor: pointer;
+}
+
+.mini-grid .today {
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-weight: 900;
+}
+
+.mini-grid .selected {
+  background: #1a73e8;
+  color: white;
+}
+
+.calendar-list label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0;
+  color: #344052;
+  font-weight: 750;
+}
+
+.workspace {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid #e5ebf5;
+}
+
+h1,
+h2 {
+  margin: 0;
+  color: #18212f;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.topbar-actions button {
+  width: auto;
+  padding-inline: 18px;
+}
+
+.topbar-actions .ghost {
+  background: #eef3ff;
+  color: #1a73e8;
+}
+
+.day-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5ebf5;
+}
+
+.day-strip button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: transparent;
+  color: #526179;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.day-strip strong {
+  color: #18212f;
+  font-size: 1.3rem;
+}
+
+.day-strip .active {
+  border-color: #bfd4ff;
+  background: #e8f0fe;
+}
+
+.calendar-board {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  min-height: 620px;
+  padding: 14px 16px 24px;
+}
+
+.time-column {
+  display: grid;
+  grid-template-rows: repeat(9, 1fr);
+  color: #7d8a9e;
+  font-size: 0.78rem;
+}
+
+.grid-column {
+  position: relative;
+  display: grid;
+  grid-template-rows: repeat(9, 1fr);
+  border-left: 1px solid #e5ebf5;
+}
+
+.time-row {
+  border-top: 1px solid #e5ebf5;
+}
+
+.event-card {
+  position: absolute;
+  width: 28%;
+  min-width: 145px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border-left: 5px solid #34a853;
+  border-radius: 16px;
+  background: #e6f4ea;
+  color: #173b22;
+  padding: 12px;
+  box-shadow: 0 10px 24px rgba(52, 168, 83, 0.14);
+}
+
+.selected-event {
+  border-color: #1a73e8;
+  background: #e8f0fe;
+  color: #12366d;
+}
+
+.event-card span,
+.agenda-item p,
+.agenda-item span {
+  color: #526179;
+}
+
+.agenda-panel h2 {
+  font-size: 2rem;
+}
+
+.agenda-item {
+  display: grid;
+  gap: 6px;
+}
+
+.agenda-item.empty {
+  border: 1px dashed #cbd6e8;
+}
+
+@media (max-width: 1180px) {
+  .calendar-shell {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .agenda-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .calendar-shell {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .topbar,
+  .topbar-actions {
+    flex-direction: column;
+  }
+
+  .day-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .calendar-board {
+    min-height: 520px;
+  }
+
+  .event-card {
+    width: 72%;
+    left: 12px !important;
+  }
+}
+`,
+    },
+  ];
+}
+
 export function buildFirstPartyTemplatePackFiles(
   pack: FirstPartyTemplatePack | null,
   originalRequest: string,
@@ -348,6 +784,10 @@ export function buildFirstPartyTemplatePackFiles(
 
   if (pack.id === 'appointment-scheduler') {
     return buildAppointmentSchedulerFiles(originalRequest);
+  }
+
+  if (pack.id === 'calendar-planner') {
+    return buildCalendarPlannerFiles(originalRequest);
   }
 
   return [];

@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.21',
+    name: 'v3.0.9.21 focused Preview and Calendar first pass',
+    description:
+      'Preview and Code now get the main Workspace viewport, manual Code selection is no longer stolen by preview refreshes, and Google Calendar-style prompts start from a deterministic first-pass app with the requested visible heading text.',
+    releaseDate: '2026-06-29',
+  },
+  {
     id: 'release-v3.0.9.20',
     name: 'v3.0.9.20 compact Workspace prompt',
     description:

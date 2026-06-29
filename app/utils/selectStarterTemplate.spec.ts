@@ -73,6 +73,26 @@ describe('getTemplates', () => {
     expect(result?.assistantMessage).not.toContain('Your fallback starter is ready.');
   });
 
+  it('uses a deterministic first-party calendar planner for Google Calendar style apps', async () => {
+    vi.stubGlobal('fetch', vi.fn() as unknown as typeof fetch);
+
+    const token = 'CAL_VISIBLE_TOKEN';
+    const result = await getTemplates(
+      'Vite React',
+      'Calendar App',
+      `Build a Google Calendar style app where users can create event cards and review their agenda. Render a visible heading that contains the exact text "${token}".`,
+    );
+
+    expect(result?.userMessage).toContain('FIRST-PARTY TEMPLATE PACK: Calendar Planner');
+    expect(result?.userMessage).toContain('week calendar grid');
+    expect(result?.userMessage).toContain('create event');
+    expect(result?.assistantMessage).toContain('filePath="src/App.tsx"');
+    expect(result?.assistantMessage).toContain(token);
+    expect(result?.assistantMessage).toContain('+ Create event');
+    expect(result?.assistantMessage).toContain('Agenda');
+    expect(result?.assistantMessage).not.toContain('Your fallback starter is ready.');
+  });
+
   it('prefers local starter files for templates that have a bundled fallback', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(

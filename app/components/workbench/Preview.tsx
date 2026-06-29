@@ -65,6 +65,8 @@ const WINDOW_SIZES: WindowSize[] = [
   { name: 'Desktop', width: 1920, height: 1080, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
   { name: '4K Display', width: 3840, height: 2160, icon: 'i-ph:monitor', hasFrame: true, frameType: 'desktop' },
 ];
+const DEFAULT_WINDOW_SIZE = WINDOW_SIZES.find((size) => size.name === 'Desktop') ?? WINDOW_SIZES[0];
+const DEFAULT_DEVICE_WIDTH_PERCENT = 100;
 const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 5000;
 const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 3500;
 const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
@@ -126,14 +128,14 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isInspectorMode, setIsInspectorMode] = useState(false);
   const [isDeviceModeOn, setIsDeviceModeOn] = useState(false);
-  const [widthPercent, setWidthPercent] = useState<number>(37.5);
+  const [widthPercent, setWidthPercent] = useState<number>(DEFAULT_DEVICE_WIDTH_PERCENT);
   const [currentWidth, setCurrentWidth] = useState<number>(0);
 
   const resizingState = useRef({
     isResizing: false,
     side: null as ResizeSide,
     startX: 0,
-    startWidthPercent: 37.5,
+    startWidthPercent: DEFAULT_DEVICE_WIDTH_PERCENT,
     windowWidth: window.innerWidth,
     pointerId: null as number | null,
   });
@@ -142,7 +144,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const SCALING_FACTOR = 1;
 
   const [isWindowSizeDropdownOpen, setIsWindowSizeDropdownOpen] = useState(false);
-  const [selectedWindowSize, setSelectedWindowSize] = useState<WindowSize>(WINDOW_SIZES[0]);
+  const [selectedWindowSize, setSelectedWindowSize] = useState<WindowSize>(DEFAULT_WINDOW_SIZE);
   const [isLandscape, setIsLandscape] = useState(false);
   const [showDeviceFrame, setShowDeviceFrame] = useState(true);
   const lastReportedHostedPreviewAlertSignatureRef = useRef<string | null>(null);
@@ -719,8 +721,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         newWidthPercent = state.startWidthPercent - dxPercent;
       }
 
-      // Limit width percentage between 10% and 90%
-      newWidthPercent = Math.max(10, Math.min(newWidthPercent, 90));
+      // Keep responsive previews usable while allowing a true full-width canvas.
+      newWidthPercent = Math.max(10, Math.min(newWidthPercent, 100));
 
       // Force a synchronous update to ensure the UI reflects the change immediately
       setWidthPercent(newWidthPercent);
@@ -1165,8 +1167,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       {isPortDropdownOpen && (
         <div className="z-iframe-overlay w-full h-full absolute" onClick={() => setIsPortDropdownOpen(false)} />
       )}
-      <div className="bg-bolt-elements-background-depth-2 p-2 flex items-center gap-2">
-        <div className="flex items-center gap-2">
+      <div className="bg-bolt-elements-background-depth-2 p-1.5 flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <IconButton icon="i-ph:arrow-clockwise" onClick={reloadPreview} />
           <IconButton
             icon="i-ph:selection"
@@ -1175,7 +1177,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           />
         </div>
 
-        <div className="flex-grow flex items-center gap-1 bg-bolt-elements-preview-addressBar-background border border-bolt-elements-borderColor text-bolt-elements-preview-addressBar-text rounded-full px-1 py-1 text-sm hover:bg-bolt-elements-preview-addressBar-backgroundHover hover:focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within-border-bolt-elements-borderColorActive focus-within:text-bolt-elements-preview-addressBar-textActive">
+        <div className="flex-grow flex items-center gap-1 bg-bolt-elements-preview-addressBar-background border border-bolt-elements-borderColor text-bolt-elements-preview-addressBar-text rounded-full px-1 py-0.5 text-sm hover:bg-bolt-elements-preview-addressBar-backgroundHover hover:focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within-border-bolt-elements-borderColorActive focus-within:text-bolt-elements-preview-addressBar-textActive">
           <PortDropdown
             activePreviewIndex={activePreviewIndex}
             setActivePreviewIndex={setActivePreviewIndex}
@@ -1214,7 +1216,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <IconButton
             icon="i-ph:devices"
             onClick={toggleDeviceMode}

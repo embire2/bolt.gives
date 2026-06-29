@@ -485,6 +485,7 @@ export const Workbench = memo(
     const unsavedFiles = useStore(workbenchStore.unsavedFiles);
     const files = useStore(workbenchStore.files);
     const selectedView = useStore(workbenchStore.currentView);
+    const userSelectedView = useStore(workbenchStore.userSelectedView);
     const { showChat } = useStore(chatStore);
     const canHideChat = showWorkbench || !showChat;
 
@@ -498,6 +499,7 @@ export const Workbench = memo(
     const stepRunnerEvents = useStore(workbenchStore.interactiveStepEvents);
     const [loadedViews, setLoadedViews] = useState<Set<WorkbenchViewType>>(() => new Set(['code']));
     const workspaceCommentaryRef = useRef<HTMLDivElement | null>(null);
+    const previousHasPreviewRef = useRef(hasPreview);
     const hasWorkspaceContent =
       hasPreview ||
       Boolean(selectedFile) ||
@@ -518,15 +520,29 @@ export const Workbench = memo(
       [actionAlert, data, hasPreview, isStreaming, stepRunnerEvents],
     );
 
+    const focusedWorkspaceView = selectedView === 'preview' || selectedView === 'code';
+    const showExpandedWorkspaceStatus = chatStarted && !focusedWorkspaceView;
+
     const setSelectedView = (view: WorkbenchViewType) => {
-      workbenchStore.currentView.set(view);
+      workbenchStore.selectWorkbenchView(view, { userInitiated: true });
     };
 
     useEffect(() => {
-      if (hasPreview) {
-        setSelectedView('preview');
+      const previewJustBecameAvailable = hasPreview && !previousHasPreviewRef.current;
+      previousHasPreviewRef.current = hasPreview;
+
+      if (previewJustBecameAvailable && !userSelectedView) {
+        workbenchStore.currentView.set('preview');
       }
-    }, [hasPreview]);
+    }, [hasPreview, userSelectedView]);
+
+    useEffect(() => {
+      if (!userSelectedView || userSelectedView === 'preview' || selectedView !== 'preview') {
+        return;
+      }
+
+      workbenchStore.currentView.set(userSelectedView);
+    }, [selectedView, userSelectedView]);
 
     useEffect(() => {
       setLoadedViews((current) => {
@@ -589,7 +605,7 @@ export const Workbench = memo(
 
     const handleSelectFile = useCallback((filePath: string) => {
       workbenchStore.setSelectedFile(filePath);
-      workbenchStore.currentView.set('diff');
+      workbenchStore.selectWorkbenchView('diff', { userInitiated: true });
     }, []);
 
     const handleSyncFiles = useCallback(async () => {
@@ -608,9 +624,19 @@ export const Workbench = memo(
     }, []);
 
     const workbenchPanel = (
-      <div className="h-full min-h-0 px-2 lg:px-4 pb-4">
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-bolt-elements-borderColor/60 bg-bolt-elements-background-depth-2/90 backdrop-blur-xl shadow-2xl shadow-black/20">
-          <div className="flex items-center px-3 py-2 border-b border-bolt-elements-borderColor gap-1.5">
+      <div className={classNames('h-full min-h-0', focusedWorkspaceView ? 'px-1 pb-1' : 'px-2 pb-3 lg:px-4 lg:pb-4')}>
+        <div
+          className={classNames(
+            'flex h-full min-h-0 flex-col overflow-hidden border border-bolt-elements-borderColor/60 bg-bolt-elements-background-depth-2/90 backdrop-blur-xl shadow-2xl shadow-black/20',
+            focusedWorkspaceView ? 'rounded-lg' : 'rounded-xl',
+          )}
+        >
+          <div
+            className={classNames(
+              'flex items-center border-b border-bolt-elements-borderColor gap-1.5',
+              focusedWorkspaceView ? 'px-2 py-1.5' : 'px-3 py-2',
+            )}
+          >
             <button
               className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
               disabled={!canToggleChatSidebar}
@@ -621,6 +647,18 @@ export const Workbench = memo(
               }}
             />
             <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
+            {chatStarted && focusedWorkspaceView ? (
+              <div
+                className={classNames(
+                  'hidden min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] sm:flex',
+                  getWorkspaceToneClasses(workspaceSummary.tone),
+                )}
+                title={`${workspaceSummary.current} Next: ${workspaceSummary.next}`}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                <span className="truncate">{workspaceSummary.stateLabel}</span>
+              </div>
+            ) : null}
             <div className="ml-auto mr-2 flex items-center gap-2">
               <button
                 type="button"
@@ -771,22 +809,10 @@ export const Workbench = memo(
             />
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            {chatStarted ? (
-              <div
-                className={classNames(
-                  'border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3',
-                  selectedView === 'preview' ? 'py-1' : 'py-2',
-                )}
-              >
-                <div
-                  className={`rounded-lg border px-3 ${selectedView === 'preview' ? 'py-1.5' : 'py-2'} ${getWorkspaceToneClasses(workspaceSummary.tone)}`}
-                >
-                  <div
-                    className={classNames(
-                      'flex items-center justify-between gap-3',
-                      selectedView === 'preview' ? 'mb-0' : 'mb-2',
-                    )}
-                  >
+            {showExpandedWorkspaceStatus ? (
+              <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/90 px-3 py-2">
+                <div className={`rounded-lg border px-3 py-2 ${getWorkspaceToneClasses(workspaceSummary.tone)}`}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                         Workspace Status
@@ -796,35 +822,29 @@ export const Workbench = memo(
                       </div>
                     </div>
                     <div className="rounded-full border border-current/25 px-2 py-0.5 text-[11px] text-bolt-elements-textSecondary">
-                      {selectedView === 'preview'
-                        ? 'Preview view'
-                        : selectedView === 'code'
-                          ? 'Code view'
-                          : 'Diff view'}
+                      Diff view
                     </div>
                   </div>
-                  {selectedView === 'preview' ? null : (
-                    <div className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:grid-cols-3">
-                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                          Happening now
-                        </div>
-                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.current}</div>
+                  <div className="grid gap-2 text-xs text-bolt-elements-textSecondary lg:grid-cols-3">
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Happening now
                       </div>
-                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                          Last visible result
-                        </div>
-                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.last}</div>
-                      </div>
-                      <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
-                          Next
-                        </div>
-                        <div className="text-bolt-elements-textPrimary">{workspaceSummary.next}</div>
-                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.current}</div>
                     </div>
-                  )}
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Last visible result
+                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.last}</div>
+                    </div>
+                    <div className="rounded-md bg-bolt-elements-background-depth-2/70 px-2 py-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textTertiary">
+                        Next
+                      </div>
+                      <div className="text-bolt-elements-textPrimary">{workspaceSummary.next}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -873,24 +893,14 @@ export const Workbench = memo(
               </div>
             )}
           </div>
-          {chatStarted ? (
-            <div
-              className={classNames(
-                'shrink-0 overflow-hidden border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-2',
-                selectedView === 'preview' ? 'max-h-16 py-1' : 'max-h-44 py-1.5',
-              )}
-            >
+          {chatStarted && !focusedWorkspaceView ? (
+            <div className="max-h-44 shrink-0 overflow-hidden border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1/80 px-2 py-1.5">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                     Workspace Activity
                   </div>
-                  <div
-                    className={classNames(
-                      'hidden truncate text-[11px] text-bolt-elements-textTertiary lg:block',
-                      selectedView === 'preview' ? 'sr-only' : '',
-                    )}
-                  >
+                  <div className="hidden truncate text-[11px] text-bolt-elements-textTertiary lg:block">
                     Live progress stays visible here while files and preview update above.
                   </div>
                 </div>
@@ -898,12 +908,7 @@ export const Workbench = memo(
                   {isStreaming ? 'Working…' : hasWorkspaceContent ? 'Ready' : 'Standing by'}
                 </div>
               </div>
-              <div
-                className={classNames(
-                  'grid min-h-0 gap-2 overflow-hidden md:grid-cols-[0.95fr_1.05fr]',
-                  selectedView === 'preview' ? 'max-h-0 opacity-0' : 'max-h-36 opacity-100',
-                )}
-              >
+              <div className="grid max-h-36 min-h-0 gap-2 overflow-hidden opacity-100 md:grid-cols-[0.95fr_1.05fr]">
                 <div ref={workspaceCommentaryRef} className="max-h-36 overflow-y-auto pr-1">
                   <Suspense fallback={<WorkbenchPanelFallback label="Loading live commentary" />}>
                     <LazyCommentaryFeed data={data} scrollRef={workspaceCommentaryRef} />

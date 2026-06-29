@@ -254,8 +254,8 @@ function WorkspaceCompactPrompt({
   const buttonLabel = isStreaming && !hasPromptDraft ? 'Stop current run' : 'Send workspace prompt';
 
   return (
-    <div data-testid="workspace-compact-prompt" className="z-prompt mx-auto w-full max-w-[980px] py-1.5">
-      <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/95 px-2.5 py-2 shadow-[0_-8px_26px_rgba(15,23,42,0.10)] backdrop-blur">
+    <div data-testid="workspace-compact-prompt" className="z-prompt w-full py-1">
+      <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/95 px-2 py-1.5 shadow-[0_-8px_26px_rgba(15,23,42,0.10)] backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="hidden min-w-0 shrink-0 items-center gap-1.5 text-[11px] text-bolt-elements-textTertiary sm:flex">
             <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary">
@@ -266,7 +266,7 @@ function WorkspaceCompactPrompt({
           <div className="relative min-w-0 flex-1">
             <textarea
               ref={textareaRef}
-              className="modern-scrollbar block max-h-20 min-h-[42px] w-full resize-none rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2.5 pr-12 text-sm text-bolt-elements-textPrimary outline-none transition-colors placeholder:text-bolt-elements-textTertiary focus:border-bolt-elements-focus"
+              className="modern-scrollbar block max-h-16 min-h-[38px] w-full resize-none rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 pr-12 text-sm text-bolt-elements-textPrimary outline-none transition-colors placeholder:text-bolt-elements-textTertiary focus:border-bolt-elements-focus"
               value={input}
               onChange={(event) => handleInputChange?.(event)}
               onPaste={handlePaste}
@@ -1257,8 +1257,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             >
               <div
                 className={classNames(
-                  'mx-auto w-full max-w-[980px] modern-scrollbar',
-                  activeSurface === 'workspace' ? 'max-h-[92px] overflow-hidden' : 'max-h-[42vh] overflow-y-auto',
+                  'mx-auto w-full modern-scrollbar',
+                  activeSurface === 'workspace'
+                    ? 'max-w-none max-h-[74px] overflow-hidden'
+                    : 'max-w-[980px] max-h-[42vh] overflow-y-auto',
                 )}
               >
                 {activeSurface === 'workspace' ? renderWorkspaceCompactPrompt() : renderPromptBlock('persistent')}

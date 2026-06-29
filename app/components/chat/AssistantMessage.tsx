@@ -40,10 +40,7 @@ interface AssistantMessageProps {
 }
 
 function openArtifactInWorkbench(filePath: string) {
-  if (workbenchStore.currentView.get() !== 'code') {
-    workbenchStore.currentView.set('code');
-  }
-
+  workbenchStore.selectWorkbenchView('code', { userInitiated: true });
   workbenchStore.setSelectedFile(toWorkbenchAbsoluteFilePath(filePath, WORK_DIR));
 }
 

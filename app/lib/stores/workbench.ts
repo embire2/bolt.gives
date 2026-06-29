@@ -387,6 +387,8 @@ export class WorkbenchStore {
 
   showWorkbench: WritableAtom<boolean> = hotData?.showWorkbench ?? atom(false);
   currentView: WritableAtom<WorkbenchViewType> = hotData?.currentView ?? atom('code');
+  userSelectedView: WritableAtom<WorkbenchViewType | undefined> =
+    hotData?.userSelectedView ?? atom<WorkbenchViewType | undefined>(undefined);
   unsavedFiles: WritableAtom<Set<string>> = hotData?.unsavedFiles ?? atom(new Set<string>());
   actionAlert: WritableAtom<ActionAlert | undefined> = hotData?.actionAlert ?? atom<ActionAlert | undefined>(undefined);
   supabaseAlert: WritableAtom<SupabaseAlert | undefined> =
@@ -428,6 +430,7 @@ export class WorkbenchStore {
       hot.data.unsavedFiles = this.unsavedFiles;
       hot.data.showWorkbench = this.showWorkbench;
       hot.data.currentView = this.currentView;
+      hot.data.userSelectedView = this.userSelectedView;
       hot.data.actionAlert = this.actionAlert;
       hot.data.supabaseAlert = this.supabaseAlert;
       hot.data.deployAlert = this.deployAlert;
@@ -477,6 +480,14 @@ export class WorkbenchStore {
 
   addToExecutionQueue(callback: () => Promise<void>) {
     return this.#enqueueExecution(callback);
+  }
+
+  selectWorkbenchView(view: WorkbenchViewType, options?: { userInitiated?: boolean }) {
+    if (options?.userInitiated) {
+      this.userSelectedView.set(view);
+    }
+
+    this.currentView.set(view);
   }
 
   #sanitizeInteractiveEvent(event: InteractiveStepRunnerEvent): InteractiveStepRunnerEvent {
