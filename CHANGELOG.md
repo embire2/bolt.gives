@@ -28,6 +28,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.22 (2026-06-29)
+
+### Fixed
+
+- Cloudflare Pages hosts, including `boltgives.pages.dev` and managed fleet project domains, now use the central `wss://bolt.gives/collab` transport instead of opening same-host `/collab` WebSockets that return 404 on Pages.
+- This removes noisy editor and step-runner WebSocket errors from deployed Pages previews while preserving same-host collaboration on custom production domains such as `alpha1.bolt.gives`.
+
 ## v3.0.9.21 (2026-06-29)
 
 ### Changed

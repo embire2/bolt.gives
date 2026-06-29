@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.21`
+- [x] `v3.0.9.22`
 
 Next release target:
 
@@ -32,8 +32,20 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Respect manual workbench tab selection so preview recovery/status refreshes do not force users out of `Code` or `Diff`.
 - [x] Add a deterministic first-party Calendar Planner starter for Google Calendar-style prompts, with week grid, agenda, and create-event smoke signals.
 - [x] Add regression coverage for sticky workbench tab selection and Calendar Planner template selection.
+- [x] Route Cloudflare Pages collaboration traffic through the central `wss://bolt.gives/collab` transport instead of same-host Pages routes.
 
-## v3.0.9.21 - Current Patch
+## v3.0.9.22 - Current Patch
+
+Release theme: remove deployed Pages transport noise after the Workspace/Preview usability patch.
+
+### Shipped in v3.0.9.22
+
+- [x] Treat all `*.pages.dev` platform hosts as Cloudflare Pages collaboration clients.
+- [x] Use the central `wss://bolt.gives/collab` endpoint for `boltgives.pages.dev` and managed fleet domains.
+- [x] Keep same-host collaboration on custom production domains such as `alpha1.bolt.gives`.
+- [x] Add regression coverage for canonical, alternate, and managed Pages hostnames.
+
+## v3.0.9.21 - Shipped Patch
 
 Release theme: make first-pass app previews usable and keep the Workspace focused.
 

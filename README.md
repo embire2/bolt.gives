@@ -50,9 +50,9 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.21`)
+## Current Release (`v3.0.9.22`)
 
-`v3.0.9.21` is the current stable hosted release. It makes first-pass app creation and Workspace iteration easier: `Preview` and `Code` now get the main screen space, the compact follow-up prompt remains visible for guidance, and manual Code/Diff selection is no longer overridden by preview refreshes.
+`v3.0.9.22` is the current stable hosted release. It keeps the `v3.0.9.21` first-pass app creation and Workspace usability fixes, and adds a Cloudflare Pages transport hotfix so managed Pages domains use the central `wss://bolt.gives/collab` endpoint instead of noisy same-host `/collab` WebSocket attempts.
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
 
@@ -86,17 +86,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.21` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.22` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.21`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.21)
+- Release: [`v3.0.9.22`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.22)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.21/install.sh)
-- Release commit: see the `v3.0.9.21` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.22/install.sh)
+- Release commit: see the `v3.0.9.22` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.21/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.22/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -178,7 +178,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.21`)
+## Current Platform Baseline (`v3.0.9.22`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
@@ -189,6 +189,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
 - Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
 - Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
+- Cloudflare Pages and managed fleet hosts use the central collaboration WebSocket transport at `wss://bolt.gives/collab`, avoiding same-host `/collab` 404s on Pages domains.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
 - The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.
 - Managed Cloudflare trial instances use the same protected hosted `FREE` relay path and can generate previewable apps plus follow-up improvements without requiring users to bring their own model API key.

@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.22',
+    name: 'v3.0.9.22 Cloudflare Pages collaboration transport hotfix',
+    description:
+      'Cloudflare Pages and managed fleet hosts now use the central bolt.gives collaboration WebSocket endpoint instead of same-host /collab routes that return 404 on Pages.',
+    releaseDate: '2026-06-29',
+  },
+  {
     id: 'release-v3.0.9.21',
     name: 'v3.0.9.21 focused Preview and Calendar first pass',
     description:

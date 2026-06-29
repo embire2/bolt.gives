@@ -8,7 +8,7 @@ export function isLocalCollaborationHost(host: string) {
 }
 
 export function isBoltPagesCollaborationHost(host: string) {
-  return host === 'bolt-gives.pages.dev' || host.endsWith('.bolt-gives.pages.dev');
+  return host === 'pages.dev' || host.endsWith('.pages.dev');
 }
 
 export function resolveDefaultCollaborationServerUrl(options: { host: string; protocol: string; originHost?: string }) {

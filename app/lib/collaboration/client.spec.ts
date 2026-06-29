@@ -28,6 +28,22 @@ describe('collaboration client URL resolution', () => {
         originHost: '3809d258.bolt-gives.pages.dev',
       }),
     ).toBe('wss://bolt.gives/collab');
+
+    expect(
+      resolveDefaultCollaborationServerUrl({
+        host: 'boltgives.pages.dev',
+        protocol: 'https:',
+        originHost: 'boltgives.pages.dev',
+      }),
+    ).toBe('wss://bolt.gives/collab');
+
+    expect(
+      resolveDefaultCollaborationServerUrl({
+        host: 'denn.pages.dev',
+        protocol: 'https:',
+        originHost: 'denn.pages.dev',
+      }),
+    ).toBe('wss://bolt.gives/collab');
   });
 
   it('uses same-host collaboration for non-pages production hosts', () => {
@@ -42,6 +58,8 @@ describe('collaboration client URL resolution', () => {
 
   it('treats pages self-target and localhost as unsafe stored URLs on remote hosts', () => {
     expect(isUnsafeStoredCollaborationUrl('wss://bolt-gives.pages.dev/collab', 'bolt-gives.pages.dev')).toBe(true);
+    expect(isUnsafeStoredCollaborationUrl('wss://boltgives.pages.dev/collab', 'boltgives.pages.dev')).toBe(true);
+    expect(isUnsafeStoredCollaborationUrl('wss://denn.pages.dev/collab', 'denn.pages.dev')).toBe(true);
     expect(isUnsafeStoredCollaborationUrl('ws://localhost:1234', 'bolt-gives.pages.dev')).toBe(true);
     expect(isUnsafeStoredCollaborationUrl('wss://bolt.gives/collab', 'bolt-gives.pages.dev')).toBe(false);
   });
