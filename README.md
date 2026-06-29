@@ -24,6 +24,7 @@
 ## Start Here
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
+- [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Open the live alpha environment](https://alpha1.bolt.gives)
 - [Review the roadmap](ROADMAP.md)
@@ -36,6 +37,8 @@ Managed instances serve their runtime preview through their own assigned hostnam
 Managed Pages instances also use `https://bolt.gives` as the canonical hosted `FREE` relay/control origin, so new trial instances do not inherit the older alpha host defaults.
 
 Cloudflare Pages edge functions also retry runtime-control calls through `https://bolt.gives/runtime` when the edge rejects the local loopback fallback, which keeps public Pages previews from surfacing avoidable runtime-control console errors.
+
+The new [`/workspace-setup`](/workspace-setup) wizard provisions dedicated Ubuntu runtime-node projects for clients who need a real server CLI. Each project gets its own Linux user, private workspace directory, PostgreSQL database/user/password, and SSH command. Runtime-node admin SSH credentials stay in ignored env/runtime service files and are never sent to the browser.
 
 The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, GitHub contribution path, real product screenshots, crawler-friendly structured data, and a generated search/social image at `/seo/bolt-gives-agentic-coding-platform.png`. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.
 
@@ -50,9 +53,9 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.22`)
+## Current Release (`v3.0.9.23`)
 
-`v3.0.9.22` is the current stable hosted release. It keeps the `v3.0.9.21` first-pass app creation and Workspace usability fixes, and adds a Cloudflare Pages transport hotfix so managed Pages domains use the central `wss://bolt.gives/collab` endpoint instead of noisy same-host `/collab` WebSocket attempts.
+`v3.0.9.23` is the current stable hosted release. It keeps the `v3.0.9.21` first-pass app creation and Workspace usability fixes, keeps the `v3.0.9.22` Cloudflare Pages transport hotfix, and adds the dedicated runtime-node Live Workspaces setup path for per-project Ubuntu CLI and PostgreSQL sandboxes.
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
 
@@ -63,6 +66,24 @@ The `v3.1.0` line is tightening first-pass project creation and Workspace usabil
 Workbench tab selection is user-respecting. The app may still auto-open `Preview` the first time a preview becomes available, but after a user clicks `Code` or `Diff`, runtime preview refreshes and repair-loop status updates no longer force the workbench back to `Preview`.
 
 Google Calendar-style prompts now use a deterministic first-party Calendar Planner starter before model continuation. It is plain React/CSS with a week grid, agenda panel, calendar list, and create-event action, avoiding dependency-heavy first-pass failures such as fragile FullCalendar CSS subpath imports.
+
+### Dedicated runtime-node Live Workspaces
+
+`/workspace-setup` creates real project workspaces on an operator-configured Ubuntu runtime node. The runtime server connects to the node over SSH from the server side only, provisions PostgreSQL if needed, creates one Linux user per project, locks the workspace directory to that user, creates a project-specific PostgreSQL role/database, and returns one-time client credentials.
+
+Configure it with ignored env/runtime service variables:
+
+```bash
+BOLT_RUNTIME_NODE_ENABLED=true
+BOLT_RUNTIME_NODE_HOST=31.6.62.183
+BOLT_RUNTIME_NODE_PUBLIC_HOST=31.6.62.183
+BOLT_RUNTIME_NODE_PORT=22
+BOLT_RUNTIME_NODE_ADMIN_USER=root
+BOLT_RUNTIME_NODE_SSH_PASSWORD=replace_in_runtime_env
+BOLT_RUNTIME_NODE_BASE_DIR=/srv/bolt-live-workspaces
+```
+
+Prefer `BOLT_RUNTIME_NODE_SSH_KEY_PATH` over password auth after the first bootstrap. The root/admin SSH credential must stay in `.env.local`, `.env`, or `/etc/bolt-gives/runtime.env`; never commit it and never expose it to managed customer projects.
 
 ### Built-in web app updater
 
@@ -86,17 +107,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.22` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.23` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.22`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.22)
+- Release: [`v3.0.9.23`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.23)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.22/install.sh)
-- Release commit: see the `v3.0.9.22` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh)
+- Release commit: see the `v3.0.9.23` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.22/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -178,11 +199,12 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.22`)
+## Current Platform Baseline (`v3.0.9.23`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
 - Preview and Code are focused workspace surfaces: status and activity chrome stay compact, the preview defaults to a desktop/full-width canvas, and user-selected workbench tabs are not overridden by preview recovery refreshes.
+- Live Workspaces can provision per-project Ubuntu CLI users, private workspace directories, and dedicated PostgreSQL roles/databases on a configured runtime node.
 - Google Calendar-style app prompts now start from a deterministic first-party React/CSS Calendar Planner pack with visible calendar, agenda, and create-event smoke signals.
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.

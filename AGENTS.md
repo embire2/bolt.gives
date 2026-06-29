@@ -5,7 +5,7 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform. The product must be reliable, visibly transparent while it works, safe when it acts autonomously, and easy to self-host.
 
 Current release line:
-- Stable: `v3.0.9.22`
+- Stable: `v3.0.9.23`
 - In progress: `v3.1.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
@@ -48,6 +48,7 @@ The current hosted product baseline is:
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`
 - Header-level `Shout Out Box` broadcast messaging with user-side settings toggle
 - Interactive self-host installer with local PostgreSQL and Caddy HTTPS support
+- Dedicated runtime-node Live Workspaces at `/workspace-setup` for per-project Ubuntu CLI users, private workspace directories, and per-project PostgreSQL databases
 
 Do not regress any of the above without an explicit user request.
 
@@ -58,11 +59,14 @@ Do not regress any of the above without an explicit user request.
 - Do not leak operator-funded keys to the browser.
 - The hosted `FREE` path must remain server-side only.
 - Managed-instance or admin payloads must not expose Cloudflare credentials, internal hashes, or private admin DB credentials.
+- Runtime-node admin SSH credentials must stay in ignored env/runtime service files and must never be sent to browsers, managed Pages instances, workspace source files, screenshots, release notes, or commits.
+- Runtime-node client credentials are one-time handoff values. Store only hashes/metadata in registries and never log plaintext passwords.
 
 ## Current Hosting / Runtime Facts
 
 - `/srv/bolt-gives` is the live deployed tree on this server.
 - `/srv/bolt-gives-runtime-workspaces` holds hosted runtime workspaces.
+- Dedicated runtime-node client projects default to `/srv/bolt-live-workspaces` on the configured Ubuntu node; each project must have its own Unix user and PostgreSQL role/database.
 - Deployments are often done by syncing repo contents into `/srv/bolt-gives` without `.git`; do not assume the live `.git` SHA reflects the running code unless you verified the deploy method.
 - Main services:
   - `bolt-gives-app.service`
@@ -91,6 +95,7 @@ These are the current release priorities:
 - Tenant/account/RBAC hardening
 - Self-host installer resilience
 - First-party template packs and smoke coverage
+- Runtime-node isolation hardening: move from root bootstrap/password auth toward SSH keys, a non-root agent account, stronger quotas, and auditable per-project operations
 
 Recent critical issue context:
 - A real failure mode existed where stale “starter placeholder” detection could roll a valid generated app back to the fallback starter.
@@ -156,6 +161,16 @@ If deployment fails:
 - Users must see the actual assigned hostname, not a guessed one.
 - `admin.bolt.gives` is the operator surface for client profiles, instance assignments, refresh/suspend actions, and admin email activity.
 - If Cloudflare credentials are configured, trial provisioning must be verified through the runtime control plane, not assumed from docs alone.
+
+## Dedicated Runtime Node Rules
+
+- `/workspace-setup` is client-facing and must never reveal admin/root SSH credentials.
+- Provisioning is server-side only through runtime-control endpoints.
+- One project gets one Unix user, one private workspace directory, one PostgreSQL database, and one PostgreSQL role.
+- Client-selected CLI usernames must be validated as safe Linux usernames and must not collide with system users.
+- Client passwords and generated database passwords are shown once, then stored only as hashes/metadata.
+- Prefer SSH keys and a non-root runtime agent after bootstrap. Root/password access is acceptable only for initial setup or explicitly approved emergency repair.
+- If provisioning fails, record a redacted error and keep the registry honest; do not mark failed workspaces active.
 
 ## Self-Host Rules
 

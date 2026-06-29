@@ -28,6 +28,18 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.23 (2026-06-29)
+
+### Added
+
+- New `/workspace-setup` Live Workspaces wizard provisions per-project Ubuntu CLI workspaces on a configured dedicated runtime node.
+- Runtime-node provisioning creates one Linux user per project, a private project directory, a dedicated PostgreSQL role/database, a project `.env`, and a one-time SSH command/credential handoff for the client.
+- Server-side runtime-control endpoints now manage runtime-node support status and workspace provisioning without exposing admin SSH credentials, root passwords, database admin details, or stored password hashes to the browser.
+
+### Security
+
+- Runtime-node admin SSH credentials are read only from ignored env/runtime service files. Client responses include only the project user and generated project database credentials, and passwords are not stored in the workspace registry as plaintext.
+
 ## v3.0.9.22 (2026-06-29)
 
 ### Fixed

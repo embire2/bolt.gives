@@ -56,13 +56,14 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable hosted release v3.0.9.22 with v3.1.0 platform hardening in progress.',
+  'Stable hosted release v3.0.9.23 with v3.1.0 platform hardening in progress.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
   `Hosted ${FREE_PROVIDER_NAME} provider locked to ${FREE_HOSTED_MODEL_LABEL} through the protected server-side path.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
+  'Dedicated runtime-node setup can create per-project Ubuntu CLI workspaces with isolated PostgreSQL databases.',
   'Follow-up prompts keep project history, runtime snapshots, and current workspace context.',
   'Contributors can join through GitHub issues and roadmap-aligned pull requests.',
 ];
@@ -91,6 +92,12 @@ const conversionCards = [
     title: 'Give each client a previewable instance.',
     description:
       'Managed trial instances use assigned hostnames, same-origin runtime previews, and the protected hosted FREE provider path.',
+  },
+  {
+    eyebrow: 'Runtime node',
+    title: 'Issue real CLI workspaces when clients need server access.',
+    description:
+      'The setup wizard provisions per-project Ubuntu users, private workspace directories, and dedicated PostgreSQL roles/databases on a runtime node.',
   },
 ];
 
@@ -385,6 +392,12 @@ export default function Index() {
                   Create managed instance
                 </a>
                 <a
+                  href="/workspace-setup"
+                  className="rounded-2xl border border-emerald-700/30 bg-emerald-100 px-5 py-3 text-sm font-black text-emerald-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-200"
+                >
+                  Create live workspace
+                </a>
+                <a
                   href="https://github.com/embire2/bolt.gives"
                   className="rounded-2xl border border-amber-700/30 bg-amber-100 px-5 py-3 text-sm font-black text-amber-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-200"
                 >
@@ -587,7 +600,7 @@ export default function Index() {
         </section>
 
         <section className="px-4 py-12 sm:px-6 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+          <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-4">
             <a
               href="/chat"
               className="rounded-[2rem] bg-slate-950 p-7 text-white shadow-xl shadow-slate-950/15 transition hover:-translate-y-0.5"
@@ -616,6 +629,16 @@ export default function Index() {
               <h3 className="mt-4 text-2xl font-black">Contribute on GitHub</h3>
               <p className="mt-3 text-sm leading-6 text-amber-950/75">
                 Discuss issues, open tested pull requests, and help move the roadmap forward in public.
+              </p>
+            </a>
+            <a
+              href="/workspace-setup"
+              className="rounded-[2rem] border border-emerald-700/20 bg-emerald-100 p-7 shadow-sm transition hover:-translate-y-0.5"
+            >
+              <div className="text-sm font-black uppercase tracking-[0.22em] text-emerald-900">Runtime Node</div>
+              <h3 className="mt-4 text-2xl font-black">Create a live CLI workspace</h3>
+              <p className="mt-3 text-sm leading-6 text-emerald-950/75">
+                Provision an isolated Ubuntu project user, private workspace directory, and dedicated Postgres database.
               </p>
             </a>
           </div>

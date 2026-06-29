@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.22`
+- [x] `v3.0.9.23`
 
 Next release target:
 
@@ -33,8 +33,22 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Add a deterministic first-party Calendar Planner starter for Google Calendar-style prompts, with week grid, agenda, and create-event smoke signals.
 - [x] Add regression coverage for sticky workbench tab selection and Calendar Planner template selection.
 - [x] Route Cloudflare Pages collaboration traffic through the central `wss://bolt.gives/collab` transport instead of same-host Pages routes.
+- [x] Add a dedicated runtime-node Live Workspaces wizard for per-project Ubuntu CLI users, isolated workspace directories, and PostgreSQL databases.
 
-## v3.0.9.22 - Current Patch
+## v3.0.9.23 - Current Patch
+
+Release theme: launch the dedicated runtime-node workspace provisioning path.
+
+### Shipped in v3.0.9.23
+
+- [x] Add `/workspace-setup` for client-created live server workspaces.
+- [x] Provision one Linux user per project with a private workspace directory.
+- [x] Provision one PostgreSQL database and role per project on the runtime node.
+- [x] Return one-time CLI/database credentials to the client without storing plaintext passwords in the registry.
+- [x] Keep runtime-node admin SSH credentials server-side in ignored env/runtime service files.
+- [x] Add regression coverage for username validation, client-safe config sanitization, and one-time credential handling.
+
+## v3.0.9.22 - Shipped Patch
 
 Release theme: remove deployed Pages transport noise after the Workspace/Preview usability patch.
 

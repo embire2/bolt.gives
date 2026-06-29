@@ -50,6 +50,16 @@ import {
   sendContributorApplicationEmails,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
+import {
+  buildRuntimeNodeConfig,
+  createRuntimeNodeWorkspaceRecord,
+  normalizeRuntimeNodeWorkspaceRegistry,
+  runRuntimeNodeProvision,
+  sanitizeRuntimeNodeConfigForClient,
+  sanitizeRuntimeNodeWorkspaceForClient,
+  slugifyRuntimeNodeProject,
+  validateRuntimeNodeUsername,
+} from './runtime-node-workspaces.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -108,6 +118,8 @@ const PREVIEW_ERROR_PATTERNS = [
 const TENANT_REGISTRY_PATH =
   process.env.RUNTIME_TENANT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'tenant-registry.json');
 const TENANT_INVITE_TTL_MS = Number(process.env.RUNTIME_TENANT_INVITE_TTL_MS || `${72 * 60 * 60 * 1000}`);
+const RUNTIME_NODE_WORKSPACE_REGISTRY_PATH =
+  process.env.RUNTIME_NODE_WORKSPACE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'runtime-node-workspaces.json');
 const MANAGED_INSTANCE_REGISTRY_PATH =
   process.env.RUNTIME_MANAGED_INSTANCE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'managed-instance-registry.json');
 const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '0');
@@ -845,6 +857,55 @@ export async function writeJsonAtomically(filePath, payload) {
 
 async function writeManagedInstanceRegistry(registry) {
   await writeJsonAtomically(MANAGED_INSTANCE_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+async function ensureRuntimeNodeWorkspaceRegistry() {
+  try {
+    const raw = await fs.readFile(RUNTIME_NODE_WORKSPACE_REGISTRY_PATH, 'utf8');
+    const registry = normalizeRuntimeNodeWorkspaceRegistry(JSON.parse(raw));
+    await writeRuntimeNodeWorkspaceRegistry(registry);
+    return registry;
+  } catch {
+    const registry = normalizeRuntimeNodeWorkspaceRegistry({ workspaces: [], events: [] });
+    await writeRuntimeNodeWorkspaceRegistry(registry);
+    return registry;
+  }
+}
+
+async function writeRuntimeNodeWorkspaceRegistry(registry) {
+  await writeJsonAtomically(RUNTIME_NODE_WORKSPACE_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+function appendRuntimeNodeWorkspaceEvent(registry, event) {
+  const events = Array.isArray(registry.events) ? registry.events.slice(-499) : [];
+  events.push({
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    ...event,
+  });
+  registry.events = events;
+}
+
+function buildRuntimeNodeWorkspaceSummary(workspaces = []) {
+  return {
+    total: workspaces.length,
+    active: workspaces.filter((workspace) => workspace.status === 'active').length,
+    provisioning: workspaces.filter((workspace) => workspace.status === 'provisioning').length,
+    failed: workspaces.filter((workspace) => workspace.status === 'failed').length,
+    suspended: workspaces.filter((workspace) => workspace.status === 'suspended').length,
+  };
+}
+
+function redactRuntimeNodeError(message, secrets = {}) {
+  let next = String(message || 'Runtime node provisioning failed.');
+
+  for (const secret of [secrets.cliPassword, secrets.databasePassword]) {
+    if (secret) {
+      next = next.split(secret).join('[redacted]');
+    }
+  }
+
+  return next;
 }
 
 export function buildManagedInstanceRegistryFromAssignments(assignments = []) {
@@ -4715,6 +4776,153 @@ export function createRuntimeServer() {
 
     if (pathname.startsWith('/runtime/preview/')) {
       proxyPreviewRequest(req, res, pathname);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/runtime/runtime-node/config') {
+      try {
+        const config = buildRuntimeNodeConfig();
+        const registry = await ensureRuntimeNodeWorkspaceRegistry();
+
+        sendJson(res, 200, {
+          ok: true,
+          ...sanitizeRuntimeNodeConfigForClient(config),
+          summary: buildRuntimeNodeWorkspaceSummary(registry.workspaces),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect runtime node support.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/runtime-node/workspaces') {
+      let stagedWorkspace = null;
+      let stagedSecrets = null;
+
+      try {
+        const config = buildRuntimeNodeConfig();
+
+        if (!config.supported) {
+          sendText(res, 503, config.reason || 'Dedicated runtime-node workspaces are unavailable.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const clientName = String(body.clientName || '').trim();
+        const clientEmail = String(body.clientEmail || '')
+          .trim()
+          .toLowerCase();
+        const projectName = String(body.projectName || '').trim();
+        const cliUsername = String(body.cliUsername || '').trim();
+        const cliPassword = String(body.cliPassword || '');
+        const usernameValidation = validateRuntimeNodeUsername(cliUsername);
+        const projectSlug = slugifyRuntimeNodeProject(projectName);
+
+        if (clientName.length < 2) {
+          sendText(res, 400, 'Client name must be at least 2 characters long.');
+          return;
+        }
+
+        if (!isLikelyValidEmail(clientEmail)) {
+          sendText(res, 400, 'A valid email address is required.');
+          return;
+        }
+
+        if (!projectSlug || projectSlug.length < 3) {
+          sendText(res, 400, 'Project name must create a slug with at least 3 letters or numbers.');
+          return;
+        }
+
+        if (!usernameValidation.ok) {
+          sendText(res, 400, usernameValidation.reason);
+          return;
+        }
+
+        const registry = await ensureRuntimeNodeWorkspaceRegistry();
+
+        if (registry.workspaces.some((workspace) => workspace.projectSlug === projectSlug)) {
+          sendText(res, 409, 'That live workspace project slug is already in use.');
+          return;
+        }
+
+        if (registry.workspaces.some((workspace) => workspace.cliUsername === usernameValidation.username)) {
+          sendText(res, 409, 'That CLI username is already in use on the runtime node.');
+          return;
+        }
+
+        const { record, secrets } = createRuntimeNodeWorkspaceRecord(
+          {
+            clientName,
+            clientEmail,
+            projectName,
+            cliUsername,
+            cliPassword,
+          },
+          config,
+        );
+
+        stagedWorkspace = record;
+        stagedSecrets = secrets;
+        registry.workspaces.unshift(record);
+        appendRuntimeNodeWorkspaceEvent(registry, {
+          actor: clientEmail,
+          action: 'runtime-node.workspace.requested',
+          target: record.projectSlug,
+          details: {
+            cliUsername: record.cliUsername,
+            workspaceDir: record.workspaceDir,
+          },
+        });
+        await writeRuntimeNodeWorkspaceRegistry(registry);
+
+        await runRuntimeNodeProvision(record, secrets, config);
+
+        record.status = 'active';
+        record.provisionedAt = new Date().toISOString();
+        record.updatedAt = record.provisionedAt;
+        record.lastError = null;
+        appendRuntimeNodeWorkspaceEvent(registry, {
+          actor: clientEmail,
+          action: 'runtime-node.workspace.provisioned',
+          target: record.projectSlug,
+          details: {
+            cliUsername: record.cliUsername,
+            workspaceDir: record.workspaceDir,
+            databaseName: record.databaseName,
+          },
+        });
+        await writeRuntimeNodeWorkspaceRegistry(registry);
+
+        sendJson(res, 200, {
+          ok: true,
+          workspace: sanitizeRuntimeNodeWorkspaceForClient(record, secrets),
+        });
+      } catch (error) {
+        const registry = await ensureRuntimeNodeWorkspaceRegistry();
+        const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error), stagedSecrets || {});
+
+        if (stagedWorkspace) {
+          const existing = registry.workspaces.find((workspace) => workspace.id === stagedWorkspace.id);
+          const target = existing || stagedWorkspace;
+          target.status = 'failed';
+          target.updatedAt = new Date().toISOString();
+          target.lastError = message;
+
+          if (!existing) {
+            registry.workspaces.unshift(target);
+          }
+
+          appendRuntimeNodeWorkspaceEvent(registry, {
+            actor: stagedWorkspace.clientEmail || 'runtime-node',
+            action: 'runtime-node.workspace.failed',
+            target: stagedWorkspace.projectSlug,
+            details: { error: message },
+          });
+          await writeRuntimeNodeWorkspaceRegistry(registry);
+        }
+
+        sendText(res, 500, message || 'Failed to provision the live runtime workspace.');
+      }
       return;
     }
 

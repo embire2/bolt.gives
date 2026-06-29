@@ -8,15 +8,15 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.0.9.20`
-- Release commit: `41836f7f38af93f594b33660e1dcf06b8e231b6a`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.20`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.20/install.sh`
+- Stable: `v3.0.9.23`
+- Release commit: current `main`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.23`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh`
 - In progress: `v3.1.0`
 
-`v3.0.9.20` is the current stable hosted and Linux self-host release. It keeps the full prompt experience in `Chat`, replaces the oversized Workspace composer with a compact follow-up prompt bar, and preserves room for generated files, Preview, runtime status, and execution transparency.
+`v3.0.9.23` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, and adds the dedicated runtime-node Live Workspaces setup wizard.
 
-The active Cloudflare managed fleet has been refreshed to the release commit: `44/44` deployable instances active and healthy, with `3` suspended instances left untouched.
+The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut.
 
 ## Operating Principles
 
@@ -57,6 +57,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Preview auto-recovery via server-side health checks.
 - Managed `FREE` provider locked to `deepseek/deepseek-v4-pro`.
 - One-client / one-instance managed Cloudflare trial flow.
+- Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 
@@ -70,6 +71,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - First-party template packs with smoke coverage.
 - Continued browser-weight reduction on editor, PDF, git, and terminal surfaces.
 - Self-host installer resilience for apt, build, Caddy, PostgreSQL, and service failures.
+- Runtime-node hardening: non-root agent bootstrap, SSH-key auth, stronger quotas, audit visibility, and clean recovery paths.
 
 ## Delivery Workflow
 
@@ -101,7 +103,17 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 - Never commit secrets, API keys, tokens, cookies, session dumps, or sensitive logs.
 - Keep secrets in `.env.local`, runtime env files, service environment variables, or provider secrets.
 - Do not expose hosted `FREE` provider upstream keys to the browser or managed customer projects.
+- Do not expose runtime-node root/admin SSH credentials to browsers, managed instances, release notes, screenshots, logs, or commits.
+- Client runtime-node CLI/database passwords are one-time handoff values; store only hashes/metadata.
 - Redact sensitive values from screenshots, logs, commits, release notes, and issue comments.
+
+## Runtime Node Rules
+
+- `/workspace-setup` must create one Unix user, one private workspace directory, and one PostgreSQL database/role per project.
+- Client-selected usernames must be safe Linux usernames and must not collide with reserved system accounts.
+- The provisioning path must run on the server side through runtime-control; never call SSH from the browser.
+- Prefer SSH keys and a non-root `bolt-runtime` agent after initial bootstrap. Root/password access is only for setup or approved emergency repair.
+- If provisioning fails, keep the workspace record failed with a redacted error. Never show false success.
 
 ## Definition of Done
 
