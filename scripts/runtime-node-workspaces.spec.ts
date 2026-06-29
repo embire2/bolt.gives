@@ -99,6 +99,10 @@ describe('runtime-node workspace provisioning helpers', () => {
     expect(script).toContain('useradd --create-home');
     expect(script).toContain('chmod 700 "$WORKSPACE_DIR"');
     expect(script).toContain('createdb -O "$DB_USER" "$DB_NAME"');
+    expect(script).toContain('chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env"');
+    expect(script).toContain('chmod 600 "$WORKSPACE_DIR/.env"');
+    expect(script).not.toContain('```');
+    expect(script).not.toContain('`$WORKSPACE_DIR`');
     expect(script).toContain('/var/log/bolt-runtime/workspace-provision.log');
   });
 });

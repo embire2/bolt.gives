@@ -356,16 +356,14 @@ cat > "$WORKSPACE_DIR/README.md" <<EOF_README
 
 This project workspace is isolated at:
 
-\`$WORKSPACE_DIR\`
+  $WORKSPACE_DIR
 
 ## Quick CLI
 
-\`\`\`bash
-cd "$WORKSPACE_DIR"
-pnpm --version
-source .env
-psql "\\$DATABASE_URL"
-\`\`\`
+  cd "$WORKSPACE_DIR"
+  pnpm --version
+  source .env
+  psql "\\$DATABASE_URL"
 
 The workspace is owned by the project Unix user and is not readable by other client users.
 EOF_README
