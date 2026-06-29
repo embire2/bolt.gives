@@ -29,6 +29,7 @@ const RESERVED_LINUX_USERNAMES = new Set([
   'postgres',
   'sshd',
   'bolt-runtime',
+  'bolt-runtime-agent',
 ]);
 
 export function hashRuntimeNodeSecret(value) {
@@ -304,45 +305,63 @@ DB_PASSWORD=${shellQuote(secrets.databasePassword)}
 DB_PASSWORD_SQL=${shellQuote(dbPasswordSql)}
 DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:5432/$DB_NAME"
 
-apt-get update -y >/dev/null
-apt-get install -y sudo postgresql postgresql-contrib git curl ca-certificates build-essential python3 nodejs npm >/dev/null
-systemctl enable --now postgresql >/dev/null
+run_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+run_postgres() {
+  if [ "$(id -u)" -eq 0 ]; then
+    sudo -u postgres "$@"
+  else
+    sudo -u postgres "$@"
+  fi
+}
+
+cd /tmp
+
+run_root env DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null
+run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo postgresql postgresql-contrib git curl ca-certificates build-essential python3 nodejs npm >/dev/null
+run_root systemctl enable --now postgresql >/dev/null
 
 if ! getent group bolt-clients >/dev/null; then
-  groupadd --system bolt-clients
+  run_root groupadd --system bolt-clients
 fi
 
-mkdir -p "$BASE_DIR" /var/log/bolt-runtime
-chmod 755 "$BASE_DIR"
-touch /var/log/bolt-runtime/workspace-provision.log
-chmod 600 /var/log/bolt-runtime/workspace-provision.log
+run_root mkdir -p "$BASE_DIR" /var/log/bolt-runtime
+run_root chmod 751 "$BASE_DIR"
+run_root touch /var/log/bolt-runtime/workspace-provision.log
+run_root chmod 600 /var/log/bolt-runtime/workspace-provision.log
 
 if id "$CLI_USERNAME" >/dev/null 2>&1; then
-  usermod --home "$WORKSPACE_DIR" --shell /bin/bash --append --groups bolt-clients "$CLI_USERNAME"
+  run_root usermod --home "$WORKSPACE_DIR" --shell /bin/bash --append --groups bolt-clients "$CLI_USERNAME"
 else
-  useradd --create-home --home-dir "$WORKSPACE_DIR" --shell /bin/bash --groups bolt-clients "$CLI_USERNAME"
+  run_root useradd --create-home --home-dir "$WORKSPACE_DIR" --shell /bin/bash --groups bolt-clients "$CLI_USERNAME"
 fi
 
-printf '%s:%s\\n' "$CLI_USERNAME" "$CLI_PASSWORD" | chpasswd
-mkdir -p "$WORKSPACE_DIR"
-chown -R "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR"
-chmod 700 "$WORKSPACE_DIR"
+printf '%s:%s\\n' "$CLI_USERNAME" "$CLI_PASSWORD" | run_root chpasswd
+run_root mkdir -p "$WORKSPACE_DIR"
+run_root chown -R "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR"
+run_root chmod 700 "$WORKSPACE_DIR"
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  npm install -g pnpm >/dev/null 2>&1 || true
+  run_root npm install -g pnpm >/dev/null 2>&1 || true
 fi
 
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
+if run_postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
+  run_postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
 else
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
+  run_postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
 fi
 
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-  sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
+if ! run_postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+  run_postgres createdb -O "$DB_USER" "$DB_NAME"
 fi
 
-cat > "$WORKSPACE_DIR/.env" <<EOF_ENV
+run_root tee "$WORKSPACE_DIR/.env" >/dev/null <<EOF_ENV
 DATABASE_URL=$DATABASE_URL
 PGHOST=127.0.0.1
 PGPORT=5432
@@ -351,7 +370,7 @@ PGUSER=$DB_USER
 PGPASSWORD=$DB_PASSWORD
 EOF_ENV
 
-cat > "$WORKSPACE_DIR/README.md" <<EOF_README
+run_root tee "$WORKSPACE_DIR/README.md" >/dev/null <<EOF_README
 # $PROJECT_SLUG live workspace
 
 This project workspace is isolated at:
@@ -368,18 +387,18 @@ This project workspace is isolated at:
 The workspace is owned by the project Unix user and is not readable by other client users.
 EOF_README
 
-cat > "$WORKSPACE_DIR/.profile" <<'EOF_PROFILE'
+run_root tee "$WORKSPACE_DIR/.profile" >/dev/null <<'EOF_PROFILE'
 umask 077
 ulimit -u 256
 ulimit -n 2048
 cd "$HOME"
 EOF_PROFILE
 
-chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env" "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
-chmod 600 "$WORKSPACE_DIR/.env"
-chmod 644 "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
+run_root chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env" "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
+run_root chmod 600 "$WORKSPACE_DIR/.env"
+run_root chmod 644 "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
 
-printf '%s project=%s user=%s dir=%s db=%s\\n' "$(date -Is)" "$PROJECT_SLUG" "$CLI_USERNAME" "$WORKSPACE_DIR" "$DB_NAME" >> /var/log/bolt-runtime/workspace-provision.log
+printf '%s project=%s user=%s dir=%s db=%s\\n' "$(date -Is)" "$PROJECT_SLUG" "$CLI_USERNAME" "$WORKSPACE_DIR" "$DB_NAME" | run_root tee -a /var/log/bolt-runtime/workspace-provision.log >/dev/null
 echo "runtime-node workspace provisioned: $PROJECT_SLUG"
 `;
 }

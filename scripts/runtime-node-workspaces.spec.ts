@@ -12,6 +12,7 @@ describe('runtime-node workspace provisioning helpers', () => {
   it('validates client Linux usernames before provisioning', () => {
     expect(validateRuntimeNodeUsername('Ada_Project').ok).toBe(true);
     expect(validateRuntimeNodeUsername('root')).toMatchObject({ ok: false });
+    expect(validateRuntimeNodeUsername('bolt-runtime-agent')).toMatchObject({ ok: false });
     expect(validateRuntimeNodeUsername('9starts-with-number')).toMatchObject({ ok: false });
     expect(validateRuntimeNodeUsername('xy')).toMatchObject({ ok: false });
   });
@@ -95,12 +96,15 @@ describe('runtime-node workspace provisioning helpers', () => {
     );
     const script = buildRuntimeNodeProvisionScript(record, secrets, config);
 
-    expect(script).toContain('apt-get install -y sudo postgresql postgresql-contrib');
-    expect(script).toContain('useradd --create-home');
-    expect(script).toContain('chmod 700 "$WORKSPACE_DIR"');
-    expect(script).toContain('createdb -O "$DB_USER" "$DB_NAME"');
-    expect(script).toContain('chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env"');
-    expect(script).toContain('chmod 600 "$WORKSPACE_DIR/.env"');
+    expect(script).toContain(
+      'run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo postgresql postgresql-contrib',
+    );
+    expect(script).toContain('run_root useradd --create-home');
+    expect(script).toContain('run_root chmod 751 "$BASE_DIR"');
+    expect(script).toContain('run_root chmod 700 "$WORKSPACE_DIR"');
+    expect(script).toContain('run_postgres createdb -O "$DB_USER" "$DB_NAME"');
+    expect(script).toContain('run_root chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env"');
+    expect(script).toContain('run_root chmod 600 "$WORKSPACE_DIR/.env"');
     expect(script).not.toContain('```');
     expect(script).not.toContain('`$WORKSPACE_DIR`');
     expect(script).toContain('/var/log/bolt-runtime/workspace-provision.log');

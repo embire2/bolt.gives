@@ -78,12 +78,12 @@ BOLT_RUNTIME_NODE_ENABLED=true
 BOLT_RUNTIME_NODE_HOST=31.6.62.183
 BOLT_RUNTIME_NODE_PUBLIC_HOST=31.6.62.183
 BOLT_RUNTIME_NODE_PORT=22
-BOLT_RUNTIME_NODE_ADMIN_USER=root
-BOLT_RUNTIME_NODE_SSH_PASSWORD=replace_in_runtime_env
+BOLT_RUNTIME_NODE_ADMIN_USER=bolt-runtime-agent
+BOLT_RUNTIME_NODE_SSH_KEY_PATH=/etc/bolt-gives/runtime-node-agent
 BOLT_RUNTIME_NODE_BASE_DIR=/srv/bolt-live-workspaces
 ```
 
-Prefer `BOLT_RUNTIME_NODE_SSH_KEY_PATH` over password auth after the first bootstrap. The root/admin SSH credential must stay in `.env.local`, `.env`, or `/etc/bolt-gives/runtime.env`; never commit it and never expose it to managed customer projects.
+Use root/password only for the first bootstrap or an approved emergency repair. The steady-state path is a non-root runtime agent with an SSH key and server-side `sudo`; no root/admin SSH secret is sent to the browser or written into managed customer projects. If a bootstrap password was pasted during setup, rotate it after the agent key is verified.
 
 ### Built-in web app updater
 

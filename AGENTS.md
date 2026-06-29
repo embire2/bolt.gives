@@ -67,6 +67,7 @@ Do not regress any of the above without an explicit user request.
 - `/srv/bolt-gives` is the live deployed tree on this server.
 - `/srv/bolt-gives-runtime-workspaces` holds hosted runtime workspaces.
 - Dedicated runtime-node client projects default to `/srv/bolt-live-workspaces` on the configured Ubuntu node; each project must have its own Unix user and PostgreSQL role/database.
+- Runtime-node steady state must use a non-root `bolt-runtime-agent` SSH key with server-side `sudo`; root/password is bootstrap-only and must be rotated after setup.
 - Deployments are often done by syncing repo contents into `/srv/bolt-gives` without `.git`; do not assume the live `.git` SHA reflects the running code unless you verified the deploy method.
 - Main services:
   - `bolt-gives-app.service`
@@ -169,7 +170,7 @@ If deployment fails:
 - One project gets one Unix user, one private workspace directory, one PostgreSQL database, and one PostgreSQL role.
 - Client-selected CLI usernames must be validated as safe Linux usernames and must not collide with system users.
 - Client passwords and generated database passwords are shown once, then stored only as hashes/metadata.
-- Prefer SSH keys and a non-root runtime agent after bootstrap. Root/password access is acceptable only for initial setup or explicitly approved emergency repair.
+- Prefer SSH keys and the non-root `bolt-runtime-agent` after bootstrap. Root/password access is acceptable only for initial setup or explicitly approved emergency repair, and must be removed from service runtime env once the key path is verified.
 - If provisioning fails, record a redacted error and keep the registry honest; do not mark failed workspaces active.
 
 ## Self-Host Rules

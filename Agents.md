@@ -16,7 +16,7 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 `v3.0.9.23` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, and adds the dedicated runtime-node Live Workspaces setup wizard.
 
-The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut.
+The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
 ## Operating Principles
 
@@ -104,6 +104,7 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 - Keep secrets in `.env.local`, runtime env files, service environment variables, or provider secrets.
 - Do not expose hosted `FREE` provider upstream keys to the browser or managed customer projects.
 - Do not expose runtime-node root/admin SSH credentials to browsers, managed instances, release notes, screenshots, logs, or commits.
+- Do not run normal runtime-node provisioning through root/password once the `bolt-runtime-agent` SSH key is verified.
 - Client runtime-node CLI/database passwords are one-time handoff values; store only hashes/metadata.
 - Redact sensitive values from screenshots, logs, commits, release notes, and issue comments.
 
