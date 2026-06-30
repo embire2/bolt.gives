@@ -4,6 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import dns from 'node:dns/promises';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
@@ -64,6 +65,7 @@ import {
   appendProjectDeploymentEvent,
   buildCustomDomainDnsInstructions,
   buildProjectHostname,
+  buildResolvedProjectDnsStatus,
   encodeStripeForm,
   findProjectDeploymentByHost,
   isLikelyValidCustomDomain,
@@ -4404,9 +4406,28 @@ async function resolveCloudflareZoneIdForProjectDomain() {
   return zone.id;
 }
 
+async function resolveExistingProjectDnsStatus(hostname, fallbackMessage = '') {
+  if (!PROJECT_PUBLIC_IP) {
+    return null;
+  }
+
+  try {
+    const addresses = await dns.resolve4(hostname);
+    return buildResolvedProjectDnsStatus(hostname, PROJECT_PUBLIC_IP, addresses, fallbackMessage);
+  } catch {
+    return null;
+  }
+}
+
 async function ensureProjectSubdomainDnsRecord(hostname) {
   if (!PROJECT_PUBLIC_IP) {
     return { status: 'manual-required', message: 'BOLT_PROJECT_PUBLIC_IP is not configured.' };
+  }
+
+  const existingDns = await resolveExistingProjectDnsStatus(hostname, 'Existing DNS or wildcard DNS is already in place.');
+
+  if (existingDns) {
+    return existingDns;
   }
 
   try {
@@ -4439,6 +4460,15 @@ async function ensureProjectSubdomainDnsRecord(hostname) {
 
     return { status: 'active', message: `A record for ${hostname} points to ${PROJECT_PUBLIC_IP}.` };
   } catch (error) {
+    const fallbackDns = await resolveExistingProjectDnsStatus(
+      hostname,
+      `Cloudflare DNS automation was skipped or unavailable: ${error instanceof Error ? error.message : 'unknown error'}.`,
+    );
+
+    if (fallbackDns) {
+      return fallbackDns;
+    }
+
     return {
       status: 'manual-required',
       message: error instanceof Error ? error.message : 'Cloudflare DNS setup failed.',

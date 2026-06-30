@@ -220,6 +220,25 @@ export function buildCustomDomainDnsInstructions(domain, serverIp) {
   };
 }
 
+export function buildResolvedProjectDnsStatus(hostname, serverIp, addresses, fallbackMessage = '') {
+  const host = String(hostname || '').trim();
+  const ip = String(serverIp || '').trim();
+  const resolvedAddresses = Array.isArray(addresses)
+    ? addresses.map((address) => String(address || '').trim()).filter(Boolean)
+    : [];
+
+  if (!host || !ip || !resolvedAddresses.includes(ip)) {
+    return null;
+  }
+
+  const suffix = fallbackMessage ? ` ${fallbackMessage}` : '';
+
+  return {
+    status: 'active',
+    message: `${host} already resolves to ${ip}.${suffix}`.trim(),
+  };
+}
+
 export function encodeStripeForm(params, prefix = '') {
   const pairs = [];
 

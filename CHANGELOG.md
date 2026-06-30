@@ -41,6 +41,7 @@
 
 - Preview proxy failures no longer leave users staring at a browser-level refused-connection page. The runtime returns a stable repair page explaining that bolt.gives detected a problem and is fixing it automatically.
 - Automatic preview recovery now uses a sticky `repairing` state while restore/probe work is running, preventing rapid “Needs Repair” flicker during recovery loops.
+- Project publishing now treats existing `*.bolt.gives` DNS/wildcard records that already resolve to the app server as active instead of falsely requiring Cloudflare zone management.
 
 ### Security
 

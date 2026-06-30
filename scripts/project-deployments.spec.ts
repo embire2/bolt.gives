@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCustomDomainDnsInstructions,
   buildProjectHostname,
+  buildResolvedProjectDnsStatus,
   encodeStripeForm,
   findProjectDeploymentByHost,
   normalizeProjectDeploymentRegistry,
@@ -27,6 +28,22 @@ describe('project deployment helpers', () => {
       ttl: 'Auto',
       note: 'Create an A record for example.com pointing to 31.6.62.183. Leave DNS propagation time before retrying HTTPS.',
     });
+  });
+
+  it('treats an already resolving project hostname as active DNS', () => {
+    expect(
+      buildResolvedProjectDnsStatus(
+        'smoke-30924.bolt.gives',
+        '31.6.62.180',
+        ['198.51.100.1', '31.6.62.180'],
+        'Existing wildcard DNS is in place.',
+      ),
+    ).toEqual({
+      status: 'active',
+      message: 'smoke-30924.bolt.gives already resolves to 31.6.62.180. Existing wildcard DNS is in place.',
+    });
+
+    expect(buildResolvedProjectDnsStatus('smoke-30924.bolt.gives', '31.6.62.180', ['198.51.100.1'])).toBeNull();
   });
 
   it('normalizes a registry and finds deployments by bolt or custom host', () => {
