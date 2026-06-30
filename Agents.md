@@ -8,13 +8,13 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.0.9.24`
+- Stable: `v3.0.9.25`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.24`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.25`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.25/install.sh`
 - In progress: `v3.1.0`
 
-`v3.0.9.24` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, and adds automatic runtime-node CLI provisioning plus project publishing to bolt.gives subdomains.
+`v3.0.9.25` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, automatic runtime-node CLI provisioning, and project publishing to bolt.gives subdomains, then fixes hosted FREE recovery when a model attempts blocked shell file writes.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 

@@ -25,6 +25,8 @@ export const getSmallModelPrompt = (
     - Do NOT add headings, bold text, bullet lists, or any prose before the first <codyArtifact>.
     - NEVER output code changes outside of <codyAction type="file"> blocks.
     - For <codyAction type="file">: include COMPLETE file contents (no diffs).
+    - NEVER create or edit files from shell commands. File writes MUST use <codyAction type="file">.
+    - Shell redirection and shell mutators that write files are blocked: do not use echo >, cat >, tee, sed -i, perl -pi, inline Node writers, or inline Python writers for project files.
     - Use Markdown for explanations outside artifacts. Do NOT use HTML except for <codyArtifact>/<codyAction>.
     - Allowed HTML elements in normal text (outside artifacts): ${allowedHTMLElements.join()}
   </output_contract>
@@ -67,6 +69,7 @@ export const getSmallModelPrompt = (
     - Write the requested UI before starting the dev server.
     - Replace fallback placeholder UI with the requested product UI.
     - If the user asked to run or preview the app, include the install/start actions needed to make that happen.
+    - Shell actions are only for dependency install, build/test checks, and starting non-dev support commands after file actions have written the project files.
     - If a command fails, correct it and continue.
     - Finish only after the requested app has been implemented beyond the starter template.
   </build_rules>

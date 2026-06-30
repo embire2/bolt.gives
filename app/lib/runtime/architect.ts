@@ -150,6 +150,25 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'blocked-shell-mutation',
+    title: 'Shell file mutation blocked',
+    source: 'terminal',
+    patterns: [
+      /Blocked Shell Mutation/i,
+      /Shell redirection that writes to files is blocked/i,
+      /Shell-based file mutation/i,
+      /Shell-based file mutation via [`']?tee[`']? is blocked/i,
+    ],
+    maxAutoAttempts: 3,
+    guidance: [
+      'Retry the same project change by emitting complete file actions instead of shell commands that write files.',
+      'Do not use shell redirection, `echo >`, `cat >`, `tee`, `sed -i`, inline Node scripts, or inline Python scripts to create or edit project files.',
+      'Use `<codyAction type="file" filePath="...">` or `<boltAction type="file" filePath="...">` with the full file contents for every code change.',
+      'Use shell actions only for dependency install, build, test, or start commands after file actions are emitted.',
+      'Continue from the current workspace and original request; do not re-scaffold unless the workspace is empty or unrecoverable.',
+    ],
+  },
+  {
     id: 'json-command-envelope',
     title: 'JSON-wrapped shell command',
     source: 'terminal',
@@ -334,6 +353,20 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
   },
 ];
 
+const HOSTED_FREE_CLIENT_RECOVERY_ISSUES = new Set(['blocked-shell-mutation']);
+
+export function shouldUseHostedFreeServerRecovery(options: {
+  hostedRuntimeEnabled: boolean;
+  providerName: string;
+  diagnosis: ArchitectDiagnosis;
+}): boolean {
+  return (
+    options.hostedRuntimeEnabled &&
+    options.providerName === 'FREE' &&
+    !HOSTED_FREE_CLIENT_RECOVERY_ISSUES.has(options.diagnosis.issueId)
+  );
+}
+
 function buildFingerprint(input: string): string {
   let hash = 5381;
 
@@ -471,6 +504,11 @@ export function buildArchitectAutoHealPrompt(options: {
     '',
     'Execute a safe self-heal workflow now:',
     numberedGuidance,
+    '',
+    'Artifact output contract:',
+    '- When repairing files, emit exactly one artifact and use file actions with complete file contents.',
+    '- Never mutate project files through shell commands. Shell is only for install/build/test/start after file actions.',
+    '- Start with executable artifact actions when code changes are required; do not return plan-only prose.',
     '',
     'Safety guardrails:',
     '- Operate only within /home/project.',

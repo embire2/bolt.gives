@@ -14,6 +14,14 @@ const previewAlert: ActionAlert = {
   source: 'preview',
 };
 
+const blockedShellAlert: ActionAlert = {
+  type: 'error',
+  title: 'Terminal Error',
+  description: 'Blocked Shell Mutation',
+  content: 'Shell redirection that writes to files is blocked. Use a file action for writes so changes stay atomic.',
+  source: 'terminal',
+};
+
 describe('ChatAlert', () => {
   beforeAll(async () => {
     if (typeof window !== 'undefined') {
@@ -78,5 +86,15 @@ describe('ChatAlert', () => {
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
     expect(clearAlert).toHaveBeenCalledTimes(1);
     expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('explains blocked shell mutation as a safe file-action retry path', () => {
+    const clearAlert = vi.fn();
+    const postMessage = vi.fn();
+
+    render(<ChatAlert alert={blockedShellAlert} clearAlert={clearAlert} postMessage={postMessage} />);
+
+    expect(screen.queryByText(/write project files through a shell command/i)).toBeTruthy();
+    expect(screen.queryByText(/using file actions instead/i)).toBeTruthy();
   });
 });

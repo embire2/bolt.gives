@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.24`
+- [x] `v3.0.9.25`
 
 Next release target:
 
@@ -38,7 +38,18 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.24 - Current Patch
+## v3.0.9.25 - Current Patch
+
+Release theme: keep hosted FREE users moving when a model emits unsafe shell file writes.
+
+### Shipped in v3.0.9.25
+
+- [x] Detect `Blocked Shell Mutation` as a recoverable terminal issue in Architect.
+- [x] Allow hosted `FREE` blocked-shell-mutation issues to use client auto-heal instead of being skipped for server-side recovery.
+- [x] Strengthen build prompts so file writes must be emitted as complete file actions, not shell redirection or inline file-writing scripts.
+- [x] Add regression coverage for hosted `FREE` blocked-shell auto-heal routing and user-facing alert copy.
+
+## v3.0.9.24 - Shipped Patch
 
 Release theme: make hosted projects real server-backed workspaces with publishable domains.
 

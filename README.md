@@ -53,9 +53,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.24`)
+## Current Release (`v3.0.9.25`)
 
-`v3.0.9.24` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, and dedicated runtime-node setup wizard, then adds automatic Ubuntu CLI workspace provisioning for normal chat-created projects, calmer preview repair, and project publishing to `https://{subdomain}.bolt.gives`.
+`v3.0.9.25` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, and project publishing to `https://{subdomain}.bolt.gives`, then fixes hosted `FREE` recovery when a model attempts blocked shell file writes.
+
+### Blocked shell mutation recovery
+
+Project file writes must be emitted as complete file actions, not terminal redirection. `v3.0.9.25` detects `Blocked Shell Mutation` terminal errors as recoverable Architect issues, keeps the shell safety guard in place, and automatically retries hosted `FREE` runs with explicit instructions to re-emit the same changes through `<codyAction type="file">` or `<boltAction type="file">` blocks. Hosted `FREE`, small-model, optimized, and base artifact prompts now forbid `echo >`, `cat >`, `tee`, `sed -i`, and inline file-writing scripts for project files.
 
 ### Project publishing and custom domains
 
@@ -127,17 +131,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.24` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.25` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.24`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.24)
+- Release: [`v3.0.9.25`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.25)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh)
-- Release commit: see the `v3.0.9.24` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.25/install.sh)
+- Release commit: see the `v3.0.9.25` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.25/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```

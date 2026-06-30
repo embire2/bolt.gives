@@ -15,6 +15,8 @@ export const getHostedFreeBuildPrompt = (cwd: string = WORK_DIR) => stripIndents
   - Do NOT write any prose, commentary, headings, Markdown, or code fences before <boltArtifact>.
   - For every <boltAction type="file">, include the COMPLETE file contents.
   - Never output code changes outside <boltAction type="file"> blocks.
+  - Never create or edit files from shell commands. File writes MUST use <boltAction type="file">.
+  - Shell redirection and shell mutators that write files are blocked: do not use echo >, cat >, tee, sed -i, perl -pi, inline Node writers, or inline Python writers for project files.
 
   ENVIRONMENT:
   - Working directory: ${cwd}
@@ -31,6 +33,7 @@ export const getHostedFreeBuildPrompt = (cwd: string = WORK_DIR) => stripIndents
   - Prefer plain CSS or the project's existing styling stack.
   - Do not introduce new build tooling unless it is required and you add all dependencies/config in the same response.
   - If dependencies changed, include the install action required to make the app run.
+  - Shell actions are only for dependency install, build/test checks, and starting non-dev support commands.
   - Include a <boltAction type="start"> so preview can run.
   - If a command fails, correct it and continue.
   - Finish only after the requested app has been implemented beyond the starter template.

@@ -15,6 +15,10 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
   const isPreview = source === 'preview';
   const isInfo = type === 'info';
   const title = alert.title || (isPreview ? 'Preview Error' : 'Terminal Error');
+  const isBlockedShellMutation =
+    /Blocked Shell Mutation|Shell(?:-based)? file mutation|Shell redirection that writes to files/i.test(
+      [title, description, content].filter(Boolean).join('\n'),
+    );
   const message =
     isInfo && isPreview
       ? 'bolt.gives detected a preview problem and is automatically repairing it. The workspace will keep working until a previewable app is ready.'
@@ -28,7 +32,9 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
             : 'Architect has queued an automatic terminal repair and will run it as soon as the current step finishes.'
           : isPreview
             ? 'We encountered an error while running the preview. Would you like Cody agent to analyze and help resolve this issue?'
-            : 'We encountered an error while running terminal commands. Would you like Cody agent to analyze and help resolve this issue?';
+            : isBlockedShellMutation
+              ? 'Cody attempted to write project files through a shell command. That is blocked for safety. Cody agent can retry the same change using file actions instead.'
+              : 'We encountered an error while running terminal commands. Would you like Cody agent to analyze and help resolve this issue?';
 
   return (
     <AnimatePresence>

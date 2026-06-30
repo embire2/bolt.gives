@@ -5,6 +5,7 @@ import {
   decideArchitectAutoHeal,
   decideStarterContinuationPrecedence,
   diagnoseArchitectIssue,
+  shouldUseHostedFreeServerRecovery,
 } from './architect';
 
 describe('diagnoseArchitectIssue', () => {
@@ -170,6 +171,20 @@ describe('diagnoseArchitectIssue', () => {
     expect(diagnosis?.issueId).toBe('starter-placeholder-visible');
     expect(diagnosis?.maxAutoAttempts).toBe(3);
   });
+
+  it('detects blocked shell mutations as client-side recoverable terminal errors', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Terminal Error',
+      description: 'Blocked Shell Mutation',
+      content:
+        'Shell redirection that writes to files is blocked. Use a file action for writes so changes stay atomic.',
+      source: 'terminal',
+    });
+
+    expect(diagnosis?.issueId).toBe('blocked-shell-mutation');
+    expect(diagnosis?.guidance.join('\n')).toContain('<codyAction type="file"');
+  });
 });
 
 describe('decideArchitectAutoHeal', () => {
@@ -215,6 +230,44 @@ describe('decideArchitectAutoHeal', () => {
   });
 });
 
+describe('shouldUseHostedFreeServerRecovery', () => {
+  it('does not skip client auto-heal for hosted FREE blocked shell mutations', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Terminal Error',
+      description: 'Blocked Shell Mutation',
+      content: 'Shell-based file mutation (`echo`, `cat >`, `sed -i`) is blocked. Use a file action instead.',
+      source: 'terminal',
+    })!;
+
+    expect(
+      shouldUseHostedFreeServerRecovery({
+        hostedRuntimeEnabled: true,
+        providerName: 'FREE',
+        diagnosis,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps hosted FREE preview recovery routed to server-side recovery', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'preview',
+      title: 'Preview Error',
+      description: '[plugin:vite:import-analysis] Missing "./index.css" specifier in "@fullcalendar/core" package',
+      content: '/home/project/src/main.jsx',
+      source: 'preview',
+    })!;
+
+    expect(
+      shouldUseHostedFreeServerRecovery({
+        hostedRuntimeEnabled: true,
+        providerName: 'FREE',
+        diagnosis,
+      }),
+    ).toBe(true);
+  });
+});
+
 describe('buildArchitectAutoHealPrompt', () => {
   it('builds a guarded prompt that references Architect and issue details', () => {
     const alert = {
@@ -237,6 +290,28 @@ describe('buildArchitectAutoHealPrompt', () => {
     expect(prompt).toContain('/home/project/src/main.jsx');
     expect(prompt).toContain('Build a doctor appointment scheduling app with reminders.');
     expect(prompt).toContain('Safety guardrails');
+  });
+
+  it('forbids shell file mutation when repairing blocked shell writes', () => {
+    const alert = {
+      type: 'error',
+      title: 'Terminal Error',
+      description: 'Blocked Shell Mutation',
+      content:
+        'Shell redirection that writes to files is blocked. Use a file action for writes so changes stay atomic.',
+      source: 'terminal' as const,
+    };
+    const diagnosis = diagnoseArchitectIssue(alert)!;
+    const prompt = buildArchitectAutoHealPrompt({
+      alert,
+      diagnosis,
+      attemptNumber: 1,
+      originalRequest: 'Build a landing page.',
+    });
+
+    expect(prompt).toContain('blocked-shell-mutation');
+    expect(prompt).toContain('Never mutate project files through shell commands');
+    expect(prompt).toContain('file actions with complete file contents');
   });
 });
 

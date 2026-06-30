@@ -28,6 +28,18 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.25 (2026-06-30)
+
+### Fixed
+
+- Hosted `FREE` terminal errors caused by blocked shell file mutations now enter Architect auto-heal instead of being skipped as if server-side recovery would handle them.
+- The recovery prompt now tells the model to re-emit the same change with complete file actions, and never through shell redirection, `echo >`, `cat >`, `tee`, `sed -i`, or inline file-writing scripts.
+- Terminal alerts for blocked shell mutations now explain the safety block and file-action retry path instead of presenting the issue as an unexplained command failure.
+
+### Changed
+
+- Hosted `FREE`, small-model, optimized, and base artifact prompts now explicitly state that shell actions may install/build/test/start only; project file writes must be file actions.
+
 ## v3.0.9.24 (2026-06-30)
 
 ### Added

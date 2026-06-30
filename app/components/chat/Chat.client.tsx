@@ -3191,8 +3191,12 @@ CONTINUE IMMEDIATELY:
       let cancelled = false;
 
       const evaluateArchitectAutoHeal = async () => {
-        const { decideArchitectAutoHeal, decideStarterContinuationPrecedence, diagnoseArchitectIssue } =
-          await loadArchitectModule();
+        const {
+          decideArchitectAutoHeal,
+          decideStarterContinuationPrecedence,
+          diagnoseArchitectIssue,
+          shouldUseHostedFreeServerRecovery,
+        } = await loadArchitectModule();
         const diagnosis = diagnoseArchitectIssue(actionAlert);
 
         if (!diagnosis || cancelled) {
@@ -3240,7 +3244,13 @@ CONTINUE IMMEDIATELY:
           return;
         }
 
-        if (hostedRuntimeEnabled && provider.name === 'FREE') {
+        if (
+          shouldUseHostedFreeServerRecovery({
+            hostedRuntimeEnabled,
+            providerName: provider.name,
+            diagnosis,
+          })
+        ) {
           appendArchitectTimelineEvent({
             type: 'telemetry',
             description: `${ARCHITECT_NAME} auto-heal skipped`,
@@ -3318,36 +3328,58 @@ CONTINUE IMMEDIATELY:
 
     useEffect(() => {
       if (!pendingArchitectAutoHeal || isLoading || architectInFlightRef.current) {
-        return;
+        return undefined;
       }
 
-      if (hostedRuntimeEnabled && provider.name === 'FREE') {
-        setPendingArchitectAutoHeal(null);
-        setArchitectAutoHealStatus(null);
+      let cancelled = false;
 
-        appendArchitectTimelineEvent({
-          type: 'telemetry',
-          description: `${ARCHITECT_NAME} auto-heal skipped`,
-          output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
-        });
+      const resumePendingArchitectAutoHeal = async () => {
+        const { shouldUseHostedFreeServerRecovery } = await loadArchitectModule();
 
-        return;
-      }
+        if (cancelled) {
+          return;
+        }
 
-      if (pendingArchitectAutoHeal.promptGeneration !== manualPromptGenerationRef.current) {
-        setPendingArchitectAutoHeal(null);
-        setArchitectAutoHealStatus(null);
+        if (
+          shouldUseHostedFreeServerRecovery({
+            hostedRuntimeEnabled,
+            providerName: provider.name,
+            diagnosis: pendingArchitectAutoHeal.diagnosis,
+          })
+        ) {
+          setPendingArchitectAutoHeal(null);
+          setArchitectAutoHealStatus(null);
 
-        appendArchitectTimelineEvent({
-          type: 'telemetry',
-          description: `${ARCHITECT_NAME} auto-heal skipped`,
-          output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) was superseded by a newer user prompt.`,
-        });
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) is handled by hosted FREE server-side recovery.`,
+          });
 
-        return;
-      }
+          return;
+        }
 
-      void dispatchArchitectAutoHeal(pendingArchitectAutoHeal.alert, pendingArchitectAutoHeal.diagnosis);
+        if (pendingArchitectAutoHeal.promptGeneration !== manualPromptGenerationRef.current) {
+          setPendingArchitectAutoHeal(null);
+          setArchitectAutoHealStatus(null);
+
+          appendArchitectTimelineEvent({
+            type: 'telemetry',
+            description: `${ARCHITECT_NAME} auto-heal skipped`,
+            output: `${pendingArchitectAutoHeal.diagnosis.title} (${pendingArchitectAutoHeal.diagnosis.issueId}) was superseded by a newer user prompt.`,
+          });
+
+          return;
+        }
+
+        void dispatchArchitectAutoHeal(pendingArchitectAutoHeal.alert, pendingArchitectAutoHeal.diagnosis);
+      };
+
+      void resumePendingArchitectAutoHeal();
+
+      return () => {
+        cancelled = true;
+      };
     }, [dispatchArchitectAutoHeal, hostedRuntimeEnabled, isLoading, pendingArchitectAutoHeal, provider.name]);
 
     /**
