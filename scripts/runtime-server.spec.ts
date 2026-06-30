@@ -577,6 +577,18 @@ describe('runtime server workspace isolation', () => {
           message: 'Recovering',
           updatedAt: '2026-03-29T12:00:01.000Z',
         },
+        runtimeNodeWorkspace: {
+          projectSlug: 'session-compact',
+          cliUsername: 'bolt_session',
+          status: 'active',
+        },
+        runtimeNodeWorkspaceSecretHandoff: {
+          projectSlug: 'session-compact',
+          cliUsername: 'bolt_session',
+          oneTimeCliPassword: 'should-not-leak',
+          oneTimeDatabasePassword: 'should-not-leak',
+          status: 'active',
+        },
       }),
     ).toEqual({
       sessionId: 'session-compact',
@@ -599,6 +611,11 @@ describe('runtime server workspace isolation', () => {
         token: 3,
         message: 'Recovering',
         updatedAt: '2026-03-29T12:00:01.000Z',
+      },
+      runtimeNodeWorkspace: {
+        projectSlug: 'session-compact',
+        cliUsername: 'bolt_session',
+        status: 'active',
       },
     });
   });

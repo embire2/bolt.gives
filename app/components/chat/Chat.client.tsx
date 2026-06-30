@@ -824,7 +824,7 @@ export const ChatImpl = memo(
     }, [messages]);
 
     useEffect(() => {
-      if (isRuntimeScannerEnabled && actionAlert && !isLoading && !fakeLoading) {
+      if (isRuntimeScannerEnabled && actionAlert?.type === 'error' && !isLoading && !fakeLoading) {
         const isPreview = actionAlert.source === 'preview';
         const prompt = `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${actionAlert.content}\n\`\`\`\n`;
 
@@ -3184,7 +3184,7 @@ CONTINUE IMMEDIATELY:
     );
 
     useEffect(() => {
-      if (!actionAlert || architectInFlightRef.current) {
+      if (!actionAlert || actionAlert.type !== 'error' || architectInFlightRef.current) {
         return undefined;
       }
 

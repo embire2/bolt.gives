@@ -9,6 +9,8 @@ import {
   type HostedRuntimePreviewSummary,
   fetchHostedRuntimePreviewStatus,
   isHostedRuntimeEnabled,
+  publishHostedRuntimeProject,
+  createHostedRuntimeCustomDomainCheckout,
   reportHostedRuntimePreviewAlert,
   subscribeHostedRuntimePreview,
   shouldReloadHostedPreviewIframe,
@@ -128,6 +130,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isInspectorMode, setIsInspectorMode] = useState(false);
   const [isDeviceModeOn, setIsDeviceModeOn] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<string | null>(null);
   const [widthPercent, setWidthPercent] = useState<number>(DEFAULT_DEVICE_WIDTH_PERCENT);
   const [currentWidth, setCurrentWidth] = useState<number>(0);
 
@@ -1057,6 +1060,73 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
   };
 
+  const publishProject = async () => {
+    const previewSessionId =
+      extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) || workbenchStore.hostedRuntimeSessionId;
+
+    if (!previewSessionId) {
+      setPublishStatus('Start a project before publishing.');
+      return;
+    }
+
+    const requestedSubdomain = window.prompt(
+      'Choose your public bolt.gives subdomain, for example "acme-dashboard":',
+      previewSessionId
+        .replace(/[^a-z0-9-]+/gi, '-')
+        .slice(0, 24)
+        .toLowerCase(),
+    );
+
+    if (!requestedSubdomain) {
+      return;
+    }
+
+    setPublishStatus('Publishing project and setting up the subdomain...');
+
+    try {
+      const result = await publishHostedRuntimeProject({
+        sessionId: previewSessionId,
+        subdomain: requestedSubdomain,
+      });
+      const url = result.deployment.url || `https://${result.deployment.hostname}`;
+      setPublishStatus(
+        `Published: ${url}. DNS: ${result.deployment.dnsStatus}. Routing: ${result.deployment.caddyStatus}.`,
+      );
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setPublishStatus(error instanceof Error ? error.message : 'Project publish failed.');
+    }
+  };
+
+  const startCustomDomainCheckout = async () => {
+    const previewSessionId =
+      extractHostedRuntimeSessionIdFromPreviewBaseUrl(activePreview?.baseUrl) || workbenchStore.hostedRuntimeSessionId;
+
+    if (!previewSessionId) {
+      setPublishStatus('Publish the project first, then add a custom domain.');
+      return;
+    }
+
+    const customDomain = window.prompt('Enter the custom domain you want to host for $10/month:');
+
+    if (!customDomain) {
+      return;
+    }
+
+    setPublishStatus('Creating Stripe Checkout for custom-domain hosting...');
+
+    try {
+      const result = await createHostedRuntimeCustomDomainCheckout({
+        sessionId: previewSessionId,
+        customDomain,
+      });
+      setPublishStatus(result.dnsInstructions.note);
+      window.location.href = result.checkoutUrl;
+    } catch (error) {
+      setPublishStatus(error instanceof Error ? error.message : 'Unable to start custom-domain checkout.');
+    }
+  };
+
   // Function to get the correct frame padding based on orientation
   const getFramePadding = useCallback(() => {
     if (!selectedWindowSize) {
@@ -1217,6 +1287,28 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {hostedRuntimeEnabled && (
+            <>
+              <button
+                type="button"
+                onClick={publishProject}
+                disabled={!activePreview}
+                className="hidden rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 md:inline-flex dark:text-emerald-200"
+                title="Publish this project to a bolt.gives subdomain"
+              >
+                Publish
+              </button>
+              <button
+                type="button"
+                onClick={startCustomDomainCheckout}
+                disabled={!activePreview}
+                className="hidden rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex dark:text-sky-200"
+                title="Host this project on a custom domain for $10/month"
+              >
+                Custom domain
+              </button>
+            </>
+          )}
           <IconButton
             icon="i-ph:devices"
             onClick={toggleDeviceMode}
@@ -1402,6 +1494,12 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           </div>
         </div>
       </div>
+
+      {publishStatus && (
+        <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+          {publishStatus}
+        </div>
+      )}
 
       <div className="flex-1 border-t border-bolt-elements-borderColor flex justify-center items-center overflow-auto">
         <div

@@ -60,6 +60,18 @@ import {
   slugifyRuntimeNodeProject,
   validateRuntimeNodeUsername,
 } from './runtime-node-workspaces.mjs';
+import {
+  appendProjectDeploymentEvent,
+  buildCustomDomainDnsInstructions,
+  buildProjectHostname,
+  encodeStripeForm,
+  findProjectDeploymentByHost,
+  isLikelyValidCustomDomain,
+  normalizeCustomDomain,
+  normalizeProjectDeploymentRegistry,
+  sanitizeProjectDeploymentForClient,
+  validateProjectSubdomain,
+} from './project-deployments.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -120,6 +132,20 @@ const TENANT_REGISTRY_PATH =
 const TENANT_INVITE_TTL_MS = Number(process.env.RUNTIME_TENANT_INVITE_TTL_MS || `${72 * 60 * 60 * 1000}`);
 const RUNTIME_NODE_WORKSPACE_REGISTRY_PATH =
   process.env.RUNTIME_NODE_WORKSPACE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'runtime-node-workspaces.json');
+const PROJECT_DEPLOYMENT_REGISTRY_PATH =
+  process.env.RUNTIME_PROJECT_DEPLOYMENT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'project-deployments.json');
+const PROJECT_DOMAIN_ROOT = process.env.BOLT_PROJECT_DOMAIN_ROOT || 'bolt.gives';
+const PROJECT_PUBLIC_IP =
+  process.env.BOLT_PROJECT_PUBLIC_IP ||
+  process.env.BOLT_RUNTIME_NODE_PUBLIC_HOST ||
+  process.env.BOLT_RUNTIME_NODE_HOST ||
+  '';
+const PROJECT_CADDY_ENABLED = process.env.BOLT_PROJECT_CADDY_ENABLED !== 'false';
+const PROJECT_CADDY_SNIPPET_DIR = process.env.BOLT_PROJECT_CADDY_SNIPPET_DIR || '/etc/caddy/bolt-gives-projects';
+const PROJECT_CADDYFILE_PATH = process.env.BOLT_PROJECT_CADDYFILE_PATH || '/etc/caddy/Caddyfile';
+const STRIPE_PUBLISHABLE_KEY = process.env.BOLT_STRIPE_PUBLISHABLE_KEY || '';
+const STRIPE_SECRET_KEY = process.env.BOLT_STRIPE_SECRET_KEY || '';
+const STRIPE_CUSTOM_DOMAIN_PRICE_USD = Number(process.env.BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD || '10');
 const MANAGED_INSTANCE_REGISTRY_PATH =
   process.env.RUNTIME_MANAGED_INSTANCE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'managed-instance-registry.json');
 const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '0');
@@ -146,7 +172,9 @@ const FREE_USAGE_QUOTA_SECRET =
   MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET;
 const FREE_USAGE_QUOTA_PATH =
   process.env.RUNTIME_FREE_USAGE_QUOTA_PATH || path.join(PERSIST_ROOT, 'free-usage-quota.json');
-const FREE_USAGE_DAILY_LIMIT_USD = Number(process.env.BOLT_FREE_DAILY_USD_LIMIT || process.env.FREE_DAILY_USD_LIMIT || '1');
+const FREE_USAGE_DAILY_LIMIT_USD = Number(
+  process.env.BOLT_FREE_DAILY_USD_LIMIT || process.env.FREE_DAILY_USD_LIMIT || '1',
+);
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
 const SHOUTBOX_MESSAGES_PATH =
@@ -361,7 +389,9 @@ function pruneFreeUsageQuotaLedger(ledger, activeDayKey) {
 }
 
 function assertValidFreeUsageQuotaSubject(subjectHash) {
-  const normalized = String(subjectHash || '').trim().toLowerCase();
+  const normalized = String(subjectHash || '')
+    .trim()
+    .toLowerCase();
 
   if (!/^[a-f0-9]{64}$/.test(normalized)) {
     throw new Error('Invalid FREE quota subject.');
@@ -906,6 +936,177 @@ function redactRuntimeNodeError(message, secrets = {}) {
   }
 
   return next;
+}
+
+async function ensureProjectDeploymentRegistry() {
+  try {
+    const raw = await fs.readFile(PROJECT_DEPLOYMENT_REGISTRY_PATH, 'utf8');
+    const registry = normalizeProjectDeploymentRegistry(JSON.parse(raw));
+    await writeProjectDeploymentRegistry(registry);
+    return registry;
+  } catch {
+    const registry = normalizeProjectDeploymentRegistry({ deployments: [], events: [] });
+    await writeProjectDeploymentRegistry(registry);
+    return registry;
+  }
+}
+
+async function writeProjectDeploymentRegistry(registry) {
+  await writeJsonAtomically(PROJECT_DEPLOYMENT_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+function buildAutoRuntimeNodeProjectSlug(sessionId) {
+  const hash = crypto
+    .createHash('sha1')
+    .update(String(sessionId || ''))
+    .digest('hex')
+    .slice(0, 16);
+  return slugifyRuntimeNodeProject(`project-${hash}`);
+}
+
+function buildAutoRuntimeNodeUsername(sessionId) {
+  const hash = crypto
+    .createHash('sha1')
+    .update(String(sessionId || ''))
+    .digest('hex')
+    .slice(0, 12);
+  return `bolt_${hash}`.slice(0, 28);
+}
+
+function createStrongRuntimeNodePassword() {
+  return `Bolt-${crypto.randomBytes(18).toString('base64url')}9a`;
+}
+
+async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
+  if (session.runtimeNodeWorkspace?.status === 'active' || session.runtimeNodeWorkspace?.status === 'provisioning') {
+    return session.runtimeNodeWorkspace;
+  }
+
+  if (session.runtimeNodeProvisionPromise) {
+    return session.runtimeNodeWorkspace || null;
+  }
+
+  const config = buildRuntimeNodeConfig();
+
+  if (!config.supported) {
+    session.runtimeNodeWorkspace = {
+      supported: false,
+      status: 'unavailable',
+      reason: config.reason || 'Dedicated runtime-node workspaces are unavailable.',
+    };
+    return session.runtimeNodeWorkspace;
+  }
+
+  const projectSlug = buildAutoRuntimeNodeProjectSlug(session.id);
+  const cliUsername = buildAutoRuntimeNodeUsername(session.id);
+  const clientEmail = String(options.clientEmail || `workspace-${projectSlug}@bolt.gives`).toLowerCase();
+  const clientName = String(options.clientName || 'bolt.gives project workspace').trim();
+
+  session.runtimeNodeProvisionPromise = (async () => {
+    let stagedWorkspace = null;
+    let stagedSecrets = null;
+
+    try {
+      const registry = await ensureRuntimeNodeWorkspaceRegistry();
+      const existing = registry.workspaces.find(
+        (workspace) => workspace.projectSlug === projectSlug || workspace.cliUsername === cliUsername,
+      );
+
+      if (existing) {
+        session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(existing);
+        return existing;
+      }
+
+      const { record, secrets } = createRuntimeNodeWorkspaceRecord(
+        {
+          clientName,
+          clientEmail,
+          projectName: projectSlug,
+          cliUsername,
+          cliPassword: createStrongRuntimeNodePassword(),
+        },
+        config,
+      );
+
+      stagedWorkspace = record;
+      stagedSecrets = secrets;
+      session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(record);
+      registry.workspaces.unshift(record);
+      appendRuntimeNodeWorkspaceEvent(registry, {
+        actor: 'runtime-session',
+        action: 'runtime-node.workspace.auto-requested',
+        target: record.projectSlug,
+        details: {
+          sessionId: session.id,
+          cliUsername: record.cliUsername,
+          workspaceDir: record.workspaceDir,
+        },
+      });
+      await writeRuntimeNodeWorkspaceRegistry(registry);
+      await runRuntimeNodeProvision(record, secrets, config);
+
+      record.status = 'active';
+      record.provisionedAt = new Date().toISOString();
+      record.updatedAt = record.provisionedAt;
+      record.lastError = null;
+      session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(record);
+      appendRuntimeNodeWorkspaceEvent(registry, {
+        actor: 'runtime-session',
+        action: 'runtime-node.workspace.auto-provisioned',
+        target: record.projectSlug,
+        details: {
+          sessionId: session.id,
+          cliUsername: record.cliUsername,
+          workspaceDir: record.workspaceDir,
+          databaseName: record.databaseName,
+        },
+      });
+      await writeRuntimeNodeWorkspaceRegistry(registry);
+      broadcastPreviewState(session);
+      return record;
+    } catch (error) {
+      const registry = await ensureRuntimeNodeWorkspaceRegistry();
+      const message = redactRuntimeNodeError(
+        error instanceof Error ? error.message : String(error),
+        stagedSecrets || {},
+      );
+
+      if (stagedWorkspace) {
+        const existing = registry.workspaces.find((workspace) => workspace.id === stagedWorkspace.id);
+        const target = existing || stagedWorkspace;
+        target.status = 'failed';
+        target.updatedAt = new Date().toISOString();
+        target.lastError = message;
+
+        if (!existing) {
+          registry.workspaces.unshift(target);
+        }
+
+        session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(target);
+        appendRuntimeNodeWorkspaceEvent(registry, {
+          actor: 'runtime-session',
+          action: 'runtime-node.workspace.auto-failed',
+          target: stagedWorkspace.projectSlug,
+          details: { sessionId: session.id, error: message },
+        });
+        await writeRuntimeNodeWorkspaceRegistry(registry);
+      } else {
+        session.runtimeNodeWorkspace = {
+          supported: true,
+          status: 'failed',
+          reason: message,
+        };
+      }
+
+      broadcastPreviewState(session);
+      return null;
+    } finally {
+      session.runtimeNodeProvisionPromise = null;
+    }
+  })();
+
+  void session.runtimeNodeProvisionPromise;
+  return session.runtimeNodeWorkspace;
 }
 
 export function buildManagedInstanceRegistryFromAssignments(assignments = []) {
@@ -1888,6 +2089,32 @@ function createPreviewRecoveryState() {
   };
 }
 
+function buildPreviewRepairingAlert(alert, message = '') {
+  const detected = alert?.description ? `Detected: ${alert.description}` : 'Detected a preview startup problem.';
+
+  return {
+    type: 'info',
+    title: 'Preview Repair In Progress',
+    description:
+      'A preview problem was detected. bolt.gives is fixing it automatically and will reload the preview when it is ready.',
+    content: `${message || detected}\n\n${detected}`,
+    source: 'preview',
+  };
+}
+
+function setPreviewRepairingState(session, alert, message = '') {
+  setPreviewRecoveryState(
+    session,
+    'running',
+    message || 'A preview problem was detected. The hosted runtime is applying automatic repair.',
+  );
+  touchPreviewDiagnostics(session, {
+    status: 'repairing',
+    healthy: false,
+    alert: buildPreviewRepairingAlert(alert, message),
+  });
+}
+
 export function buildPreviewStateSummary(session) {
   return {
     sessionId: session.id,
@@ -1897,6 +2124,7 @@ export function buildPreviewStateSummary(session) {
     updatedAt: session.previewDiagnostics.updatedAt,
     alert: session.previewDiagnostics.alert,
     recovery: session.previewRecovery,
+    runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
   };
 }
 
@@ -2288,7 +2516,7 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
     `Restoring the last known working workspace snapshot after ${reason}.`,
   );
   touchPreviewDiagnostics(session, {
-    status: 'starting',
+    status: 'repairing',
     healthy: false,
     alert: {
       type: 'info',
@@ -2361,7 +2589,16 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
 }
 
 function schedulePreviewAutoRestore(session, alert) {
-  if (!session.restorePointFileMap || session.autoRestoreInFlight) {
+  if (!session.restorePointFileMap) {
+    touchPreviewDiagnostics(session, {
+      status: 'error',
+      healthy: false,
+      alert,
+    });
+    return;
+  }
+
+  if (session.autoRestoreInFlight) {
     return;
   }
 
@@ -2372,6 +2609,11 @@ function schedulePreviewAutoRestore(session, alert) {
   }
 
   cancelPendingPreviewAutoRestore(session);
+  setPreviewRepairingState(
+    session,
+    alert,
+    'Preview repair is queued. The current preview will stay open while recovery runs.',
+  );
   const mutationId = session.workspaceMutationId;
   session.autoRestoreTimer = setTimeout(() => {
     session.autoRestoreTimer = null;
@@ -2399,11 +2641,11 @@ function schedulePreviewAutoRestore(session, alert) {
         return;
       }
 
-      touchPreviewDiagnostics(session, {
-        status: 'error',
-        healthy: false,
-        alert: probe.alert,
-      });
+      setPreviewRepairingState(
+        session,
+        probe.alert,
+        'Preview repair is running. Restoring the last known working workspace.',
+      );
       session.lastAutoRestoreFingerprint = fingerprint;
       await restoreSessionLastKnownGoodWorkspace(session, 'a preview compilation failure');
     })();
@@ -2441,11 +2683,6 @@ function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace
             'probe',
             `Detected preview failure after ${reason}: ${probe.alert.description}`,
           );
-          touchPreviewDiagnostics(session, {
-            status: 'error',
-            healthy: false,
-            alert: probe.alert,
-          });
           schedulePreviewAutoRestore(session, probe.alert);
           return;
         }
@@ -2471,11 +2708,6 @@ function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace
       };
 
       appendPreviewDiagnosticEntries(session, 'probe', timeoutAlert.description);
-      touchPreviewDiagnostics(session, {
-        status: 'error',
-        healthy: false,
-        alert: timeoutAlert,
-      });
       schedulePreviewAutoRestore(session, timeoutAlert);
     })();
   }, POST_SYNC_PREVIEW_PROBE_DELAY_MS);
@@ -2491,15 +2723,16 @@ function recordPreviewLog(session, channel, chunk) {
   const nextLogs = appendPreviewDiagnosticEntries(session, channel, normalized);
   const detectedAlert = extractPreviewAlertFromText(nextLogs.join('\n'));
 
-  touchPreviewDiagnostics(session, {
-    status: detectedAlert ? 'error' : session.previewDiagnostics.status,
-    healthy: detectedAlert ? false : session.previewDiagnostics.healthy,
-    alert: detectedAlert || session.previewDiagnostics.alert,
-  });
-
   if (detectedAlert) {
     schedulePreviewAutoRestore(session, detectedAlert);
+    return;
   }
+
+  touchPreviewDiagnostics(session, {
+    status: session.previewDiagnostics.status,
+    healthy: session.previewDiagnostics.healthy,
+    alert: session.previewDiagnostics.alert,
+  });
 }
 
 export function recordPreviewResponse(session, body, statusCode, upstreamPath, contentType = '') {
@@ -2518,11 +2751,6 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath, c
       : null);
 
   if (detectedAlert) {
-    touchPreviewDiagnostics(session, {
-      status: 'error',
-      healthy: false,
-      alert: detectedAlert,
-    });
     schedulePreviewAutoRestore(session, detectedAlert);
 
     return;
@@ -2579,6 +2807,9 @@ function getSession(sessionId) {
       autoRestoreInFlight: false,
       lastAutoRestoreFingerprint: null,
       lastPreparedDependencyFingerprint: null,
+      runtimeNodeWorkspace: null,
+      runtimeNodeWorkspaceSecretHandoff: null,
+      runtimeNodeProvisionPromise: null,
       publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
@@ -4046,6 +4277,362 @@ export function resolveStalePreviewRedirectPath(session, requestUrl, pathname = 
   );
 }
 
+function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
+  const escapeHtml = (value) =>
+    String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  const recoveryMessage =
+    session.previewRecovery?.message ||
+    'bolt.gives detected a preview problem and is automatically applying repairs until the app is previewable.';
+
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preview repair in progress</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f3e8; color: #172033; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(720px, calc(100vw - 32px)); border: 1px solid rgba(15, 23, 42, .12); border-radius: 28px; background: rgba(255, 255, 255, .92); box-shadow: 0 24px 80px rgba(15, 23, 42, .16); padding: 32px; }
+      .eyebrow { color: #047857; font-weight: 900; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; }
+      h1 { margin: 12px 0; font-size: clamp(28px, 5vw, 46px); line-height: .98; letter-spacing: -.05em; }
+      p { color: #475569; line-height: 1.7; }
+      .bar { height: 10px; overflow: hidden; border-radius: 999px; background: #dbeafe; margin-top: 24px; }
+      .bar::before { content: ""; display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #10b981, #0ea5e9); animation: move 1.6s ease-in-out infinite alternate; }
+      code { display: block; white-space: pre-wrap; margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: #0f172a; color: #d1fae5; font-size: 12px; }
+      @keyframes move { from { transform: translateX(0); } to { transform: translateX(140%); } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Preview repair</div>
+      <h1>We found a preview issue and are fixing it.</h1>
+      <p>${escapeHtml(recoveryMessage)}</p>
+      <div class="bar" aria-label="Repair in progress"></div>
+      <code>${escapeHtml(detail)}</code>
+    </main>
+  </body>
+</html>`);
+}
+
+function getRequestHost(req) {
+  return String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+}
+
+function runShellCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd || REPO_ROOT,
+      env: { ...process.env, ...(options.env || {}) },
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      reject(new Error((stderr || stdout || `${command} exited with ${code}`).trim()));
+    });
+  });
+}
+
+function getCloudflareApiConfig() {
+  return {
+    token: String(process.env.CLOUDFLARE_API_TOKEN || '').trim(),
+    zoneId: String(process.env.CLOUDFLARE_ZONE_ID || process.env.BOLT_PROJECT_CLOUDFLARE_ZONE_ID || '').trim(),
+  };
+}
+
+async function fetchCloudflareApi(pathname, options = {}) {
+  const config = getCloudflareApiConfig();
+
+  if (!config.token) {
+    throw new Error('CLOUDFLARE_API_TOKEN is not configured.');
+  }
+
+  const response = await fetch(`https://api.cloudflare.com/client/v4${pathname}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload?.success === false) {
+    const message = payload?.errors?.[0]?.message || `Cloudflare API failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+async function resolveCloudflareZoneIdForProjectDomain() {
+  const configured = getCloudflareApiConfig().zoneId;
+
+  if (configured) {
+    return configured;
+  }
+
+  const payload = await fetchCloudflareApi(`/zones?name=${encodeURIComponent(PROJECT_DOMAIN_ROOT)}`);
+  const zone = Array.isArray(payload?.result) ? payload.result[0] : null;
+
+  if (!zone?.id) {
+    throw new Error(`Cloudflare zone ${PROJECT_DOMAIN_ROOT} was not found.`);
+  }
+
+  return zone.id;
+}
+
+async function ensureProjectSubdomainDnsRecord(hostname) {
+  if (!PROJECT_PUBLIC_IP) {
+    return { status: 'manual-required', message: 'BOLT_PROJECT_PUBLIC_IP is not configured.' };
+  }
+
+  try {
+    const zoneId = await resolveCloudflareZoneIdForProjectDomain();
+    const existing = await fetchCloudflareApi(
+      `/zones/${encodeURIComponent(zoneId)}/dns_records?type=A&name=${encodeURIComponent(hostname)}`,
+    );
+    const records = Array.isArray(existing?.result) ? existing.result : [];
+    const record = records[0];
+    const body = {
+      type: 'A',
+      name: hostname,
+      content: PROJECT_PUBLIC_IP,
+      ttl: 1,
+      proxied: true,
+      comment: 'Managed by bolt.gives project publishing.',
+    };
+
+    if (record?.id) {
+      await fetchCloudflareApi(`/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    } else {
+      await fetchCloudflareApi(`/zones/${encodeURIComponent(zoneId)}/dns_records`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    }
+
+    return { status: 'active', message: `A record for ${hostname} points to ${PROJECT_PUBLIC_IP}.` };
+  } catch (error) {
+    return {
+      status: 'manual-required',
+      message: error instanceof Error ? error.message : 'Cloudflare DNS setup failed.',
+    };
+  }
+}
+
+function caddySnippetForProjectHost(hostname) {
+  return `${hostname} {
+\tencode zstd gzip
+\theader {
+\t\tCache-Control "no-store, max-age=0, must-revalidate"
+\t}
+
+\thandle {
+\t\treverse_proxy 127.0.0.1:${PORT}
+\t}
+}
+`;
+}
+
+async function ensureProjectCaddyHost(hostname) {
+  if (!PROJECT_CADDY_ENABLED) {
+    return { status: 'disabled', message: 'Project Caddy automation is disabled.' };
+  }
+
+  try {
+    await fs.mkdir(PROJECT_CADDY_SNIPPET_DIR, { recursive: true });
+    const safeName = hostname.replace(/[^a-z0-9.-]/g, '-');
+    const snippetPath = path.join(PROJECT_CADDY_SNIPPET_DIR, `${safeName}.caddy`);
+    await fs.writeFile(snippetPath, caddySnippetForProjectHost(hostname), 'utf8');
+
+    let caddyfile = await fs.readFile(PROJECT_CADDYFILE_PATH, 'utf8').catch(() => '');
+    const importLine = `import ${PROJECT_CADDY_SNIPPET_DIR}/*.caddy`;
+
+    if (caddyfile && !caddyfile.includes(importLine)) {
+      caddyfile = `${caddyfile.trim()}\n\n${importLine}\n`;
+      await fs.writeFile(PROJECT_CADDYFILE_PATH, caddyfile, 'utf8');
+    }
+
+    await runShellCommand('caddy', ['fmt', '--overwrite', PROJECT_CADDYFILE_PATH]).catch(() => undefined);
+    await runShellCommand('caddy', ['reload', '--config', PROJECT_CADDYFILE_PATH]);
+
+    return { status: 'active', message: `Caddy route for ${hostname} is active.` };
+  } catch (error) {
+    return {
+      status: 'manual-required',
+      message: error instanceof Error ? error.message : 'Caddy route setup failed.',
+    };
+  }
+}
+
+async function createStripeCustomDomainCheckout({ deployment, customDomain, req, customerEmail = '' }) {
+  if (!STRIPE_SECRET_KEY) {
+    throw new Error('Stripe custom-domain billing is not configured on this deployment.');
+  }
+
+  const origin = getRequestOrigin(req);
+  const unitAmount = Math.round(STRIPE_CUSTOM_DOMAIN_PRICE_USD * 100);
+  const payload = {
+    mode: 'subscription',
+    success_url: `${origin}/chat?custom_domain=success&domain=${encodeURIComponent(customDomain)}`,
+    cancel_url: `${origin}/chat?custom_domain=cancelled&domain=${encodeURIComponent(customDomain)}`,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: unitAmount,
+          recurring: { interval: 'month' },
+          product_data: {
+            name: 'bolt.gives custom domain hosting',
+            description: `$${STRIPE_CUSTOM_DOMAIN_PRICE_USD}/month hosting for ${customDomain}`,
+          },
+        },
+      },
+    ],
+    metadata: {
+      sessionId: deployment.sessionId,
+      subdomain: deployment.subdomain,
+      boltHostname: deployment.hostname,
+      customDomain,
+    },
+  };
+
+  if (customerEmail && isLikelyValidEmail(customerEmail)) {
+    payload.customer_email = customerEmail;
+  }
+
+  const body = new URLSearchParams(encodeStripeForm(payload));
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data?.url) {
+    throw new Error(data?.error?.message || `Stripe Checkout failed with status ${response.status}`);
+  }
+
+  return {
+    checkoutSessionId: data.id || null,
+    checkoutUrl: data.url,
+    publishableKey: STRIPE_PUBLISHABLE_KEY || null,
+  };
+}
+
+async function proxyPublishedProjectRequest(req, res, deployment) {
+  const session = sessions.get(deployment.sessionId);
+
+  if (!session) {
+    sendPreviewRepairPage(
+      res,
+      { previewRecovery: { message: null } },
+      'The published project session is not loaded yet.',
+    );
+    return;
+  }
+
+  void ensureRuntimeNodeWorkspaceForSession(session);
+
+  if (!session.preview?.port) {
+    scheduleHostedAutoStartAfterSync(session);
+    sendPreviewRepairPage(
+      res,
+      session,
+      'The published project preview is starting. This page will be available shortly.',
+    );
+    return;
+  }
+
+  const port = Number(session.preview.port);
+  const upstreamReq = http.request(
+    {
+      host: HOST,
+      port,
+      method: req.method,
+      path: req.url || '/',
+      headers: {
+        ...req.headers,
+        host: `${HOST}:${port}`,
+      },
+    },
+    (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode || 200, applyPreviewResponseHeaders({ ...upstreamRes.headers }));
+      upstreamRes.pipe(res);
+    },
+  );
+
+  upstreamReq.setTimeout(PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS, () => {
+    upstreamReq.destroy(new Error(`Published project upstream timed out after ${PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS}ms`));
+  });
+  upstreamReq.on('error', (error) => {
+    const alert = {
+      type: 'error',
+      title: 'Published Project Preview Error',
+      description: `Published project proxy failed: ${error.message}`,
+      content: `Proxy request for ${deployment.hostname} failed.`,
+      source: 'preview',
+    };
+    schedulePreviewAutoRestore(session, alert);
+    sendPreviewRepairPage(res, session, `Published project proxy failed: ${error.message}`);
+  });
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    upstreamReq.end();
+    return;
+  }
+
+  req.pipe(upstreamReq);
+}
+
+async function maybeHandlePublishedProjectRequest(req, res) {
+  const host = getRequestHost(req);
+
+  if (!host || host === PROJECT_DOMAIN_ROOT || host === `www.${PROJECT_DOMAIN_ROOT}`) {
+    return false;
+  }
+
+  const registry = await ensureProjectDeploymentRegistry();
+  const deployment = findProjectDeploymentByHost(registry, host);
+
+  if (!deployment || deployment.status === 'suspended') {
+    return false;
+  }
+
+  await proxyPublishedProjectRequest(req, res, deployment);
+  return true;
+}
+
 export function normalizeIncomingPreviewAlert(input) {
   if (!input || typeof input !== 'object') {
     return null;
@@ -4535,11 +5122,6 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
             content: `Non-text preview response failed for ${upstreamPath}`,
             source: 'preview',
           };
-          touchPreviewDiagnostics(session, {
-            status: 'error',
-            healthy: false,
-            alert,
-          });
           schedulePreviewAutoRestore(session, alert);
         }
 
@@ -4576,19 +5158,15 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       return;
     }
 
-    touchPreviewDiagnostics(session, {
-      status: 'error',
-      healthy: false,
-      alert: {
-        type: 'error',
-        title: 'Preview Error',
-        description: `Preview proxy failed: ${error.message}`,
-        content: `Proxy request to ${upstreamPath} failed.`,
-        source: 'preview',
-      },
-    });
-    schedulePreviewAutoRestore(session, session.previewDiagnostics.alert);
-    sendText(res, 502, `Preview proxy failed: ${error.message}`);
+    const alert = {
+      type: 'error',
+      title: 'Preview Error',
+      description: `Preview proxy failed: ${error.message}`,
+      content: `Proxy request to ${upstreamPath} failed.`,
+      source: 'preview',
+    };
+    schedulePreviewAutoRestore(session, alert);
+    sendPreviewRepairPage(res, session, `Preview proxy failed: ${error.message}`);
   });
 
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -4689,6 +5267,10 @@ export function createRuntimeServer() {
     const url = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
     const pathname = url.pathname;
     const searchParams = url.searchParams;
+
+    if (!pathname.startsWith('/runtime/') && (await maybeHandlePublishedProjectRequest(req, res))) {
+      return;
+    }
 
     if (pathname === '/health') {
       sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
@@ -4899,7 +5481,10 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         const registry = await ensureRuntimeNodeWorkspaceRegistry();
-        const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error), stagedSecrets || {});
+        const message = redactRuntimeNodeError(
+          error instanceof Error ? error.message : String(error),
+          stagedSecrets || {},
+        );
 
         if (stagedWorkspace) {
           const existing = registry.workspaces.find((workspace) => workspace.id === stagedWorkspace.id);
@@ -5150,6 +5735,8 @@ export function createRuntimeServer() {
     const previewEventsMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-events$/);
     const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
     const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
+    const publishMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/publish$/);
+    const customDomainCheckoutMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/custom-domain\/checkout$/);
 
     if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
       try {
@@ -6091,6 +6678,7 @@ export function createRuntimeServer() {
       try {
         const requestedSessionId = normalizeSessionId(previewStatusMatch[1]);
         const session = getSession(requestedSessionId);
+        void ensureRuntimeNodeWorkspaceForSession(session);
         sendJson(res, 200, {
           sessionId: requestedSessionId,
           preview: session.preview || null,
@@ -6100,6 +6688,7 @@ export function createRuntimeServer() {
           recentLogs: session.previewDiagnostics.recentLogs,
           alert: session.previewDiagnostics.alert,
           recovery: session.previewRecovery,
+          runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect preview status');
@@ -6111,6 +6700,7 @@ export function createRuntimeServer() {
       try {
         const requestedSessionId = normalizeSessionId(previewEventsMatch[1]);
         const session = getSession(requestedSessionId);
+        void ensureRuntimeNodeWorkspaceForSession(session);
 
         res.writeHead(200, {
           'Content-Type': 'text/event-stream; charset=utf-8',
@@ -6148,6 +6738,7 @@ export function createRuntimeServer() {
       try {
         const requestedSessionId = normalizeSessionId(snapshotMatch[1]);
         const session = getSession(requestedSessionId);
+        void ensureRuntimeNodeWorkspaceForSession(session);
         const files = await resolveSessionSnapshotFiles(session);
         sendJson(res, 200, {
           sessionId: requestedSessionId,
@@ -6177,11 +6768,6 @@ export function createRuntimeServer() {
           'browser-preview',
           `Browser reported preview failure: ${alert.description}\n${alert.content}`,
         );
-        touchPreviewDiagnostics(session, {
-          status: 'error',
-          healthy: false,
-          alert,
-        });
         schedulePreviewAutoRestore(session, alert);
 
         sendJson(res, 200, {
@@ -6195,6 +6781,171 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && publishMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(publishMatch[1]);
+        const session = getSession(requestedSessionId);
+        const body = await readJsonBody(req);
+        const validation = validateProjectSubdomain(body.subdomain || body.projectSubdomain || requestedSessionId);
+
+        if (!validation.ok) {
+          sendText(res, 400, validation.reason);
+          return;
+        }
+
+        void ensureRuntimeNodeWorkspaceForSession(session);
+
+        if (!session.preview?.port) {
+          scheduleHostedAutoStartAfterSync(session);
+        }
+
+        const registry = await ensureProjectDeploymentRegistry();
+        const hostname = buildProjectHostname(validation.subdomain, PROJECT_DOMAIN_ROOT);
+        const existingByHost = registry.deployments.find(
+          (deployment) => deployment.hostname === hostname && deployment.sessionId !== requestedSessionId,
+        );
+
+        if (existingByHost) {
+          sendText(res, 409, 'That bolt.gives project subdomain is already in use.');
+          return;
+        }
+
+        let deployment = registry.deployments.find(
+          (entry) => entry.sessionId === requestedSessionId || entry.hostname === hostname,
+        );
+        const now = new Date().toISOString();
+        const dns = await ensureProjectSubdomainDnsRecord(hostname);
+        const caddy = await ensureProjectCaddyHost(hostname);
+
+        if (!deployment) {
+          deployment = {
+            id: crypto.randomUUID(),
+            sessionId: requestedSessionId,
+            subdomain: validation.subdomain,
+            hostname,
+            status: 'active',
+            previewPort: Number(session.preview?.port || 0) || null,
+            customDomains: [],
+            dnsStatus: dns.status,
+            caddyStatus: caddy.status,
+            lastError:
+              dns.status === 'active' && caddy.status === 'active' ? null : `${dns.message} ${caddy.message}`.trim(),
+            createdAt: now,
+            updatedAt: now,
+          };
+          registry.deployments.unshift(deployment);
+        } else {
+          deployment.subdomain = validation.subdomain;
+          deployment.hostname = hostname;
+          deployment.status = 'active';
+          deployment.previewPort = Number(session.preview?.port || 0) || deployment.previewPort || null;
+          deployment.dnsStatus = dns.status;
+          deployment.caddyStatus = caddy.status;
+          deployment.lastError =
+            dns.status === 'active' && caddy.status === 'active' ? null : `${dns.message} ${caddy.message}`.trim();
+          deployment.updatedAt = now;
+        }
+
+        appendProjectDeploymentEvent(registry, {
+          actor: 'runtime-session',
+          action: 'project.publish',
+          target: hostname,
+          details: {
+            sessionId: requestedSessionId,
+            dnsStatus: dns.status,
+            caddyStatus: caddy.status,
+          },
+        });
+        await writeProjectDeploymentRegistry(registry);
+
+        sendJson(res, 200, {
+          ok: true,
+          deployment: sanitizeProjectDeploymentForClient(deployment, { serverIp: PROJECT_PUBLIC_IP }),
+          runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
+          dns,
+          caddy,
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to publish the project.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && customDomainCheckoutMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(customDomainCheckoutMatch[1]);
+        const body = await readJsonBody(req);
+        const customDomain = normalizeCustomDomain(body.customDomain || body.domain);
+
+        if (!isLikelyValidCustomDomain(customDomain)) {
+          sendText(res, 400, 'Enter a valid custom domain that is not already under bolt.gives.');
+          return;
+        }
+
+        const registry = await ensureProjectDeploymentRegistry();
+        const deployment = registry.deployments.find((entry) => entry.sessionId === requestedSessionId);
+
+        if (!deployment) {
+          sendText(res, 404, 'Publish the project to a bolt.gives subdomain before adding a custom domain.');
+          return;
+        }
+
+        const existingActive = findProjectDeploymentByHost(registry, customDomain);
+
+        if (existingActive && existingActive.id !== deployment.id) {
+          sendText(res, 409, 'That custom domain is already attached to another project.');
+          return;
+        }
+
+        const checkout = await createStripeCustomDomainCheckout({
+          deployment,
+          customDomain,
+          req,
+          customerEmail: String(body.customerEmail || '').trim(),
+        });
+        const now = new Date().toISOString();
+        const existingDomain = deployment.customDomains.find((entry) => entry.domain === customDomain);
+
+        if (existingDomain) {
+          existingDomain.status = 'pending-payment';
+          existingDomain.stripeCheckoutSessionId = checkout.checkoutSessionId;
+          existingDomain.updatedAt = now;
+        } else {
+          deployment.customDomains.push({
+            domain: customDomain,
+            status: 'pending-payment',
+            stripeCheckoutSessionId: checkout.checkoutSessionId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        deployment.status = 'pending-domain-payment';
+        deployment.updatedAt = now;
+        appendProjectDeploymentEvent(registry, {
+          actor: 'runtime-session',
+          action: 'project.custom-domain.checkout',
+          target: customDomain,
+          details: {
+            sessionId: requestedSessionId,
+            subdomain: deployment.subdomain,
+          },
+        });
+        await writeProjectDeploymentRegistry(registry);
+
+        sendJson(res, 200, {
+          ok: true,
+          checkoutUrl: checkout.checkoutUrl,
+          publishableKey: checkout.publishableKey,
+          dnsInstructions: buildCustomDomainDnsInstructions(customDomain, PROJECT_PUBLIC_IP),
+          deployment: sanitizeProjectDeploymentForClient(deployment, { serverIp: PROJECT_PUBLIC_IP }),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to start custom-domain checkout.');
+      }
+      return;
+    }
+
     if (req.method === 'POST' && syncMatch) {
       try {
         const requestedSessionId = normalizeSessionId(syncMatch[1]);
@@ -6202,6 +6953,7 @@ export function createRuntimeServer() {
         const body = await readJsonBody(req);
         const incomingFiles = body.files || {};
         const prune = body.prune === true;
+        void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, async () => {
           session.publicOrigin = getRequestOrigin(req);
           markSessionMutationStart(session);
@@ -6242,6 +6994,7 @@ export function createRuntimeServer() {
       try {
         const session = getSession(normalizeSessionId(commandMatch[1]));
         const body = await readJsonBody(req);
+        void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, () => handleRunCommand(req, res, session, body));
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Runtime command failed');

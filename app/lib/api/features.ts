@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.24',
+    name: 'v3.0.9.24 live CLI workspaces, repair UX, and project publishing',
+    description:
+      'Hosted projects now auto-provision dedicated Ubuntu CLI workspaces, preview repair shows a calm in-progress state instead of refused-connection churn, and Preview can publish to a bolt.gives subdomain or start $10/month Stripe checkout for custom-domain hosting.',
+    releaseDate: '2026-06-30',
+  },
+  {
     id: 'release-v3.0.9.23',
     name: 'v3.0.9.23 dedicated runtime-node live workspace setup',
     description:

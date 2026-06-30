@@ -53,4 +53,30 @@ describe('ChatAlert', () => {
     expect(screen.queryByText(/Architect is fixing the preview error now/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /auto-fixing/i }).getAttribute('disabled')).not.toBeNull();
   });
+
+  it('shows preview repair status as informational and not manually actionable', () => {
+    const clearAlert = vi.fn();
+    const postMessage = vi.fn();
+
+    render(
+      <ChatAlert
+        alert={{
+          type: 'info',
+          title: 'Preview Recovery In Progress',
+          description: 'The hosted runtime is repairing the preview.',
+          content: 'Repair is running.',
+          source: 'preview',
+        }}
+        clearAlert={clearAlert}
+        postMessage={postMessage}
+      />,
+    );
+
+    expect(screen.queryByText(/automatically repairing it/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /ask cody agent/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(clearAlert).toHaveBeenCalledTimes(1);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
 });

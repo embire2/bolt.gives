@@ -28,6 +28,24 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.24 (2026-06-30)
+
+### Added
+
+- Hosted project sessions now automatically start an idempotent runtime-node provisioning job, so each chat-created project gets a dedicated Ubuntu CLI workspace, private workspace directory, and PostgreSQL database instead of only supporting the manual `/workspace-setup` wizard.
+- Preview now exposes project publishing controls that can assign a free `https://{subdomain}.bolt.gives` deployment for the current hosted runtime session.
+- Project publishing records DNS and Caddy routing status in a runtime deployment registry and attempts to upsert the Cloudflare A record plus a Caddy route automatically when operator credentials are configured.
+- Custom-domain hosting now has a server-side Stripe Checkout endpoint for the `$10/month` plan and returns clear A-record instructions pointing the customer domain at the configured server IP.
+
+### Fixed
+
+- Preview proxy failures no longer leave users staring at a browser-level refused-connection page. The runtime returns a stable repair page explaining that bolt.gives detected a problem and is fixing it automatically.
+- Automatic preview recovery now uses a sticky `repairing` state while restore/probe work is running, preventing rapid “Needs Repair” flicker during recovery loops.
+
+### Security
+
+- Stripe secret keys are read only from server-side environment variables. Browsers receive only Checkout URLs, publishable-key metadata, and DNS instructions.
+
 ## v3.0.9.23 (2026-06-29)
 
 ### Added

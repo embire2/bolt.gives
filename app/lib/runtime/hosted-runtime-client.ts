@@ -35,7 +35,7 @@ export interface HostedRuntimeCommandResult {
 export interface HostedRuntimePreviewStatus {
   sessionId: string;
   preview: HostedRuntimePreviewInfo | null;
-  status: 'idle' | 'starting' | 'ready' | 'error';
+  status: 'idle' | 'starting' | 'ready' | 'repairing' | 'error';
   healthy: boolean;
   updatedAt: string | null;
   recentLogs: string[];
@@ -46,6 +46,7 @@ export interface HostedRuntimePreviewStatus {
     message: string | null;
     updatedAt: string | null;
   } | null;
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
 }
 
 export interface HostedRuntimePreviewSummary {
@@ -56,6 +57,51 @@ export interface HostedRuntimePreviewSummary {
   updatedAt: string | null;
   alert: ActionAlert | null;
   recovery: HostedRuntimePreviewStatus['recovery'];
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+}
+
+export interface HostedRuntimeNodeWorkspace {
+  id?: string;
+  projectName?: string;
+  projectSlug?: string;
+  cliUsername?: string;
+  workspaceDir?: string;
+  sshHost?: string | null;
+  sshPort?: number;
+  sshCommand?: string | null;
+  status?: string;
+  oneTimeCliPassword?: string | null;
+  databaseName?: string;
+  databaseUser?: string;
+  databaseUrl?: string | null;
+  oneTimeDatabasePassword?: string | null;
+  reason?: string | null;
+}
+
+export interface HostedProjectDeployment {
+  id: string;
+  sessionId: string;
+  subdomain: string;
+  hostname: string;
+  url: string | null;
+  status: string;
+  dnsStatus: string;
+  caddyStatus: string;
+  customDomains: Array<{
+    domain: string;
+    status: string;
+    dnsInstructions: HostedProjectDnsInstructions | null;
+  }>;
+  dnsInstructions: HostedProjectDnsInstructions | null;
+  lastError: string | null;
+}
+
+export interface HostedProjectDnsInstructions {
+  type: 'A';
+  name: string;
+  value: string;
+  ttl: string;
+  note: string;
 }
 
 export interface HostedPreviewReloadDecision {
@@ -358,4 +404,79 @@ export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: 
     const message = await response.text();
     throw new Error(message || `Hosted runtime preview alert failed with status ${response.status}`);
   }
+}
+
+export async function publishHostedRuntimeProject(options: { sessionId: string; subdomain: string }): Promise<{
+  ok: true;
+  deployment: HostedProjectDeployment;
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  dns?: { status: string; message: string };
+  caddy?: { status: string; message: string };
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(options.sessionId)}/publish`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ subdomain: options.subdomain }),
+      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      label: 'hosted-runtime/project-publish',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Project publish failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    deployment: HostedProjectDeployment;
+    runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+    dns?: { status: string; message: string };
+    caddy?: { status: string; message: string };
+  };
+}
+
+export async function createHostedRuntimeCustomDomainCheckout(options: {
+  sessionId: string;
+  customDomain: string;
+  customerEmail?: string;
+}): Promise<{
+  ok: true;
+  checkoutUrl: string;
+  publishableKey: string | null;
+  dnsInstructions: HostedProjectDnsInstructions;
+  deployment: HostedProjectDeployment;
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(options.sessionId)}/custom-domain/checkout`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        customDomain: options.customDomain,
+        customerEmail: options.customerEmail,
+      }),
+      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      label: 'hosted-runtime/custom-domain-checkout',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Custom-domain checkout failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    checkoutUrl: string;
+    publishableKey: string | null;
+    dnsInstructions: HostedProjectDnsInstructions;
+    deployment: HostedProjectDeployment;
+  };
 }

@@ -8,13 +8,13 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.0.9.23`
+- Stable: `v3.0.9.24`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.23`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.24`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh`
 - In progress: `v3.1.0`
 
-`v3.0.9.23` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, and adds the dedicated runtime-node Live Workspaces setup wizard.
+`v3.0.9.24` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, and adds automatic runtime-node CLI provisioning plus project publishing to bolt.gives subdomains.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -58,6 +58,8 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Managed `FREE` provider locked to `deepseek/deepseek-v4-pro`.
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
+- Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
+- Project publishing to `https://{subdomain}.bolt.gives` and Stripe Checkout for `$10/month` custom-domain hosting.
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 
@@ -72,6 +74,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Continued browser-weight reduction on editor, PDF, git, and terminal surfaces.
 - Self-host installer resilience for apt, build, Caddy, PostgreSQL, and service failures.
 - Runtime-node hardening: non-root agent bootstrap, SSH-key auth, stronger quotas, audit visibility, and clean recovery paths.
+- Project publishing hardening: Stripe webhook activation, domain verification, and operator-visible deployment/domain state.
 
 ## Delivery Workflow
 
@@ -106,15 +109,24 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 - Do not expose runtime-node root/admin SSH credentials to browsers, managed instances, release notes, screenshots, logs, or commits.
 - Do not run normal runtime-node provisioning through root/password once the `bolt-runtime-agent` SSH key is verified.
 - Client runtime-node CLI/database passwords are one-time handoff values; store only hashes/metadata.
+- Stripe secret keys must stay server-side only; browsers may receive Checkout URLs and publishable-key metadata only.
 - Redact sensitive values from screenshots, logs, commits, release notes, and issue comments.
 
 ## Runtime Node Rules
 
 - `/workspace-setup` must create one Unix user, one private workspace directory, and one PostgreSQL database/role per project.
+- Normal hosted projects must auto-provision the same per-project runtime-node workspace in the background.
 - Client-selected usernames must be safe Linux usernames and must not collide with reserved system accounts.
 - The provisioning path must run on the server side through runtime-control; never call SSH from the browser.
 - Prefer SSH keys and a non-root `bolt-runtime` agent after initial bootstrap. Root/password access is only for setup or approved emergency repair.
 - If provisioning fails, keep the workspace record failed with a redacted error. Never show false success.
+
+## Project Publishing Rules
+
+- Free publishing uses `https://{subdomain}.bolt.gives`.
+- Reserved operational subdomains such as `admin`, `create`, `alpha1`, and `ahmad` must not be assigned to users.
+- Custom-domain hosting is `$10/month` through server-side Stripe Checkout.
+- Users must receive clear DNS guidance: create an `A` record pointing to the configured bolt.gives server IP.
 
 ## Definition of Done
 

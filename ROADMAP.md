@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.23`
+- [x] `v3.0.9.24`
 
 Next release target:
 
@@ -34,8 +34,24 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Add regression coverage for sticky workbench tab selection and Calendar Planner template selection.
 - [x] Route Cloudflare Pages collaboration traffic through the central `wss://bolt.gives/collab` transport instead of same-host Pages routes.
 - [x] Add a dedicated runtime-node Live Workspaces wizard for per-project Ubuntu CLI users, isolated workspace directories, and PostgreSQL databases.
+- [x] Auto-provision runtime-node CLI workspaces for normal hosted chat projects, not only manual setup-wizard submissions.
+- [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
+- [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.23 - Current Patch
+## v3.0.9.24 - Current Patch
+
+Release theme: make hosted projects real server-backed workspaces with publishable domains.
+
+### Shipped in v3.0.9.24
+
+- [x] Hosted session sync/status/command paths now start idempotent runtime-node provisioning for each project.
+- [x] Preview repair loops now show a calm repairing state and repair page instead of browser refused-to-connect failures.
+- [x] Preview toolbar includes `Publish` and `Custom domain` controls for hosted projects.
+- [x] Runtime deployment registry maps project subdomains and custom domains back to their hosted sessions.
+- [x] Cloudflare DNS and Caddy route automation are attempted server-side and return explicit manual-required status when an operator credential or route step is missing.
+- [x] Stripe Checkout is created server-side for the $10/month custom-domain subscription path.
+
+## v3.0.9.23 - Shipped Patch
 
 Release theme: launch the dedicated runtime-node workspace provisioning path.
 

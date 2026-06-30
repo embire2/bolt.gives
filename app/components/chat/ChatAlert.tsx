@@ -10,22 +10,25 @@ interface Props {
 }
 
 export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState }: Props) {
-  const { description, content, source } = alert;
+  const { description, content, source, type } = alert;
 
   const isPreview = source === 'preview';
-  const title = isPreview ? 'Preview Error' : 'Terminal Error';
+  const isInfo = type === 'info';
+  const title = alert.title || (isPreview ? 'Preview Error' : 'Terminal Error');
   const message =
-    autoFixState === 'running'
-      ? isPreview
-        ? 'Architect is fixing the preview error now so a working preview can come back without manual intervention.'
-        : 'Architect is fixing the terminal error now so the run can continue safely.'
-      : autoFixState === 'queued'
+    isInfo && isPreview
+      ? 'bolt.gives detected a preview problem and is automatically repairing it. The workspace will keep working until a previewable app is ready.'
+      : autoFixState === 'running'
         ? isPreview
-          ? 'Architect has queued an automatic preview repair and will run it as soon as the current step finishes.'
-          : 'Architect has queued an automatic terminal repair and will run it as soon as the current step finishes.'
-        : isPreview
-          ? 'We encountered an error while running the preview. Would you like Cody agent to analyze and help resolve this issue?'
-          : 'We encountered an error while running terminal commands. Would you like Cody agent to analyze and help resolve this issue?';
+          ? 'Architect is fixing the preview error now so a working preview can come back without manual intervention.'
+          : 'Architect is fixing the terminal error now so the run can continue safely.'
+        : autoFixState === 'queued'
+          ? isPreview
+            ? 'Architect has queued an automatic preview repair and will run it as soon as the current step finishes.'
+            : 'Architect has queued an automatic terminal repair and will run it as soon as the current step finishes.'
+          : isPreview
+            ? 'We encountered an error while running the preview. Would you like Cody agent to analyze and help resolve this issue?'
+            : 'We encountered an error while running terminal commands. Would you like Cody agent to analyze and help resolve this issue?';
 
   return (
     <AnimatePresence>
@@ -65,7 +68,7 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
               <p>{message}</p>
               {description && (
                 <div className="text-xs text-bolt-elements-textSecondary p-2 bg-bolt-elements-background-depth-3 rounded mt-4 mb-4">
-                  Error: {description}
+                  {isInfo ? 'Status' : 'Error'}: {description}
                 </div>
               )}
             </motion.div>
@@ -78,26 +81,32 @@ export default function ChatAlert({ alert, clearAlert, postMessage, autoFixState
               transition={{ delay: 0.3 }}
             >
               <div className={classNames(' flex gap-2')}>
-                <button
-                  onClick={() =>
-                    postMessage(
-                      `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${content}\n\`\`\`\n`,
-                    )
-                  }
-                  disabled={autoFixState === 'queued' || autoFixState === 'running'}
-                  className={classNames(
-                    `px-2 py-1.5 rounded-md text-sm font-medium`,
-                    'bg-bolt-elements-button-primary-background',
-                    'hover:bg-bolt-elements-button-primary-backgroundHover',
-                    'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bolt-elements-button-danger-background',
-                    'text-bolt-elements-button-primary-text',
-                    'flex items-center gap-1.5',
-                    (autoFixState === 'queued' || autoFixState === 'running') && 'cursor-not-allowed opacity-60',
-                  )}
-                >
-                  <div className="i-ph:chat-circle-duotone"></div>
-                  {autoFixState === 'running' ? 'Auto-fixing' : autoFixState === 'queued' ? 'Queued' : 'Ask Cody agent'}
-                </button>
+                {!isInfo && (
+                  <button
+                    onClick={() =>
+                      postMessage(
+                        `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${content}\n\`\`\`\n`,
+                      )
+                    }
+                    disabled={autoFixState === 'queued' || autoFixState === 'running'}
+                    className={classNames(
+                      `px-2 py-1.5 rounded-md text-sm font-medium`,
+                      'bg-bolt-elements-button-primary-background',
+                      'hover:bg-bolt-elements-button-primary-backgroundHover',
+                      'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bolt-elements-button-danger-background',
+                      'text-bolt-elements-button-primary-text',
+                      'flex items-center gap-1.5',
+                      (autoFixState === 'queued' || autoFixState === 'running') && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    <div className="i-ph:chat-circle-duotone"></div>
+                    {autoFixState === 'running'
+                      ? 'Auto-fixing'
+                      : autoFixState === 'queued'
+                        ? 'Queued'
+                        : 'Ask Cody agent'}
+                  </button>
+                )}
                 <button
                   onClick={clearAlert}
                   className={classNames(

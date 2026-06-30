@@ -53,9 +53,29 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.23`)
+## Current Release (`v3.0.9.24`)
 
-`v3.0.9.23` is the current stable hosted release. It keeps the `v3.0.9.21` first-pass app creation and Workspace usability fixes, keeps the `v3.0.9.22` Cloudflare Pages transport hotfix, and adds the dedicated runtime-node Live Workspaces setup path for per-project Ubuntu CLI and PostgreSQL sandboxes.
+`v3.0.9.24` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, and dedicated runtime-node setup wizard, then adds automatic Ubuntu CLI workspace provisioning for normal chat-created projects, calmer preview repair, and project publishing to `https://{subdomain}.bolt.gives`.
+
+### Project publishing and custom domains
+
+From the hosted Preview toolbar, users can publish the current project to a free bolt.gives subdomain such as `https://acme-dashboard.bolt.gives`. The runtime control plane records the deployment, attempts to create/update the Cloudflare A record, attempts to add a Caddy route, and keeps explicit DNS/routing status for operators.
+
+Users who want their own domain can start the Custom Domain flow from Preview. bolt.gives creates a server-side Stripe Checkout subscription for `$10/month`; after checkout, users are instructed to create an `A` record for their domain pointing at the configured bolt.gives server IP.
+
+Required server-side env:
+
+```bash
+BOLT_PROJECT_DOMAIN_ROOT=bolt.gives
+BOLT_PROJECT_PUBLIC_IP=31.6.62.183
+BOLT_PROJECT_CADDY_ENABLED=true
+BOLT_PROJECT_CADDY_SNIPPET_DIR=/etc/caddy/bolt-gives-projects
+BOLT_STRIPE_PUBLISHABLE_KEY=pk_live_...
+BOLT_STRIPE_SECRET_KEY=sk_live_...
+BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD=10
+```
+
+Keep `BOLT_STRIPE_SECRET_KEY` in ignored server env files only. Do not commit it or expose it through Pages/managed customer deployments.
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
 
@@ -107,17 +127,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.23` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.24` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.23`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.23)
+- Release: [`v3.0.9.24`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.24)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh)
-- Release commit: see the `v3.0.9.23` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh)
+- Release commit: see the `v3.0.9.24` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.23/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.24/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -199,12 +219,14 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.23`)
+## Current Platform Baseline (`v3.0.9.24`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
 - Preview and Code are focused workspace surfaces: status and activity chrome stay compact, the preview defaults to a desktop/full-width canvas, and user-selected workbench tabs are not overridden by preview recovery refreshes.
 - Live Workspaces can provision per-project Ubuntu CLI users, private workspace directories, and dedicated PostgreSQL roles/databases on a configured runtime node.
+- Hosted chat-created projects now auto-provision a runtime-node CLI workspace and project database instead of requiring a separate manual setup step.
+- Published projects can be assigned `https://{subdomain}.bolt.gives`; custom-domain hosting starts a server-side Stripe Checkout flow and guides users to create an `A` record to the bolt.gives server IP.
 - Google Calendar-style app prompts now start from a deterministic first-party React/CSS Calendar Planner pack with visible calendar, agenda, and create-event smoke signals.
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
