@@ -44,6 +44,7 @@
 - Project publishing now treats existing `*.bolt.gives` DNS/wildcard records that already resolve to the app server as active instead of falsely requiring Cloudflare zone management.
 - Published project subdomains now proxy WebSocket upgrades back to the active preview server, removing Vite HMR `404` console errors on `https://{subdomain}.bolt.gives`.
 - Project publishing now waits for the generated Caddy hostname to accept HTTPS before reporting the route as active, avoiding the first-request TLS/refused-connection edge after ACME issuance.
+- Managed Cloudflare fleet rollouts now preflight both `build/client` and `build/server/index.js` before mutating instance state, avoiding false failed instances when a rollout overlaps a production build.
 
 ### Security
 

@@ -158,6 +158,9 @@ const MANAGED_INSTANCE_ROOT_DOMAIN = process.env.RUNTIME_MANAGED_INSTANCE_ROOT_D
 const MANAGED_INSTANCE_SOURCE_BRANCH = process.env.RUNTIME_MANAGED_INSTANCE_SOURCE_BRANCH || 'main';
 const MANAGED_INSTANCE_DEPLOY_DIR =
   process.env.RUNTIME_MANAGED_INSTANCE_DEPLOY_DIR || path.join(REPO_ROOT, 'build', 'client');
+const MANAGED_INSTANCE_SERVER_BUILD_PATH =
+  process.env.RUNTIME_MANAGED_INSTANCE_SERVER_BUILD_PATH ||
+  path.join(path.dirname(MANAGED_INSTANCE_DEPLOY_DIR), 'server', 'index.js');
 const MANAGED_INSTANCE_SYNC_INTERVAL_MS = Number(process.env.RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS || '600000');
 const MANAGED_INSTANCE_DELETE_ON_SUSPEND = process.env.RUNTIME_MANAGED_INSTANCE_DELETE_ON_SUSPEND === '1';
 const MANAGED_INSTANCE_PUBLIC_ENABLED = process.env.RUNTIME_MANAGED_INSTANCE_ENABLED !== 'false';
@@ -746,6 +749,55 @@ export function buildManagedInstanceRolloutGuardDecision(input = {}) {
   };
 }
 
+export function buildManagedInstanceDeployArtifactDecision({
+  deployDirReadable,
+  serverBuildReadable,
+  deployDir = MANAGED_INSTANCE_DEPLOY_DIR,
+  serverBuildPath = MANAGED_INSTANCE_SERVER_BUILD_PATH,
+}) {
+  if (!deployDirReadable) {
+    return {
+      ready: false,
+      reason: `Managed instance deploy artifact is not ready yet: ${deployDir} is missing or unreadable.`,
+    };
+  }
+
+  if (!serverBuildReadable) {
+    return {
+      ready: false,
+      reason: `Managed instance deploy artifact is not ready yet: ${serverBuildPath} is missing or unreadable.`,
+    };
+  }
+
+  return { ready: true, reason: null };
+}
+
+async function inspectManagedInstanceDeployArtifact() {
+  const [deployDirReadable, serverBuildReadable] = await Promise.all([
+    fs.access(MANAGED_INSTANCE_DEPLOY_DIR, fsConstants.R_OK).then(
+      () => true,
+      () => false,
+    ),
+    fs.access(MANAGED_INSTANCE_SERVER_BUILD_PATH, fsConstants.R_OK).then(
+      () => true,
+      () => false,
+    ),
+  ]);
+
+  return buildManagedInstanceDeployArtifactDecision({
+    deployDirReadable,
+    serverBuildReadable,
+  });
+}
+
+async function assertManagedInstanceDeployArtifactReady() {
+  const artifact = await inspectManagedInstanceDeployArtifact();
+
+  if (!artifact.ready) {
+    throw new Error(artifact.reason || 'Managed instance deploy artifact is not ready yet.');
+  }
+}
+
 async function resolveManagedRolloutGuardState({ force = false } = {}) {
   const now = Date.now();
 
@@ -833,6 +885,19 @@ async function buildManagedInstanceSupportState() {
     return {
       supported: false,
       reason: rolloutGuard.reason,
+      trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+      rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+      sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+      rolloutGuard,
+    };
+  }
+
+  const deployArtifact = await inspectManagedInstanceDeployArtifact();
+
+  if (!deployArtifact.ready) {
+    return {
+      supported: false,
+      reason: deployArtifact.reason,
       trialDays: MANAGED_INSTANCE_TRIAL_DAYS,
       rootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
       sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
@@ -1377,7 +1442,7 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
   const config = getManagedInstanceCloudflareConfig();
   const gitSha = await resolveCurrentGitSha();
 
-  await fs.access(MANAGED_INSTANCE_DEPLOY_DIR, fsConstants.R_OK);
+  await assertManagedInstanceDeployArtifactReady();
   await ensureManagedInstanceProjectExists(instance);
   await upsertManagedInstanceProjectSecret(
     instance,

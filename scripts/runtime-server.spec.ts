@@ -10,6 +10,7 @@ import {
   buildHostedWorkspaceBootstrapAlert,
   buildFreeUsageQuotaDecision,
   buildManagedInstanceDeployArgs,
+  buildManagedInstanceDeployArtifactDecision,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildWorkspaceFileMapFromDisk,
@@ -265,6 +266,40 @@ describe('runtime server workspace isolation', () => {
         '3d400050b6d8529edc2a994e9a9bbbf650974029',
       ]),
     );
+  });
+
+  it('waits for complete managed deploy artifacts before fleet rollout', () => {
+    expect(
+      buildManagedInstanceDeployArtifactDecision({
+        deployDirReadable: false,
+        serverBuildReadable: true,
+        deployDir: '/srv/bolt-gives/build/client',
+        serverBuildPath: '/srv/bolt-gives/build/server/index.js',
+      }),
+    ).toEqual({
+      ready: false,
+      reason: 'Managed instance deploy artifact is not ready yet: /srv/bolt-gives/build/client is missing or unreadable.',
+    });
+
+    expect(
+      buildManagedInstanceDeployArtifactDecision({
+        deployDirReadable: true,
+        serverBuildReadable: false,
+        deployDir: '/srv/bolt-gives/build/client',
+        serverBuildPath: '/srv/bolt-gives/build/server/index.js',
+      }),
+    ).toEqual({
+      ready: false,
+      reason:
+        'Managed instance deploy artifact is not ready yet: /srv/bolt-gives/build/server/index.js is missing or unreadable.',
+    });
+
+    expect(
+      buildManagedInstanceDeployArtifactDecision({
+        deployDirReadable: true,
+        serverBuildReadable: true,
+      }),
+    ).toEqual({ ready: true, reason: null });
   });
 
   it('skips inactive and already-current managed instances during full-fleet rollout', () => {
