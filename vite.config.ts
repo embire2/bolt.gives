@@ -22,14 +22,21 @@ const getGitHash = () => {
   }
 };
 
+export function normalizeProductVersion(rawVersion = '1.0.1') {
+  return String(rawVersion || '1.0.1').replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1.$2');
+}
+
 export default defineConfig((config) => {
   const nodeEnv = config.mode === 'production' ? 'production' : process.env.NODE_ENV || 'development';
+  const productVersion = normalizeProductVersion(
+    process.env.APP_VERSION || process.env.BOLT_APP_VERSION || process.env.npm_package_version || '1.0.1',
+  );
 
   return {
     define: {
       'process.env.NODE_ENV': JSON.stringify(nodeEnv),
       __COMMIT_HASH: JSON.stringify(getGitHash()),
-      __APP_VERSION: JSON.stringify(process.env.npm_package_version || '1.0.1'),
+      __APP_VERSION: JSON.stringify(productVersion),
     },
     build: {
       target: 'esnext',
