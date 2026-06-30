@@ -49,6 +49,7 @@ Release theme: make hosted projects real server-backed workspaces with publishab
 - [x] Preview toolbar includes `Publish` and `Custom domain` controls for hosted projects.
 - [x] Runtime deployment registry maps project subdomains and custom domains back to their hosted sessions.
 - [x] Cloudflare DNS and Caddy route automation are attempted server-side and return explicit manual-required status when an operator credential or route step is missing.
+- [x] Published project hostnames wait for HTTPS readiness and proxy preview WebSockets so first public loads do not show TLS or HMR `404` errors.
 - [x] Stripe Checkout is created server-side for the $10/month custom-domain subscription path.
 
 ## v3.0.9.23 - Shipped Patch

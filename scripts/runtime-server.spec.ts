@@ -39,6 +39,7 @@ import {
   recordPreviewResponse,
   releaseReservedPreviewPorts,
   resolveRuntimeWorkspaceRoot,
+  resolvePublishedProjectUpgradeTarget,
   resolveSessionSnapshotFiles,
   runSerializedManagedInstanceRollout,
   restoreSessionLastKnownGoodWorkspace,
@@ -617,6 +618,53 @@ describe('runtime server workspace isolation', () => {
         cliUsername: 'bolt_session',
         status: 'active',
       },
+    });
+  });
+
+  it('routes published project websocket upgrades to the active preview port', () => {
+    expect(
+      resolvePublishedProjectUpgradeTarget(
+        {
+          status: 'active',
+          previewPort: 4100,
+        },
+        {
+          preview: {
+            port: 4123,
+          },
+        },
+      ),
+    ).toEqual({
+      ok: true,
+      portRaw: '4123',
+      upstreamPath: null,
+    });
+  });
+
+  it('falls back to the deployment preview port for published project websocket upgrades', () => {
+    expect(
+      resolvePublishedProjectUpgradeTarget(
+        {
+          status: 'active',
+          previewPort: 4100,
+        },
+        {},
+      ),
+    ).toEqual({
+      ok: true,
+      portRaw: '4100',
+      upstreamPath: null,
+    });
+  });
+
+  it('returns graceful websocket upgrade errors for unavailable published projects', () => {
+    expect(resolvePublishedProjectUpgradeTarget({ status: 'active', previewPort: 4100 }, null)).toMatchObject({
+      ok: false,
+      statusCode: 503,
+    });
+    expect(resolvePublishedProjectUpgradeTarget({ status: 'suspended', previewPort: 4100 }, {})).toMatchObject({
+      ok: false,
+      statusCode: 404,
     });
   });
 

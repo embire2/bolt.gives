@@ -59,7 +59,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ### Project publishing and custom domains
 
-From the hosted Preview toolbar, users can publish the current project to a free bolt.gives subdomain such as `https://acme-dashboard.bolt.gives`. The runtime control plane records the deployment, attempts to create/update the Cloudflare A record, attempts to add a Caddy route, and keeps explicit DNS/routing status for operators.
+From the hosted Preview toolbar, users can publish the current project to a free bolt.gives subdomain such as `https://acme-dashboard.bolt.gives`. The runtime control plane records the deployment, attempts to create/update the Cloudflare A record, attempts to add a Caddy route, waits for HTTPS readiness, and keeps explicit DNS/routing status for operators.
 
 Users who want their own domain can start the Custom Domain flow from Preview. bolt.gives creates a server-side Stripe Checkout subscription for `$10/month`; after checkout, users are instructed to create an `A` record for their domain pointing at the configured bolt.gives server IP.
 
@@ -67,7 +67,7 @@ Required server-side env:
 
 ```bash
 BOLT_PROJECT_DOMAIN_ROOT=bolt.gives
-BOLT_PROJECT_PUBLIC_IP=31.6.62.183
+BOLT_PROJECT_PUBLIC_IP=31.6.62.180
 BOLT_PROJECT_CADDY_ENABLED=true
 BOLT_PROJECT_CADDY_SNIPPET_DIR=/etc/caddy/bolt-gives-projects
 BOLT_STRIPE_PUBLISHABLE_KEY=pk_live_...

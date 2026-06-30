@@ -8,6 +8,7 @@ import dns from 'node:dns/promises';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import tls from 'node:tls';
 import crypto from 'node:crypto';
 import {
   createPreviewProbeCoordinator,
@@ -145,6 +146,8 @@ const PROJECT_PUBLIC_IP =
 const PROJECT_CADDY_ENABLED = process.env.BOLT_PROJECT_CADDY_ENABLED !== 'false';
 const PROJECT_CADDY_SNIPPET_DIR = process.env.BOLT_PROJECT_CADDY_SNIPPET_DIR || '/etc/caddy/bolt-gives-projects';
 const PROJECT_CADDYFILE_PATH = process.env.BOLT_PROJECT_CADDYFILE_PATH || '/etc/caddy/Caddyfile';
+const PROJECT_HTTPS_READY_TIMEOUT_MS = Number(process.env.BOLT_PROJECT_HTTPS_READY_TIMEOUT_MS || '30000');
+const PROJECT_HTTPS_READY_INTERVAL_MS = Number(process.env.BOLT_PROJECT_HTTPS_READY_INTERVAL_MS || '1000');
 const STRIPE_PUBLISHABLE_KEY = process.env.BOLT_STRIPE_PUBLISHABLE_KEY || '';
 const STRIPE_SECRET_KEY = process.env.BOLT_STRIPE_SECRET_KEY || '';
 const STRIPE_CUSTOM_DOMAIN_PRICE_USD = Number(process.env.BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD || '10');
@@ -4490,6 +4493,65 @@ function caddySnippetForProjectHost(hostname) {
 `;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function probeProjectHttpsHandshake(hostname) {
+  return new Promise((resolve) => {
+    const socket = tls.connect(
+      {
+        host: hostname,
+        port: 443,
+        servername: hostname,
+        timeout: Math.min(PROJECT_HTTPS_READY_INTERVAL_MS, 5000),
+      },
+      () => {
+        socket.end();
+        resolve({ ok: true, error: null });
+      },
+    );
+
+    socket.on('timeout', () => {
+      socket.destroy(new Error('TLS handshake timed out'));
+    });
+    socket.on('error', (error) => {
+      resolve({ ok: false, error });
+    });
+  });
+}
+
+async function waitForProjectHttpsReady(hostname) {
+  if (PROJECT_HTTPS_READY_TIMEOUT_MS <= 0) {
+    return { ok: true, message: 'HTTPS readiness wait is disabled.' };
+  }
+
+  const deadline = Date.now() + PROJECT_HTTPS_READY_TIMEOUT_MS;
+  let lastError = null;
+
+  while (Date.now() <= deadline) {
+    // This intentionally performs the first TLS handshake so Caddy can complete
+    // ACME before the browser receives the newly published URL.
+    // eslint-disable-next-line no-await-in-loop
+    const result = await probeProjectHttpsHandshake(hostname);
+
+    if (result.ok) {
+      return { ok: true, message: `${hostname} accepts HTTPS connections.` };
+    }
+
+    lastError = result.error;
+    // eslint-disable-next-line no-await-in-loop
+    await delay(PROJECT_HTTPS_READY_INTERVAL_MS);
+  }
+
+  return {
+    ok: false,
+    message: `Timed out waiting for HTTPS on ${hostname}: ${lastError?.message || 'TLS handshake failed'}`,
+  };
+}
+
 async function ensureProjectCaddyHost(hostname) {
   if (!PROJECT_CADDY_ENABLED) {
     return { status: 'disabled', message: 'Project Caddy automation is disabled.' };
@@ -4511,8 +4573,13 @@ async function ensureProjectCaddyHost(hostname) {
 
     await runShellCommand('caddy', ['fmt', '--overwrite', PROJECT_CADDYFILE_PATH]).catch(() => undefined);
     await runShellCommand('caddy', ['reload', '--config', PROJECT_CADDYFILE_PATH]);
+    const httpsReady = await waitForProjectHttpsReady(hostname);
 
-    return { status: 'active', message: `Caddy route for ${hostname} is active.` };
+    if (!httpsReady.ok) {
+      return { status: 'pending', message: httpsReady.message };
+    }
+
+    return { status: 'active', message: `Caddy route for ${hostname} is active. ${httpsReady.message}` };
   } catch (error) {
     return {
       status: 'manual-required',
@@ -4646,21 +4713,31 @@ async function proxyPublishedProjectRequest(req, res, deployment) {
 }
 
 async function maybeHandlePublishedProjectRequest(req, res) {
+  const deployment = await resolvePublishedProjectDeploymentForRequest(req);
+
+  if (!deployment) {
+    return false;
+  }
+
+  await proxyPublishedProjectRequest(req, res, deployment);
+  return true;
+}
+
+async function resolvePublishedProjectDeploymentForRequest(req) {
   const host = getRequestHost(req);
 
   if (!host || host === PROJECT_DOMAIN_ROOT || host === `www.${PROJECT_DOMAIN_ROOT}`) {
-    return false;
+    return null;
   }
 
   const registry = await ensureProjectDeploymentRegistry();
   const deployment = findProjectDeploymentByHost(registry, host);
 
   if (!deployment || deployment.status === 'suspended') {
-    return false;
+    return null;
   }
 
-  await proxyPublishedProjectRequest(req, res, deployment);
-  return true;
+  return deployment;
 }
 
 export function normalizeIncomingPreviewAlert(input) {
@@ -5207,21 +5284,46 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   req.pipe(upstreamReq);
 }
 
-function proxyPreviewUpgrade(req, socket, head) {
-  const target = parsePreviewProxyRequestTarget(req.url || '');
-
-  if (!target) {
-    socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
-    socket.destroy();
+function writeUpgradeError(socket, statusCode, statusText) {
+  if (socket.destroyed) {
     return;
   }
 
-  const { sessionId, portRaw, upstreamPath } = target;
-  const session = sessions.get(sessionId);
+  socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+export function resolvePublishedProjectUpgradeTarget(deployment, session) {
+  if (!deployment || deployment.status === 'suspended') {
+    return { ok: false, statusCode: 404, statusText: 'Not Found', reason: 'Project deployment is unavailable.' };
+  }
 
   if (!session) {
-    socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
-    socket.destroy();
+    return {
+      ok: false,
+      statusCode: 503,
+      statusText: 'Service Unavailable',
+      reason: 'The published project session is not loaded yet.',
+    };
+  }
+
+  const port = Number(session.preview?.port || deployment.previewPort || 0);
+
+  if (!port) {
+    return {
+      ok: false,
+      statusCode: 503,
+      statusText: 'Service Unavailable',
+      reason: 'The published project preview is not ready yet.',
+    };
+  }
+
+  return { ok: true, portRaw: String(port), upstreamPath: null };
+}
+
+function proxyUpgradeToPreviewPort(req, socket, head, { portRaw, upstreamPath }) {
+  if (!portRaw || !upstreamPath) {
+    writeUpgradeError(socket, 404, 'Not Found');
     return;
   }
 
@@ -5256,8 +5358,7 @@ function proxyPreviewUpgrade(req, socket, head) {
 
   upstreamSocket.on('error', () => {
     if (!socket.destroyed) {
-      socket.write('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
-      socket.destroy();
+      writeUpgradeError(socket, 502, 'Bad Gateway');
     }
   });
 
@@ -5266,6 +5367,51 @@ function proxyPreviewUpgrade(req, socket, head) {
       upstreamSocket.destroy();
     }
   });
+}
+
+function proxyPreviewUpgrade(req, socket, head) {
+  const target = parsePreviewProxyRequestTarget(req.url || '');
+
+  if (!target) {
+    writeUpgradeError(socket, 404, 'Not Found');
+    return;
+  }
+
+  const { sessionId, portRaw, upstreamPath } = target;
+  const session = sessions.get(sessionId);
+
+  if (!session) {
+    writeUpgradeError(socket, 404, 'Not Found');
+    return;
+  }
+
+  proxyUpgradeToPreviewPort(req, socket, head, { portRaw, upstreamPath });
+}
+
+function proxyPublishedProjectUpgrade(req, socket, head, deployment) {
+  const session = sessions.get(deployment.sessionId);
+  const target = resolvePublishedProjectUpgradeTarget(deployment, session);
+
+  if (!target.ok) {
+    writeUpgradeError(socket, target.statusCode, target.statusText);
+    return;
+  }
+
+  proxyUpgradeToPreviewPort(req, socket, head, {
+    portRaw: target.portRaw,
+    upstreamPath: req.url || '/',
+  });
+}
+
+async function maybeHandlePublishedProjectUpgrade(req, socket, head) {
+  const deployment = await resolvePublishedProjectDeploymentForRequest(req);
+
+  if (!deployment) {
+    return false;
+  }
+
+  proxyPublishedProjectUpgrade(req, socket, head, deployment);
+  return true;
 }
 
 async function readJsonBody(req) {
@@ -7055,8 +7201,15 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
 
-  socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
-  socket.destroy();
+  void maybeHandlePublishedProjectUpgrade(req, socket, head)
+    .then((handled) => {
+      if (!handled) {
+        writeUpgradeError(socket, 404, 'Not Found');
+      }
+    })
+    .catch(() => {
+      writeUpgradeError(socket, 500, 'Internal Server Error');
+    });
 });
 
 function startServer() {

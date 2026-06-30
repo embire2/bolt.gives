@@ -42,6 +42,8 @@
 - Preview proxy failures no longer leave users staring at a browser-level refused-connection page. The runtime returns a stable repair page explaining that bolt.gives detected a problem and is fixing it automatically.
 - Automatic preview recovery now uses a sticky `repairing` state while restore/probe work is running, preventing rapid “Needs Repair” flicker during recovery loops.
 - Project publishing now treats existing `*.bolt.gives` DNS/wildcard records that already resolve to the app server as active instead of falsely requiring Cloudflare zone management.
+- Published project subdomains now proxy WebSocket upgrades back to the active preview server, removing Vite HMR `404` console errors on `https://{subdomain}.bolt.gives`.
+- Project publishing now waits for the generated Caddy hostname to accept HTTPS before reporting the route as active, avoiding the first-request TLS/refused-connection edge after ACME issuance.
 
 ### Security
 
