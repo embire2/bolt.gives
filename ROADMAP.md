@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.30`
+- [x] `v3.0.9.31`
 
 Next release target:
 
@@ -38,7 +38,17 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.30 - Current Patch
+## v3.0.9.31 - Current Patch
+
+Release theme: prevent broken generated Vite apps from being treated as healthy or restorable.
+
+### Shipped in v3.0.9.31
+
+- [x] Probe the Vite entry module graph after root HTML before marking hosted previews healthy.
+- [x] Use the stricter probe before declaring automatic restore successful.
+- [x] Add regression coverage for root-HTML success with entry-module JSX failure.
+
+## v3.0.9.30 - Shipped Patch
 
 Release theme: keep the generated app visible while the agent is coding instead of flashing the preview pane.
 

@@ -2340,6 +2340,18 @@ function inferExpectedViteMainEntryPath(fileMap) {
   return null;
 }
 
+function inferExpectedViteMainEntryRequestPath(fileMap) {
+  const entryPath = inferExpectedViteMainEntryPath(fileMap);
+
+  if (!entryPath || !hasTextFile(fileMap, entryPath)) {
+    return null;
+  }
+
+  const relativePath = entryPath.replace(WORK_DIR, '').replace(/^\/+/, '');
+
+  return relativePath ? `/${relativePath}` : null;
+}
+
 export function buildHostedWorkspaceBootstrapAlert(fileMap) {
   if (!fileMap || typeof fileMap !== 'object') {
     return null;
@@ -2485,11 +2497,13 @@ export function markSessionMutationStart(session) {
 export async function probeSessionPreviewHealth(session, requestPath = '/') {
   const port = Number(session.preview?.port || 0);
   const existingAlert = requestPath === '/' ? session.previewDiagnostics?.alert || null : null;
+  let rootViteEntryRequestPath = null;
 
   if (requestPath === '/') {
     try {
       const diskFiles = await buildWorkspaceFileMapFromDisk(session);
       const workspaceBootstrapAlert = buildHostedWorkspaceBootstrapAlert(diskFiles);
+      rootViteEntryRequestPath = inferExpectedViteMainEntryRequestPath(diskFiles);
 
       if (workspaceBootstrapAlert) {
         return {
@@ -2549,11 +2563,30 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
           }
         : null);
 
-    return {
+    const result = {
       healthy: !alert && responseHasHealthyStatus,
       statusCode: response.status,
       alert,
     };
+
+    if (requestPath === '/' && result.healthy && rootViteEntryRequestPath) {
+      const moduleProbe = await probeSessionPreviewHealth(
+        {
+          ...session,
+          previewDiagnostics: {
+            ...(session.previewDiagnostics || createPreviewDiagnostics()),
+            alert: null,
+          },
+        },
+        rootViteEntryRequestPath,
+      );
+
+      if (!moduleProbe.healthy) {
+        return moduleProbe;
+      }
+    }
+
+    return result;
   } catch (error) {
     return {
       healthy: false,
@@ -2604,7 +2637,18 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
 
     if (Number.isFinite(Number(session.preview?.port)) && Number(session.preview?.port) > 0) {
       try {
-        await waitForPreview(Number(session.preview.port));
+        const recoveryProbe = await probeSessionPreviewHealth({
+          ...session,
+          previewDiagnostics: {
+            ...(session.previewDiagnostics || createPreviewDiagnostics()),
+            alert: null,
+          },
+        });
+
+        if (!recoveryProbe.healthy) {
+          throw new Error(recoveryProbe.alert?.description || 'Restored preview did not become healthy.');
+        }
+
         clearPreviewDiagnostics(session, session.preview ? 'ready' : 'idle');
         appendPreviewDiagnosticEntries(
           session,
@@ -4492,7 +4536,10 @@ async function ensureProjectSubdomainDnsRecord(hostname) {
     return { status: 'manual-required', message: 'BOLT_PROJECT_PUBLIC_IP is not configured.' };
   }
 
-  const existingDns = await resolveExistingProjectDnsStatus(hostname, 'Existing DNS or wildcard DNS is already in place.');
+  const existingDns = await resolveExistingProjectDnsStatus(
+    hostname,
+    'Existing DNS or wildcard DNS is already in place.',
+  );
 
   if (existingDns) {
     return existingDns;

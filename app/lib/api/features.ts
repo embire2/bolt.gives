@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.31',
+    name: 'v3.0.9.31 stricter preview recovery',
+    description:
+      'Hosted Vite previews now validate the entry module graph before marking a preview healthy, preventing broken JSX from becoming the last-known-good recovery snapshot.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.30',
     name: 'v3.0.9.30 calmer coding preview',
     description:

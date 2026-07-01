@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.31 (2026-07-01)
+
+### Fixed
+
+- Hosted Vite preview health now probes the app entry module after the root HTML shell before marking a preview healthy.
+- Automatic restore now uses the same stricter health probe before saying a last-known-good workspace snapshot recovered successfully.
+- Added regression coverage for the exact failure mode where `/` returned 200 while `/src/main.tsx` exposed an unterminated JSX transform error.
+
 ## v3.0.9.30 (2026-07-01)
 
 ### Fixed

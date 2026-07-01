@@ -278,7 +278,8 @@ describe('runtime server workspace isolation', () => {
       }),
     ).toEqual({
       ready: false,
-      reason: 'Managed instance deploy artifact is not ready yet: /srv/bolt-gives/build/client is missing or unreadable.',
+      reason:
+        'Managed instance deploy artifact is not ready yet: /srv/bolt-gives/build/client is missing or unreadable.',
     });
 
     expect(
@@ -1065,6 +1066,71 @@ describe('runtime server workspace isolation', () => {
 
     expect(result.healthy).toBe(false);
     expect(result.alert?.description).toContain('src/main.tsx');
+  });
+
+  it('probes the Vite entry module before treating the preview as healthy', async () => {
+    const workspace = await makeTempDir('bolt-runtime-probe-entry-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'index.html'),
+      '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'main.tsx'),
+      'import App from "./App";\nconsole.log(App);\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      'export default function App() { return <h1>Broken</h1>;',
+      'utf8',
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const pathname = new URL(String(url)).pathname;
+
+      if (pathname === '/') {
+        return new Response(
+          '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+          {
+            status: 200,
+            headers: {
+              'content-type': 'text/html; charset=utf-8',
+            },
+          },
+        );
+      }
+
+      return new Response('[plugin:vite:react-babel] Unterminated JSX contents. src/App.tsx:1:53', {
+        status: 500,
+        headers: {
+          'content-type': 'text/javascript; charset=utf-8',
+        },
+      });
+    });
+
+    const result = await probeSessionPreviewHealth({
+      dir: workspace,
+      preview: {
+        port: 4103,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-entry-probe/4103',
+      },
+      previewDiagnostics: {
+        status: 'starting',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: null,
+      },
+    } as any);
+
+    expect(fetchSpy).toHaveBeenCalledWith('http://127.0.0.1:4103/', expect.any(Object));
+    expect(fetchSpy).toHaveBeenCalledWith('http://127.0.0.1:4103/src/main.tsx', expect.any(Object));
+    expect(result.healthy).toBe(false);
+    expect(result.alert?.description).toContain('Unterminated JSX');
+
+    fetchSpy.mockRestore();
   });
 
   it('preserves an existing preview alert during health probes until a fresh mutation clears it', async () => {
@@ -2102,6 +2168,17 @@ The latest release of react-calendar is "6.0.1".`),
   it('restores the last known good hosted workspace snapshot after a preview failure', async () => {
     const workspace = await makeTempDir('bolt-runtime-workspace-');
     const goodFiles = {
+      '/home/project/index.html': {
+        type: 'file',
+        content:
+          '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+        isBinary: false,
+      },
+      '/home/project/src/main.tsx': {
+        type: 'file',
+        content: 'import App from "./App";\nconsole.log(App);\n',
+        isBinary: false,
+      },
       '/home/project/src/App.tsx': {
         type: 'file',
         content: 'export default function App() { return <h1>Good</h1>; }',
@@ -2110,6 +2187,17 @@ The latest release of react-calendar is "6.0.1".`),
     };
 
     const brokenFiles = {
+      '/home/project/index.html': {
+        type: 'file',
+        content:
+          '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+        isBinary: false,
+      },
+      '/home/project/src/main.tsx': {
+        type: 'file',
+        content: 'import App from "./App";\nconsole.log(App);\n',
+        isBinary: false,
+      },
       '/home/project/src/App.tsx': {
         type: 'file',
         content: 'export default function App() { return <h1>Broken</h1>;',
