@@ -5,7 +5,8 @@
 Build and maintain `bolt.gives` as a production-ready agentic coding platform. The product must be reliable, visibly transparent while it works, safe when it acts autonomously, and easy to self-host.
 
 Current release line:
-- Stable: `v3.0.9.28`
+
+- Stable: `v3.0.9.29`
 - In progress: `v3.1.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
@@ -17,6 +18,7 @@ Core rule: do not ship hidden behavior. If the agent takes action, the user must
 - Optional soak/staging branch: `alpha`
 
 Live surfaces to validate when a core path changes:
+
 - `https://alpha1.bolt.gives`
 - `https://ahmad.bolt.gives`
 - `https://bolt-gives.pages.dev`
@@ -24,6 +26,7 @@ Live surfaces to validate when a core path changes:
 - `https://create.bolt.gives`
 
 Branch policy:
+
 - High-risk work may land on `alpha` first.
 - Verify on `alpha1`.
 - Fast-forward or merge cleanly into `main`.
@@ -34,6 +37,7 @@ Branch policy:
 ## Product Baseline You Must Preserve
 
 The current hosted product baseline is:
+
 - Chat-first landing surface
 - Separate `Chat` and `Workspace` tabs
 - Live commentary feed
@@ -89,6 +93,7 @@ When changing hosted runtime behavior, validate both the app service and the run
 ## v3.1.0 Priorities
 
 These are the current release priorities:
+
 - Prompt-to-preview reliability
 - Clear execution state in both `Chat` and `Workspace`
 - Commentary derived from actual runtime events, not filler
@@ -102,6 +107,7 @@ These are the current release priorities:
 - Project publishing hardening: Stripe webhook activation, domain verification, and operator-visible deployment/domain state
 
 Recent critical issue context:
+
 - A real failure mode existed where stale “starter placeholder” detection could roll a valid generated app back to the fallback starter.
 - Current fixes ignore stale starter detections when active workspace files no longer contain the starter placeholder.
 - Preserve that behavior unless replacing it with something stricter and provably better.
@@ -109,24 +115,29 @@ Recent critical issue context:
 ## Mandatory Implementation Workflow
 
 1. Confirm current behavior
+
 - Reproduce the issue or validate the gap.
 - Record the exact runtime path, affected files, and live surface.
 
 2. Implement the smallest safe fix
+
 - Preserve contracts where possible.
 - Add strict-provider safeguards when touching tools or stream schemas.
 
 3. Add regression coverage
+
 - Put tests close to the changed code.
 - Include at least one test that would have failed before the fix.
 
 4. Validate locally
+
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test`
 - `pnpm run build`
 
 5. Run targeted E2E smoke when the change touches any of:
+
 - chat streaming
 - providers / API-key selection
 - preview / runtime handoff
@@ -136,16 +147,19 @@ Recent critical issue context:
 - managed Cloudflare trials
 
 6. Update docs in the same change set
+
 - `CHANGELOG.md`
 - `README.md`
 - `ROADMAP.md`
 
 7. Commit and push
+
 - Use Conventional Commits.
 
 ## Deployment Rules
 
 Before declaring success:
+
 - Confirm the build passes.
 - Confirm services restart cleanly.
 - Confirm the chat flow actually works on a live URL.
@@ -154,6 +168,7 @@ Before declaring success:
 - Confirm live domains return healthy responses.
 
 If deployment fails:
+
 - capture exact error text
 - fix root cause, not symptoms
 - rerun smoke before declaring success
@@ -188,6 +203,7 @@ If deployment fails:
 ## Self-Host Rules
 
 The installer must remain interactive and recover from common failures. The supported self-host baseline includes:
+
 - custom app/admin/create domains
 - local PostgreSQL
 - `psql` client
@@ -198,6 +214,7 @@ If installer behavior changes, verify both syntax and a realistic install path.
 ## Quality Bar Before Marking Work Done
 
 A change is done only if all are true:
+
 - code compiles
 - typecheck passes
 - lint passes

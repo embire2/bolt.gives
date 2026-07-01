@@ -24,7 +24,10 @@ import {
 import { createResilientExecutionQueue } from '~/lib/runtime/serial-execution-queue';
 import { createScopedLogger } from '~/utils/logger';
 import { resolvePreferredArtifactFilePath } from '~/lib/runtime/file-paths';
-import { extractHostedRuntimeSessionIdFromPreviewBaseUrl } from '~/lib/runtime/hosted-runtime-client';
+import {
+  extractHostedRuntimeSessionIdFromPreviewBaseUrl,
+  normalizeHostedRuntimePreviewBaseUrlForBrowser,
+} from '~/lib/runtime/hosted-runtime-client';
 import { WORK_DIR } from '~/utils/constants';
 
 const logger = createScopedLogger('WorkbenchStore');
@@ -674,15 +677,16 @@ export class WorkbenchStore {
 
   syncHostedPreview(preview: HostedPreviewSync) {
     const currentPreviews = this.#previewsStore.previews.get();
+    const normalizedBaseUrl = normalizeHostedRuntimePreviewBaseUrlForBrowser(preview.baseUrl);
     const nextPreview = {
       port: preview.port,
       ready: true,
-      baseUrl: preview.baseUrl,
+      baseUrl: normalizedBaseUrl,
       revision: preview.revision,
     };
-    const nextHostedSessionId = extractHostedRuntimeSessionIdFromPreviewBaseUrl(preview.baseUrl);
+    const nextHostedSessionId = extractHostedRuntimeSessionIdFromPreviewBaseUrl(normalizedBaseUrl);
     const existingPreview = currentPreviews.find((candidate) => {
-      if (candidate.port === preview.port || candidate.baseUrl === preview.baseUrl) {
+      if (candidate.port === preview.port || candidate.baseUrl === normalizedBaseUrl) {
         return true;
       }
 

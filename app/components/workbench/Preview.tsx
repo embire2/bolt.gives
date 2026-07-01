@@ -11,6 +11,7 @@ import {
   isHostedRuntimeEnabled,
   publishHostedRuntimeProject,
   createHostedRuntimeCustomDomainCheckout,
+  normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   subscribeHostedRuntimePreview,
   shouldReloadHostedPreviewIframe,
@@ -229,19 +230,24 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     ) => {
       lastHostedPreviewEventAtRef.current = Date.now();
 
+      const statusPreview = status.preview
+        ? {
+            ...status.preview,
+            baseUrl: normalizeHostedRuntimePreviewBaseUrlForBrowser(status.preview.baseUrl),
+          }
+        : null;
+
       const previewSessionId =
-        extractHostedRuntimeSessionIdFromPreviewBaseUrl(status.preview?.baseUrl || activePreview?.baseUrl) ||
+        extractHostedRuntimeSessionIdFromPreviewBaseUrl(statusPreview?.baseUrl || activePreview?.baseUrl) ||
         workbenchStore.hostedRuntimeSessionId;
 
       if (
-        status.preview &&
-        (!activePreview ||
-          status.preview.baseUrl !== activePreview.baseUrl ||
-          status.preview.port !== activePreview.port)
+        statusPreview &&
+        (!activePreview || statusPreview.baseUrl !== activePreview.baseUrl || statusPreview.port !== activePreview.port)
       ) {
         workbenchStore.syncHostedPreview({
-          port: status.preview.port,
-          baseUrl: status.preview.baseUrl,
+          port: statusPreview.port,
+          baseUrl: statusPreview.baseUrl,
           revision: activePreview?.revision,
         });
       }

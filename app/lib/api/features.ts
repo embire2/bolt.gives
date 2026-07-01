@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.29',
+    name: 'v3.0.9.29 Pages preview checkpoint fix',
+    description:
+      'Cloudflare Pages now normalizes every hosted preview checkpoint, status event, and ready event to the current browser origin so generated apps stay previewable instead of falling back to blocked bolt.gives iframe URLs.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.28',
     name: 'v3.0.9.28 empty-context first-pass fix',
     description:

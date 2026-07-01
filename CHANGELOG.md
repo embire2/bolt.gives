@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.29 (2026-07-01)
+
+### Fixed
+
+- Cloudflare Pages preview checkpoints now normalize `https://bolt.gives/runtime/preview/...` payloads to the current Pages browser origin before storing or rendering the iframe.
+- Hosted runtime command, preview-status, preview-event, chat-checkpoint, and Workbench sync paths now share the same browser-safe preview URL normalization.
+- Added regression coverage for the exact Pages failure where a healthy generated app was still blocked by Cloudflare cross-origin response policy.
+
 ## v3.0.9.28 (2026-07-01)
 
 ### Fixed

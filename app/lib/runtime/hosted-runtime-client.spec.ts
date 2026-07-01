@@ -3,6 +3,7 @@ import {
   extractHostedRuntimeSessionIdFromPreviewBaseUrl,
   fetchHostedRuntimeSnapshot,
   fetchHostedRuntimePreviewStatus,
+  normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   resolveHostedRuntimeBaseUrl,
   subscribeHostedRuntimePreview,
@@ -40,6 +41,7 @@ describe('hosted runtime client', () => {
         hostname: 'bolt-gives.pages.dev',
         protocol: 'https:',
         host: 'bolt-gives.pages.dev',
+        origin: 'https://bolt-gives.pages.dev',
       },
     });
 
@@ -49,7 +51,7 @@ describe('hosted runtime client', () => {
         sessionId: 'pages123',
         preview: {
           port: 4100,
-          baseUrl: 'https://bolt-gives.pages.dev/runtime/preview/pages123/4100',
+          baseUrl: 'https://bolt.gives/runtime/preview/pages123/4100',
         },
         status: 'ready',
         healthy: true,
@@ -78,6 +80,36 @@ describe('hosted runtime client', () => {
     expect(status.preview?.baseUrl).toBe('https://bolt-gives.pages.dev/runtime/preview/pages123/4100');
   });
 
+  it('normalizes central preview URLs to the current Pages browser origin', () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'bolt-gives.pages.dev',
+        protocol: 'https:',
+        host: 'bolt-gives.pages.dev',
+        origin: 'https://bolt-gives.pages.dev',
+      },
+    });
+
+    expect(
+      normalizeHostedRuntimePreviewBaseUrlForBrowser('https://bolt.gives/runtime/preview/pages-session/4100'),
+    ).toBe('https://bolt-gives.pages.dev/runtime/preview/pages-session/4100');
+  });
+
+  it('keeps local browser preview URLs pointed at the local runtime service', () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'localhost',
+        protocol: 'http:',
+        host: 'localhost:5173',
+        origin: 'http://localhost:5173',
+      },
+    });
+
+    expect(
+      normalizeHostedRuntimePreviewBaseUrlForBrowser('http://127.0.0.1:4321/runtime/preview/local-session/4100'),
+    ).toBe('http://127.0.0.1:4321/runtime/preview/local-session/4100');
+  });
+
   it('uses same-host runtime for hosted instances', () => {
     expect(
       resolveHostedRuntimeBaseUrl({
@@ -94,6 +126,7 @@ describe('hosted runtime client', () => {
         hostname: 'alpha1.bolt.gives',
         protocol: 'https:',
         host: 'alpha1.bolt.gives',
+        origin: 'https://alpha1.bolt.gives',
       },
     });
 
@@ -139,6 +172,7 @@ describe('hosted runtime client', () => {
         hostname: 'alpha1.bolt.gives',
         protocol: 'https:',
         host: 'alpha1.bolt.gives',
+        origin: 'https://alpha1.bolt.gives',
       },
     });
 
@@ -174,6 +208,7 @@ describe('hosted runtime client', () => {
         hostname: 'alpha1.bolt.gives',
         protocol: 'https:',
         host: 'alpha1.bolt.gives',
+        origin: 'https://alpha1.bolt.gives',
       },
     });
 
@@ -250,6 +285,7 @@ describe('hosted runtime client', () => {
         hostname: 'alpha1.bolt.gives',
         protocol: 'https:',
         host: 'alpha1.bolt.gives',
+        origin: 'https://alpha1.bolt.gives',
       },
     });
 

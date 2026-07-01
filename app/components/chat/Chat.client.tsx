@@ -56,7 +56,10 @@ import type { AgentMode, AgentPlanStep } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
 import { resolveStallPolicy } from '~/lib/runtime/stall-policy';
-import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
+import {
+  isHostedRuntimeEnabled,
+  normalizeHostedRuntimePreviewBaseUrlForBrowser,
+} from '~/lib/runtime/hosted-runtime-client';
 import type { TextFileSnapshot } from '~/lib/runtime/agent-file-diffs';
 import type { SketchElement } from '~/components/chat/SketchCanvas';
 import type { AutonomyMode } from '~/lib/runtime/autonomy';
@@ -1231,9 +1234,10 @@ Requirements:
         return;
       }
 
+      const previewBaseUrl = normalizeHostedRuntimePreviewBaseUrlForBrowser(hostedPreviewCheckpoint.previewBaseUrl);
       const checkpointSignature = [
         hostedPreviewCheckpoint.timestamp,
-        hostedPreviewCheckpoint.previewBaseUrl,
+        previewBaseUrl,
         hostedPreviewCheckpoint.previewPort,
       ].join('::');
 
@@ -1253,11 +1257,11 @@ Requirements:
         type: 'telemetry',
         timestamp: new Date().toISOString(),
         description: 'Preview verified',
-        output: `url=${hostedPreviewCheckpoint.previewBaseUrl} port=${hostedPreviewCheckpoint.previewPort}`,
+        output: `url=${previewBaseUrl} port=${hostedPreviewCheckpoint.previewPort}`,
       });
       workbenchStore.syncHostedPreview({
         port: hostedPreviewCheckpoint.previewPort,
-        baseUrl: hostedPreviewCheckpoint.previewBaseUrl,
+        baseUrl: previewBaseUrl,
       });
     }, [boundedChatData]);
 

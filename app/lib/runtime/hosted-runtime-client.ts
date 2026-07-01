@@ -153,6 +153,66 @@ export function getHostedRuntimeBaseUrl() {
   });
 }
 
+export function normalizeHostedRuntimePreviewBaseUrlForBrowser(baseUrl: string | null | undefined): string {
+  const rawBaseUrl = String(baseUrl || '').trim();
+
+  if (!rawBaseUrl || typeof window === 'undefined') {
+    return rawBaseUrl;
+  }
+
+  try {
+    const browserOrigin = window.location.origin || `${window.location.protocol}//${window.location.host}`;
+    const browserHost = window.location.hostname;
+    const previewUrl = new URL(rawBaseUrl, browserOrigin);
+
+    if (isLocalHost(browserHost) || !previewUrl.pathname.startsWith('/runtime/preview/')) {
+      return rawBaseUrl;
+    }
+
+    if (previewUrl.origin === browserOrigin) {
+      return previewUrl.toString();
+    }
+
+    return `${browserOrigin}${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`;
+  } catch {
+    return rawBaseUrl;
+  }
+}
+
+function normalizeHostedRuntimePreviewInfoForBrowser<T extends HostedRuntimePreviewInfo | null | undefined>(
+  preview: T,
+): T {
+  if (!preview) {
+    return preview;
+  }
+
+  const baseUrl = normalizeHostedRuntimePreviewBaseUrlForBrowser(preview.baseUrl);
+
+  if (baseUrl === preview.baseUrl) {
+    return preview;
+  }
+
+  return {
+    ...preview,
+    baseUrl,
+  };
+}
+
+function normalizeHostedRuntimePreviewPayloadForBrowser<
+  T extends HostedRuntimePreviewStatus | HostedRuntimePreviewSummary,
+>(payload: T): T {
+  const preview = normalizeHostedRuntimePreviewInfoForBrowser(payload.preview);
+
+  if (preview === payload.preview) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    preview,
+  };
+}
+
 export function extractHostedRuntimeSessionIdFromPreviewBaseUrl(baseUrl: string | null | undefined): string | null {
   if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
     return null;
@@ -289,7 +349,7 @@ export async function runHostedRuntimeCommand(options: {
       if (event.type === 'stdout' || event.type === 'stderr') {
         output += event.chunk;
       } else if (event.type === 'ready') {
-        preview = event.preview;
+        preview = normalizeHostedRuntimePreviewInfoForBrowser(event.preview);
       } else if (event.type === 'exit') {
         exitCode = event.exitCode;
       } else if (event.type === 'error') {
@@ -323,7 +383,7 @@ export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promis
     throw new Error(message || `Hosted runtime preview status failed with status ${response.status}`);
   }
 
-  return (await response.json()) as HostedRuntimePreviewStatus;
+  return normalizeHostedRuntimePreviewPayloadForBrowser((await response.json()) as HostedRuntimePreviewStatus);
 }
 
 export function subscribeHostedRuntimePreview(
@@ -346,7 +406,9 @@ export function subscribeHostedRuntimePreview(
     }
 
     try {
-      callbacks.onMessage(JSON.parse(event.data) as HostedRuntimePreviewSummary);
+      callbacks.onMessage(
+        normalizeHostedRuntimePreviewPayloadForBrowser(JSON.parse(event.data) as HostedRuntimePreviewSummary),
+      );
     } catch (error) {
       callbacks.onError?.(error instanceof Error ? error : new Error('Invalid preview event payload'));
     }
