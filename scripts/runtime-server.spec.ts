@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewResponseHeaders,
+  applyHostedVitePreviewDefaults,
   applyUnavailablePackageVersionRepair,
   authorizeFreeUsageQuotaSecret,
   authorizeHostedFreeRelaySecret,
@@ -1393,6 +1394,7 @@ describe('runtime server workspace isolation', () => {
     );
 
     expect(result.generatedFiles).toEqual(['tsconfig.app.json', 'tsconfig.node.json']);
+    expect(result.previewConfigFiles).toEqual(['vite.config.js']);
     await expect(fs.readFile(path.join(workspace, 'tsconfig.app.json'), 'utf8')).resolves.toContain(
       '"include": [\n    "src"\n  ]',
     );
@@ -1452,6 +1454,7 @@ describe('runtime server workspace isolation', () => {
     >;
 
     expect(repair.generatedFiles).toEqual(['tsconfig.app.json', 'tsconfig.node.json']);
+    expect(repair.previewConfigFiles).toEqual(['vite.config.ts']);
     expect(repair.repairedFiles).toEqual([]);
     expect(generatedFileMap).toMatchObject({
       '/home/project/tsconfig.app.json': {
@@ -1462,8 +1465,106 @@ describe('runtime server workspace isolation', () => {
         type: 'file',
         isBinary: false,
       },
+      '/home/project/vite.config.ts': {
+        type: 'file',
+        isBinary: false,
+      },
     });
     expect(generatedFileMap['/home/project/tsconfig.app.json'].content).toContain('"include": [\n    "src"\n  ]');
+    expect(generatedFileMap['/home/project/vite.config.ts'].content).toContain('hmr: false');
+  });
+
+  it('disables Vite HMR in hosted preview configs after a workspace sync', async () => {
+    const workspace = await makeTempDir('bolt-runtime-vite-hmr-sync-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'workspace-app',
+        private: true,
+        scripts: {
+          dev: 'vite',
+        },
+        dependencies: {
+          react: '^18.2.0',
+          'react-dom': '^18.2.0',
+        },
+        devDependencies: {
+          vite: '^5.0.0',
+          '@vitejs/plugin-react': '^4.0.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'vite.config.js'),
+      [
+        "import { defineConfig } from 'vite';",
+        "import react from '@vitejs/plugin-react';",
+        '',
+        'export default defineConfig({',
+        '  plugins: [react()],',
+        '});',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(path.join(workspace, 'src', 'main.jsx'), "console.log('ready');\n", 'utf8');
+
+    const repair = await repairHostedWorkspaceSupportFilesAfterSync({
+      dir: workspace,
+    } as {
+      dir: string;
+    });
+    const generatedFileMap = repair.fileMap as Record<
+      string,
+      {
+        type: string;
+        isBinary: boolean;
+        content: string;
+      }
+    >;
+
+    expect(repair.generatedFiles).toEqual([]);
+    expect(repair.previewConfigFiles).toEqual(['vite.config.js']);
+    expect(repair.repairedFiles).toEqual([]);
+    expect(generatedFileMap['/home/project/vite.config.js']?.content).toContain('server: { hmr: false }');
+    await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain(
+      'server: { hmr: false }',
+    );
+  });
+
+  it('adds hosted Vite HMR defaults to existing server blocks without duplicating them', () => {
+    const firstPass = applyHostedVitePreviewDefaults(`export default {
+  server: {
+    port: 5173,
+  },
+};
+`);
+
+    expect(firstPass.changed).toBe(true);
+    expect(firstPass.content).toContain('hmr: false');
+    expect(firstPass.content).toContain('port: 5173');
+
+    const secondPass = applyHostedVitePreviewDefaults(firstPass.content);
+
+    expect(secondPass.changed).toBe(false);
+    expect((secondPass.content.match(/hmr: false/g) || []).length).toBe(1);
+  });
+
+  it('replaces existing Vite HMR settings for hosted previews', () => {
+    const result = applyHostedVitePreviewDefaults(`export default {
+  server: {
+    hmr: true,
+    port: 5173,
+  },
+};
+`);
+
+    expect(result.changed).toBe(true);
+    expect(result.content).toContain('hmr: false');
+    expect(result.content).not.toContain('hmr: true');
+    expect((result.content.match(/hmr:/g) || []).length).toBe(1);
   });
 
   it('repairs unsafe JSX angle text immediately after a workspace sync', async () => {

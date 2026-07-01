@@ -53,9 +53,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.31`)
+## Current Release (`v3.0.9.32`)
 
-`v3.0.9.31` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, shell-before-manifest recovery, empty-context first-pass recovery, Pages preview checkpoint fix, and calmer coding preview, then tightens hosted Vite preview health so broken generated JSX cannot be saved as the last-known-good restore point.
+`v3.0.9.32` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, shell-before-manifest recovery, empty-context first-pass recovery, Pages preview checkpoint fix, calmer coding preview, and stricter hosted Vite preview health, then suppresses unnecessary Vite HMR websocket noise on hosted preview configs.
+
+### Quiet hosted Vite previews
+
+`v3.0.9.32` disables Vite HMR inside hosted preview configs for generated apps. The Preview iframe still loads and refreshes through the runtime, but Cloudflare Pages-hosted previews no longer repeatedly log websocket `502` transport errors for an HMR channel that hosted users do not need.
 
 ### Stricter preview recovery
 
@@ -155,17 +159,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.31` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.32` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.31`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.31)
+- Release: [`v3.0.9.32`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.32)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.31/install.sh)
-- Release commit: see the `v3.0.9.31` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh)
+- Release commit: see the `v3.0.9.32` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.31/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```

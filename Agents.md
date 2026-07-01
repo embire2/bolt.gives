@@ -8,13 +8,13 @@ Secondary objective: continue the `v3.1.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.0.9.31`
+- Stable: `v3.0.9.32`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.31`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.31/install.sh`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.32`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh`
 - In progress: `v3.1.0`
 
-`v3.0.9.31` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, automatic runtime-node CLI provisioning, project publishing to bolt.gives subdomains, hosted FREE blocked-shell recovery, same-origin `bolt-gives.pages.dev` runtime proxying, shell-before-manifest Architect recovery, empty-context first-pass recovery, Pages preview checkpoint fix, and calmer coding preview, then tightens hosted Vite preview health checks so broken JSX cannot become the last-known-good recovery snapshot.
+`v3.0.9.32` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, automatic runtime-node CLI provisioning, project publishing to bolt.gives subdomains, hosted FREE blocked-shell recovery, same-origin `bolt-gives.pages.dev` runtime proxying, shell-before-manifest Architect recovery, empty-context first-pass recovery, Pages preview checkpoint fix, calmer coding preview, and stricter hosted Vite preview health checks, then disables hosted Vite HMR in generated preview configs so Pages previews do not log repeated websocket 502 transport errors.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 

@@ -3023,6 +3023,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    hmr: false,
+  },
 });
 `;
 }
@@ -3482,6 +3485,216 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
   return generatedFiles;
 }
 
+function workspacePackageUsesVite(packageJsonRecord) {
+  const packageJson = packageJsonRecord?.json || {};
+  const scripts = packageJson.scripts || {};
+
+  return Boolean(
+    packageJson.dependencies?.vite ||
+      packageJson.devDependencies?.vite ||
+      Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
+  );
+}
+
+function findMatchingBrace(source, openBraceIndex) {
+  if (openBraceIndex < 0 || source[openBraceIndex] !== '{') {
+    return -1;
+  }
+
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = openBraceIndex; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && next === '/') {
+        inBlockComment = false;
+        index += 1;
+      }
+
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === quote) {
+        quote = null;
+      }
+
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function insertObjectProperty(source, openBraceIndex, propertySource, indent = '  ') {
+  const insertAt = openBraceIndex + 1;
+  const nextNonWhitespaceIndex = source.slice(insertAt).search(/\S/);
+  const isEmptyObject = nextNonWhitespaceIndex >= 0 && source[insertAt + nextNonWhitespaceIndex] === '}';
+
+  if (isEmptyObject) {
+    return `${source.slice(0, insertAt)}\n${indent}${propertySource}\n${source.slice(insertAt)}`;
+  }
+
+  return `${source.slice(0, insertAt)}\n${indent}${propertySource}\n${source.slice(insertAt)}`;
+}
+
+export function applyHostedVitePreviewDefaults(content) {
+  const source = String(content || '');
+
+  if (!source.trim()) {
+    return { changed: false, content: source };
+  }
+
+  const serverMatch = source.match(/\bserver\s*:\s*\{/);
+
+  if (serverMatch?.index !== undefined) {
+    const serverOpenBraceIndex = source.indexOf('{', serverMatch.index);
+    const serverCloseBraceIndex = findMatchingBrace(source, serverOpenBraceIndex);
+    const serverBody =
+      serverCloseBraceIndex > serverOpenBraceIndex
+        ? source.slice(serverOpenBraceIndex + 1, serverCloseBraceIndex)
+        : '';
+
+    if (/\bhmr\s*:\s*false\b/.test(serverBody)) {
+      return { changed: false, content: source };
+    }
+
+    if (serverCloseBraceIndex > serverOpenBraceIndex) {
+      if (/\bhmr\s*:/.test(serverBody)) {
+        const repairedServerBody = serverBody.replace(/\bhmr\s*:\s*(?:\{[\s\S]*?\}|[^,\n}]+)/, 'hmr: false');
+
+        return {
+          changed: true,
+          content: `${source.slice(0, serverOpenBraceIndex + 1)}${repairedServerBody}${source.slice(
+            serverCloseBraceIndex,
+          )}`,
+        };
+      }
+
+      return {
+        changed: true,
+        content: insertObjectProperty(source, serverOpenBraceIndex, 'hmr: false,', '    '),
+      };
+    }
+  }
+
+  const defineConfigMatch = source.match(/\bdefineConfig\s*\(\s*\{/);
+
+  if (defineConfigMatch?.index !== undefined) {
+    const openBraceIndex = source.indexOf('{', defineConfigMatch.index);
+
+    return {
+      changed: true,
+      content: insertObjectProperty(source, openBraceIndex, 'server: { hmr: false },'),
+    };
+  }
+
+  const defaultObjectMatch = source.match(/\bexport\s+default\s*\{/);
+
+  if (defaultObjectMatch?.index !== undefined) {
+    const openBraceIndex = source.indexOf('{', defaultObjectMatch.index);
+
+    return {
+      changed: true,
+      content: insertObjectProperty(source, openBraceIndex, 'server: { hmr: false },'),
+    };
+  }
+
+  return { changed: false, content: source };
+}
+
+async function ensureHostedWorkspaceVitePreviewDefaults(session) {
+  const packageJsonRecord = await readWorkspacePackageJson(session);
+
+  if (!workspacePackageUsesVite(packageJsonRecord)) {
+    return [];
+  }
+
+  const repairedFiles = [];
+  const viteConfigPaths = [
+    'vite.config.js',
+    'vite.config.mjs',
+    'vite.config.cjs',
+    'vite.config.ts',
+    'vite.config.mts',
+    'vite.config.cts',
+  ];
+
+  for (const relativePath of viteConfigPaths) {
+    const absolutePath = path.join(session.dir, relativePath);
+
+    if (!(await exists(absolutePath))) {
+      continue;
+    }
+
+    const current = await fs.readFile(absolutePath, 'utf8');
+    const next = applyHostedVitePreviewDefaults(current);
+
+    if (!next.changed) {
+      continue;
+    }
+
+    await writeWorkspaceFileAtomic(absolutePath, next.content);
+    repairedFiles.push(relativePath);
+  }
+
+  return repairedFiles;
+}
+
 export async function ensureHostedWorkspaceProjectBootstrap(session) {
   if (await workspaceHasOwnProjectManifest(session.dir)) {
     return {
@@ -3562,11 +3775,13 @@ export async function ensureHostedWorkspaceProjectBootstrap(session) {
 
 export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
   const generatedFiles = await ensureHostedWorkspaceViteSupportFiles(session);
+  const previewConfigFiles = await ensureHostedWorkspaceVitePreviewDefaults(session);
   const repairedFiles = await repairHostedWorkspaceUnsafeJsxTextEntities(session);
 
-  if (generatedFiles.length === 0 && repairedFiles.length === 0) {
+  if (generatedFiles.length === 0 && previewConfigFiles.length === 0 && repairedFiles.length === 0) {
     return {
       generatedFiles: [],
+      previewConfigFiles: [],
       repairedFiles: [],
       fileMap: {},
     };
@@ -3574,7 +3789,7 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 
   const fileMap = {};
 
-  for (const relativePath of [...new Set([...generatedFiles, ...repairedFiles])]) {
+  for (const relativePath of [...new Set([...generatedFiles, ...previewConfigFiles, ...repairedFiles])]) {
     const absolutePath = path.join(session.dir, relativePath);
     const workbenchPath = path.posix.join(WORK_DIR, relativePath);
     const content = await fs.readFile(absolutePath, 'utf8');
@@ -3588,6 +3803,7 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 
   return {
     generatedFiles,
+    previewConfigFiles,
     repairedFiles,
     fileMap,
   };
@@ -3607,6 +3823,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
       changed: bootstrapRepair.generatedFiles.length > 0,
       installedPackages: [],
       repairedFiles: [],
+      previewConfigFiles: [],
       sanitizedFiles: [],
       generatedFiles: bootstrapRepair.generatedFiles,
     };
@@ -3616,6 +3833,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
   const sanitizedFiles = [];
   const repairedFiles = await repairHostedWorkspaceUnsafeJsxTextEntities(session);
   const generatedFiles = [...bootstrapRepair.generatedFiles, ...(await ensureHostedWorkspaceViteSupportFiles(session))];
+  const previewConfigFiles = await ensureHostedWorkspaceVitePreviewDefaults(session);
   let packageJson = packageJsonRecord.json;
   const lockfileRecord = await readWorkspaceLockfile(session);
   const dependencyFingerprint = createWorkspaceDependencyFingerprint(packageJsonRecord.raw, lockfileRecord?.raw || '');
@@ -3810,10 +4028,12 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     changed:
       sanitizedFiles.length > 0 ||
       repairedFiles.length > 0 ||
+      previewConfigFiles.length > 0 ||
       installedPackages.length > 0 ||
       generatedFiles.length > 0,
     installedPackages,
     repairedFiles,
+    previewConfigFiles,
     sanitizedFiles,
     generatedFiles,
   };
@@ -5040,6 +5260,13 @@ async function handleRunCommand(req, res, session, body) {
         writeEvent({
           type: 'status',
           message: `Architect repaired unsafe JSX text entities in ${preparation.repairedFiles.join(', ')}`,
+        });
+      }
+
+      if (preparation.previewConfigFiles.length > 0) {
+        writeEvent({
+          type: 'status',
+          message: `Architect disabled Vite HMR for hosted preview configs: ${preparation.previewConfigFiles.join(', ')}`,
         });
       }
 
@@ -7259,6 +7486,13 @@ export function createRuntimeServer() {
               session,
               'architect',
               `Architect repaired unsafe JSX text entities after sync: ${supportRepair.repairedFiles.join(', ')}`,
+            );
+          }
+          if (supportRepair.previewConfigFiles.length > 0) {
+            appendPreviewDiagnosticEntries(
+              session,
+              'architect',
+              `Architect disabled Vite HMR for hosted preview configs after sync: ${supportRepair.previewConfigFiles.join(', ')}`,
             );
           }
           await refreshSessionCurrentFileMapFromDisk(session);

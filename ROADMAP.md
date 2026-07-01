@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.31`
+- [x] `v3.0.9.32`
 
 Next release target:
 
@@ -38,7 +38,17 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.31 - Current Patch
+## v3.0.9.32 - Current Patch
+
+Release theme: keep hosted Vite previews quiet and professional on Cloudflare Pages.
+
+### Shipped in v3.0.9.32
+
+- [x] Disable Vite HMR in generated hosted preview configs so Pages previews do not log repeated websocket `502` errors.
+- [x] Repair simple existing `vite.config.*` files during workspace sync/start while preserving normal Vite plugin config.
+- [x] Add regression coverage for generated configs and existing `server` blocks without duplicate HMR settings.
+
+## v3.0.9.31 - Shipped Patch
 
 Release theme: prevent broken generated Vite apps from being treated as healthy or restorable.
 

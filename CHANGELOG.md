@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.32 (2026-07-01)
+
+### Fixed
+
+- Hosted Vite preview configs now disable HMR for generated apps so Cloudflare Pages previews do not repeatedly log websocket `502` transport errors while the preview is otherwise healthy.
+- Existing simple `vite.config.*` files are repaired after sync/start, and newly bootstrapped Vite configs include the hosted-preview default from creation.
+- Added regression coverage for generated Vite configs and existing `server` blocks so the HMR suppression is applied once without duplicating config.
+
 ## v3.0.9.31 (2026-07-01)
 
 ### Fixed

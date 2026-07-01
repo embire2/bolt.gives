@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.32',
+    name: 'v3.0.9.32 quiet hosted Vite previews',
+    description:
+      'Hosted Vite previews now disable HMR in generated preview configs so Pages-hosted projects do not emit noisy websocket 502 errors while the app remains previewable.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.31',
     name: 'v3.0.9.31 stricter preview recovery',
     description:

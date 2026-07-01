@@ -6,7 +6,7 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.0.9.31`
+- Stable: `v3.0.9.32`
 - In progress: `v3.1.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
