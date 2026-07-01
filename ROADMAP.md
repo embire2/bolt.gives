@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.27`
+- [x] `v3.0.9.28`
 
 Next release target:
 
@@ -38,7 +38,17 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.27 - Current Patch
+## v3.0.9.28 - Current Patch
+
+Release theme: let brand-new hosted FREE chats proceed with empty context until files exist.
+
+### Shipped in v3.0.9.28
+
+- [x] Skip context-selection model calls when the workspace has no files yet.
+- [x] Treat “no context files selected” as a valid empty context buffer instead of a fatal chat error.
+- [x] Add regression coverage for empty workspaces and empty selector responses.
+
+## v3.0.9.27 - Shipped Patch
 
 Release theme: recover hosted FREE first-pass runs when a model starts with package-manager commands before project files exist.
 

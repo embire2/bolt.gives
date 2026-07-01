@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.28 (2026-07-01)
+
+### Fixed
+
+- Brand-new hosted `FREE` projects now continue when the workspace has no files yet, instead of spending a context-selection model call on an empty file list.
+- Context selection now treats “no files selected” as a valid empty context buffer instead of throwing `Bolt failed to select files` and leaving the UI in `Working`.
+- Added regression coverage for both empty workspaces and selector responses that intentionally include no files.
+
 ## v3.0.9.27 (2026-07-01)
 
 ### Fixed

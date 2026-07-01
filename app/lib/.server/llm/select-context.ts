@@ -90,6 +90,12 @@ export async function selectContext(props: {
     return !ig.ignores(relPath);
   });
 
+  if (filePaths.length === 0) {
+    logger.info('No files available for context selection. Continuing with an empty context buffer.');
+
+    return {};
+  }
+
   let context = '';
   const currrentFiles: string[] = [];
   const contextFiles: FileMap = {};
@@ -231,7 +237,9 @@ export async function selectContext(props: {
   logger.info(`Total files: ${totalFiles}`);
 
   if (totalFiles == 0) {
-    throw new Error(`Bolt failed to select files`);
+    logger.info('No additional files selected for context. Continuing with an empty context buffer.');
+
+    return {};
   }
 
   return filteredFiles;

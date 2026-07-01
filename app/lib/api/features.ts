@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.28',
+    name: 'v3.0.9.28 empty-context first-pass fix',
+    description:
+      'Brand-new hosted FREE projects now continue when no existing files or no extra context files are selected, instead of failing the chat stream before the model can scaffold the app.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.27',
     name: 'v3.0.9.27 Pages first-pass recovery',
     description:

@@ -53,13 +53,17 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.27`)
+## Current Release (`v3.0.9.28`)
 
-`v3.0.9.27` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, and canonical same-origin Cloudflare Pages previews, then fixes first-pass hosted `FREE` runs that try package-manager commands before project files exist.
+`v3.0.9.28` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, and shell-before-manifest recovery, then fixes first-pass hosted `FREE` runs that have no existing files or no selected context files.
+
+### Empty-context first-pass fix
+
+Brand-new projects often start with no useful files yet. `v3.0.9.28` lets chat generation continue with an empty context buffer when there are no workspace files or when context selection intentionally chooses no files. This prevents the chat stream from failing with `Bolt failed to select files` before the model can scaffold the app.
 
 ### First-pass project recovery
 
-If a model tries to run `pnpm install`, `npm run`, or another package-manager command before emitting `package.json`, the hosted runtime still refuses the unsafe empty-workspace command. `v3.0.9.27` now classifies that refusal as recoverable Architect work for hosted `FREE`: the model is instructed to retry the original request by emitting complete file actions for `package.json`, `index.html`, source files, and CSS before any install/build/test/start shell command.
+If a model tries to run `pnpm install`, `npm run`, or another package-manager command before emitting `package.json`, the hosted runtime still refuses the unsafe empty-workspace command. `v3.0.9.27` classifies that refusal as recoverable Architect work for hosted `FREE`: the model is instructed to retry the original request by emitting complete file actions for `package.json`, `index.html`, source files, and CSS before any install/build/test/start shell command.
 
 ### Canonical Pages preview fix
 
@@ -139,17 +143,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.27` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.28` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.27`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.27)
+- Release: [`v3.0.9.28`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.28)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.27/install.sh)
-- Release commit: see the `v3.0.9.27` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.28/install.sh)
+- Release commit: see the `v3.0.9.28` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.27/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.28/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
