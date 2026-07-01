@@ -18,7 +18,6 @@ const HOSTED_SNAPSHOT_TIMEOUT_MS = 30_000;
 const HOSTED_ALERT_TIMEOUT_MS = 10_000;
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
-const PAGES_RUNTIME_BASE_URL = 'https://bolt.gives/runtime';
 
 export interface HostedRuntimePreviewInfo {
   port: number;
@@ -129,16 +128,15 @@ function isPagesHost(host: string) {
 
 export function resolveHostedRuntimeBaseUrl(options: { host: string; protocol: string; originHost?: string }) {
   const { host, protocol, originHost = host } = options;
+  const httpProto = protocol === 'https:' ? 'https:' : 'http:';
 
   if (isLocalHost(host)) {
     return LOCAL_RUNTIME_BASE_URL;
   }
 
   if (isPagesHost(host)) {
-    return PAGES_RUNTIME_BASE_URL;
+    return `${httpProto}//${originHost}/runtime`;
   }
-
-  const httpProto = protocol === 'https:' ? 'https:' : 'http:';
 
   return `${httpProto}//${originHost}/runtime`;
 }

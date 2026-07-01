@@ -53,9 +53,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.25`)
+## Current Release (`v3.0.9.26`)
 
-`v3.0.9.25` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, and project publishing to `https://{subdomain}.bolt.gives`, then fixes hosted `FREE` recovery when a model attempts blocked shell file writes.
+`v3.0.9.26` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, and project publishing to `https://{subdomain}.bolt.gives`, then fixes canonical Cloudflare Pages previews on `bolt-gives.pages.dev`.
+
+### Canonical Pages preview fix
+
+`bolt-gives.pages.dev` now uses its own same-origin `/runtime` proxy for hosted runtime sync, status, command, and preview URLs. The Pages function still forwards those requests to the central runtime control plane and preserves `x-bolt-public-origin`, but the browser sees preview iframes at `https://bolt-gives.pages.dev/runtime/preview/...` instead of cross-origin `https://bolt.gives/runtime/preview/...`. This keeps Cloudflare Pages preview iframes compatible with the platform security headers instead of failing with browser blocked-response errors.
 
 ### Blocked shell mutation recovery
 
@@ -131,17 +135,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.25` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.26` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.25`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.25)
+- Release: [`v3.0.9.26`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.26)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.25/install.sh)
-- Release commit: see the `v3.0.9.25` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.26/install.sh)
+- Release commit: see the `v3.0.9.26` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.25/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.26/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.25`
+- [x] `v3.0.9.26`
 
 Next release target:
 
@@ -38,7 +38,17 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.25 - Current Patch
+## v3.0.9.26 - Current Patch
+
+Release theme: keep canonical Cloudflare Pages project previews same-origin and browser-previewable.
+
+### Shipped in v3.0.9.26
+
+- [x] Make `bolt-gives.pages.dev` use its same-origin `/runtime` proxy instead of direct `https://bolt.gives/runtime` browser calls.
+- [x] Preserve central runtime-control proxying behind Cloudflare Pages while returning preview URLs on the public Pages origin.
+- [x] Add regression coverage so canonical Pages preview-status polling cannot regress to a cross-origin preview URL path.
+
+## v3.0.9.25 - Shipped Patch
 
 Release theme: keep hosted FREE users moving when a model emits unsafe shell file writes.
 

@@ -24,14 +24,58 @@ describe('hosted runtime client', () => {
     ).toBe('http://127.0.0.1:4321/runtime');
   });
 
-  it('routes the primary Pages host to the central runtime proxy', () => {
+  it('uses the same-origin runtime proxy for the primary Pages host', () => {
     expect(
       resolveHostedRuntimeBaseUrl({
         host: 'bolt-gives.pages.dev',
         protocol: 'https:',
         originHost: 'bolt-gives.pages.dev',
       }),
-    ).toBe('https://bolt.gives/runtime');
+    ).toBe('https://bolt-gives.pages.dev/runtime');
+  });
+
+  it('keeps canonical Pages preview status checks on the iframe origin', async () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'bolt-gives.pages.dev',
+        protocol: 'https:',
+        host: 'bolt-gives.pages.dev',
+      },
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessionId: 'pages123',
+        preview: {
+          port: 4100,
+          baseUrl: 'https://bolt-gives.pages.dev/runtime/preview/pages123/4100',
+        },
+        status: 'ready',
+        healthy: true,
+        updatedAt: '2026-07-01T10:00:00.000Z',
+        recentLogs: [],
+        alert: null,
+        recovery: {
+          state: 'idle',
+          token: 0,
+          message: null,
+          updatedAt: '2026-07-01T10:00:00.000Z',
+        },
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const status = await fetchHostedRuntimePreviewStatus('pages123');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://bolt-gives.pages.dev/runtime/sessions/pages123/preview-status',
+      expect.objectContaining({
+        method: 'GET',
+      }),
+    );
+    expect(status.preview?.baseUrl).toBe('https://bolt-gives.pages.dev/runtime/preview/pages123/4100');
   });
 
   it('uses same-host runtime for hosted instances', () => {

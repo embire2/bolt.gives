@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.26',
+    name: 'v3.0.9.26 same-origin Pages previews',
+    description:
+      'The canonical bolt-gives.pages.dev app now talks to its own /runtime proxy so generated preview iframes stay same-origin and are no longer blocked by browser cross-origin response policy.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.25',
     name: 'v3.0.9.25 blocked shell mutation recovery',
     description:

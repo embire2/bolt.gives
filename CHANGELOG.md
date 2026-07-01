@@ -28,6 +28,13 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.26 (2026-07-01)
+
+### Fixed
+
+- `bolt-gives.pages.dev` now uses its own same-origin `/runtime` proxy for hosted runtime calls, so preview iframes load on the Pages origin instead of being blocked by browser cross-origin response policy when the runtime returns `https://bolt.gives/runtime/preview/...`.
+- Added regression coverage that canonical Pages preview-status checks stay on `https://bolt-gives.pages.dev/runtime/...` while the Cloudflare Pages function continues to proxy those requests to the central runtime control plane.
+
 ## v3.0.9.25 (2026-06-30)
 
 ### Fixed
