@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.30 (2026-07-01)
+
+### Fixed
+
+- Workspace Preview no longer remounts the iframe when normal hosted file revision metadata changes during coding.
+- Preview revision cache-busting is now reserved for explicit reload, route navigation, and repair/recovery reloads instead of every generated file sync.
+- Added regression coverage proving iframe keys remain stable across revision-only preview updates while still changing when the rendered preview path changes.
+
 ## v3.0.9.29 (2026-07-01)
 
 ### Fixed

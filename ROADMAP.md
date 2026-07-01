@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.29`
+- [x] `v3.0.9.30`
 
 Next release target:
 
@@ -38,7 +38,18 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.29 - Current Patch
+## v3.0.9.30 - Current Patch
+
+Release theme: keep the generated app visible while the agent is coding instead of flashing the preview pane.
+
+### Shipped in v3.0.9.30
+
+- [x] Stop normal hosted preview revision updates from remounting the Preview iframe.
+- [x] Stop normal file-sync revision metadata from cache-busting the Preview iframe URL.
+- [x] Preserve explicit reload, path navigation, blocked-frame repair, and recovery reload behavior.
+- [x] Add regression coverage for stable iframe keys across revision-only updates.
+
+## v3.0.9.29 - Shipped Patch
 
 Release theme: keep Cloudflare Pages generated-app previews on the browser-safe same-origin runtime path.
 

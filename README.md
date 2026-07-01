@@ -53,9 +53,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.29`)
+## Current Release (`v3.0.9.30`)
 
-`v3.0.9.29` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, shell-before-manifest recovery, and empty-context first-pass recovery, then fixes the remaining Pages preview checkpoint path that could route a healthy generated app back through blocked `https://bolt.gives/runtime/preview/...` iframe URLs.
+`v3.0.9.30` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, shell-before-manifest recovery, empty-context first-pass recovery, and Pages preview checkpoint fix, then removes the constant Preview flashing that could happen while the agent was writing files.
+
+### Calmer coding preview
+
+`v3.0.9.30` keeps the Preview iframe mounted while normal hosted runtime file-revision metadata changes. The preview can still reload when the user clicks reload, navigates to a different preview path, or when automatic repair needs to recover a blocked or restored frame, but ordinary coding updates no longer throw away the iframe and replace it on each revision.
 
 ### Pages preview checkpoint fix
 
@@ -147,17 +151,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.29` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.0.9.30` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.29`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.29)
+- Release: [`v3.0.9.30`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.30)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.29/install.sh)
-- Release commit: see the `v3.0.9.29` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.30/install.sh)
+- Release commit: see the `v3.0.9.30` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.29/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.30/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```

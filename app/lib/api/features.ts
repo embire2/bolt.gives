@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.30',
+    name: 'v3.0.9.30 calmer coding preview',
+    description:
+      'Workspace preview no longer remounts or cache-busts the iframe for normal file revision updates, reducing the constant flashing users saw while the agent was coding.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.29',
     name: 'v3.0.9.29 Pages preview checkpoint fix',
     description:

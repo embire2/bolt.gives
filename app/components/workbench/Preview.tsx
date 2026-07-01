@@ -24,6 +24,7 @@ import type { ElementInfo } from './Inspector';
 import type { PreviewInfo } from '~/lib/stores/previews';
 import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
 import { hasFallbackStarterPlaceholder, isStarterPlaceholderAlert } from '~/lib/runtime/starter-placeholder';
+import { buildPreviewUrl, getPreviewIframeKey } from './preview-url';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -73,30 +74,6 @@ const DEFAULT_DEVICE_WIDTH_PERCENT = 100;
 const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 5000;
 const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 3500;
 const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
-
-function normalizePreviewPath(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return '/';
-  }
-
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-}
-
-function buildPreviewUrl(baseUrl: string, displayPath: string, revision = 0) {
-  const normalizedPath = normalizePreviewPath(displayPath);
-  const previewBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const target = new URL(normalizedPath === '/' ? '' : normalizedPath.slice(1), previewBase);
-
-  if (revision > 0) {
-    target.searchParams.set('__bolt_preview_rev', String(revision));
-  } else {
-    target.searchParams.delete('__bolt_preview_rev');
-  }
-
-  return target.toString();
-}
 
 function findPreferredHostedPreviewIndex(previews: PreviewInfo[], hostedSessionId: string | null) {
   if (previews.length === 0) {
@@ -449,7 +426,6 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
 
     if (lastPreviewRevisionRef.current !== revision) {
-      setIframeUrl(buildPreviewUrl(baseUrl, displayPath, revision));
       lastPreviewRevisionRef.current = revision;
     }
   }, [activePreview?.baseUrl, activePreview?.revision, displayPath]);
@@ -1589,7 +1565,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                     />
 
                     <iframe
-                      key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
+                      key={getPreviewIframeKey(iframeUrl)}
                       ref={iframeRef}
                       onLoad={handlePreviewFrameLoad}
                       title="preview"
@@ -1608,7 +1584,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 </div>
               ) : (
                 <iframe
-                  key={`${iframeUrl || 'preview'}:${activePreview.revision || 0}`}
+                  key={getPreviewIframeKey(iframeUrl)}
                   ref={iframeRef}
                   onLoad={handlePreviewFrameLoad}
                   title="preview"
