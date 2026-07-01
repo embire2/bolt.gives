@@ -28,6 +28,14 @@
 
 - Privileged tenant-admin actions now require the operator to move off the default/change-required admin password state before creating tenants, changing SMTP, sending client mail, or refreshing/suspending managed instances.
 
+## v3.0.9.27 (2026-07-01)
+
+### Fixed
+
+- Hosted `FREE` first-pass project creation now treats “session workspace has no project manifest yet” terminal failures as client-side Architect recovery instead of a dead dev-server failure.
+- The recovery prompt now requires the model to emit complete file actions for `package.json`, `index.html`, source files, and CSS before any install/build/test/start shell command.
+- Added regression coverage using the exact hosted runtime refusal text seen during the live `bolt-gives.pages.dev` E2E.
+
 ## v3.0.9.26 (2026-07-01)
 
 ### Fixed

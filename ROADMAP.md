@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.26`
+- [x] `v3.0.9.27`
 
 Next release target:
 
@@ -38,7 +38,17 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.26 - Current Patch
+## v3.0.9.27 - Current Patch
+
+Release theme: recover hosted FREE first-pass runs when a model starts with package-manager commands before project files exist.
+
+### Shipped in v3.0.9.27
+
+- [x] Classify “session workspace has no project manifest yet” hosted runtime failures as client-side Architect recovery for hosted FREE.
+- [x] Require recovery to emit complete file actions for `package.json`, `index.html`, source files, and CSS before install/start commands.
+- [x] Add regression coverage using the exact hosted runtime refusal text captured during the live Pages E2E.
+
+## v3.0.9.26 - Shipped Patch
 
 Release theme: keep canonical Cloudflare Pages project previews same-origin and browser-previewable.
 

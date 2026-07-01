@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.0.9.27',
+    name: 'v3.0.9.27 Pages first-pass recovery',
+    description:
+      'Hosted FREE project creation now auto-recovers when a model tries to run pnpm/npm before emitting project files, asking it to scaffold package.json, index.html, source, and CSS through file actions before install/start.',
+    releaseDate: '2026-07-01',
+  },
+  {
     id: 'release-v3.0.9.26',
     name: 'v3.0.9.26 same-origin Pages previews',
     description:

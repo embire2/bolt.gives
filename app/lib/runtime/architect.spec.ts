@@ -249,6 +249,26 @@ describe('shouldUseHostedFreeServerRecovery', () => {
     ).toBe(false);
   });
 
+  it('does not skip client auto-heal when hosted FREE runs shell before project files exist', () => {
+    const diagnosis = diagnoseArchitectIssue({
+      type: 'error',
+      title: 'Dev Server Failed',
+      description: 'Command Failed (exit code: 1)',
+      content:
+        'Hosted runtime refused to run a package-manager command because the session workspace has no project manifest yet. Scaffold or sync the project files first.',
+      source: 'terminal',
+    })!;
+
+    expect(diagnosis.issueId).toBe('shell-before-project-manifest');
+    expect(
+      shouldUseHostedFreeServerRecovery({
+        hostedRuntimeEnabled: true,
+        providerName: 'FREE',
+        diagnosis,
+      }),
+    ).toBe(false);
+  });
+
   it('keeps hosted FREE preview recovery routed to server-side recovery', () => {
     const diagnosis = diagnoseArchitectIssue({
       type: 'preview',
@@ -312,6 +332,29 @@ describe('buildArchitectAutoHealPrompt', () => {
     expect(prompt).toContain('blocked-shell-mutation');
     expect(prompt).toContain('Never mutate project files through shell commands');
     expect(prompt).toContain('file actions with complete file contents');
+  });
+
+  it('requires file-action scaffolding before install when the project manifest is missing', () => {
+    const alert = {
+      type: 'error',
+      title: 'Dev Server Failed',
+      description: 'Command Failed (exit code: 1)',
+      content:
+        'Hosted runtime refused to run a package-manager command because the session workspace has no project manifest yet. Scaffold or sync the project files first.',
+      source: 'terminal' as const,
+    };
+    const diagnosis = diagnoseArchitectIssue(alert)!;
+    const prompt = buildArchitectAutoHealPrompt({
+      alert,
+      diagnosis,
+      attemptNumber: 1,
+      originalRequest: 'Build a tiny Pages smoke app.',
+    });
+
+    expect(prompt).toContain('shell-before-project-manifest');
+    expect(prompt).toContain('package.json, index.html');
+    expect(prompt).toContain('before any install, build, test, or start shell command');
+    expect(prompt).toContain('Do not use a shell command as the first executable action');
   });
 });
 

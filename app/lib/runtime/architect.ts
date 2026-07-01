@@ -98,6 +98,24 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
     ],
   },
   {
+    id: 'shell-before-project-manifest',
+    title: 'Shell command ran before project files existed',
+    source: 'terminal',
+    patterns: [
+      /session workspace has no project manifest yet/i,
+      /Scaffold or sync the project files first/i,
+      /package-manager command because the session workspace has no project manifest/i,
+    ],
+    maxAutoAttempts: 3,
+    guidance: [
+      'Retry the original request by scaffolding the app with complete file actions before any install, build, test, or start shell command.',
+      'Emit package.json, index.html, src/main.tsx or src/main.jsx, src/App.tsx or src/App.jsx, and any required CSS as file actions with complete contents.',
+      'Only after those file actions are emitted, run pnpm install and the preview start command.',
+      'Do not use a shell command as the first executable action for an empty workspace.',
+      'Continue from the original user request and build the requested app, not a placeholder scaffold.',
+    ],
+  },
+  {
     id: 'interactive-cli-cancelled',
     title: 'Interactive CLI cancelled',
     source: 'terminal',
@@ -353,7 +371,7 @@ const ARCHITECT_KNOWLEDGE_BASE: ArchitectIssue[] = [
   },
 ];
 
-const HOSTED_FREE_CLIENT_RECOVERY_ISSUES = new Set(['blocked-shell-mutation']);
+const HOSTED_FREE_CLIENT_RECOVERY_ISSUES = new Set(['blocked-shell-mutation', 'shell-before-project-manifest']);
 
 export function shouldUseHostedFreeServerRecovery(options: {
   hostedRuntimeEnabled: boolean;
