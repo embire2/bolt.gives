@@ -39,7 +39,7 @@ describe('hosted-preview-recovery', () => {
 
   it('builds a continuation prompt that forbids false success and re-scaffolding', () => {
     const prompt = buildHostedPreviewRecoveryPrompt({
-      model: 'deepseek/deepseek-v4-pro',
+      model: 'gpt-5.6',
       provider: 'FREE',
       originalRequest: 'Build a React todo app.',
       failureSummary: 'Unexpected token in /src/App.tsx:32:17',

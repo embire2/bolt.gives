@@ -3,13 +3,14 @@ import {
   FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_LABEL,
   FREE_HOSTED_MODEL_MAX_TOKENS,
+  FREE_HOSTED_API_TOKEN_KEY,
 } from '~/lib/modules/llm/free-provider-config';
 
 export const DEFAULT_PROVIDER_NAME = 'FREE';
 export const DEFAULT_MODEL_NAME = FREE_HOSTED_MODEL;
 
 export const PROVIDER_BASE_URL_ENV_KEYS: Record<string, { baseUrlKey?: string; apiTokenKey?: string }> = {
-  FREE: { apiTokenKey: 'FREE_OPENROUTER_API_KEY' },
+  FREE: { apiTokenKey: FREE_HOSTED_API_TOKEN_KEY },
   Anthropic: { apiTokenKey: 'ANTHROPIC_API_KEY' },
   AmazonBedrock: { apiTokenKey: 'AWS_BEDROCK_CONFIG' },
   Cerebras: { apiTokenKey: 'CEREBRAS_API_KEY' },

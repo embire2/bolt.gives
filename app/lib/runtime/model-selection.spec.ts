@@ -157,6 +157,13 @@ describe('model-selection utilities', () => {
       { name: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI', maxTokenAllowed: 16000 },
       { name: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', maxTokenAllowed: 128000 },
       {
+        name: 'gpt-5.6',
+        label: 'GPT-5.6',
+        provider: 'OpenAI',
+        maxTokenAllowed: 1000000,
+        maxCompletionTokens: 128000,
+      },
+      {
         name: 'gpt-5.5',
         label: 'GPT-5.5',
         provider: 'OpenAI',
@@ -179,7 +186,7 @@ describe('model-selection utilities', () => {
       savedModelName: 'also-missing',
     });
 
-    expect(resolved).toBe('gpt-5.5');
+    expect(resolved).toBe('gpt-5.6');
   });
 
   it('prefers current agentic coding models from newer providers', () => {
@@ -199,8 +206,8 @@ describe('model-selection utilities', () => {
   it('replaces a stale hidden FREE fallback selection with the visible hosted FREE model', () => {
     const models: ModelInfo[] = [
       {
-        name: 'deepseek/deepseek-v4-pro',
-        label: 'DeepSeek V4 Pro',
+        name: 'gpt-5.6',
+        label: 'MagnetAPI.org - ChatGPT-5.6',
         provider: 'FREE',
         maxTokenAllowed: 64000,
         maxCompletionTokens: 8192,
@@ -210,11 +217,11 @@ describe('model-selection utilities', () => {
     const resolved = resolvePreferredModelName({
       providerName: 'FREE',
       models,
-      rememberedModelName: 'deepseek/deepseek-v4-pro',
-      savedModelName: 'deepseek/deepseek-v4-pro',
+      rememberedModelName: 'gpt-5.6',
+      savedModelName: 'gpt-5.6',
     });
 
-    expect(resolved).toBe('deepseek/deepseek-v4-pro');
+    expect(resolved).toBe('gpt-5.6');
   });
 
   it('stores and retrieves provider model selections', () => {

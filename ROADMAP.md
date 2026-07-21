@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-01
+Last updated: 2026-07-21
 
 Status legend:
 
@@ -10,17 +10,33 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.0.9.32`
+- [x] `v3.1.0`
 
 Next release target:
 
-- [~] `v3.1.0`
+- [~] `v3.2.0`
 
-## v3.1.0 - In Progress
+## v3.2.0 - In Progress
+
+Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
+
+- [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
+- [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
+- [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
+- [ ] Harden Stripe webhook activation and custom-domain ownership verification.
+- [ ] Continue server-side reconciliation and CSS/editor splitting while preserving the v3.1.0 initial-route budget.
+- [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.1.0 - Shipped
 
 Release theme: harden hosted operations, updater safety, managed fleet observability, and prompt-to-preview reliability.
 
-### Shipped toward v3.1.0
+### Shipped in v3.1.0
+
+- [x] Move the protected hosted FREE path to MagnetAPI.org `gpt-5.6` using Responses API tool calls.
+- [x] Cut initial Chat assets by about 40% and enforce per-asset and route-level bundle budgets in production builds.
+- [x] Defer settings integrations, plugins, PDF export, Git cloning, and terminal assets until users request them.
+- [x] Reduce redundant connection, shoutbox, and notification polling on idle or hidden pages.
 
 - [x] Add a built-in web app updater banner at the top of every page when a newer release is available.
 - [x] Support optional updates that users can dismiss per version.
@@ -38,7 +54,7 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
-## v3.0.9.32 - Current Patch
+## v3.0.9.32 - Shipped Patch
 
 Release theme: keep hosted Vite previews quiet and professional on Cloudflare Pages.
 
@@ -450,7 +466,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] Header-level `Shout Out Box` messaging is available with unread tracking and a user-side settings toggle.
 - [x] Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
-## v3.1.0 - Launch Plan
+## v3.1.0 - Delivery Record
 
 Release theme: turn the current hosted reliability baseline into a more observable, reversible, and scalable platform for managed instances, teams, self-hosters, and common project templates.
 
@@ -473,7 +489,7 @@ Release theme: turn the current hosted reliability baseline into a more observab
 
 3. Prompt-to-preview quality
 
-- [x] Upgrade the managed hosted `FREE` model to OpenRouter `deepseek/deepseek-v4-pro` / `DeepSeek V4 Pro` across default startup, managed-instance, and E2E paths.
+- [x] Upgrade the managed hosted `FREE` model to MagnetAPI.org `gpt-5.6` / `MagnetAPI.org - ChatGPT-5.6` across default startup, managed-instance, and E2E paths.
 - [~] Ship first-party template packs for the most common app requests.
 - [~] Add CI smoke coverage for each first-party template pack.
 - [~] Reduce empty scaffold / starter-only outcomes on real user requests.
@@ -482,8 +498,8 @@ Release theme: turn the current hosted reliability baseline into a more observab
 4. Browser weight and runtime offload
 
 - [~] Push more preview/log reconciliation state entirely to the server.
-- [ ] Continue reducing heavy editor, PDF, git, terminal, and deploy chunks from startup paths.
-- [~] Add bundle budgets in CI so browser weight cannot silently regress.
+- [x] Remove PDF, Git, terminal, settings integrations, and plugin code from initial Chat routes until users request them.
+- [x] Enforce a 1 MB per-asset and 2 MB initial-route budget in production builds.
 - [~] Keep longer hosted sessions responsive on lower-end machines.
 
 5. Self-host installer resilience

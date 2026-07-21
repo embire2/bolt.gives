@@ -32,6 +32,10 @@ function resolveRatesPerMillion(providerName?: string, modelName?: string): { pr
   const normalizedProvider = (providerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const normalizedModel = (modelName || '').toLowerCase();
 
+  if (normalizedProvider === 'free' && normalizedModel.includes('gpt-5.6')) {
+    return { prompt: 0.125, completion: 1 };
+  }
+
   if (normalizedProvider === 'openai' || normalizedProvider === 'azureopenai' || normalizedProvider === 'github') {
     if (normalizedModel.includes('gpt-5.2-codex') || normalizedModel.includes('gpt-5.1-codex')) {
       return { prompt: 1.25, completion: 10 };

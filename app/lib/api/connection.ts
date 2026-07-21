@@ -17,43 +17,20 @@ export const checkConnection = async (): Promise<ConnectionStatus> => {
       };
     }
 
-    // Try multiple endpoints in case one fails
-    const endpoints = [
-      '/api/health',
-      '/', // Fallback to root route
-      '/favicon.ico', // Another common fallback
-    ];
-
-    let latency = 0;
-    let connected = false;
-
-    for (const endpoint of endpoints) {
-      try {
-        const start = performance.now();
-        const response = await fetch(endpoint, {
-          method: 'HEAD',
-          cache: 'no-cache',
-        });
-        const end = performance.now();
-
-        if (response.ok) {
-          latency = Math.round(end - start);
-          connected = true;
-          break;
-        }
-      } catch (endpointError) {
-        console.debug(`Failed to connect to ${endpoint}:`, endpointError);
-        continue;
-      }
-    }
+    const start = performance.now();
+    const response = await fetch('/api/health', {
+      method: 'HEAD',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    const latency = Math.round(performance.now() - start);
 
     return {
-      connected,
+      connected: response.ok,
       latency,
       lastChecked: new Date().toISOString(),
     };
-  } catch (error) {
-    console.error('Connection check failed:', error);
+  } catch {
     return {
       connected: false,
       latency: 0,

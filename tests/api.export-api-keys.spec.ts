@@ -24,7 +24,7 @@ describe('/api/export-api-keys', () => {
       context: {
         cloudflare: {
           env: {
-            FREE_OPENROUTER_API_KEY: 'server-free-key',
+            MAGNET_API_KEY: 'server-free-key',
             OPENAI_API_KEY: 'server-openai-key',
           },
         },

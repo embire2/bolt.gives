@@ -213,7 +213,7 @@ describe('api.chat continuation helpers', () => {
       parts: [
         {
           type: 'text',
-          text: '[Model: deepseek/deepseek-v4-pro]\n\n[Provider: FREE]\n\nAdd a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+          text: '[Model: gpt-5.6]\n\n[Provider: FREE]\n\nAdd a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
         },
       ],
     } as any;
@@ -307,7 +307,7 @@ describe('api.chat continuation helpers', () => {
           parts: [
             {
               type: 'text',
-              text: '[Model: deepseek/deepseek-v4-pro]\n\n[Provider: FREE]\n\nImprove the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
+              text: '[Model: gpt-5.6]\n\n[Provider: FREE]\n\nImprove the existing calendar and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',
             },
           ],
         },
@@ -525,7 +525,7 @@ describe('api.chat continuation helpers', () => {
 
   it('includes the latest execution failure details in the continuation prompt', () => {
     const prompt = buildRunContinuationPrompt({
-      model: 'deepseek/deepseek-v4-pro',
+      model: 'gpt-5.6',
       provider: 'FREE',
       originalRequest: 'Build a calendar app.',
       starterEntryTarget: 'src/App.tsx',
@@ -546,7 +546,7 @@ describe('api.chat continuation helpers', () => {
 
   it('includes missing exact visible text requirements in continuation prompts', () => {
     const prompt = buildRunContinuationPrompt({
-      model: 'deepseek/deepseek-v4-pro',
+      model: 'gpt-5.6',
       provider: 'FREE',
       originalRequest:
         'Improve the existing calendar project and add a visible agenda sidebar label containing the exact text "CAL_FUP_123".',

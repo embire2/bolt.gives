@@ -70,6 +70,10 @@ function scorePreferredModel(model: ModelInfo): number {
 
   let score = 0;
 
+  if (normalized.includes('gpt-5.6')) {
+    score += 1000;
+  }
+
   if (normalized.includes('gpt-5.5')) {
     score += 980;
   }

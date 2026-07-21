@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.1.0',
+    name: 'v3.1.0 faster startup and ChatGPT-5.6 FREE coding',
+    description:
+      'The protected FREE route now uses MagnetAPI.org ChatGPT-5.6 with Responses API tool calls, while optional settings, PDF, Git, terminal, and plugin code stay off the initial chat path for a substantially lighter workspace.',
+    releaseDate: '2026-07-21',
+  },
+  {
     id: 'release-v3.0.9.32',
     name: 'v3.0.9.32 quiet hosted Vite previews',
     description:

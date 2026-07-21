@@ -37,7 +37,7 @@ async function smokeTarget(baseUrl) {
       body: JSON.stringify({
         system: 'Reply with exactly OK.',
         message: 'OK?',
-        model: 'deepseek/deepseek-v4-pro',
+        model: 'gpt-5.6',
         provider: { name: 'FREE' },
         streamOutput: false,
       }),

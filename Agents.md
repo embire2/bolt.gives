@@ -4,17 +4,17 @@
 
 Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is visible, understandable, and verifiable while it happens. Users must be able to start a project, see files and Preview, send follow-up prompts, and understand what changed.
 
-Secondary objective: continue the `v3.1.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
+Secondary objective: continue the `v3.2.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v3.0.9.32`
+- Stable: `v3.1.0`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.32`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh`
-- In progress: `v3.1.0`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.1.0`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh`
+- In progress: `v3.2.0`
 
-`v3.0.9.32` is the current stable hosted and Linux self-host release. It keeps the focused Preview/Code workspace improvements, the deterministic Google Calendar first pass, the Cloudflare Pages collaboration transport fix, automatic runtime-node CLI provisioning, project publishing to bolt.gives subdomains, hosted FREE blocked-shell recovery, same-origin `bolt-gives.pages.dev` runtime proxying, shell-before-manifest Architect recovery, empty-context first-pass recovery, Pages preview checkpoint fix, calmer coding preview, and stricter hosted Vite preview health checks, then disables hosted Vite HMR in generated preview configs so Pages previews do not log repeated websocket 502 transport errors.
+`v3.1.0` is the current stable hosted and Linux self-host release. It moves the protected FREE provider to MagnetAPI.org ChatGPT-5.6 through the Responses API, preserves the prompt-to-preview and follow-up recovery baseline, and cuts initial Chat assets by about 40% by deferring optional settings, PDF, Git, terminal, and plugin code.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -55,7 +55,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Live commentary feed plus technical execution transparency.
 - Server-first hosted runtime for install, build, test, preview, and file sync.
 - Preview auto-recovery via server-side health checks.
-- Managed `FREE` provider locked to `deepseek/deepseek-v4-pro`.
+- Managed `FREE` provider locked to MagnetAPI.org model `gpt-5.6` through the server-side Responses API.
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
 - Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
@@ -63,7 +63,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 
-## v3.1.0 Priorities
+## v3.2.0 Priorities
 
 - Prompt-to-preview reliability for first generation and follow-up prompts.
 - History-aware project continuation using runtime snapshots and current workspace state.

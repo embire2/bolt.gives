@@ -26,7 +26,7 @@ describe('ensureFreeProviderAvailability', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('throws a rate-limit error when OpenRouter rejects the hosted model', async () => {
+  it('throws a rate-limit error when MagnetAPI rejects the hosted model', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce({
@@ -34,7 +34,7 @@ describe('ensureFreeProviderAvailability', () => {
         status: 429,
         json: async () => ({
           error: {
-            message: 'deepseek/deepseek-v4-pro is temporarily rate-limited upstream.',
+            message: 'gpt-5.6 is temporarily rate-limited upstream.',
           },
         }),
       }),
@@ -44,7 +44,7 @@ describe('ensureFreeProviderAvailability', () => {
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
         modelName: FREE_HOSTED_MODEL,
-        apiKey: 'sk-or-v1-real-secret',
+        apiKey: 'magnet-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_RATE_LIMITED');
   });
@@ -57,7 +57,7 @@ describe('ensureFreeProviderAvailability', () => {
         status: 402,
         json: async () => ({
           error: {
-            message: 'Insufficient credits. Add more using https://openrouter.ai/settings/credits',
+            message: 'Insufficient credits. Add wallet credit in MagnetAPI.',
           },
         }),
       }),
@@ -67,7 +67,7 @@ describe('ensureFreeProviderAvailability', () => {
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
         modelName: FREE_HOSTED_MODEL,
-        apiKey: 'sk-or-v1-real-secret',
+        apiKey: 'magnet-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_CREDITS_EXHAUSTED');
   });
@@ -78,7 +78,7 @@ describe('ensureFreeProviderAvailability', () => {
       status: 503,
       json: async () => ({
         error: {
-          message: 'openai/gpt-oss-120b:free is temporarily unavailable upstream.',
+          message: 'gpt-5.6 is temporarily unavailable upstream.',
         },
       }),
     });
@@ -88,12 +88,36 @@ describe('ensureFreeProviderAvailability', () => {
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
         modelName: FREE_HOSTED_MODEL,
-        apiKey: 'sk-or-v1-real-secret',
+        apiKey: 'magnet-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_UNAVAILABLE');
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.magnetapi.org/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+    );
     expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain(FREE_HOSTED_MODEL);
+    expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain('max_output_tokens');
+  });
+
+  it('preserves actionable top-level upstream errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'The selected model is warming up.' }),
+      }),
+    );
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'magnet-real-secret',
+      }),
+    ).rejects.toThrow('The selected model is warming up.');
   });
 
   it('caches a successful result for the same token fingerprint', async () => {
@@ -107,13 +131,13 @@ describe('ensureFreeProviderAvailability', () => {
     await ensureFreeProviderAvailability({
       providerName: FREE_PROVIDER_NAME,
       modelName: FREE_HOSTED_MODEL,
-      apiKey: 'sk-or-v1-real-secret',
+      apiKey: 'magnet-real-secret',
     });
     await expect(
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
         modelName: FREE_HOSTED_MODEL,
-        apiKey: 'sk-or-v1-real-secret',
+        apiKey: 'magnet-real-secret',
       }),
     ).resolves.toMatchObject({
       resolvedModelName: FREE_HOSTED_MODEL,
@@ -123,7 +147,7 @@ describe('ensureFreeProviderAvailability', () => {
       ensureFreeProviderAvailability({
         providerName: FREE_PROVIDER_NAME,
         modelName: FREE_HOSTED_MODEL,
-        apiKey: 'sk-or-v1-real-secret',
+        apiKey: 'magnet-real-secret',
       }),
     ).resolves.toMatchObject({
       resolvedModelName: FREE_HOSTED_MODEL,

@@ -28,6 +28,10 @@ function toSafeChunkSuffix(value: string) {
 }
 
 export function getManualChunkName(id: string): string | undefined {
+  if (id.includes('vite/preload-helper')) {
+    return 'vite-preload-helper';
+  }
+
   if (!id.includes('node_modules')) {
     return undefined;
   }
@@ -154,12 +158,24 @@ export function getManualChunkName(id: string): string | undefined {
     return 'charts-react';
   }
 
-  if (matchPackage(id, ['jspdf'])) {
-    return 'pdf-export';
+  if (matchPackage(id, ['react-toastify'])) {
+    return 'ui-toast';
   }
 
-  if (matchPackage(id, ['@radix-ui', '@headlessui', 'framer-motion', 'lucide-react', 'react-toastify'])) {
-    return 'ui-vendor';
+  if (matchPackage(id, ['framer-motion'])) {
+    return 'ui-motion';
+  }
+
+  if (matchPackage(id, ['@radix-ui'])) {
+    return 'ui-radix';
+  }
+
+  if (matchPackage(id, ['@headlessui'])) {
+    return 'ui-headless';
+  }
+
+  if (matchPackage(id, ['lucide-react'])) {
+    return 'ui-lucide';
   }
 
   if (matchPackage(id, ['@ai-sdk', 'ai', '@openrouter', 'ollama-ai-provider', 'zod'])) {

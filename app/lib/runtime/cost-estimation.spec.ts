@@ -63,6 +63,19 @@ describe('cost-estimation', () => {
     expect(cost).toBeGreaterThan(0);
   });
 
+  it('uses MagnetAPI ten-percent rates for the hosted FREE model', () => {
+    const cost = estimateCostUSD({
+      providerName: 'FREE',
+      modelName: 'gpt-5.6',
+      usage: {
+        promptTokens: 1000,
+        completionTokens: 1000,
+      },
+    });
+
+    expect(cost).toBeCloseTo(0.001125, 8);
+  });
+
   it('formats very small non-zero values without collapsing to 0.0000', () => {
     const formatted = formatCostUSD(0.000005);
     expect(formatted).toBe('$0.000005');

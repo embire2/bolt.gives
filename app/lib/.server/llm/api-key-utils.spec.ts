@@ -80,10 +80,10 @@ describe('api-key-utils', () => {
         FREE: 'user-supplied-free-key',
       },
       runtimeEnv: {
-        FREE_OPENROUTER_API_KEY: 'env-free-key',
+        MAGNET_API_KEY: 'env-free-key',
       },
       providerTokenKeyByName: {
-        FREE: 'FREE_OPENROUTER_API_KEY',
+        FREE: 'MAGNET_API_KEY',
       },
       serverManagedProviderNames: ['FREE'],
     });
@@ -98,7 +98,7 @@ describe('api-key-utils', () => {
       },
       runtimeEnv: {},
       providerTokenKeyByName: {
-        FREE: 'FREE_OPENROUTER_API_KEY',
+        FREE: 'MAGNET_API_KEY',
       },
       serverManagedProviderNames: ['FREE'],
     });

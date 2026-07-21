@@ -16,7 +16,7 @@ import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
 import { shouldEnableBuiltInWebTools } from './tool-intent';
 import { ensureFreeProviderAvailability } from './free-provider-preflight';
-import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
+import { FREE_HOSTED_API_TOKEN_KEY, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 
 export type Messages = Message[];
@@ -57,6 +57,10 @@ function scoreModelForFallback(model: {
   }
 
   let score = 0;
+
+  if (normalized.includes('gpt-5.6')) {
+    score += 950;
+  }
 
   if (normalized.includes('gpt-5.4')) {
     score += 900;
@@ -530,8 +534,8 @@ export async function streamText(props: {
     const envRecord = serverEnv as Record<string, string | undefined> | undefined;
     const preflightApiKey =
       normalizeCredential(apiKeys?.[provider.name]) ||
-      normalizeCredential(envRecord?.FREE_OPENROUTER_API_KEY) ||
-      normalizeCredential(process?.env?.FREE_OPENROUTER_API_KEY);
+      normalizeCredential(envRecord?.[FREE_HOSTED_API_TOKEN_KEY]) ||
+      normalizeCredential(process?.env?.[FREE_HOSTED_API_TOKEN_KEY]);
 
     await ensureFreeProviderAvailability({
       providerName: provider.name,

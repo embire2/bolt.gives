@@ -1180,7 +1180,7 @@ Local PostgreSQL:
 Next steps:
   1. Ensure your DNS A records point the chosen app/admin/create domains at this VPS before relying on public HTTPS.
   2. Edit ${INSTALL_DIR}/.env.local and add any provider keys you want to use.
-     Keep server-side secrets such as FREE_OPENROUTER_API_KEY private; never place them in browser code or commits.
+     Keep server-side secrets such as MAGNET_API_KEY private; never place them in browser code or commits.
   3. Sign in to the private operator panel with the username above and the password you chose during install.
      The installer seeds the local tenant registry with that private password and does not store the raw value in Git or browser code.
   4. Restart services after editing secrets:

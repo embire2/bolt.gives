@@ -2,20 +2,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, { clearHostedFreeModelResolution } from './free';
 import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL } from '~/lib/modules/llm/free-provider-config';
 
-const { chatSpy, createOpenRouterSpy } = vi.hoisted(() => {
-  const chatSpy = vi.fn();
-  const createOpenRouterSpy = vi.fn(() => ({
-    chat: chatSpy,
+const { responsesSpy, createOpenAISpy } = vi.hoisted(() => {
+  const responsesSpy = vi.fn();
+  const createOpenAISpy = vi.fn(() => ({
+    responses: responsesSpy,
   }));
 
   return {
-    chatSpy,
-    createOpenRouterSpy,
+    responsesSpy,
+    createOpenAISpy,
   };
 });
 
-vi.mock('@openrouter/ai-sdk-provider', () => ({
-  createOpenRouter: createOpenRouterSpy,
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: createOpenAISpy,
 }));
 
 describe('FreeProvider', () => {
@@ -25,28 +25,30 @@ describe('FreeProvider', () => {
     clearHostedFreeModelResolution();
   });
 
-  it('uses the dedicated server-side OpenRouter key and hard-locks the hosted FREE model', () => {
+  it('uses the dedicated server-side MagnetAPI key and Responses transport for the locked FREE model', () => {
     const provider = new FreeProvider();
     const modelInstance = { id: 'free-model-instance' };
-    chatSpy.mockReturnValue(modelInstance);
+    responsesSpy.mockReturnValue(modelInstance);
 
     const result = provider.getModelInstance({
       model: 'openai/gpt-4o',
       serverEnv: {
-        FREE_OPENROUTER_API_KEY: 'sk-or-free',
+        MAGNET_API_KEY: 'magnet-test-key',
       } as unknown as Env,
     });
 
-    expect(createOpenRouterSpy).toHaveBeenCalledWith({
-      apiKey: 'sk-or-free',
+    expect(createOpenAISpy).toHaveBeenCalledWith({
+      apiKey: 'magnet-test-key',
+      baseURL: 'https://api.magnetapi.org/v1',
+      compatibility: 'strict',
     });
-    expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
+    expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {
     const provider = new FreeProvider();
-    vi.stubEnv('FREE_OPENROUTER_API_KEY', '');
+    vi.stubEnv('MAGNET_API_KEY', '');
 
     expect(() =>
       provider.getModelInstance({
@@ -59,20 +61,22 @@ describe('FreeProvider', () => {
   it('accepts the hydrated server-managed key when it is supplied through apiKeys', () => {
     const provider = new FreeProvider();
     const modelInstance = { id: 'free-model-instance' };
-    chatSpy.mockReturnValue(modelInstance);
+    responsesSpy.mockReturnValue(modelInstance);
 
     const result = provider.getModelInstance({
       model: FREE_HOSTED_MODEL,
       serverEnv: {} as Env,
       apiKeys: {
-        FREE: 'sk-or-free',
+        FREE: 'magnet-relayed-key',
       },
     });
 
-    expect(createOpenRouterSpy).toHaveBeenCalledWith({
-      apiKey: 'sk-or-free',
+    expect(createOpenAISpy).toHaveBeenCalledWith({
+      apiKey: 'magnet-relayed-key',
+      baseURL: 'https://api.magnetapi.org/v1',
+      compatibility: 'strict',
     });
-    expect(chatSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
+    expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
   });
 

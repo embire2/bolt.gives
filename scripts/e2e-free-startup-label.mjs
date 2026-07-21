@@ -38,7 +38,7 @@ try {
 
       return (
         comboboxText.some((text) => text.includes('FREE')) &&
-        comboboxText.some((text) => text.includes('DeepSeek V4 Pro'))
+        comboboxText.some((text) => text.includes('MagnetAPI.org - ChatGPT-5.6'))
       );
     },
     { timeout: 90000 },
@@ -52,8 +52,8 @@ try {
     throw new Error(`Expected FREE provider on startup, received: ${providerText}`);
   }
 
-  if (!modelText.includes('DeepSeek V4 Pro')) {
-    throw new Error(`Expected DeepSeek V4 Pro model label on startup, received: ${modelText}`);
+  if (!modelText.includes('MagnetAPI.org - ChatGPT-5.6')) {
+    throw new Error(`Expected MagnetAPI.org - ChatGPT-5.6 model label on startup, received: ${modelText}`);
   }
 
   await page.screenshot({

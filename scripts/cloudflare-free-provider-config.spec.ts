@@ -12,21 +12,21 @@ describe('cloudflare FREE provider config helpers', () => {
     const plainEnv = buildHostedFreeRelayPlainEnv({
       hostedFreeRelayOrigin: 'https://bolt.gives/',
       runtimeControlPublicUrl: 'https://bolt.gives/runtime/',
-      freeOpenRouterApiKey: 'must-not-be-used',
+      magnetApiKey: 'must-not-be-used',
     });
 
     expect(plainEnv).toEqual({
       BOLT_HOSTED_FREE_RELAY_ORIGIN: 'https://bolt.gives',
       BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://bolt.gives/runtime',
     });
-    expect(plainEnv).not.toHaveProperty('FREE_OPENROUTER_API_KEY');
+    expect(plainEnv).not.toHaveProperty('MAGNET_API_KEY');
   });
 
   it('syncs relay and quota secrets without using the upstream model key', () => {
     const secrets = buildFreeProviderSecretValues({
       BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
       BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
-      FREE_OPENROUTER_API_KEY: 'must-not-be-used',
+      MAGNET_API_KEY: 'must-not-be-used',
     });
 
     expect(secrets).toEqual({
@@ -80,7 +80,7 @@ describe('cloudflare FREE provider config helpers', () => {
       type: 'secret_text',
       value: 'quota-secret',
     });
-    expect(JSON.stringify(merged)).not.toContain('FREE_OPENROUTER_API_KEY');
+    expect(JSON.stringify(merged)).not.toContain('MAGNET_API_KEY');
   });
 
   it('targets the canonical Pages project plus active managed projects only when requested', () => {

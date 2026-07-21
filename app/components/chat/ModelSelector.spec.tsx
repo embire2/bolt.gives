@@ -28,8 +28,8 @@ const freeProvider: ProviderInfo = {
   allowsUserApiKey: false,
   staticModels: [
     {
-      name: 'deepseek/deepseek-v4-pro',
-      label: 'DeepSeek V4 Pro',
+      name: 'gpt-5.6',
+      label: 'MagnetAPI.org - ChatGPT-5.6',
       provider: 'FREE',
       maxTokenAllowed: 64000,
     },
@@ -65,13 +65,13 @@ describe('ModelSelector', () => {
       <ModelSelector
         provider={freeProvider}
         providerList={[freeProvider]}
-        model="deepseek/deepseek-v4-pro"
+        model="gpt-5.6"
         modelList={[]}
         apiKeys={{}}
       />,
     );
 
-    expect(screen.getAllByRole('combobox')[1].textContent).toContain('DeepSeek V4 Pro');
+    expect(screen.getAllByRole('combobox')[1].textContent).toContain('MagnetAPI.org - ChatGPT-5.6');
     expect(screen.queryByText('Select model')).toBeNull();
   });
 });

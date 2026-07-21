@@ -53,9 +53,17 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.0.9.32`)
+## Current Release (`v3.1.0`)
 
-`v3.0.9.32` is the current stable hosted release. It keeps the focused Preview/Code workspace improvements, Cloudflare Pages transport hotfix, dedicated runtime-node setup wizard, automatic Ubuntu CLI workspace provisioning, calmer preview repair, hosted `FREE` blocked-shell recovery, project publishing to `https://{subdomain}.bolt.gives`, canonical same-origin Cloudflare Pages previews, shell-before-manifest recovery, empty-context first-pass recovery, Pages preview checkpoint fix, calmer coding preview, and stricter hosted Vite preview health, then suppresses unnecessary Vite HMR websocket noise on hosted preview configs.
+`v3.1.0` is the current stable hosted and self-hosted release. It preserves the first-pass preview, history-aware follow-up, runtime-node, publishing, updater, and fleet-observability work from the v3.0.9 line while making the coding path substantially lighter and moving the protected FREE model to MagnetAPI.org ChatGPT-5.6.
+
+### v3.1.0 highlights
+
+- Protected `FREE` coding now uses MagnetAPI.org model `gpt-5.6` through the OpenAI-compatible Responses API, preserving structured tool calls without exposing the operator token to browsers or managed Pages projects.
+- Initial `/chat` assets fell from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files, about 40% fewer bytes and 46% fewer initial requests.
+- Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.
+- Health, notification, and Shout Out Box polling perform less idle work, pause or slow down where appropriate, and persist acknowledged connection states.
+- `pnpm run build` now enforces a 1 MB per-asset and 2 MB initial-route budget under a 3 GB heap ceiling.
 
 ### Quiet hosted Vite previews
 
@@ -159,17 +167,17 @@ The updater creates a rollback branch, stashes local uncommitted changes, fetche
 
 ### Linux release package
 
-The `v3.0.9.32` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.1.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.0.9.32`](https://github.com/embire2/bolt.gives/releases/tag/v3.0.9.32)
+- Release: [`v3.1.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.1.0)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh)
-- Release commit: see the `v3.0.9.32` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh)
+- Release commit: see the `v3.1.0` GitHub tag once published.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.0.9.32/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -214,11 +222,11 @@ Bring-your-own-key model support has also been refreshed for current coding-capa
 
 `v3.0.9.3` restored web browsing reliability and made direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.
 
-Large hosted model update: the managed `FREE` provider now uses OpenRouter model `deepseek/deepseek-v4-pro`, displayed as `DeepSeek V4 Pro`, through the protected server-side route. Managed instances and self-hosted deployments that configure `FREE_OPENROUTER_API_KEY` inherit that same locked model without exposing the operator-funded key to the browser.
+Large hosted model update: the managed `FREE` provider now uses MagnetAPI.org model `gpt-5.6`, displayed as `MagnetAPI.org - ChatGPT-5.6`, through the protected server-side route. Managed instances and self-hosted deployments that configure `MAGNET_API_KEY` inherit that same locked model without exposing the operator-funded key to the browser.
 
 `v3.0.9.2` restored managed Cloudflare trial coding by allowing credentialed hosted `FREE` relay calls through the server CSRF gate for chat routes, then verifying the shared relay secret through the runtime verifier before any model call is allowed. The compact Workspace Activity drawer from `v3.0.9.1` remains in place, so generated files and preview remain visible while live progress continues updating.
 
-The hosted `FREE` path is locked to `DeepSeek V4 Pro` and stays server-side. Project creation now applies deterministic starter bootstrap for hosted FREE runs, syncs completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
+The hosted `FREE` path is locked to MagnetAPI.org ChatGPT-5.6 and stays server-side. Project creation applies deterministic starter bootstrap for hosted FREE runs, syncs completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
 The browser startup path keeps preview/deploy controls out of the initial header chunk until chat starts. This preserves deploy access once a preview exists without reintroducing workbench initialization cycles during landing-page hydration.
 
@@ -230,9 +238,9 @@ Managed Cloudflare instances are registration-first, one-client / one-instance e
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, fleet summary cards, deployment history, last-good SHA, healthcheck and rollback outcome visibility, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, Caddy-managed HTTPS, and a committed installer smoke command.
 
-## Roadmap to v3.1.0
+## Roadmap to v3.2.0
 
-`v3.1.0` is the next platform-hardening release. The focus is managed-instance rollout observability, rollback, tenant/RBAC hardening, first-party template packs, stronger release gates, and continued browser-weight reduction.
+`v3.2.0` is the next platform-hardening release. The focus is completing account lifecycle/RBAC work, broader template smoke coverage, auditable collaboration/runtime quotas, publishing verification, installer resilience, and continued server-side runtime offload.
 
 ### Launch blockers
 
@@ -247,11 +255,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 - Tighten Cloudflare managed-instance lifecycle around health-verified updates and rollback.
 - Expand operator visibility inside `admin.bolt.gives` with trial capacity, deployment state, and outbound communication history.
-- Keep the built-in `FREE` + `DeepSeek V4 Pro` path reliable across hosted, Pages, and managed instances.
+- Keep the built-in `FREE` + MagnetAPI.org ChatGPT-5.6 path reliable across hosted, Pages, and managed instances.
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.0.9.24`)
+## Current Platform Baseline (`v3.1.0`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
@@ -263,8 +271,8 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
-- Hosted `FREE` provider ships locked to `DeepSeek V4 Pro` through a protected server-side OpenRouter route.
-- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `FREE_OPENROUTER_API_KEY` in managed/customer projects.
+- Hosted `FREE` provider ships locked to MagnetAPI.org model `gpt-5.6` through a protected server-side Responses API route.
+- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `MAGNET_API_KEY` in managed/customer projects.
 - Cloudflare Pages and managed fleet hosts use the central collaboration WebSocket transport at `wss://bolt.gives/collab`, avoiding same-host `/collab` 404s on Pages domains.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
 - The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.
@@ -491,18 +499,18 @@ bolt.gives core still does not require an external hosted database, but the full
 
 Important:
 
-- keep `FREE_OPENROUTER_API_KEY` on the server only
+- keep `MAGNET_API_KEY` on the canonical server only
 - keep any `OPENAI_API_KEY`, `OPEN_ROUTER_API_KEY`, or other provider secrets on the server only unless the user intentionally wants browser-local key entry
 - never commit `.env.local`
 
 Hosted-instance note:
 
-- If you run a managed/shared instance, you can define `FREE_OPENROUTER_API_KEY` server-side to expose a locked hosted coder without exposing the token to users.
+- If you run a managed/shared instance, define `MAGNET_API_KEY` on the canonical server to expose the locked hosted coder without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
-- The hosted `FREE` coder is pinned to `deepseek/deepseek-v4-pro`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
-- Managed Cloudflare instances do not receive the OpenRouter key itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
+- The hosted `FREE` coder is pinned to MagnetAPI.org model `gpt-5.6`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
+- Managed Cloudflare instances do not receive the MagnetAPI token itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 - Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay and quota config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
-- Hosted FREE relay authorization now falls back to the local runtime service on the operator host, so the built-in `DeepSeek V4 Pro` path keeps working on Pages-hosted managed trials without asking the user for their own API key.
+- Hosted FREE relay authorization falls back to the local runtime service on the operator host, so the built-in MagnetAPI.org ChatGPT-5.6 path works on Pages-hosted managed trials without asking users for their own API key.
 - Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
 - Live browser E2E checks now require generated and follow-up tokens to persist in the hosted runtime snapshot, with bounded snapshot/status fetch timeouts so release validation cannot hang silently.
@@ -725,14 +733,14 @@ In Cloudflare Pages, open:
 
 Set at least:
 
-- `NODE_OPTIONS=--max-old-space-size=6142`
+- `NODE_OPTIONS=--max-old-space-size=3072`
 
 Optional, depending on how they want the AI runtime to behave:
 
-- `FREE_OPENROUTER_API_KEY=...`
+- `MAGNET_API_KEY=...`
   - Use this only if they want the built-in hosted `FREE` provider to work on **their** deployment.
   - This stays server-side in Cloudflare. It is **not** exposed to browser users.
-  - The shipped FREE path is locked to `deepseek/deepseek-v4-pro`.
+  - The shipped FREE path is locked to MagnetAPI.org model `gpt-5.6`.
 - `BOLT_FREE_DAILY_USD_LIMIT=1`
   - Optional override for hosted `FREE` daily spend per person.
   - The default is `$1` and the ledger resets at `00:00 GMT+2`.
@@ -747,9 +755,9 @@ Optional, depending on how they want the AI runtime to behave:
 
 Important:
 
-- The open-source app does **not** expose `FREE_OPENROUTER_API_KEY` to end users.
-- If a user wants their deployment to ship with a working FREE coder immediately after install, they need to set `FREE_OPENROUTER_API_KEY` in Cloudflare for their own project.
-- Hosted operator deployments should keep `FREE_OPENROUTER_API_KEY` only on the canonical server/runtime and send managed Pages projects relay credentials instead.
+- The open-source app does **not** expose `MAGNET_API_KEY` to end users.
+- If an operator wants a deployment to ship with a working FREE coder, set `MAGNET_API_KEY` only on the canonical server/runtime.
+- Hosted operator deployments send managed Pages projects relay credentials, never the MagnetAPI token.
 
 ### 6. First deploy
 
@@ -763,7 +771,7 @@ On first load, the expected default UX is:
 
 - land on `Chat`
 - provider already set to `FREE`
-- model label already showing `DeepSeek V4 Pro`
+- model label already showing `MagnetAPI.org - ChatGPT-5.6`
 
 ### 7. Give the user their own subdomain
 
@@ -797,13 +805,13 @@ If they want a soak-test instance:
 
 If the build runs out of memory:
 
-- confirm `NODE_OPTIONS=--max-old-space-size=6142` is set in Pages
+- confirm at least 3 GB of Node heap plus adequate system memory or swap is available
 - confirm the build command is exactly:
-  - `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
+  - `pnpm run build`
 
 If the UI loads but the FREE provider does not work:
 
-- confirm `FREE_OPENROUTER_API_KEY` is set in the Cloudflare Pages environment
+- confirm `MAGNET_API_KEY` is set on the canonical server/runtime, not on managed Pages projects
 - confirm the canonical runtime has a hosted FREE quota secret available through `BOLT_FREE_USAGE_QUOTA_SECRET` or `BOLT_HOSTED_FREE_RELAY_SECRET`
 - for the hosted operator fleet, run `pnpm run cloudflare:sync-free-provider -- --include-managed` so Pages projects receive the relay secret, quota secret, and control origin while keeping the upstream model key on the operator host
 - run `pnpm run smoke:free-provider` and check that each target returns `200`

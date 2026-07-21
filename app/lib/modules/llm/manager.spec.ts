@@ -9,7 +9,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', provider: 'FREE' }],
+            staticModels: [{ name: 'gpt-5.6', label: 'MagnetAPI.org - ChatGPT-5.6', provider: 'FREE' }],
           },
         ],
         [
@@ -29,10 +29,7 @@ describe('LLMManager.updateModelList', () => {
       },
     });
 
-    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual([
-      'FREE:deepseek/deepseek-v4-pro',
-      'OpenAI:gpt-5.4',
-    ]);
+    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['OpenAI:gpt-5.4', 'FREE:gpt-5.6']);
   });
 
   it('respects providers explicitly disabled in settings', async () => {
@@ -42,7 +39,7 @@ describe('LLMManager.updateModelList', () => {
           'FREE',
           {
             name: 'FREE',
-            staticModels: [{ name: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', provider: 'FREE' }],
+            staticModels: [{ name: 'gpt-5.6', label: 'MagnetAPI.org - ChatGPT-5.6', provider: 'FREE' }],
           },
         ],
         [
@@ -63,6 +60,6 @@ describe('LLMManager.updateModelList', () => {
       },
     });
 
-    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:deepseek/deepseek-v4-pro']);
+    expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(['FREE:gpt-5.6']);
   });
 });

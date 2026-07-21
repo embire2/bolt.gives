@@ -41,8 +41,8 @@ describe('prompt selection', () => {
 
   it('uses the hosted FREE build prompt for the hosted FREE provider', () => {
     const model: ModelInfo = {
-      name: 'deepseek/deepseek-v4-pro',
-      label: 'DeepSeek V4 Pro',
+      name: 'gpt-5.6',
+      label: 'MagnetAPI.org - ChatGPT-5.6',
       provider: 'FREE',
       maxTokenAllowed: 131072,
       maxCompletionTokens: 8192,

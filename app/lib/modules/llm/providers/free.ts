@@ -1,8 +1,10 @@
 import type { LanguageModelV1 } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenAI } from '@ai-sdk/openai';
 import { BaseProvider } from '~/lib/modules/llm/base-provider';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import {
+  FREE_HOSTED_API_BASE_URL,
+  FREE_HOSTED_API_TOKEN_KEY,
   FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_LABEL,
   FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
@@ -28,7 +30,7 @@ export default class FreeProvider extends BaseProvider {
   allowsUserApiKey = false;
 
   config = {
-    apiTokenKey: 'FREE_OPENROUTER_API_KEY',
+    apiTokenKey: FREE_HOSTED_API_TOKEN_KEY,
   };
 
   staticModels: ModelInfo[] = [FREE_HOSTED_MODEL_INFO];
@@ -45,17 +47,19 @@ export default class FreeProvider extends BaseProvider {
       providerSettings: providerSettings?.[this.name],
       serverEnv: serverEnv as any,
       defaultBaseUrlKey: '',
-      defaultApiTokenKey: 'FREE_OPENROUTER_API_KEY',
+      defaultApiTokenKey: FREE_HOSTED_API_TOKEN_KEY,
     });
 
     if (!apiKey) {
       throw new Error(`Missing API key for ${this.name} provider`);
     }
 
-    const openRouter = createOpenRouter({
+    const magnetApi = createOpenAI({
       apiKey,
+      baseURL: FREE_HOSTED_API_BASE_URL,
+      compatibility: 'strict',
     });
 
-    return openRouter.chat(FREE_HOSTED_MODEL) as LanguageModelV1;
+    return magnetApi.responses(FREE_HOSTED_MODEL) as LanguageModelV1;
   }
 }

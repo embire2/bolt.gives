@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.0.9.32`
-- In progress: `v3.1.0`
+- Stable: `v3.1.0`
+- In progress: `v3.2.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
 
@@ -46,7 +46,8 @@ The current hosted product baseline is:
 - Preview auto-recovery via server-side health checks
 - Managed `FREE` provider locked to one hosted model:
   - provider: `FREE`
-  - model: `deepseek/deepseek-v4-pro`
+  - model: `gpt-5.6`
+  - upstream: MagnetAPI.org Responses API
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`
@@ -90,7 +91,7 @@ When changing hosted runtime behavior, validate both the app service and the run
 - Keep behavior changes explicit in commit messages and docs.
 - If you encounter unexpected unrelated file modifications while editing, stop and assess before overwriting them.
 
-## v3.1.0 Priorities
+## v3.2.0 Priorities
 
 These are the current release priorities:
 

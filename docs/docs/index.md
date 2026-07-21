@@ -98,7 +98,7 @@ If you deploy this repo via Cloudflare Pages:
 - Root directory: `/`
 - Build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
 - Build output directory: `build/client`
-- If you want the built-in hosted FREE coder on your own deployment, set `FREE_OPENROUTER_API_KEY` in the Pages environment settings
+- If you operate a hosted FREE coder on your own deployment, set `MAGNET_API_KEY` only in the server environment
 - If your build fails with out-of-memory, confirm `NODE_OPTIONS=--max-old-space-size=6142` is set in the Pages build environment
 - For the full step-by-step setup guide, use the `Deploying To Cloudflare Pages` section in `README.md`
 

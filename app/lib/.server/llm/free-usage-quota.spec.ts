@@ -69,7 +69,7 @@ describe('hosted FREE usage quota client', () => {
     ).rejects.toThrow('FREE_PROVIDER_DAILY_LIMIT_EXCEEDED');
   });
 
-  it('records estimated DeepSeek V4 Pro usage cost against the runtime quota ledger', async () => {
+  it('records estimated MagnetAPI ChatGPT-5.6 usage cost against the runtime quota ledger', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -95,7 +95,7 @@ describe('hosted FREE usage quota client', () => {
       request: new Request('https://bolt.gives/api/chat'),
       runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
       providerName: 'FREE',
-      modelName: 'deepseek/deepseek-v4-pro',
+      modelName: 'gpt-5.6',
       usage: {
         promptTokens: 1000,
         completionTokens: 1000,
@@ -106,9 +106,9 @@ describe('hosted FREE usage quota client', () => {
 
     const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4321/runtime/internal/free-usage-quota/record');
-    expect(requestBody.costUsd).toBeCloseTo(0.01, 6);
+    expect(requestBody.costUsd).toBeCloseTo(0.001125, 8);
     expect(requestBody.limitUsd).toBe(1);
     expect(requestBody.providerName).toBe('FREE');
-    expect(requestBody.modelName).toBe('deepseek/deepseek-v4-pro');
+    expect(requestBody.modelName).toBe('gpt-5.6');
   });
 });

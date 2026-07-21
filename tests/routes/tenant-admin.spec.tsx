@@ -113,7 +113,7 @@ describe('TenantAdminPage', () => {
           pageUrl: 'https://alpha1.bolt.gives',
           appVersion: '3.0.9.3',
           provider: 'FREE',
-          model: 'deepseek/deepseek-v4-pro',
+          model: 'gpt-5.6',
           browser: 'Firefox',
           userAgent: 'Mozilla/5.0',
           status: 'new',

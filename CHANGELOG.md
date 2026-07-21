@@ -1,12 +1,19 @@
 # Changelog
 
-## Unreleased (`v3.1.0` in progress)
+## Unreleased
 
-- `v3.1.0` is now opened as the next roadmap target, focused on managed-instance rollout observability, tenant/RBAC hardening, template packs, and stronger release gates.
+- No unreleased changes yet.
+
+## v3.1.0 (2026-07-21)
 
 ### Changed
 
-- Large hosted model update: the managed `FREE` provider now locks to OpenRouter model `deepseek/deepseek-v4-pro` with the visible `DeepSeek V4 Pro` label across hosted, Pages, and managed-instance startup paths.
+- Large hosted model update: the managed `FREE` provider now locks to MagnetAPI.org model `gpt-5.6`, displayed as `MagnetAPI.org - ChatGPT-5.6`, across hosted, Pages, and managed-instance startup paths.
+- The FREE adapter uses MagnetAPI's OpenAI-compatible Responses API so agent tool calls remain structured; the operator token stays on the canonical server and is never included in browser or managed Pages payloads.
+- The hosted FREE daily quota now estimates `gpt-5.6` usage at MagnetAPI's documented 10% of the existing GPT-5 reference rates instead of the previous generic-provider fallback.
+- Initial `/chat` assets dropped from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files by deferring settings integrations, plugins, PDF export, Git cloning, and terminal assets until requested.
+- Production builds now enforce a 1 MB per-asset and 2 MB initial-route budget, and the normal build heap ceiling was reduced from 8 GB to 3 GB for more predictable self-host builds.
+- Connection health checks now use one bounded `/api/health` probe every 30 seconds, Shout Out Box polling slows while closed and pauses in hidden tabs, and notification state no longer creates a redundant timer for every log update.
 - The public contributor application form has been retired to stop spam. `/contribute` now renders a no-form GitHub contribution page and POST submissions return `410 Gone` without emailing the operator inbox.
 - Hosted `FREE` managed-instance runs now use deterministic starter bootstrap before model continuation, preventing empty runtime workspaces when a model initially emits inspection-only shell actions.
 - The Appointment Scheduler first-party template pack now materializes a real React first-pass app with calendar slots,
@@ -15,6 +22,7 @@
 
 ### Added
 
+- Regression coverage now protects MagnetAPI preflight errors, Responses API selection, server-only FREE credentials, connection acknowledgement persistence, lazy settings loading, and initial-route bundle budgets.
 - Built-in web app updater now exposes a root-level update banner on every page, supports optional dismissal, blocks the app with a mandatory update modal when release policy requires it, shows release features, and streams live update progress over Server-Sent Events.
 - The self-update flow now creates a rollback checkpoint, preserves local working tree changes in a git stash before resetting to `origin/main`, installs dependencies, builds the updated app, and schedules service restart for production systemd deployments.
 - Release policy parsing now lets operators mark GitHub Releases as `Update policy: optional` or `Update policy: mandatory`, with `BOLT_UPDATE_POLICY` and `BOLT_MANDATORY_UPDATE_VERSION` overrides for self-hosted/operator environments.

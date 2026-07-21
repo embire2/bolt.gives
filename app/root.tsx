@@ -11,8 +11,6 @@ import { cssTransition, ToastContainer } from 'react-toastify';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
-import xtermStyles from '@xterm/xterm/css/xterm.css?url';
-import { PluginManager } from './lib/services/pluginManager';
 import { CursorGlow } from './components/ui/CursorGlow';
 import { PublicUrlConfigProvider } from './lib/public-url-context';
 import { getPublicUrlConfig } from './lib/public-urls';
@@ -42,7 +40,6 @@ export const links: LinksFunction = () => [
   { rel: 'stylesheet', href: reactToastifyStyles },
   { rel: 'stylesheet', href: tailwindReset },
   { rel: 'stylesheet', href: globalStyles },
-  { rel: 'stylesheet', href: xtermStyles },
   {
     rel: 'preconnect',
     href: 'https://fonts.googleapis.com',
@@ -178,9 +175,19 @@ export default function App() {
         });
     }
 
-    PluginManager.loadInstalledPlugins().catch(() => {
-      // Plugin loading is optional and should not block app startup.
-    });
+    try {
+      const installedPlugins = window.localStorage.getItem('bolt_installed_plugins');
+
+      if (installedPlugins && installedPlugins !== '[]') {
+        import('./lib/services/pluginManager')
+          .then(({ PluginManager: pluginManager }) => pluginManager.loadInstalledPlugins())
+          .catch(() => {
+            // Plugin loading is optional and should not block app startup.
+          });
+      }
+    } catch {
+      // Restricted storage must not block the core coding workspace.
+    }
   }, []);
 
   return (

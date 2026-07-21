@@ -42,7 +42,7 @@ function getCurrentProvider() {
 }
 
 function getCurrentModel() {
-  return Cookies.get('selectedModel') || 'deepseek/deepseek-v4-pro';
+  return Cookies.get('selectedModel') || 'gpt-5.6';
 }
 
 function getBrowserLabel() {

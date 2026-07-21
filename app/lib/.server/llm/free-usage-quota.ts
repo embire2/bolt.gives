@@ -1,4 +1,8 @@
-import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
+import {
+  FREE_HOSTED_API_TOKEN_KEY,
+  FREE_HOSTED_MODEL,
+  FREE_PROVIDER_NAME,
+} from '~/lib/modules/llm/free-provider-config';
 import { estimateCostUSD } from '~/lib/runtime/cost-estimation';
 import { normalizeUsage, type UsageLike } from '~/lib/runtime/usage';
 import { parseCookies } from '~/lib/api/cookies';
@@ -106,7 +110,7 @@ async function sha256Hex(input: string) {
 export async function buildFreeUsageQuotaSubjectHash(options: { request: Request; runtimeEnv?: RuntimeEnv }) {
   const secret =
     getFreeUsageQuotaSecret(options.runtimeEnv) ||
-    normalizeCredential(options.runtimeEnv?.FREE_OPENROUTER_API_KEY) ||
+    normalizeCredential(options.runtimeEnv?.[FREE_HOSTED_API_TOKEN_KEY]) ||
     'bolt-free-usage-quota';
   return sha256Hex(`${secret}:${getFreeUsageQuotaSubjectBasis(options.request)}`);
 }

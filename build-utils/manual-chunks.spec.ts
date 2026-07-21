@@ -29,10 +29,10 @@ describe('getManualChunkName', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/@xterm/xterm/lib/xterm.js')).toBe('terminal-xterm');
   });
 
-  it('separates charting and pdf export tooling from the main client shell', () => {
+  it('separates charting from the main client shell and leaves PDF code in its own package chunk', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/chart.js/dist/chart.js')).toBe('charts-core');
     expect(getManualChunkName('/root/bolt.gives/node_modules/react-chartjs-2/dist/index.js')).toBe('charts-react');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/jspdf/dist/jspdf.es.min.js')).toBe('pdf-export');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/jspdf/dist/jspdf.es.min.js')).toBe('vendor-jspdf');
   });
 
   it('isolates collaboration and export tooling', () => {
@@ -47,12 +47,17 @@ describe('getManualChunkName', () => {
     );
   });
 
-  it('extracts framework, ui, and diagram dependencies from the generic vendor chunk', () => {
+  it('extracts framework, UI, and diagram dependencies from the generic vendor chunk', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/react/index.js')).toBe('react-core');
     expect(getManualChunkName('/root/bolt.gives/node_modules/@remix-run/react/dist/index.js')).toBe('remix-runtime');
     expect(getManualChunkName('/root/bolt.gives/node_modules/react-router/dist/index.js')).toBe('router-runtime');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/react-toastify/dist/index.js')).toBe('ui-toast');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/framer-motion/dist/es/index.mjs')).toBe('ui-motion');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@radix-ui/react-dialog/dist/index.mjs')).toBe(
+      'ui-radix',
+    );
     expect(getManualChunkName('/root/bolt.gives/node_modules/lucide-react/dist/esm/lucide-react.js')).toBe(
-      'ui-vendor',
+      'ui-lucide',
     );
     expect(getManualChunkName('/root/bolt.gives/node_modules/mermaid/dist/mermaid.core.mjs')).toBe(
       'diagram-vendor',
@@ -61,6 +66,10 @@ describe('getManualChunkName', () => {
 
   it('returns undefined for application files', () => {
     expect(getManualChunkName('/root/bolt.gives/app/components/chat/BaseChat.tsx')).toBeUndefined();
+  });
+
+  it('keeps the shared Vite preload helper out of optional dependency chunks', () => {
+    expect(getManualChunkName('\0vite/preload-helper.js')).toBe('vite-preload-helper');
   });
 
   it('splits llm and schema tooling by responsibility', () => {

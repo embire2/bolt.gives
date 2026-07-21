@@ -1,8 +1,7 @@
 import type { WebContainer } from '@webcontainer/api';
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { webcontainer as webcontainerPromise } from '~/lib/webcontainer';
-import git, { type GitAuth, type PromiseFsClient } from 'isomorphic-git';
-import http from 'isomorphic-git/http/web';
+import type { GitAuth, PromiseFsClient } from 'isomorphic-git';
 import Cookies from 'js-cookie';
 import { toast } from 'react-toastify';
 
@@ -75,6 +74,11 @@ export function useGit() {
       }
 
       try {
+        const [{ default: git }, { default: http }] = await Promise.all([
+          import('isomorphic-git'),
+          import('isomorphic-git/http/web'),
+        ]);
+
         // Add a small delay before retrying to allow for network recovery
         if (retryCount > 0) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));

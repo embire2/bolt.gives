@@ -14,20 +14,18 @@ import { DialogTitle } from '~/components/ui/Dialog';
 import { AvatarDropdown } from './AvatarDropdown';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 
-// Import all tab components
-import ProfileTab from '~/components/@settings/tabs/profile/ProfileTab';
-import SettingsTab from '~/components/@settings/tabs/settings/SettingsTab';
-import NotificationsTab from '~/components/@settings/tabs/notifications/NotificationsTab';
-import FeaturesTab from '~/components/@settings/tabs/features/FeaturesTab';
-import GitHubTab from '~/components/@settings/tabs/github/GitHubTab';
-import GitLabTab from '~/components/@settings/tabs/gitlab/GitLabTab';
-import SupabaseTab from '~/components/@settings/tabs/supabase/SupabaseTab';
-import VercelTab from '~/components/@settings/tabs/vercel/VercelTab';
-import NetlifyTab from '~/components/@settings/tabs/netlify/NetlifyTab';
-import CloudProvidersTab from '~/components/@settings/tabs/providers/cloud/CloudProvidersTab';
-import LocalProvidersTab from '~/components/@settings/tabs/providers/local/LocalProvidersTab';
-import McpTab from '~/components/@settings/tabs/mcp/McpTab';
-
+const LazyProfileTab = lazy(() => import('~/components/@settings/tabs/profile/ProfileTab'));
+const LazySettingsTab = lazy(() => import('~/components/@settings/tabs/settings/SettingsTab'));
+const LazyNotificationsTab = lazy(() => import('~/components/@settings/tabs/notifications/NotificationsTab'));
+const LazyFeaturesTab = lazy(() => import('~/components/@settings/tabs/features/FeaturesTab'));
+const LazyGitHubTab = lazy(() => import('~/components/@settings/tabs/github/GitHubTab'));
+const LazyGitLabTab = lazy(() => import('~/components/@settings/tabs/gitlab/GitLabTab'));
+const LazySupabaseTab = lazy(() => import('~/components/@settings/tabs/supabase/SupabaseTab'));
+const LazyVercelTab = lazy(() => import('~/components/@settings/tabs/vercel/VercelTab'));
+const LazyNetlifyTab = lazy(() => import('~/components/@settings/tabs/netlify/NetlifyTab'));
+const LazyCloudProvidersTab = lazy(() => import('~/components/@settings/tabs/providers/cloud/CloudProvidersTab'));
+const LazyLocalProvidersTab = lazy(() => import('~/components/@settings/tabs/providers/local/LocalProvidersTab'));
+const LazyMcpTab = lazy(() => import('~/components/@settings/tabs/mcp/McpTab'));
 const LazyDataTab = lazy(() =>
   import('~/components/@settings/tabs/data/DataTab').then((module) => ({ default: module.DataTab })),
 );
@@ -129,41 +127,33 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
   const getTabComponent = (tabId: TabType) => {
     switch (tabId) {
       case 'profile':
-        return <ProfileTab />;
+        return <LazyProfileTab />;
       case 'settings':
-        return <SettingsTab />;
+        return <LazySettingsTab />;
       case 'notifications':
-        return <NotificationsTab />;
+        return <LazyNotificationsTab />;
       case 'features':
-        return <FeaturesTab />;
+        return <LazyFeaturesTab />;
       case 'data':
-        return (
-          <Suspense fallback={<div className="p-6 text-sm text-bolt-elements-textSecondary">Loading data tools…</div>}>
-            <LazyDataTab />
-          </Suspense>
-        );
+        return <LazyDataTab />;
       case 'cloud-providers':
-        return <CloudProvidersTab />;
+        return <LazyCloudProvidersTab />;
       case 'local-providers':
-        return <LocalProvidersTab />;
+        return <LazyLocalProvidersTab />;
       case 'github':
-        return <GitHubTab />;
+        return <LazyGitHubTab />;
       case 'gitlab':
-        return <GitLabTab />;
+        return <LazyGitLabTab />;
       case 'supabase':
-        return <SupabaseTab />;
+        return <LazySupabaseTab />;
       case 'vercel':
-        return <VercelTab />;
+        return <LazyVercelTab />;
       case 'netlify':
-        return <NetlifyTab />;
+        return <LazyNetlifyTab />;
       case 'event-logs':
-        return (
-          <Suspense fallback={<div className="p-6 text-sm text-bolt-elements-textSecondary">Loading event logs…</div>}>
-            <LazyEventLogsTab />
-          </Suspense>
-        );
+        return <LazyEventLogsTab />;
       case 'mcp':
-        return <McpTab />;
+        return <LazyMcpTab />;
 
       default:
         return null;
@@ -315,7 +305,11 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
                     )}
                   >
                     {activeTab ? (
-                      getTabComponent(activeTab)
+                      <Suspense
+                        fallback={<div className="p-6 text-sm text-bolt-elements-textSecondary">Loading settings…</div>}
+                      >
+                        {getTabComponent(activeTab)}
+                      </Suspense>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
                         {visibleTabs.map((tab, index) => (

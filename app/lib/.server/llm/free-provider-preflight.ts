@@ -1,5 +1,9 @@
 import { clearHostedFreeModelResolution } from '~/lib/modules/llm/providers/free';
-import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
+import {
+  FREE_HOSTED_API_BASE_URL,
+  FREE_HOSTED_MODEL,
+  FREE_PROVIDER_NAME,
+} from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -26,10 +30,25 @@ function getErrorMessage(payload: unknown): string {
     return 'Unknown upstream error';
   }
 
-  const error = (payload as { error?: { message?: string } }).error;
+  const candidate = payload as {
+    error?: string | { message?: unknown };
+    message?: unknown;
+    detail?: unknown;
+  };
+  const error = candidate.error;
 
-  if (error?.message) {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === 'object' && typeof error.message === 'string' && error.message.trim()) {
     return error.message;
+  }
+
+  for (const message of [candidate.message, candidate.detail]) {
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
   }
 
   return 'Unknown upstream error';
@@ -41,7 +60,7 @@ export function resetFreeProviderPreflightCache() {
 }
 
 async function probeHostedModel(options: { apiKey: string; modelName: string }) {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(`${FREE_HOSTED_API_BASE_URL}/responses`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
@@ -49,14 +68,8 @@ async function probeHostedModel(options: { apiKey: string; modelName: string }) 
     },
     body: JSON.stringify({
       model: options.modelName,
-      stream: false,
-      max_tokens: 1,
-      messages: [
-        {
-          role: 'user',
-          content: 'Reply with OK',
-        },
-      ],
+      input: 'Reply with OK',
+      max_output_tokens: 16,
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });

@@ -13,6 +13,18 @@ const getAcknowledgedIssue = (): string | null => {
   }
 };
 
+const persistAcknowledgedIssue = (issue: string | null) => {
+  try {
+    if (issue) {
+      localStorage.setItem(ACKNOWLEDGED_CONNECTION_ISSUE_KEY, issue);
+    } else {
+      localStorage.removeItem(ACKNOWLEDGED_CONNECTION_ISSUE_KEY);
+    }
+  } catch {
+    // Storage is optional; the current session still keeps the acknowledgement.
+  }
+};
+
 export const useConnectionStatus = () => {
   const [hasConnectionIssues, setHasConnectionIssues] = useState(false);
   const [currentIssue, setCurrentIssue] = useState<ConnectionIssueType>(null);
@@ -37,24 +49,30 @@ export const useConnectionStatus = () => {
   };
 
   useEffect(() => {
-    // Check immediately and then every 10 seconds
-    checkStatus();
+    void checkStatus();
 
-    const interval = setInterval(checkStatus, 10 * 1000);
+    const interval = setInterval(() => void checkStatus(), 30 * 1000);
+    const handleConnectivityChange = () => void checkStatus();
+    window.addEventListener('online', handleConnectivityChange);
+    window.addEventListener('offline', handleConnectivityChange);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleConnectivityChange);
+      window.removeEventListener('offline', handleConnectivityChange);
+    };
   }, [acknowledgedIssue]);
 
   const acknowledgeIssue = () => {
     setAcknowledgedIssue(currentIssue);
-    setAcknowledgedIssue(currentIssue);
+    persistAcknowledgedIssue(currentIssue);
     setHasConnectionIssues(false);
   };
 
   const resetAcknowledgment = () => {
     setAcknowledgedIssue(null);
-    setAcknowledgedIssue(null);
-    checkStatus();
+    persistAcknowledgedIssue(null);
+    void checkStatus();
   };
 
   return { hasConnectionIssues, currentIssue, acknowledgeIssue, resetAcknowledgment };

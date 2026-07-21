@@ -10,6 +10,7 @@ import {
 } from '~/lib/shoutbox';
 
 const SHOUTBOX_MESSAGES_POLL_MS = 15000;
+const SHOUTBOX_IDLE_POLL_MS = 60000;
 
 function isShoutboxEnabled() {
   const settings = getLocalStorage('settings');
@@ -66,6 +67,10 @@ export function Shoutbox() {
     let active = true;
 
     const loadMessages = async () => {
+      if (document.hidden && !open) {
+        return;
+      }
+
       try {
         const response = await fetch('/api/shout/messages');
         const payload = (await response.json()) as { messages?: unknown; error?: string; canSend?: boolean };
@@ -85,15 +90,25 @@ export function Shoutbox() {
 
     void loadMessages();
 
-    const timer = window.setInterval(() => {
-      void loadMessages();
-    }, SHOUTBOX_MESSAGES_POLL_MS);
+    const timer = window.setInterval(
+      () => {
+        void loadMessages();
+      },
+      open ? SHOUTBOX_MESSAGES_POLL_MS : SHOUTBOX_IDLE_POLL_MS,
+    );
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void loadMessages();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       active = false;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled]);
+  }, [enabled, open]);
 
   useEffect(() => {
     if (!open || messages.length === 0) {
