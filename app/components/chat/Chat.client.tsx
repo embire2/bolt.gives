@@ -55,7 +55,7 @@ import type { ArchitectDiagnosis } from '~/lib/runtime/architect';
 import type { AgentMode, AgentPlanStep } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
-import { resolveStallPolicy } from '~/lib/runtime/stall-policy';
+import { hasExceededHostedFreeDeadline, resolveStallPolicy } from '~/lib/runtime/stall-policy';
 import {
   isHostedRuntimeEnabled,
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
@@ -107,6 +107,7 @@ const TELEMETRY_SAMPLE_MS = 10000;
 const TELEMETRY_EMIT_INTERVAL_MS = 60000;
 const HOSTED_TELEMETRY_SAMPLE_MS = 30000;
 const HOSTED_TELEMETRY_EMIT_INTERVAL_MS = 120000;
+const HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS = 150000;
 const STEP_EVENT_FLUSH_MS = 250;
 const TELEMETRY_OUTPUT_MAX_CHARS = 1600;
 const TELEMETRY_MERGE_WINDOW_MS = 20000;
@@ -568,6 +569,7 @@ export const ChatImpl = memo(
       model,
       providerName: provider.name,
     });
+    const hostedFreeStreamDeadlineMsRef = useRef(HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS);
     const { showChat } = useStore(chatStore);
     const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
@@ -724,6 +726,12 @@ export const ChatImpl = memo(
         projectMemory,
       },
       sendExtraMessageFields: true,
+      onResponse: (response) => {
+        const deadlineMs = Number(response.headers.get('X-Bolt-Stream-Deadline-Ms'));
+
+        hostedFreeStreamDeadlineMsRef.current =
+          Number.isFinite(deadlineMs) && deadlineMs >= 10_000 ? deadlineMs : HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS;
+      },
       onError: (e) => {
         setFakeLoading(false);
         handleError(e, 'chat');
@@ -1380,6 +1388,12 @@ Requirements:
             : `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
 
           const now = Date.now();
+          const requestElapsedMs = now - requestLifecycleStartedAtRef.current;
+          const hostedFreeDeadlineExceeded = hasExceededHostedFreeDeadline({
+            providerName: runContextRef.current.providerName,
+            elapsedMs: requestElapsedMs,
+            maxDurationMs: hostedFreeStreamDeadlineMsRef.current,
+          });
 
           if (now - lastTelemetryEmitAtRef.current >= telemetryEmitIntervalMs) {
             appendStepRunnerEvent({
@@ -1454,7 +1468,10 @@ Requirements:
             });
           }
 
-          if (meaningfulStallMs > stallPolicy.recoveryThresholdMs && !stallRecoveryTriggeredRef.current) {
+          if (
+            (meaningfulStallMs > stallPolicy.recoveryThresholdMs || hostedFreeDeadlineExceeded) &&
+            !stallRecoveryTriggeredRef.current
+          ) {
             stallRecoveryTriggeredRef.current = true;
 
             const activeRunContext = runContextRef.current;
@@ -1473,7 +1490,9 @@ Requirements:
               type: 'error',
               timestamp: new Date().toISOString(),
               description: 'Auto-recovery triggered for stalled stream',
-              error: `No stream progress for ${meaningfulStallSeconds}s`,
+              error: hostedFreeDeadlineExceeded
+                ? `Hosted FREE request exceeded ${Math.round(requestElapsedMs / 1000)}s`
+                : `No stream progress for ${meaningfulStallSeconds}s`,
               output: `${telemetryMessage} | autoContinue=${shouldAutoContinue ? 'yes' : 'no'}`,
             });
 

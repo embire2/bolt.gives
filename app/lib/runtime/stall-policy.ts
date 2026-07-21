@@ -43,3 +43,17 @@ export function resolveStallPolicy(model: string | undefined, providerName?: str
 
   return DEFAULT_POLICY;
 }
+
+export function hasExceededHostedFreeDeadline(options: {
+  providerName?: string;
+  elapsedMs: number;
+  maxDurationMs: number;
+}): boolean {
+  return (
+    options.providerName?.trim().toUpperCase() === 'FREE' &&
+    Number.isFinite(options.elapsedMs) &&
+    Number.isFinite(options.maxDurationMs) &&
+    options.maxDurationMs > 0 &&
+    options.elapsedMs >= options.maxDurationMs
+  );
+}

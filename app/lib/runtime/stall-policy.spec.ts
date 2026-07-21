@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStallPolicy } from './stall-policy';
+import { hasExceededHostedFreeDeadline, resolveStallPolicy } from './stall-policy';
 
 describe('resolveStallPolicy', () => {
   it('returns long-think thresholds for gpt-5/codex models', () => {
@@ -24,5 +24,14 @@ describe('resolveStallPolicy', () => {
     expect(policy.warningThresholdMs).toBe(45000);
     expect(policy.recoveryThresholdMs).toBe(120000);
     expect(policy.starterContinuationThresholdMs).toBe(25000);
+  });
+
+  it('enforces an absolute deadline only for hosted FREE runs', () => {
+    expect(hasExceededHostedFreeDeadline({ providerName: 'FREE', elapsedMs: 30_000, maxDurationMs: 30_000 })).toBe(
+      true,
+    );
+    expect(hasExceededHostedFreeDeadline({ providerName: 'OpenAI', elapsedMs: 300_000, maxDurationMs: 30_000 })).toBe(
+      false,
+    );
   });
 });

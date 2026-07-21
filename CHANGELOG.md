@@ -31,6 +31,7 @@
 - Hidden recovery continuations are claimed before dispatch and retried only after actual request failures, preventing loading-state rerenders from spawning duplicate `/api/chat` streams for one prompt.
 - Follow-up prompts no longer inherit the previous run's preview-ready unlock timer; only preview verification from the active request can stop that request, preventing silent follow-up cancellation after 20 seconds.
 - Hosted FREE `gpt-5.6` requests now use the bounded 120-second client recovery policy instead of inheriting the 260-second BYOK long-think allowance solely from the model name.
+- The browser now reads the server-advertised FREE stream deadline and enforces it as an absolute recovery boundary, so hidden reasoning or commentary cannot keep resetting the client-side stall clock.
 - Commentary heartbeats no longer count as provider stream activity, allowing genuinely stalled model requests to enter recovery instead of remaining open indefinitely.
 - Hosted FREE streams now recover after 120 seconds without model activity, while BYOK long-thinking models retain their longer allowance and invalid timeout overrides fall back to the selected provider's safe default.
 - FREE timeout selection now resolves provider/model annotations from message history when redundant request fields are absent, and invisible reasoning-only chunks no longer mask a run that has produced no actionable coding output.
