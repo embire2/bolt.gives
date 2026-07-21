@@ -94,3 +94,14 @@ export function shouldRecoverHostedFreeCompletion(options: {
 
   return !producedPreview && !producedBuildAction;
 }
+
+export function getCurrentRequestAssistantContent(options: {
+  baselineSignature: string;
+  assistantMessageId?: string;
+  assistantContent?: string;
+}): string {
+  const content = options.assistantContent || '';
+  const signature = options.assistantMessageId ? `${options.assistantMessageId}:${content.length}` : '';
+
+  return signature && signature !== options.baselineSignature ? content : '';
+}

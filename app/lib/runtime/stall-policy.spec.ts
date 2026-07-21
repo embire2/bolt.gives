@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getCurrentRequestAssistantContent,
   getRemainingHostedFreeDeadlineMs,
   hasExceededHostedFreeDeadline,
   resolveStallPolicy,
@@ -77,5 +78,25 @@ describe('resolveStallPolicy', () => {
         lastPreviewReadyAtMs: 25_000,
       }),
     ).toBe(false);
+  });
+
+  it('does not attribute the previous assistant artifact to an empty follow-up', () => {
+    const previousContent = '<boltArtifact id="app">created</boltArtifact>';
+    const baselineSignature = `assistant-1:${previousContent.length}`;
+
+    expect(
+      getCurrentRequestAssistantContent({
+        baselineSignature,
+        assistantMessageId: 'assistant-1',
+        assistantContent: previousContent,
+      }),
+    ).toBe('');
+    expect(
+      getCurrentRequestAssistantContent({
+        baselineSignature,
+        assistantMessageId: 'assistant-2',
+        assistantContent: '<boltAction type="file">updated</boltAction>',
+      }),
+    ).toContain('<boltAction');
   });
 });

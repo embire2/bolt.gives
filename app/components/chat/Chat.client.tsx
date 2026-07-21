@@ -56,6 +56,7 @@ import type { AgentMode, AgentPlanStep } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
 import {
+  getCurrentRequestAssistantContent,
   getRemainingHostedFreeDeadlineMs,
   hasExceededHostedFreeDeadline,
   resolveStallPolicy,
@@ -781,10 +782,15 @@ export const ChatImpl = memo(
         }
 
         const requestElapsedMs = Date.now() - requestLifecycleStartedAtRef.current;
+        const currentRequestAssistantContent = getCurrentRequestAssistantContent({
+          baselineSignature: requestAssistantBaselineSignatureRef.current,
+          assistantMessageId: message.id,
+          assistantContent: message.content,
+        });
         const shouldRecoverEmptyBuild = shouldRecoverHostedFreeCompletion({
           providerName: runContextRef.current.providerName,
           chatMode,
-          assistantContent: message.content,
+          assistantContent: currentRequestAssistantContent,
           requestStartedAtMs: requestLifecycleStartedAtRef.current,
           lastPreviewReadyAtMs: lastPreviewReadyAtRef.current,
         });
@@ -855,6 +861,7 @@ export const ChatImpl = memo(
     const lastTelemetryEmitAtRef = useRef(0);
     const lastMessageProgressAtRef = useRef(Date.now());
     const lastAssistantProgressSignatureRef = useRef('');
+    const requestAssistantBaselineSignatureRef = useRef('');
     const latestUserRequestRef = useRef('');
     const requestLifecycleStartedAtRef = useRef(Date.now());
     const lastRunCompletedAtRef = useRef<number | null>(null);
@@ -1015,6 +1022,13 @@ export const ChatImpl = memo(
 
         autoContinuationCountRef.current += 1;
         requestLifecycleStartedAtRef.current = Date.now();
+
+        const previousAssistantMessage = [...messagesRef.current]
+          .reverse()
+          .find((message) => message.role === 'assistant' && typeof message.content === 'string');
+        requestAssistantBaselineSignatureRef.current = previousAssistantMessage
+          ? `${previousAssistantMessage.id}:${previousAssistantMessage.content.length}`
+          : '';
         appendHiddenContinuation(args);
 
         return true;
@@ -2816,6 +2830,13 @@ Requirements:
 
       requestLifecycleStartedAtRef.current = Date.now();
       lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
+
+      const previousAssistantMessage = [...messagesRef.current]
+        .reverse()
+        .find((message) => message.role === 'assistant' && typeof message.content === 'string');
+      requestAssistantBaselineSignatureRef.current = previousAssistantMessage
+        ? `${previousAssistantMessage.id}:${previousAssistantMessage.content.length}`
+        : '';
       lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
       manualPromptGenerationRef.current += 1;
