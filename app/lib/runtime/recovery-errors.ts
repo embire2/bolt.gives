@@ -28,6 +28,12 @@ export function classifyRecoverableStreamError(message: string | undefined | nul
   };
 }
 
+export function isHostedFreeFundingError(message: string | undefined | null): boolean {
+  return /payment required|operator-funded.*out of credits|hosted free.*out of (?:operator )?credits/i.test(
+    String(message || ''),
+  );
+}
+
 export function shouldIgnoreDisconnectAfterCompletedRun(context: CompletedRunDisconnectContext): boolean {
   const { disconnectLike } = classifyRecoverableStreamError(context.message);
 

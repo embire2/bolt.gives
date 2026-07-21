@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ensureFreeProviderAvailability, resetFreeProviderPreflightCache } from './free-provider-preflight';
+import {
+  ensureFreeProviderAvailability,
+  isHostedFreeCreditsExhausted,
+  resetFreeProviderPreflightCache,
+} from './free-provider-preflight';
 import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 
 describe('ensureFreeProviderAvailability', () => {
@@ -70,6 +74,11 @@ describe('ensureFreeProviderAvailability', () => {
         apiKey: 'magnet-real-secret',
       }),
     ).rejects.toThrow('FREE_PROVIDER_CREDITS_EXHAUSTED');
+  });
+
+  it('recognizes Magnet payment-required stream errors after a cached preflight', () => {
+    expect(isHostedFreeCreditsExhausted(undefined, 'Payment Required')).toBe(true);
+    expect(isHostedFreeCreditsExhausted(undefined, 'The model is temporarily unavailable')).toBe(false);
   });
 
   it('returns unavailable when the hosted FREE route is unavailable', async () => {

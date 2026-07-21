@@ -93,8 +93,13 @@ function isRateLimited(status: number, message: string): boolean {
   return status === 429 || /rate[-\s]*limit/i.test(message);
 }
 
-function isCreditsExhausted(status: number, message: string): boolean {
-  return status === 402 || /insufficient credits/i.test(message);
+export function isHostedFreeCreditsExhausted(status: number | undefined, message: string): boolean {
+  return (
+    status === 402 ||
+    /payment required|insufficient credits|credits? exhausted|out of (?:operator )?credits|wallet balance/i.test(
+      message,
+    )
+  );
 }
 
 export async function ensureFreeProviderAvailability(options: {
@@ -156,7 +161,7 @@ export async function ensureFreeProviderAvailability(options: {
 
   clearHostedFreeModelResolution();
 
-  const creditsExhausted = isCreditsExhausted(hostedProbe.status, hostedProbe.message);
+  const creditsExhausted = isHostedFreeCreditsExhausted(hostedProbe.status, hostedProbe.message);
   const upstreamRateLimited = isRateLimited(hostedProbe.status, hostedProbe.message);
   const errorMessage = creditsExhausted
     ? `FREE_PROVIDER_CREDITS_EXHAUSTED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`

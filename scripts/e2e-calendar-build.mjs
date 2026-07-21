@@ -28,12 +28,12 @@ const followUpPrompt = expandTemplate(
   process.env.E2E_FOLLOWUP_PROMPT ||
     `Improve the existing calendar project without restarting from scratch. Keep the exact visible text "${appToken}" in the app and add another clearly visible label with the exact text "${followUpToken}". Continue from the current project and keep preview running.`,
 );
-const expectedInitialTokens = (process.env.E2E_EXPECT_TOKENS
+const expectedInitialTokens = process.env.E2E_EXPECT_TOKENS
   ? expandTemplate(process.env.E2E_EXPECT_TOKENS)
       .split(',')
       .map((token) => token.trim())
       .filter(Boolean)
-  : [appToken]);
+  : [appToken];
 
 const events = [];
 const networkErrors = [];
@@ -56,7 +56,9 @@ function delay(ms) {
 }
 
 function normalizeText(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function extractRuntimeSessionId(previewUrl) {
@@ -221,18 +223,21 @@ async function ensureChatComposerVisible(page) {
 
   const textarea = page.locator('textarea:visible').first();
   await textarea.waitFor({ state: 'visible', timeout: 90000 });
-  await page.waitForFunction(() => {
-    const elements = Array.from(document.querySelectorAll('textarea'));
+  await page.waitForFunction(
+    () => {
+      const elements = Array.from(document.querySelectorAll('textarea'));
 
-    return elements.some((element) => {
-      if (!(element instanceof HTMLTextAreaElement)) {
-        return false;
-      }
+      return elements.some((element) => {
+        if (!(element instanceof HTMLTextAreaElement)) {
+          return false;
+        }
 
-      const style = window.getComputedStyle(element);
-      return style.display !== 'none' && style.visibility !== 'hidden' && !element.disabled;
-    });
-  }, { timeout: 90000 });
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden' && !element.disabled;
+      });
+    },
+    { timeout: 90000 },
+  );
 
   return textarea;
 }
@@ -243,9 +248,17 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await context.newPage();
 
-  page.on('console', (msg) => {
+  page.on('console', async (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      consoleErrors.push(`[${msg.type()}] ${msg.text()}`);
+      const argumentValues = await Promise.all(
+        msg.args().map((argument) => argument.jsonValue().catch(() => argument.toString())),
+      );
+      const serializedArguments = argumentValues
+        .map((value) => (typeof value === 'string' ? value : JSON.stringify(value)))
+        .join(' ');
+      const entry = `[${msg.type()}] ${serializedArguments || msg.text()}`;
+      consoleErrors.push(entry);
+      log('browser console', entry.slice(0, 800));
     }
   });
   page.on('pageerror', (err) => {
@@ -276,14 +289,17 @@ async function main() {
   });
 
   // Pin the requested provider/model in localStorage so the smoke bypasses provider setup.
-  await page.addInitScript(({ provider, model }) => {
-    const host = window.location.hostname;
-    localStorage.setItem(
-      `bolt_instance_selection_v1:${host}`,
-      JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
-    );
-    localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
-  }, { provider: providerName, model: modelName });
+  await page.addInitScript(
+    ({ provider, model }) => {
+      const host = window.location.hostname;
+      localStorage.setItem(
+        `bolt_instance_selection_v1:${host}`,
+        JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
+      );
+      localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
+    },
+    { provider: providerName, model: modelName },
+  );
 
   log('goto', baseUrl);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -317,10 +333,18 @@ async function main() {
 
   while (Date.now() < checkDeadline) {
     await keepPreviewSurfaceVisible(page);
-    const bodyText = (await page.locator('body').innerText().catch(() => '')) || '';
+    const bodyText =
+      (await page
+        .locator('body')
+        .innerText()
+        .catch(() => '')) || '';
     bodyTextLast = bodyText;
 
-    if (!sawAssistantContent && bodyText.length > 600 && /assistant|boltArtifact|Creating|Installing|Analyz/i.test(bodyText)) {
+    if (
+      !sawAssistantContent &&
+      bodyText.length > 600 &&
+      /assistant|boltArtifact|Creating|Installing|Analyz/i.test(bodyText)
+    ) {
       sawAssistantContent = true;
       log('assistant activity detected');
     }
@@ -328,8 +352,16 @@ async function main() {
       sawFiles = true;
       log('file actions detected in UI');
     }
-    const iframe = await page.locator('iframe[title="preview"]').first().isVisible().catch(() => false);
-    const previewSrc = await page.locator('iframe[title="preview"]').first().getAttribute('src').catch(() => null);
+    const iframe = await page
+      .locator('iframe[title="preview"]')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    const previewSrc = await page
+      .locator('iframe[title="preview"]')
+      .first()
+      .getAttribute('src')
+      .catch(() => null);
 
     if (previewSrc && previewSrc !== lastPreviewSrc) {
       lastPreviewSrc = previewSrc;
@@ -345,7 +377,11 @@ async function main() {
     if (iframe) {
       try {
         const pf = page.frameLocator('iframe[title="preview"]').first();
-        const inner = (await pf.locator('body').innerText({ timeout: 1500 }).catch(() => '')) || '';
+        const inner =
+          (await pf
+            .locator('body')
+            .innerText({ timeout: 1500 })
+            .catch(() => '')) || '';
         const normalizedPreview = normalizeText(inner);
 
         if (normalizedPreview && normalizedPreview !== lastPreviewText) {
@@ -441,10 +477,18 @@ async function main() {
 
     while (Date.now() < checkDeadline) {
       await keepPreviewSurfaceVisible(page);
-      const bodyText = (await page.locator('body').innerText().catch(() => '')) || '';
+      const bodyText =
+        (await page
+          .locator('body')
+          .innerText()
+          .catch(() => '')) || '';
       bodyTextLast = bodyText;
 
-      const previewSrc = await page.locator('iframe[title="preview"]').first().getAttribute('src').catch(() => null);
+      const previewSrc = await page
+        .locator('iframe[title="preview"]')
+        .first()
+        .getAttribute('src')
+        .catch(() => null);
 
       if (previewSrc && previewSrc !== lastPreviewSrc) {
         lastPreviewSrc = previewSrc;
@@ -452,12 +496,20 @@ async function main() {
         hostedRuntimeSessionId = extractRuntimeSessionId(previewSrc);
       }
 
-      const iframe = await page.locator('iframe[title="preview"]').first().isVisible().catch(() => false);
+      const iframe = await page
+        .locator('iframe[title="preview"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
 
       if (iframe) {
         try {
           const pf = page.frameLocator('iframe[title="preview"]').first();
-          const inner = (await pf.locator('body').innerText({ timeout: 1500 }).catch(() => '')) || '';
+          const inner =
+            (await pf
+              .locator('body')
+              .innerText({ timeout: 1500 })
+              .catch(() => '')) || '';
           const normalizedPreview = normalizeText(inner);
 
           if (normalizedPreview && normalizedPreview !== lastPreviewText) {
@@ -561,23 +613,29 @@ async function main() {
 
   await fs.writeFile(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
   console.log('\n===== E2E CALENDAR SUMMARY =====');
-  console.log(JSON.stringify({
-    ok: summary.ok,
-    sawAssistantContent,
-    sawFiles,
-    sawPreview,
-    sawError,
-    previewContainsToken,
-    snapshotContainsToken,
-    followUpSubmitted,
-    followUpPreviewContainsTokens,
-    followUpSnapshotContainsTokens,
-    elapsedSec: summary.elapsedSec,
-    chatRequestStatuses: chatRequests.map((r) => r.status),
-    consoleErrorCount: consoleErrors.length,
-    networkErrorCount: networkErrors.length,
-    fatalNetworkErrorCount: summary.fatalNetworkErrors.length,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: summary.ok,
+        sawAssistantContent,
+        sawFiles,
+        sawPreview,
+        sawError,
+        previewContainsToken,
+        snapshotContainsToken,
+        followUpSubmitted,
+        followUpPreviewContainsTokens,
+        followUpSnapshotContainsTokens,
+        elapsedSec: summary.elapsedSec,
+        chatRequestStatuses: chatRequests.map((r) => r.status),
+        consoleErrorCount: consoleErrors.length,
+        networkErrorCount: networkErrors.length,
+        fatalNetworkErrorCount: summary.fatalNetworkErrors.length,
+      },
+      null,
+      2,
+    ),
+  );
 
   await context.close();
   await browser.close();

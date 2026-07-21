@@ -80,7 +80,11 @@ import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
-import { classifyRecoverableStreamError, shouldIgnoreDisconnectAfterCompletedRun } from '~/lib/runtime/recovery-errors';
+import {
+  classifyRecoverableStreamError,
+  isHostedFreeFundingError,
+  shouldIgnoreDisconnectAfterCompletedRun,
+} from '~/lib/runtime/recovery-errors';
 import { securedFetch } from '~/lib/hooks/useCsrf';
 import { buildStarterBootstrapMessages } from './starter-bootstrap-messages';
 import {
@@ -2019,9 +2023,12 @@ Requirements:
         } else if (errorInfo.statusCode === 429 || errorInfo.message.toLowerCase().includes('rate limit')) {
           errorType = 'rate_limit';
           title = 'Rate Limit Exceeded';
-        } else if (errorInfo.message.toLowerCase().includes('quota')) {
+        } else if (errorInfo.message.toLowerCase().includes('quota') || isHostedFreeFundingError(errorInfo.message)) {
           errorType = 'quota';
-          title = 'Quota Exceeded';
+          title = isHostedFreeFundingError(errorInfo.message)
+            ? 'Hosted FREE Temporarily Unavailable'
+            : 'Quota Exceeded';
+          errorInfo.isRetryable = false;
         } else if (errorInfo.statusCode >= 500) {
           errorType = 'network';
           title = 'Server Error';

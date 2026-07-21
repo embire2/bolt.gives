@@ -34,6 +34,8 @@
 - The browser now arms a one-shot timer from the server-advertised FREE stream deadline, so rerenders caused by hidden reasoning, commentary, or telemetry events cannot restart the recovery boundary.
 - Hosted FREE build responses that return HTTP 200 without a build action or an actual workspace change now enter single-flight continuation immediately; merely re-verifying the unchanged preview cannot strand a follow-up.
 - Follow-up completion checks now compare the assistant message against the request-start baseline, preventing the previous successful artifact from being mistaken for output from an empty follow-up.
+- Chat now runs the same MagnetAPI availability preflight as direct LLM calls, recognizes upstream `Payment Required` responses even after a cached success, avoids futile recovery retries, and shows a clear operator-funding error instead of a generic failed stream.
+- The strict calendar E2E now streams serialized browser warnings and errors while it runs, making provider, preview, and client lifecycle failures diagnosable before the final timeout.
 - Commentary heartbeats no longer count as provider stream activity, allowing genuinely stalled model requests to enter recovery instead of remaining open indefinitely.
 - Hosted FREE streams now recover after 120 seconds without model activity, while BYOK long-thinking models retain their longer allowance and invalid timeout overrides fall back to the selected provider's safe default.
 - FREE timeout selection now resolves provider/model annotations from message history when redundant request fields are absent, and invisible reasoning-only chunks no longer mask a run that has produced no actionable coding output.

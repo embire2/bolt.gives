@@ -44,6 +44,10 @@ import {
 } from '~/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '~/lib/.server/llm/api-key-utils';
+import {
+  ensureFreeProviderAvailability,
+  isHostedFreeCreditsExhausted,
+} from '~/lib/.server/llm/free-provider-preflight';
 import { hydrateWebsiteSourceContext } from '~/lib/.server/llm/web-context';
 import {
   isHostedFreeRelayRequest,
@@ -1554,6 +1558,11 @@ Next: I will continue and can still use any URL details present in the prompt.`,
           provider: sanitizedSelection.provider,
           model: sanitizedSelection.model,
         };
+        await ensureFreeProviderAvailability({
+          providerName: sanitizedSelection.provider,
+          modelName: sanitizedSelection.model,
+          apiKey: apiKeys[sanitizedSelection.provider],
+        });
         ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
 
         if (processedMessages.length > 3) {
@@ -3174,6 +3183,13 @@ Next: I am sending the final result now.`,
           return 'Custom error: The hosted FREE model on this server is out of operator credits. Use OpenRouter with your own key right now, or ask the operator to replenish the hosted FREE route.';
         }
 
+        if (
+          resolvedSelectionForLogs.provider?.trim().toUpperCase() === 'FREE' &&
+          isHostedFreeCreditsExhausted(undefined, errorMessage)
+        ) {
+          return 'Custom error: The hosted FREE model is temporarily unavailable because the operator-funded MagnetAPI wallet is out of credits. Use your own provider API key or try again after the hosted route is replenished.';
+        }
+
         if (errorMessage.includes('FREE_PROVIDER_UNAVAILABLE')) {
           return 'Custom error: The hosted FREE coder is temporarily unavailable upstream. Please retry shortly, or switch to OpenRouter with your own key.';
         }
@@ -3325,7 +3341,11 @@ Next: I am sending the final result now.`,
       );
     }
 
-    if (error.message?.includes('FREE_PROVIDER_CREDITS_EXHAUSTED')) {
+    if (
+      error.message?.includes('FREE_PROVIDER_CREDITS_EXHAUSTED') ||
+      (resolvedSelectionForLogs.provider?.trim().toUpperCase() === 'FREE' &&
+        isHostedFreeCreditsExhausted(error.statusCode, error.message || ''))
+    ) {
       return new Response(
         JSON.stringify({
           ...errorResponse,

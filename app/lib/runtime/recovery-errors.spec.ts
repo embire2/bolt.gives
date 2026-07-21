@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRecoverableStreamError, shouldIgnoreDisconnectAfterCompletedRun } from './recovery-errors';
+import {
+  classifyRecoverableStreamError,
+  isHostedFreeFundingError,
+  shouldIgnoreDisconnectAfterCompletedRun,
+} from './recovery-errors';
 
 describe('classifyRecoverableStreamError', () => {
   it('flags websocket disconnects before response completion as recoverable', () => {
@@ -40,5 +44,11 @@ describe('classifyRecoverableStreamError', () => {
         lastPreviewReadyAt: null,
       }),
     ).toBe(false);
+  });
+
+  it('classifies hosted FREE funding failures as non-recoverable operator errors', () => {
+    expect(isHostedFreeFundingError('Custom error: Payment Required')).toBe(true);
+    expect(isHostedFreeFundingError('The operator-funded MagnetAPI wallet is out of credits.')).toBe(true);
+    expect(isHostedFreeFundingError('Generation stream timed out')).toBe(false);
   });
 });
