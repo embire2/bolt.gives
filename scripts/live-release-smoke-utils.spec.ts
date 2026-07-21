@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isStaticAssetRequestUrl, resolveCodingAppUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
+import {
+  closePageThenCleanupSession,
+  isStaticAssetRequestUrl,
+  resolveCodingAppUrl,
+  selectBreakTarget,
+} from './live-release-smoke-utils.mjs';
 
 describe('selectBreakTarget', () => {
   it('targets the active app component referenced by index.html and main entry', () => {
@@ -56,5 +61,23 @@ describe('resolveCodingAppUrl', () => {
     expect(resolveCodingAppUrl('https://alpha1.bolt.gives/chat/demo')).toBe(
       'https://alpha1.bolt.gives/chat/demo',
     );
+  });
+});
+
+describe('closePageThenCleanupSession', () => {
+  it('disconnects browser subscriptions before deleting the runtime session', async () => {
+    const calls: string[] = [];
+    const result = await closePageThenCleanupSession(
+      async () => {
+        calls.push('close-page');
+      },
+      async () => {
+        calls.push('cleanup-session');
+        return { ok: true, status: 200 };
+      },
+    );
+
+    expect(calls).toEqual(['close-page', 'cleanup-session']);
+    expect(result).toEqual({ ok: true, status: 200 });
   });
 });

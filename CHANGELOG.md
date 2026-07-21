@@ -44,7 +44,7 @@
 - FREE timeout selection now resolves provider/model annotations from message history when redundant request fields are absent, and invisible reasoning-only chunks no longer mask a run that has produced no actionable coding output.
 - Hosted FREE streams now also have a 150-second wall-clock deadline attached to the Cloudflare response pull lifecycle; it closes the browser response and cancels the upstream reader, exposes the active deadline as a safe response header, and supports a server-only staging override for rollout diagnostics.
 - Background managed-instance rollouts now yield between deployments when coding sessions are active, and deployment workers use a constrained heap/Go scheduler instead of competing with live previews for the runtime server's full memory allowance.
-- Strict calendar E2E runs terminate their generated preview process before exit and require cleanup to succeed, preventing repeated release checks from accumulating idle Vite processes.
+- Strict calendar E2E runs close browser preview subscriptions before terminating their generated preview process, require cleanup to succeed, and no longer report expected post-cleanup session requests as product `409` errors.
 
 ### Added
 

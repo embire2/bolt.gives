@@ -147,3 +147,9 @@ export function resolveCodingAppUrl(value) {
 
   return parsed.toString();
 }
+
+export async function closePageThenCleanupSession(closePage, cleanupSession) {
+  await closePage();
+
+  return cleanupSession();
+}

@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
+import { closePageThenCleanupSession, resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
@@ -42,6 +42,7 @@ const chatRequests = [];
 const previewStatusEvents = [];
 const previewTextHistory = [];
 const runtimeSnapshotChecks = [];
+let isTearingDown = false;
 
 function elapsed() {
   return ((Date.now() - started) / 1000).toFixed(1);
@@ -135,30 +136,16 @@ async function fetchRuntimeJson(page, sessionId, endpoint) {
   }
 }
 
-async function terminateRuntimeSession(page, sessionId) {
+async function terminateRuntimeSession(requestContext, sessionId) {
   if (!sessionId) {
     return { ok: true, skipped: true };
   }
 
-  return await page
-    .evaluate(
-      async ({ sessionId, timeoutMs }) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const cleanupUrl = new URL(`/runtime/sessions/${encodeURIComponent(sessionId)}/command`, baseUrl).toString();
 
-        try {
-          const response = await fetch(`/runtime/sessions/${encodeURIComponent(sessionId)}/command`, {
-            method: 'DELETE',
-            signal: controller.signal,
-          });
-
-          return { ok: response.ok, status: response.status };
-        } finally {
-          clearTimeout(timeout);
-        }
-      },
-      { sessionId, timeoutMs: runtimeFetchTimeoutMs },
-    )
+  return await requestContext
+    .delete(cleanupUrl, { timeout: runtimeFetchTimeoutMs })
+    .then((response) => ({ ok: response.ok(), status: response.status() }))
     .catch((error) => ({
       ok: false,
       status: 0,
@@ -265,6 +252,10 @@ async function main() {
     consoleErrors.push(`[pageerror] ${err.message}`);
   });
   page.on('requestfailed', (req) => {
+    if (isTearingDown) {
+      return;
+    }
+
     networkErrors.push(`REQFAIL ${req.method()} ${req.url()} :: ${req.failure()?.errorText}`);
   });
   page.on('response', async (res) => {
@@ -567,7 +558,11 @@ async function main() {
   });
   const finalBody = bodyTextLast.replace(/\s+/g, ' ').slice(0, 4000);
   await fs.writeFile(path.join(outDir, 'final-body.txt'), bodyTextLast);
-  const runtimeCleanup = await terminateRuntimeSession(page, hostedRuntimeSessionId);
+  isTearingDown = true;
+  const runtimeCleanup = await closePageThenCleanupSession(
+    () => page.close(),
+    () => terminateRuntimeSession(context.request, hostedRuntimeSessionId),
+  );
 
   if (hostedRuntimeSessionId) {
     log('runtime session cleanup', JSON.stringify(runtimeCleanup));
