@@ -239,11 +239,9 @@ export function shouldReloadHostedPreviewIframe(options: {
   const frameSource = String(options.frameSource || '').trim();
   const reloadKey = `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
   const hasTargetSource = frameSource === options.targetUrl;
-  const isExplicitlyBlocked =
-    frameLocation === 'about:blank' ||
-    frameLocation.startsWith('chrome-error://') ||
-    frameLocation.startsWith('edge-error://');
-  const isBlockedFrame = isExplicitlyBlocked || (!frameLocation && !hasTargetSource);
+  const isExplicitlyBlocked = frameLocation.startsWith('chrome-error://') || frameLocation.startsWith('edge-error://');
+  const isUnassignedFrame = !hasTargetSource && (!frameLocation || frameLocation === 'about:blank');
+  const isBlockedFrame = isExplicitlyBlocked || isUnassignedFrame;
 
   if (!options.status.healthy || !isBlockedFrame) {
     return {

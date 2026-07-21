@@ -301,6 +301,26 @@ describe('hosted runtime client', () => {
     });
   });
 
+  it('does not interrupt a correctly assigned preview while its document is still loading', () => {
+    const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/';
+
+    expect(
+      shouldReloadHostedPreviewIframe({
+        frameLocation: 'about:blank',
+        frameSource: targetUrl,
+        targetUrl,
+        status: {
+          healthy: true,
+          updatedAt: '2026-03-29T12:00:00.000Z',
+        },
+        lastReloadKey: null,
+      }),
+    ).toEqual({
+      shouldReload: false,
+      reloadKey: null,
+    });
+  });
+
   it('reloads a healthy preview when its iframe has not been assigned the target source', () => {
     const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/';
 
