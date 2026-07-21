@@ -230,14 +230,20 @@ export function extractHostedRuntimeSessionIdFromPreviewBaseUrl(baseUrl: string 
 
 export function shouldReloadHostedPreviewIframe(options: {
   frameLocation: string | null | undefined;
+  frameSource: string | null | undefined;
   targetUrl: string;
   status: Pick<HostedRuntimePreviewStatus, 'healthy' | 'updatedAt'>;
   lastReloadKey?: string | null;
 }): HostedPreviewReloadDecision {
   const frameLocation = String(options.frameLocation || '').trim();
+  const frameSource = String(options.frameSource || '').trim();
   const reloadKey = `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
-  const isBlockedFrame =
-    !frameLocation || frameLocation === 'about:blank' || frameLocation.startsWith('chrome-error://');
+  const hasTargetSource = frameSource === options.targetUrl;
+  const isExplicitlyBlocked =
+    frameLocation === 'about:blank' ||
+    frameLocation.startsWith('chrome-error://') ||
+    frameLocation.startsWith('edge-error://');
+  const isBlockedFrame = isExplicitlyBlocked || (!frameLocation && !hasTargetSource);
 
   if (!options.status.healthy || !isBlockedFrame) {
     return {

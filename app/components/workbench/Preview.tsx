@@ -335,6 +335,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
       const reloadDecision = shouldReloadHostedPreviewIframe({
         frameLocation,
+        frameSource: iframeRef.current?.getAttribute('src'),
         targetUrl,
         status,
         lastReloadKey: lastHostedPreviewReloadKeyRef.current,

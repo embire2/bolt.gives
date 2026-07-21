@@ -249,6 +249,7 @@ describe('hosted runtime client', () => {
     expect(
       shouldReloadHostedPreviewIframe({
         frameLocation: 'chrome-error://chromewebdata/',
+        frameSource: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/',
         targetUrl: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/',
         status: {
           healthy: true,
@@ -266,6 +267,7 @@ describe('hosted runtime client', () => {
     expect(
       shouldReloadHostedPreviewIframe({
         frameLocation: 'chrome-error://chromewebdata/',
+        frameSource: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/',
         targetUrl: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/',
         status: {
           healthy: true,
@@ -276,6 +278,46 @@ describe('hosted runtime client', () => {
     ).toEqual({
       shouldReload: false,
       reloadKey: 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/::2026-03-29T12:00:00.000Z',
+    });
+  });
+
+  it('does not reload a healthy cross-origin preview whose assigned source is already current', () => {
+    const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/';
+
+    expect(
+      shouldReloadHostedPreviewIframe({
+        frameLocation: '',
+        frameSource: targetUrl,
+        targetUrl,
+        status: {
+          healthy: true,
+          updatedAt: '2026-03-29T12:00:00.000Z',
+        },
+        lastReloadKey: null,
+      }),
+    ).toEqual({
+      shouldReload: false,
+      reloadKey: null,
+    });
+  });
+
+  it('reloads a healthy preview when its iframe has not been assigned the target source', () => {
+    const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/';
+
+    expect(
+      shouldReloadHostedPreviewIframe({
+        frameLocation: '',
+        frameSource: 'about:blank',
+        targetUrl,
+        status: {
+          healthy: true,
+          updatedAt: '2026-03-29T12:00:00.000Z',
+        },
+        lastReloadKey: null,
+      }),
+    ).toEqual({
+      shouldReload: true,
+      reloadKey: `${targetUrl}::2026-03-29T12:00:00.000Z`,
     });
   });
 
