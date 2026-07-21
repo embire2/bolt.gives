@@ -1394,7 +1394,12 @@ Requirements:
           const previewReadyQuietThresholdMs = hostedRuntimeEnabled ? 20000 : 12000;
 
           if (
-            shouldUnlockPromptAfterPreviewReady(recentStepEvents, meaningfulStallMs, previewReadyQuietThresholdMs) &&
+            shouldUnlockPromptAfterPreviewReady(
+              recentStepEvents,
+              meaningfulStallMs,
+              previewReadyQuietThresholdMs,
+              requestLifecycleStartedAtRef.current,
+            ) &&
             !previewPromptUnlockTriggeredRef.current
           ) {
             previewPromptUnlockTriggeredRef.current = true;

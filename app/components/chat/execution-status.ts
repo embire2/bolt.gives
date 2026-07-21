@@ -19,8 +19,19 @@ export function shouldUnlockPromptAfterPreviewReady(
   stepRunnerEvents: InteractiveStepRunnerEvent[],
   meaningfulStallMs: number,
   thresholdMs: number,
+  requestStartedAt: number = 0,
 ): boolean {
-  return hasPreviewVerification(stepRunnerEvents) && meaningfulStallMs >= thresholdMs;
+  const hasCurrentRequestPreviewVerification = stepRunnerEvents.some((event) => {
+    if (!isPreviewReadyStepEvent(event)) {
+      return false;
+    }
+
+    const eventTimestamp = Date.parse(event.timestamp);
+
+    return Number.isFinite(eventTimestamp) && eventTimestamp >= requestStartedAt;
+  });
+
+  return hasCurrentRequestPreviewVerification && meaningfulStallMs >= thresholdMs;
 }
 
 export function deriveProgressMessage(

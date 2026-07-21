@@ -263,8 +263,12 @@ async function main() {
           bodyPreview = (await res.text()).slice(0, 400);
         }
       } catch {}
-      chatRequests.push({ status: res.status(), url, headers: res.headers(), bodyPreview });
-      log('api/chat response', `status=${res.status()} body=${bodyPreview.slice(0, 200)}`);
+      const headers = res.headers();
+      chatRequests.push({ status: res.status(), url, headers, bodyPreview });
+      log(
+        'api/chat response',
+        `status=${res.status()} deadlineMs=${headers['x-bolt-stream-deadline-ms'] || 'missing'} body=${bodyPreview.slice(0, 200)}`,
+      );
     }
     if (res.status() >= 400 && !url.includes('/api/chat')) {
       networkErrors.push(`HTTP ${res.status()} ${url}`);

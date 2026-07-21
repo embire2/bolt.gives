@@ -39,6 +39,13 @@ describe('execution-status helpers', () => {
     expect(shouldUnlockPromptAfterPreviewReady([], 20_000, 20_000)).toBe(false);
   });
 
+  it('does not abort a follow-up because an earlier request verified its preview', () => {
+    const previousPreview = createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified');
+    const followUpStartedAt = Date.parse(previousPreview.timestamp) + 1;
+
+    expect(shouldUnlockPromptAfterPreviewReady([previousPreview], 20_000, 20_000, followUpStartedAt)).toBe(false);
+  });
+
   it('upgrades preview pending progress once preview is verified', () => {
     const progressEvents: ProgressAnnotation[] = [
       {
