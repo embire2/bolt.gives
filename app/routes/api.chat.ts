@@ -25,6 +25,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
 import { AgentRecoveryController } from '~/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '~/lib/.server/llm/stream-recovery';
+import { enforceDataStreamDeadline } from '~/lib/.server/llm/data-stream-deadline';
 import { recordAgentRunMetrics } from '~/lib/.server/llm/run-metrics';
 import { deriveProjectMemoryKey, getProjectMemory, upsertProjectMemory } from '~/lib/.server/llm/project-memory';
 import { analyzeRunContinuation, synthesizeRunHandoff } from '~/lib/.server/llm/run-continuation';
@@ -1150,6 +1151,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     let lastChunk: string | undefined = undefined;
 
+    let terminateActiveStream: ((reason: Error) => void) | null = null;
     const dataStream = createDataStream({
       async execute(dataStream) {
         let firstCommentaryAt: number | null = null;
@@ -1429,6 +1431,17 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
         const stopRunMonitors = () => {
           streamRecovery?.stop();
           stopCommentaryHeartbeat();
+          activeStreamAbortController = null;
+        };
+
+        terminateActiveStream = (reason: Error) => {
+          streamRecovery?.stop();
+          stopCommentaryHeartbeat();
+
+          if (activeStreamAbortController && !activeStreamAbortController.signal.aborted) {
+            activeStreamAbortController.abort(reason);
+          }
+
           activeStreamAbortController = null;
         };
         streamRecovery = new StreamRecoveryManager({
@@ -3211,7 +3224,25 @@ Next: I am sending the final result now.`,
       }),
     );
 
-    return new Response(dataStream, {
+    const responseSelection = resolvePreferredModelProvider(messages, selectedModel, selectedProvider);
+    const responseMaxDurationMs = resolveStreamMaxDurationMs(responseSelection.provider);
+    const responseStream = responseMaxDurationMs
+      ? enforceDataStreamDeadline(dataStream, {
+          maxDuration: responseMaxDurationMs,
+          errorMessage: `BOLT_STREAM_TIMEOUT: hosted FREE generation exceeded ${responseMaxDurationMs}ms`,
+          onDeadline: () => {
+            const reason = new Error(`BOLT_STREAM_TIMEOUT: hosted FREE generation exceeded ${responseMaxDurationMs}ms`);
+            terminateActiveStream?.(reason);
+            stopHeartbeatIfRunning();
+            logger.warn('Hosted FREE response deadline closed a stalled stream', {
+              ...requestDebugContext,
+              responseMaxDurationMs,
+            });
+          },
+        })
+      : dataStream;
+
+    return new Response(responseStream, {
       status: 200,
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
