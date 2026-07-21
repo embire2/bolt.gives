@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   resolveDefaultStreamTimeoutMs,
+  resolveStreamMaxDurationMs,
   shouldAttemptHostedPreviewVerification,
   shouldContinuePendingHostedPreviewVerification,
   shouldTrackCommentaryRunActivity,
@@ -63,6 +64,11 @@ describe('api.chat stream recovery policy', () => {
     expect(resolveDefaultStreamTimeoutMs('FREE', 'gpt-5.6')).toBe(120_000);
     expect(resolveDefaultStreamTimeoutMs('OpenAI', 'gpt-5.6')).toBe(300_000);
     expect(resolveDefaultStreamTimeoutMs('OpenAI', 'gpt-4.1')).toBe(180_000);
+  });
+
+  it('sets a wall-clock deadline only for hosted FREE streams', () => {
+    expect(resolveStreamMaxDurationMs('FREE')).toBe(150_000);
+    expect(resolveStreamMaxDurationMs('OpenAI')).toBeUndefined();
   });
 
   it('does not treat commentary heartbeats as provider stream activity', () => {

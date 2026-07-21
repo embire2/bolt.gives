@@ -80,6 +80,7 @@ const logger = createScopedLogger('api.chat');
 const MAX_RUN_CONTINUATION_ATTEMPTS = 5;
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const HOSTED_FREE_STREAM_TIMEOUT_MS = 120000;
+const HOSTED_FREE_STREAM_MAX_DURATION_MS = 150000;
 const LONG_THINK_STREAM_TIMEOUT_MS = 300000;
 const DEFAULT_STREAM_TIMEOUT_MS = 180000;
 const BOLT_ACTION_RE = /<boltAction\b/i;
@@ -111,6 +112,10 @@ export function shouldTrackCommentaryRunActivity(options?: { trackRunActivity?: 
 
 export function shouldTrackModelStreamChunkActivity(chunk?: { type?: string }) {
   return Boolean(chunk?.type && chunk.type !== 'reasoning');
+}
+
+export function resolveStreamMaxDurationMs(provider?: string) {
+  return provider?.trim().toUpperCase() === 'FREE' ? HOSTED_FREE_STREAM_MAX_DURATION_MS : undefined;
 }
 
 const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
@@ -1428,6 +1433,7 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
         };
         streamRecovery = new StreamRecoveryManager({
           timeout: streamTimeoutMs,
+          maxDuration: resolveStreamMaxDurationMs(streamTimeoutSelection.provider),
           maxRetries: streamMaxRetries,
           onTimeout: () => {
             const signal = recoveryController.registerTimeout();
