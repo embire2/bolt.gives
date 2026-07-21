@@ -85,36 +85,9 @@ async function waitForPromptSurface(page) {
   throw new Error('Prompt surface never became visible.');
 }
 
-async function waitForCommentaryInCurrentSurface(page, label) {
-  const deadline = Date.now() + 180000;
-  let attempt = 0;
-
-  while (Date.now() < deadline) {
-    attempt += 1;
-
-    const ready = await page
-      .evaluate((expectedLabel) => {
-        const bodyText = document.body.innerText || '';
-        return bodyText.includes(expectedLabel) && bodyText.includes('Live Commentary');
-      }, label)
-      .catch(() => false);
-
-    if (ready) {
-      logProgress('Commentary visible', `label=${label}`);
-      return;
-    }
-
-    logProgress('Waiting for commentary', `attempt=${attempt} label=${label}`);
-    await delay(4000);
-  }
-
-  throw new Error(`Commentary did not become visible for label: ${label}`);
-}
-
 async function waitForPreviewToRender(page) {
   await page.getByRole('tab', { name: /^Workspace$/i }).click();
   logProgress('Switched to workspace tab');
-  await waitForCommentaryInCurrentSurface(page, 'Live Commentary');
 
   const previewButton = page.getByRole('button', { name: /^Preview$/i }).first();
 
@@ -251,7 +224,6 @@ try {
   );
   await promptTextarea.press('Enter');
 
-  await waitForCommentaryInCurrentSurface(page, 'Live Commentary');
   await waitForPreviewToRender(page);
   if (asset404s.length > 0) {
     throw new Error(`Asset 404s detected before preview became ready: ${asset404s.join(', ')}`);

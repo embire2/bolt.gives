@@ -24,6 +24,7 @@
 - Static requests now use the Pages `ASSETS` binding before Remix SSR is imported: real CSS/JS/images retain their asset-server response while missing generated-preview assets get a lightweight `404`, preventing route-error stacks from exhausting the local Wrangler runtime.
 - Hosted/self-hosted app workers default to a 1.5 GB Node heap and error-only Wrangler diagnostics; build and runtime services keep their separate larger memory allowance.
 - Bug-report proxy coverage now injects the runtime control URL through Cloudflare context, so operator `.env.local` settings cannot make the release suite nondeterministic.
+- Recovery smoke no longer blocks on presentation copy from the compact Workspace status UI; it validates the stronger contracts directly through rendered preview content, persisted runtime files, deliberate break detection, restored source, and healthy preview state.
 
 ### Added
 
