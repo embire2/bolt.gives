@@ -66,6 +66,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - `pnpm run build` now enforces a 1 MB per-asset and 2 MB initial-route budget under a 3 GB heap ceiling.
 - Live release smoke targets the real `/chat` surface, requires generated and follow-up tokens in the same hosted runtime snapshot, and fails on fatal browser transport errors.
 - Static requests use the Pages `ASSETS` binding before Remix SSR; real files keep their asset-server response while missing generated-preview assets receive lightweight `404` responses. The local Pages app worker defaults to a 1.5 GB heap with quiet Wrangler diagnostics.
+- Concurrent hosted projects reserve unique preview ports before asynchronous socket checks, and preview plus published-project HTTP/WebSocket proxies verify session ownership, preventing one user's workspace from ever rendering another user's app.
 
 ### Quiet hosted Vite previews
 

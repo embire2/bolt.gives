@@ -25,6 +25,8 @@
 - Hosted/self-hosted app workers default to a 1.5 GB Node heap and error-only Wrangler diagnostics; build and runtime services keep their separate larger memory allowance.
 - Bug-report proxy coverage now injects the runtime control URL through Cloudflare context, so operator `.env.local` settings cannot make the release suite nondeterministic.
 - Recovery smoke no longer blocks on presentation copy from the compact Workspace status UI; it validates the stronger contracts directly through rendered preview content, persisted runtime files, deliberate break detection, restored source, and healthy preview state.
+- Hosted preview ports are reserved atomically before availability probes yield, preventing concurrent project starts from selecting the same Vite port and briefly displaying another session's app.
+- Preview and published-project HTTP/WebSocket proxies now require the requested port to belong to the current session, enforcing project isolation even when a client presents stale preview or deployment metadata.
 
 ### Added
 

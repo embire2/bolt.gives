@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  allocatePreviewPort,
   applyPreviewResponseHeaders,
   applyHostedVitePreviewDefaults,
   applyUnavailablePackageVersionRepair,
@@ -25,6 +26,7 @@ import {
   getFreeUsageQuotaResetAt,
   inferHostedWorkspaceStartCommand,
   isPreviewPortReserved,
+  isPreviewPortOwnedBySession,
   mergeWorkspaceFileMap,
   markSessionMutationStart,
   normalizeSessionId,
@@ -557,6 +559,60 @@ describe('runtime server workspace isolation', () => {
     expect(isPreviewPortReserved(4105, 'session-port-release')).toBe(false);
   });
 
+  it('reserves preview ports before asynchronous availability probes complete', async () => {
+    let resolveFirstProbe = (_available: boolean) => {};
+    const firstSession = { id: 'session-allocation-a' };
+    const secondSession = { id: 'session-allocation-b' };
+    const firstAllocation = allocatePreviewPort(firstSession.id, {
+      isPortAvailableFn: () =>
+        new Promise<boolean>((resolve) => {
+          resolveFirstProbe = resolve;
+        }),
+    });
+
+    expect(isPreviewPortReserved(4100, firstSession.id)).toBe(true);
+
+    const secondPort = await allocatePreviewPort(secondSession.id, {
+      isPortAvailableFn: async () => true,
+    });
+    resolveFirstProbe(true);
+    const firstPort = await firstAllocation;
+
+    expect(firstPort).toBe(4100);
+    expect(secondPort).toBe(4101);
+    expect(isPreviewPortReserved(firstPort, firstSession.id)).toBe(true);
+    expect(isPreviewPortReserved(secondPort, secondSession.id)).toBe(true);
+
+    releaseReservedPreviewPorts(firstSession);
+    releaseReservedPreviewPorts(secondSession);
+  });
+
+  it('requires both preview metadata and reservation ownership before proxying a session port', () => {
+    const ownerSession = {
+      id: 'session-port-owner',
+      preview: undefined as { port: number; baseUrl: string } | undefined,
+    };
+
+    updateSessionPreview(
+      ownerSession,
+      {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'alpha1.bolt.gives',
+        },
+      } as { headers: Record<string, string> },
+      4120,
+    );
+
+    expect(isPreviewPortOwnedBySession(ownerSession, 4120)).toBe(true);
+    expect(isPreviewPortOwnedBySession({ id: 'session-port-intruder', preview: ownerSession.preview }, 4120)).toBe(
+      false,
+    );
+    expect(isPreviewPortOwnedBySession(ownerSession, 4121)).toBe(false);
+
+    releaseReservedPreviewPorts(ownerSession);
+  });
+
   it('prefers an explicit public origin for hosted preview urls', () => {
     const session = {
       id: 'session-public-origin',
@@ -659,26 +715,40 @@ describe('runtime server workspace isolation', () => {
   });
 
   it('routes published project websocket upgrades to the active preview port', () => {
+    const session = {
+      id: 'session-published-upgrade',
+      preview: undefined as { port: number; baseUrl: string } | undefined,
+    };
+
+    updateSessionPreview(
+      session,
+      {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'calendar.bolt.gives',
+        },
+      } as { headers: Record<string, string> },
+      4123,
+    );
+
     expect(
       resolvePublishedProjectUpgradeTarget(
         {
           status: 'active',
           previewPort: 4100,
         },
-        {
-          preview: {
-            port: 4123,
-          },
-        },
+        session,
       ),
     ).toEqual({
       ok: true,
       portRaw: '4123',
       upstreamPath: null,
     });
+
+    releaseReservedPreviewPorts(session);
   });
 
-  it('falls back to the deployment preview port for published project websocket upgrades', () => {
+  it('rejects stale published deployment ports without active session ownership', () => {
     expect(
       resolvePublishedProjectUpgradeTarget(
         {
@@ -687,10 +757,10 @@ describe('runtime server workspace isolation', () => {
         },
         {},
       ),
-    ).toEqual({
-      ok: true,
-      portRaw: '4100',
-      upstreamPath: null,
+    ).toMatchObject({
+      ok: false,
+      statusCode: 503,
+      reason: 'The published project preview is not ready in its isolated runtime yet.',
     });
   });
 

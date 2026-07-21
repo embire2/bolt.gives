@@ -4543,6 +4543,12 @@ export function updateSessionPreview(session, req, port) {
   }
 
   const resolvedPort = Number(port);
+  const ownerSessionId = reservedPreviewPorts.get(resolvedPort);
+
+  if (ownerSessionId && ownerSessionId !== session.id) {
+    return session.preview || null;
+  }
+
   const previousPort = Number(session.preview?.port || 0);
   const previewBaseUrl = `${getRequestOrigin(req)}/runtime/preview/${session.id}/${resolvedPort}`;
 
@@ -4590,6 +4596,17 @@ export function isPreviewPortReserved(port, sessionId) {
   }
 
   return sessionId ? ownerSessionId === sessionId : true;
+}
+
+export function isPreviewPortOwnedBySession(session, port) {
+  const resolvedPort = Number(port);
+
+  return (
+    Number.isFinite(resolvedPort) &&
+    resolvedPort > 0 &&
+    Number(session?.preview?.port || 0) === resolvedPort &&
+    reservedPreviewPorts.get(resolvedPort) === session?.id
+  );
 }
 
 export function resolveStalePreviewRedirectPath(session, requestUrl, pathname = requestUrl) {
@@ -4993,12 +5010,12 @@ async function proxyPublishedProjectRequest(req, res, deployment) {
 
   void ensureRuntimeNodeWorkspaceForSession(session);
 
-  if (!session.preview?.port) {
+  if (!session.preview?.port || !isPreviewPortOwnedBySession(session, session.preview.port)) {
     scheduleHostedAutoStartAfterSync(session);
     sendPreviewRepairPage(
       res,
       session,
-      'The published project preview is starting. This page will be available shortly.',
+      'The published project preview is starting in its isolated runtime. This page will be available shortly.',
     );
     return;
   }
@@ -5106,15 +5123,37 @@ function isPortAvailable(port) {
   });
 }
 
-async function allocatePreviewPort() {
+export async function allocatePreviewPort(sessionId, options = {}) {
+  const ownerSessionId = String(sessionId || '').trim();
+  const isPortAvailableFn = options.isPortAvailableFn || isPortAvailable;
+
+  if (!ownerSessionId) {
+    throw new Error('A runtime session is required to allocate a preview port');
+  }
+
   for (let port = PREVIEW_PORT_RANGE_START; port <= PREVIEW_PORT_RANGE_END; port++) {
     if (reservedPreviewPorts.has(port)) {
       continue;
     }
 
-    // eslint-disable-next-line no-await-in-loop
-    if (await isPortAvailable(port)) {
+    // Reserve before the asynchronous socket probe so concurrent sessions cannot select the same candidate.
+    reservedPreviewPorts.set(port, ownerSessionId);
+
+    let available = false;
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      available = await isPortAvailableFn(port);
+    } catch {
+      available = false;
+    }
+
+    if (available) {
       return port;
+    }
+
+    if (reservedPreviewPorts.get(port) === ownerSessionId) {
+      reservedPreviewPorts.delete(port);
     }
   }
 
@@ -5145,7 +5184,8 @@ async function waitForPreview(port) {
   throw new Error(`Preview did not become ready on port ${port}`);
 }
 
-async function terminateSessionProcesses(session) {
+async function terminateSessionProcesses(session, options = {}) {
+  const preservePreviewPort = Number(options.preservePreviewPort || 0);
   cancelPendingPreviewAutoRestore(session);
   cancelPendingPreviewVerification(session);
 
@@ -5156,6 +5196,11 @@ async function terminateSessionProcesses(session) {
   session.processes.clear();
   releaseReservedPreviewPorts(session);
   session.preview = undefined;
+
+  if (Number.isFinite(preservePreviewPort) && preservePreviewPort > 0) {
+    reservedPreviewPorts.set(preservePreviewPort, session.id);
+  }
+
   clearPreviewDiagnostics(session);
   clearPreviewRecoveryState(session);
 }
@@ -5192,7 +5237,28 @@ async function handleRunCommand(req, res, session, body) {
   }
 
   const writeEvent = createEventWriter(res);
-  const requestedPreviewPort = kind === 'start' ? session.preview?.port || (await allocatePreviewPort()) : undefined;
+  const existingPreviewPort = kind === 'start' ? Number(session.preview?.port || 0) : 0;
+  const existingPreviewPortOwner = existingPreviewPort > 0 ? reservedPreviewPorts.get(existingPreviewPort) : undefined;
+  const canReuseExistingPreviewPort =
+    existingPreviewPort > 0 && (!existingPreviewPortOwner || existingPreviewPortOwner === session.id);
+  const allocatedNewPreviewPort = kind === 'start' && !canReuseExistingPreviewPort;
+  const requestedPreviewPort =
+    kind === 'start'
+      ? canReuseExistingPreviewPort
+        ? existingPreviewPort
+        : await allocatePreviewPort(session.id)
+      : undefined;
+
+  if (kind === 'start' && canReuseExistingPreviewPort) {
+    reservedPreviewPorts.set(existingPreviewPort, session.id);
+  }
+
+  const releaseNewPreviewPortReservation = () => {
+    if (allocatedNewPreviewPort && reservedPreviewPorts.get(Number(requestedPreviewPort)) === session.id) {
+      reservedPreviewPorts.delete(Number(requestedPreviewPort));
+    }
+  };
+
   let effectiveCommand = kind === 'start' ? normalizeStartCommand(command, requestedPreviewPort) : command.trim();
   let previewPort =
     kind === 'start' ? extractConfiguredStartPort(effectiveCommand) || Number(requestedPreviewPort || 0) : undefined;
@@ -5241,6 +5307,7 @@ async function handleRunCommand(req, res, session, body) {
         'Hosted runtime refused to run a package-manager command because the session workspace has no project manifest yet. Scaffold or sync the project files first.\n',
     });
     writeEvent({ type: 'exit', exitCode: 1 });
+    releaseNewPreviewPortReservation();
     res.end();
     return;
   }
@@ -5289,6 +5356,7 @@ async function handleRunCommand(req, res, session, body) {
         chunk: `${error instanceof Error ? error.message : String(error)}\n`,
       });
       writeEvent({ type: 'exit', exitCode: 1 });
+      releaseNewPreviewPortReservation();
       res.end();
       return;
     }
@@ -5305,12 +5373,8 @@ async function handleRunCommand(req, res, session, body) {
   };
 
   if (kind === 'start') {
-    await terminateSessionProcesses(session);
+    await terminateSessionProcesses(session, { preservePreviewPort: previewPort });
     clearPreviewDiagnostics(session, 'starting');
-
-    if (previewPort) {
-      reservedPreviewPorts.set(previewPort, session.id);
-    }
   }
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
@@ -5384,8 +5448,11 @@ async function handleRunCommand(req, res, session, body) {
       return;
     }
 
-    updateSessionPreview(session, req, detectedPort);
-    previewCoordinator.startProbe(detectedPort);
+    const detectedPreview = updateSessionPreview(session, req, detectedPort);
+
+    if (Number(detectedPreview?.port || 0) === detectedPort) {
+      previewCoordinator.startProbe(detectedPort);
+    }
   };
 
   startReservedPreviewProbe(session, req, kind, previewPort, previewCoordinator);
@@ -5523,6 +5590,11 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
     return;
   }
 
+  if (!isPreviewPortOwnedBySession(session, port)) {
+    sendText(res, 409, 'Preview port ownership mismatch');
+    return;
+  }
+
   const method = String(req.method || 'GET').toUpperCase();
   const scheduleRetry = () => {
     if (res.writableEnded || res.destroyed) {
@@ -5646,14 +5718,14 @@ export function resolvePublishedProjectUpgradeTarget(deployment, session) {
     };
   }
 
-  const port = Number(session.preview?.port || deployment.previewPort || 0);
+  const port = Number(session.preview?.port || 0);
 
-  if (!port) {
+  if (!port || !isPreviewPortOwnedBySession(session, port)) {
     return {
       ok: false,
       statusCode: 503,
       statusText: 'Service Unavailable',
-      reason: 'The published project preview is not ready yet.',
+      reason: 'The published project preview is not ready in its isolated runtime yet.',
     };
   }
 
@@ -5721,6 +5793,11 @@ function proxyPreviewUpgrade(req, socket, head) {
 
   if (!session) {
     writeUpgradeError(socket, 404, 'Not Found');
+    return;
+  }
+
+  if (!isPreviewPortOwnedBySession(session, Number(portRaw))) {
+    writeUpgradeError(socket, 409, 'Conflict');
     return;
   }
 
