@@ -79,20 +79,15 @@ export function shouldRecoverHostedFreeCompletion(options: {
   providerName?: string;
   chatMode: 'discuss' | 'build';
   assistantContent?: string;
-  requestStartedAtMs: number;
-  lastPreviewReadyAtMs?: number | null;
+  workspaceChanged: boolean;
 }): boolean {
   if (options.providerName?.trim().toUpperCase() !== 'FREE' || options.chatMode !== 'build') {
     return false;
   }
 
-  const producedPreview =
-    Number.isFinite(options.lastPreviewReadyAtMs) &&
-    Number.isFinite(options.requestStartedAtMs) &&
-    Number(options.lastPreviewReadyAtMs) >= options.requestStartedAtMs;
   const producedBuildAction = /<bolt(?:Action|Artifact)\b/i.test(options.assistantContent || '');
 
-  return !producedPreview && !producedBuildAction;
+  return !options.workspaceChanged && !producedBuildAction;
 }
 
 export function getCurrentRequestAssistantContent(options: {

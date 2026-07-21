@@ -791,8 +791,7 @@ export const ChatImpl = memo(
           providerName: runContextRef.current.providerName,
           chatMode,
           assistantContent: currentRequestAssistantContent,
-          requestStartedAtMs: requestLifecycleStartedAtRef.current,
-          lastPreviewReadyAtMs: lastPreviewReadyAtRef.current,
+          workspaceChanged: workbenchStore.files.get() !== requestWorkspaceBaselineRef.current,
         });
 
         if (shouldRecoverEmptyBuild) {
@@ -862,6 +861,7 @@ export const ChatImpl = memo(
     const lastMessageProgressAtRef = useRef(Date.now());
     const lastAssistantProgressSignatureRef = useRef('');
     const requestAssistantBaselineSignatureRef = useRef('');
+    const requestWorkspaceBaselineRef = useRef(workbenchStore.files.get());
     const latestUserRequestRef = useRef('');
     const requestLifecycleStartedAtRef = useRef(Date.now());
     const lastRunCompletedAtRef = useRef<number | null>(null);
@@ -1029,6 +1029,7 @@ export const ChatImpl = memo(
         requestAssistantBaselineSignatureRef.current = previousAssistantMessage
           ? `${previousAssistantMessage.id}:${previousAssistantMessage.content.length}`
           : '';
+        requestWorkspaceBaselineRef.current = workbenchStore.files.get();
         appendHiddenContinuation(args);
 
         return true;
@@ -2837,6 +2838,7 @@ Requirements:
       requestAssistantBaselineSignatureRef.current = previousAssistantMessage
         ? `${previousAssistantMessage.id}:${previousAssistantMessage.content.length}`
         : '';
+      requestWorkspaceBaselineRef.current = workbenchStore.files.get();
       lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
       manualPromptGenerationRef.current += 1;

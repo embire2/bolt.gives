@@ -56,8 +56,7 @@ describe('resolveStallPolicy', () => {
         providerName: 'FREE',
         chatMode: 'build',
         assistantContent: '',
-        requestStartedAtMs: 20_000,
-        lastPreviewReadyAtMs: 10_000,
+        workspaceChanged: false,
       }),
     ).toBe(true);
     expect(
@@ -65,8 +64,7 @@ describe('resolveStallPolicy', () => {
         providerName: 'FREE',
         chatMode: 'build',
         assistantContent: '<boltArtifact id="app">updated</boltArtifact>',
-        requestStartedAtMs: 20_000,
-        lastPreviewReadyAtMs: 10_000,
+        workspaceChanged: false,
       }),
     ).toBe(false);
     expect(
@@ -74,8 +72,7 @@ describe('resolveStallPolicy', () => {
         providerName: 'FREE',
         chatMode: 'build',
         assistantContent: '',
-        requestStartedAtMs: 20_000,
-        lastPreviewReadyAtMs: 25_000,
+        workspaceChanged: true,
       }),
     ).toBe(false);
   });

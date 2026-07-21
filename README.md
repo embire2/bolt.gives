@@ -71,7 +71,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - A healthy preview from the previous run no longer cancels the next follow-up after its quiet-period unlock timer; preview completion is scoped to the request that produced it.
 - Hosted FREE recovery is provider-aware: `gpt-5.6` enters single-flight continuation after 120 seconds without meaningful progress, while BYOK GPT-5/Codex models retain their longer thinking allowance.
 - The browser also honors the server-advertised 150-second absolute FREE deadline with a one-shot response timer that is independent of stream rerenders, ensuring commentary or reasoning-only text cannot suppress recovery indefinitely.
-- A hosted FREE build that completes with no file action and no preview from that request is treated as incomplete and continued automatically; an empty HTTP 200 no longer strands a follow-up prompt.
+- A hosted FREE build that completes with no file action and no workspace change is treated as incomplete and continued automatically; an empty HTTP 200 or a health check of the unchanged preview no longer strands a follow-up prompt.
 - Follow-up validation is request-scoped: a prior assistant artifact cannot satisfy a later empty response.
 - Hidden recovery requests use single-flight dispatch, reducing duplicate model streams and avoiding the CPU, network, and provider usage caused by continuation rerenders.
 - Commentary remains visible during long runs without masking provider stalls. Hosted FREE requests enter recovery after 120 seconds without visible/actionable model output and have a Cloudflare-lifecycle-safe 150-second response deadline that cancels stalled upstream work before single-flight continuation; BYOK long-thinking models keep their longer timeout.
