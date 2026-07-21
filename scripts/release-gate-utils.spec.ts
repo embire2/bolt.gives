@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { getScreenshotMinimumBytes } from './release-gate-utils.mjs';
+import { getReleaseHomeReadinessMarkers, getScreenshotMinimumBytes } from './release-gate-utils.mjs';
+
+describe('release gate home readiness', () => {
+  it('tracks the current spam-safe GitHub contribution wording', () => {
+    expect(getReleaseHomeReadinessMarkers('v3.1.0')).toEqual([
+      'v3.1.0',
+      'the transparent ai coding workspace',
+      'contribute on github',
+      'real screenshots',
+    ]);
+  });
+});
 
 describe('release gate screenshot thresholds', () => {
   it('keeps content-heavy screenshots on the default threshold', () => {

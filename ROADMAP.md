@@ -52,6 +52,7 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 - [x] Add a dedicated runtime-node Live Workspaces wizard for per-project Ubuntu CLI users, isolated workspace directories, and PostgreSQL databases.
 - [x] Auto-provision runtime-node CLI workspaces for normal hosted chat projects, not only manual setup-wizard submissions.
 - [x] Replace preview refused-connection churn with a stable repair-in-progress page and sticky repair state.
+- [x] Preserve healthy cross-origin and in-flight preview iframe loads during status reconciliation, eliminating repeated request aborts and visible flashing.
 - [x] Add project publishing for `https://{subdomain}.bolt.gives` plus Stripe Checkout initiation for $10/month custom-domain hosting.
 
 ## v3.0.9.32 - Shipped Patch

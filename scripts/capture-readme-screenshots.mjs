@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { getReleaseHomeReadinessMarkers } from './release-gate-utils.mjs';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const homeUrl = new URL('/', baseUrl).toString();
@@ -56,22 +57,30 @@ function getPromptLocator() {
 
 async function captureHome() {
   await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForFunction(
-    (label) => {
-      const text = document.body.innerText || '';
-      return (
-        text.includes(label) &&
-        text.includes('The transparent AI coding workspace') &&
-        text.includes('Contribute to Project') &&
-        /real screenshots/i.test(text) &&
-        !text.includes('Select model') &&
-        !text.includes('Preparing the coding workspace') &&
-        !/server error|error details|custom error/i.test(text)
-      );
-    },
-    versionLabel,
-    { timeout: 45000 },
-  );
+  const requiredMarkers = getReleaseHomeReadinessMarkers(versionLabel);
+
+  try {
+    await page.waitForFunction(
+      (markers) => {
+        const text = (document.body.innerText || '').toLowerCase();
+        return (
+          markers.every((marker) => text.includes(marker)) &&
+          !text.includes('select model') &&
+          !text.includes('preparing the coding workspace') &&
+          !/server error|error details|custom error/i.test(text)
+        );
+      },
+      requiredMarkers,
+      { timeout: 45000 },
+    );
+  } catch (error) {
+    const text = await page.evaluate(() => (document.body.innerText || '').toLowerCase());
+    const missingMarkers = requiredMarkers.filter((marker) => !text.includes(marker));
+    throw new Error(
+      `Home screenshot readiness failed; missing markers: ${missingMarkers.join(', ') || 'none'}. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   await waitForImages();
   await page.screenshot({ path: path.join(outDir, 'home.png'), fullPage: true });
 }
