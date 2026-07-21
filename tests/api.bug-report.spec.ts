@@ -39,7 +39,17 @@ describe('/api/bug-report action', () => {
       }),
     });
 
-    const response = await action({ request, context: { cloudflare: {} as never }, params: {} } as never);
+    const response = await action({
+      request,
+      context: {
+        cloudflare: {
+          env: {
+            BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'http://127.0.0.1:4321/runtime',
+          },
+        } as never,
+      },
+      params: {},
+    } as never);
     const payload = (await response.json()) as any;
 
     expect(response.status).toBe(200);

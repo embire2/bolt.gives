@@ -896,7 +896,7 @@ ROOT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
 cd "\${ROOT_DIR}"
 export NODE_ENV=production
 export PORT="\${PORT:-${APP_PORT}}"
-export NODE_OPTIONS="\${NODE_OPTIONS:---max-old-space-size=${NODE_HEAP_MB}}"
+export NODE_OPTIONS="\${BOLT_APP_NODE_OPTIONS:---max-old-space-size=1536}"
 exec node scripts/start-pages-dev.mjs -- --ip 0.0.0.0 --port "\${PORT}" --no-show-interactive-dev-session
 EOF
 

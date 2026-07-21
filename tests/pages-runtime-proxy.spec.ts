@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRuntimeProxyHeaders,
   buildRuntimeProxyTargetUrl,
+  isMissingStaticAssetRequest,
   normalizeRuntimeControlBaseUrl,
   shouldProxyRuntimeRequest,
 } from '../functions/[[path]]';
@@ -41,5 +42,18 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
     expect(headers.get('x-test')).toBe('kept');
     expect(headers.has('host')).toBe(false);
     expect(headers.has('content-length')).toBe(false);
+  });
+
+  it('short-circuits missing static assets before Remix SSR', () => {
+    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/app-screenshot.png'))).toBe(true);
+    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/assets/missing.js'))).toBe(true);
+    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/chat'))).toBe(false);
+    expect(
+      isMissingStaticAssetRequest(
+        new Request('https://alpha1.bolt.gives/api/export.pdf', {
+          method: 'POST',
+        }),
+      ),
+    ).toBe(false);
   });
 });

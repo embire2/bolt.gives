@@ -64,6 +64,8 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.
 - Health, notification, Shout Out Box, and locked-file state perform less idle work, use event-driven updates where possible, and persist acknowledged connection states.
 - `pnpm run build` now enforces a 1 MB per-asset and 2 MB initial-route budget under a 3 GB heap ceiling.
+- Live release smoke targets the real `/chat` surface, requires generated and follow-up tokens in the same hosted runtime snapshot, and fails on fatal browser transport errors.
+- Missing generated-preview assets bypass Remix SSR with lightweight `404` responses, and the local Pages app worker defaults to a 1.5 GB heap with quiet Wrangler diagnostics.
 
 ### Quiet hosted Vite previews
 
@@ -119,9 +121,9 @@ Keep `BOLT_STRIPE_SECRET_KEY` in ignored server env files only. Do not commit it
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
 
-### In-progress v3.1.0 preview/code reliability
+### v3.1.0 preview/code reliability
 
-The `v3.1.0` line is tightening first-pass project creation and Workspace usability. `Preview` and `Code` now take priority over supporting panels: focused views collapse repair/working state into a small status chip, remove the large Workspace Activity drawer from the bottom of the work surface, and keep the compact follow-up prompt visible for guidance.
+`v3.1.0` tightens first-pass project creation and Workspace usability. `Preview` and `Code` now take priority over supporting panels: focused views collapse repair/working state into a small status chip, remove the large Workspace Activity drawer from the bottom of the work surface, and keep the compact follow-up prompt visible for guidance.
 
 Workbench tab selection is user-respecting. The app may still auto-open `Preview` the first time a preview becomes available, but after a user clicks `Code` or `Diff`, runtime preview refreshes and repair-loop status updates no longer force the workbench back to `Preview`.
 
@@ -424,7 +426,7 @@ The installer will:
   - `bolt-gives-webbrowse`
   - `bolt-gives-runtime`
 
-The `bolt-gives-app` launcher health-checks the local Wrangler Pages listener and forces a failed exit when it stops responding, so systemd restarts the app service instead of leaving Caddy pointed at a dead origin.
+The `bolt-gives-app` launcher health-checks the local Wrangler Pages listener and forces a failed exit when it stops responding, so systemd restarts the app service instead of leaving Caddy pointed at a dead origin. The app worker uses a separate 1.5 GB heap default; build and agent-runtime processes retain their larger memory allowance.
 
 If the domain or PostgreSQL flags are omitted, the installer now prompts interactively for:
 
@@ -685,7 +687,7 @@ If the user wants to test locally first:
 git clone https://github.com/embire2/bolt.gives.git
 cd bolt.gives
 pnpm install
-NODE_OPTIONS=--max-old-space-size=6142 pnpm run build
+NODE_OPTIONS=--max-old-space-size=3072 pnpm run build
 ```
 
 This repo is already configured for Cloudflare Pages in `wrangler.toml`:
@@ -719,7 +721,7 @@ Use the following values in the Cloudflare Pages setup form:
 
 - Framework preset: `None`
 - Root directory: `/`
-- Build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
+- Build command: `NODE_OPTIONS=--max-old-space-size=3072 pnpm run build`
 - Build output directory: `build/client`
 
 Do **not** point Pages at another output folder. This project expects `build/client`.

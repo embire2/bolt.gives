@@ -137,3 +137,13 @@ export function isStaticAssetRequestUrl(url) {
     return STATIC_ASSET_PATH_RE.test(String(url || ''));
   }
 }
+
+export function resolveCodingAppUrl(value) {
+  const parsed = new URL(value);
+
+  if (parsed.pathname === '/' || parsed.pathname === '') {
+    parsed.pathname = '/chat';
+  }
+
+  return parsed.toString();
+}

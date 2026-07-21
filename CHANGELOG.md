@@ -19,6 +19,11 @@
 - The Appointment Scheduler first-party template pack now materializes a real React first-pass app with calendar slots,
   patient booking, doctor selection, SMTP reminder settings, and the requested visible heading before model continuation.
 - Managed Cloudflare fleet rollout now treats failed-but-recoverable instances as refresh candidates, so a previous failed deployment state does not strand healthy client Pages projects on an older SHA.
+- Live release smoke now resolves deployment origins to the real `/chat` coding surface and fails on fatal browser transport errors instead of accepting a preview after an interrupted app-server restart.
+- Wrangler was updated from `4.78.0` to `4.112.0` with current Cloudflare Worker declarations, replacing the stale local `esbuild` and `workerd` runtime used by hosted and self-hosted Pages development servers.
+- Missing generated-preview images and other static assets now return a lightweight Pages `404` before Remix SSR is imported, preventing repeated asset misses from producing large server stacks and exhausting the local Wrangler runtime.
+- Hosted/self-hosted app workers default to a 1.5 GB Node heap and error-only Wrangler diagnostics; build and runtime services keep their separate larger memory allowance.
+- Bug-report proxy coverage now injects the runtime control URL through Cloudflare context, so operator `.env.local` settings cannot make the release suite nondeterministic.
 
 ### Added
 

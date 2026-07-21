@@ -3,8 +3,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
 
-const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8788';
+const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
 const providerName = process.env.E2E_PROVIDER || 'FREE';
 const modelName = process.env.E2E_MODEL || 'gpt-5.6';
@@ -239,7 +240,7 @@ async function main() {
     }
   });
 
-  // Pin FREE + deepseek in localStorage so we bypass provider modal.
+  // Pin the requested provider/model in localStorage so the smoke bypasses provider setup.
   await page.addInitScript(({ provider, model }) => {
     const host = window.location.hostname;
     localStorage.setItem(
@@ -486,7 +487,8 @@ async function main() {
       (!hostedRuntimeSessionId || snapshotContainsToken) &&
       (!requireFollowUp ||
         (followUpPreviewContainsTokens && (!hostedRuntimeSessionId || followUpSnapshotContainsTokens))) &&
-      chatRequests.some((request) => request.status === 200),
+      chatRequests.some((request) => request.status === 200) &&
+      networkErrors.every(isBenignNetworkFailure),
     baseUrl,
     providerName,
     modelName,

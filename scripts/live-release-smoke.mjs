@@ -3,11 +3,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { isStaticAssetRequestUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
+import { isStaticAssetRequestUrl, resolveCodingAppUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
 
-const baseUrl = process.env.BASE_URL || 'https://alpha1.bolt.gives';
-const providerName = process.env.E2E_PROVIDER || 'OpenAI';
-const modelName = process.env.E2E_MODEL || 'gpt-5.4';
+const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'https://alpha1.bolt.gives');
+const providerName = process.env.E2E_PROVIDER || 'FREE';
+const modelName = process.env.E2E_MODEL || 'gpt-5.6';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
 const secure = baseUrl.startsWith('https://');
 const appToken = `LUMA_${Date.now().toString(36)}`;

@@ -30,6 +30,18 @@ describe('start pages dev script helpers', () => {
       '127.0.0.1',
       '--port',
       '8815',
+      '--log-level',
+      'error',
+    ]);
+  });
+
+  it('preserves an explicit Wrangler log level', () => {
+    expect(getWranglerPagesDevArgs(['--log-level', 'debug'])).toEqual([
+      'pages',
+      'dev',
+      './build/client',
+      '--log-level',
+      'debug',
     ]);
   });
 

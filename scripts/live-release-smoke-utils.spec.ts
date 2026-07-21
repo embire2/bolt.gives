@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStaticAssetRequestUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
+import { isStaticAssetRequestUrl, resolveCodingAppUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
 
 describe('selectBreakTarget', () => {
   it('targets the active app component referenced by index.html and main entry', () => {
@@ -43,5 +43,18 @@ describe('isStaticAssetRequestUrl', () => {
   it('ignores app routes and runtime endpoints', () => {
     expect(isStaticAssetRequestUrl('https://alpha1.bolt.gives/')).toBe(false);
     expect(isStaticAssetRequestUrl('https://alpha1.bolt.gives/runtime/sessions/demo/snapshot')).toBe(false);
+  });
+});
+
+describe('resolveCodingAppUrl', () => {
+  it('targets the coding route when a deployment origin is supplied', () => {
+    expect(resolveCodingAppUrl('https://alpha1.bolt.gives')).toBe('https://alpha1.bolt.gives/chat');
+    expect(resolveCodingAppUrl('http://127.0.0.1:8788/')).toBe('http://127.0.0.1:8788/chat');
+  });
+
+  it('preserves an explicit coding route', () => {
+    expect(resolveCodingAppUrl('https://alpha1.bolt.gives/chat/demo')).toBe(
+      'https://alpha1.bolt.gives/chat/demo',
+    );
   });
 });

@@ -35,9 +35,18 @@ interface PagesEnv {
 
 const WEBCONTAINER_PREFIXES = ['/webcontainer.connect', '/webcontainer.preview'];
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
+const STATIC_ASSET_EXTENSION_RE = /\.(?:avif|css|eot|gif|ico|jpe?g|js|map|mjs|mp3|mp4|ogg|otf|pdf|png|svg|ttf|wasm|webm|webp|woff2?)$/i;
 
 export function shouldProxyRuntimeRequest(pathname: string) {
   return pathname === '/runtime' || pathname.startsWith('/runtime/');
+}
+
+export function isMissingStaticAssetRequest(request: Request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return false;
+  }
+
+  return STATIC_ASSET_EXTENSION_RE.test(new URL(request.url).pathname);
 }
 
 export function normalizeRuntimeControlBaseUrl(value?: string) {
@@ -102,6 +111,19 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
 
   if (shouldProxyRuntimeRequest(url.pathname)) {
     return proxyRuntimeRequest(request, env);
+  }
+
+  // Pages serves existing files before Functions. A static-looking request
+  // reaching this catch-all is therefore missing and should not invoke Remix
+  // SSR, which otherwise emits a full route-error stack for every asset 404.
+  if (isMissingStaticAssetRequest(request)) {
+    return new Response(null, {
+      status: 404,
+      headers: {
+        'Cache-Control': 'no-store',
+        ...createSecurityHeaders(env as Record<string, string | undefined>, request),
+      },
+    });
   }
 
   // 1. Distributed rate-limit store, if a KV binding is configured.

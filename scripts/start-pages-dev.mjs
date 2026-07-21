@@ -20,7 +20,13 @@ export function stripLeadingArgSeparators(args) {
 }
 
 export function getWranglerPagesDevArgs(args = []) {
-  return ['pages', 'dev', './build/client', ...stripLeadingArgSeparators(args)];
+  const normalizedArgs = stripLeadingArgSeparators(args);
+
+  if (!normalizedArgs.includes('--log-level')) {
+    normalizedArgs.push('--log-level', process.env.BOLT_WRANGLER_LOG_LEVEL || 'error');
+  }
+
+  return ['pages', 'dev', './build/client', ...normalizedArgs];
 }
 
 function getArgValue(args, flagName) {
