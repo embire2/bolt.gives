@@ -17,6 +17,7 @@ export function enforceDataStreamDeadline(
   const encoder = new TextEncoder();
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   let deadlineHandle: ReturnType<typeof setTimeout> | null = null;
+  let startedAt = 0;
   let settled = false;
 
   const clearDeadline = () => {
@@ -26,58 +27,75 @@ export function enforceDataStreamDeadline(
     }
   };
 
+  const closeAtDeadline = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    clearDeadline();
+
+    try {
+      options.onDeadline?.();
+    } catch {
+      // Closing the response must not depend on optional cleanup succeeding.
+    }
+
+    const reason = new Error(options.errorMessage);
+    controller.enqueue(encoder.encode(`3:${JSON.stringify(options.errorMessage)}\n`));
+    controller.close();
+    void reader?.cancel(reason).catch(() => undefined);
+  };
+
   return new ReadableStream<Uint8Array>({
-    start(controller) {
+    start() {
       reader = stream.getReader();
-      deadlineHandle = setTimeout(() => {
+      startedAt = Date.now();
+    },
+    async pull(controller) {
+      if (settled) {
+        return;
+      }
+
+      const remainingDuration = maxDuration - (Date.now() - startedAt);
+
+      if (remainingDuration <= 0) {
+        closeAtDeadline(controller);
+        return;
+      }
+
+      try {
+        const outcome = await Promise.race([
+          reader!.read().then((next) => ({ type: 'read' as const, next })),
+          new Promise<{ type: 'deadline' }>((resolve) => {
+            deadlineHandle = setTimeout(() => resolve({ type: 'deadline' }), remainingDuration);
+          }),
+        ]);
+
+        clearDeadline();
+
+        if (outcome.type === 'deadline') {
+          closeAtDeadline(controller);
+          return;
+        }
+
+        if (outcome.next.done) {
+          settled = true;
+          controller.close();
+
+          return;
+        }
+
+        controller.enqueue(outcome.next.value);
+      } catch (error) {
         if (settled) {
           return;
         }
 
         settled = true;
         clearDeadline();
-
-        try {
-          options.onDeadline?.();
-        } catch {
-          // Closing the response must not depend on optional cleanup succeeding.
-        }
-
-        const reason = new Error(options.errorMessage);
-        controller.enqueue(encoder.encode(`3:${JSON.stringify(options.errorMessage)}\n`));
-        controller.close();
-        void reader?.cancel(reason).catch(() => undefined);
-      }, maxDuration);
-
-      void (async () => {
-        try {
-          while (!settled) {
-            const next = await reader!.read();
-
-            if (settled) {
-              return;
-            }
-
-            if (next.done) {
-              settled = true;
-              clearDeadline();
-              controller.close();
-
-              return;
-            }
-
-            controller.enqueue(next.value);
-          }
-        } catch (error) {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearDeadline();
-          controller.error(error);
-        }
-      })();
+        controller.error(error);
+      }
     },
     cancel(reason) {
       if (settled) {
