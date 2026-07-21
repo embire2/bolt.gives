@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  resolveDefaultStreamTimeoutMs,
   shouldAttemptHostedPreviewVerification,
   shouldContinuePendingHostedPreviewVerification,
+  shouldTrackCommentaryRunActivity,
 } from '../../app/routes/api.chat';
 
 describe('api.chat hosted preview continuation policy', () => {
@@ -52,5 +54,18 @@ describe('api.chat hosted preview continuation policy', () => {
         maxAttempts: 2,
       }),
     ).toBe(false);
+  });
+});
+
+describe('api.chat stream recovery policy', () => {
+  it('uses a shorter inactivity timeout for the hosted FREE provider', () => {
+    expect(resolveDefaultStreamTimeoutMs('FREE', 'gpt-5.6')).toBe(120_000);
+    expect(resolveDefaultStreamTimeoutMs('OpenAI', 'gpt-5.6')).toBe(300_000);
+    expect(resolveDefaultStreamTimeoutMs('OpenAI', 'gpt-4.1')).toBe(180_000);
+  });
+
+  it('does not treat commentary heartbeats as provider stream activity', () => {
+    expect(shouldTrackCommentaryRunActivity()).toBe(true);
+    expect(shouldTrackCommentaryRunActivity({ trackRunActivity: false })).toBe(false);
   });
 });

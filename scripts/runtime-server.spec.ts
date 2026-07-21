@@ -49,6 +49,7 @@ import {
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
+  shouldPauseManagedInstanceRolloutForSessions,
   shouldRefreshManagedInstanceForRollout,
   shouldRetryPreviewProxyResponse,
   startReservedPreviewProbe,
@@ -317,6 +318,18 @@ describe('runtime server workspace isolation', () => {
     expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: gitSha }, gitSha)).toBe(false);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'active', currentGitSha: 'old-sha' }, gitSha)).toBe(true);
     expect(shouldRefreshManagedInstanceForRollout({ status: 'provisioning', currentGitSha: null }, gitSha)).toBe(true);
+  });
+
+  it('yields automatic fleet rollout capacity to active coding sessions', () => {
+    expect(
+      shouldPauseManagedInstanceRolloutForSessions([
+        { processes: new Map([['preview', { pid: 123 }]]) },
+      ]),
+    ).toBe(true);
+    expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map(), autoRestoreInFlight: true }])).toBe(
+      true,
+    );
+    expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map() }])).toBe(false);
   });
 
   it('requires a project manifest for package-manager workspace commands only', () => {

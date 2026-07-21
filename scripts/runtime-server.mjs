@@ -97,6 +97,9 @@ export function resolveRuntimeWorkspaceRoot(
 
 const PERSIST_ROOT = resolveRuntimeWorkspaceRoot();
 const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6142';
+const MANAGED_INSTANCE_NODE_OPTIONS =
+  process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
+const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
 const PREVIEW_READY_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_READY_TIMEOUT_MS || '60000');
 const COMMAND_TIMEOUT_MS = Number(process.env.RUNTIME_COMMAND_TIMEOUT_MS || '900000');
 const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAIT_MS || '12000');
@@ -1216,7 +1219,8 @@ async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env =
       cwd,
       env: {
         ...process.env,
-        NODE_OPTIONS,
+        NODE_OPTIONS: MANAGED_INSTANCE_NODE_OPTIONS,
+        GOMAXPROCS: MANAGED_INSTANCE_GOMAXPROCS,
         ...env,
       },
     });
@@ -1795,6 +1799,15 @@ export function shouldRefreshManagedInstanceForRollout(instance, gitSha) {
   return true;
 }
 
+export function shouldPauseManagedInstanceRolloutForSessions(sessionValues) {
+  return Array.from(sessionValues || []).some(
+    (session) =>
+      Number(session?.processes?.size || 0) > 0 ||
+      session?.autoRestoreInFlight === true ||
+      Boolean(session?.runtimeNodeProvisionPromise),
+  );
+}
+
 async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', actor = 'system' } = {}) {
   const support = await buildManagedInstanceSupportState();
 
@@ -1807,6 +1820,11 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
   const gitSha = await resolveCurrentGitSha();
 
   for (const instance of registry.instances) {
+    if (shouldPauseManagedInstanceRolloutForSessions(sessions.values())) {
+      console.warn('[runtime] managed rollout yielded to active coding sessions; remaining instances will resume later.');
+      break;
+    }
+
     if (!shouldRefreshManagedInstanceForRollout(instance, gitSha)) {
       continue;
     }

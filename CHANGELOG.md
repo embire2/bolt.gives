@@ -29,6 +29,10 @@
 - Preview and published-project HTTP/WebSocket proxies now require the requested port to belong to the current session, enforcing project isolation even when a client presents stale preview or deployment metadata.
 - Visible follow-up prompts now use a render-stable queued dispatcher, so runtime/status rerenders cannot keep resetting the idle-send timer and leave an accepted improvement prompt permanently queued.
 - Hidden recovery continuations are claimed before dispatch and retried only after actual request failures, preventing loading-state rerenders from spawning duplicate `/api/chat` streams for one prompt.
+- Commentary heartbeats no longer count as provider stream activity, allowing genuinely stalled model requests to enter recovery instead of remaining open indefinitely.
+- Hosted FREE streams now recover after 120 seconds without model activity, while BYOK long-thinking models retain their longer allowance and invalid timeout overrides fall back to the selected provider's safe default.
+- Background managed-instance rollouts now yield between deployments when coding sessions are active, and deployment workers use a constrained heap/Go scheduler instead of competing with live previews for the runtime server's full memory allowance.
+- Strict calendar E2E runs terminate their generated preview process before exit and require cleanup to succeed, preventing repeated release checks from accumulating idle Vite processes.
 
 ### Added
 

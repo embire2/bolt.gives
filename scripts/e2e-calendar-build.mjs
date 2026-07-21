@@ -133,6 +133,37 @@ async function fetchRuntimeJson(page, sessionId, endpoint) {
   }
 }
 
+async function terminateRuntimeSession(page, sessionId) {
+  if (!sessionId) {
+    return { ok: true, skipped: true };
+  }
+
+  return await page
+    .evaluate(
+      async ({ sessionId, timeoutMs }) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+          const response = await fetch(`/runtime/sessions/${encodeURIComponent(sessionId)}/command`, {
+            method: 'DELETE',
+            signal: controller.signal,
+          });
+
+          return { ok: response.ok, status: response.status };
+        } finally {
+          clearTimeout(timeout);
+        }
+      },
+      { sessionId, timeoutMs: runtimeFetchTimeoutMs },
+    )
+    .catch((error) => ({
+      ok: false,
+      status: 0,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+}
+
 async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
   const statusResponse = await fetchRuntimeJson(page, sessionId, 'preview-status');
   const snapshotResponse = await fetchRuntimeJson(page, sessionId, 'snapshot');
@@ -480,6 +511,11 @@ async function main() {
   });
   const finalBody = bodyTextLast.replace(/\s+/g, ' ').slice(0, 4000);
   await fs.writeFile(path.join(outDir, 'final-body.txt'), bodyTextLast);
+  const runtimeCleanup = await terminateRuntimeSession(page, hostedRuntimeSessionId);
+
+  if (hostedRuntimeSessionId) {
+    log('runtime session cleanup', JSON.stringify(runtimeCleanup));
+  }
 
   const summary = {
     ok:
@@ -488,7 +524,8 @@ async function main() {
       (!requireFollowUp ||
         (followUpPreviewContainsTokens && (!hostedRuntimeSessionId || followUpSnapshotContainsTokens))) &&
       chatRequests.some((request) => request.status === 200) &&
-      networkErrors.every(isBenignNetworkFailure),
+      networkErrors.every(isBenignNetworkFailure) &&
+      runtimeCleanup.ok,
     baseUrl,
     providerName,
     modelName,
@@ -506,6 +543,7 @@ async function main() {
     followUpPreviewContainsTokens,
     followUpSnapshotContainsTokens,
     hostedRuntimeSessionId,
+    runtimeCleanup,
     chatRequests,
     consoleErrors: consoleErrors.slice(0, 60),
     networkErrors: networkErrors.slice(0, 60),

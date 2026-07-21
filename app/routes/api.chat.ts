@@ -79,6 +79,9 @@ export async function action(args: ActionFunctionArgs) {
 const logger = createScopedLogger('api.chat');
 const MAX_RUN_CONTINUATION_ATTEMPTS = 5;
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
+const HOSTED_FREE_STREAM_TIMEOUT_MS = 120000;
+const LONG_THINK_STREAM_TIMEOUT_MS = 300000;
+const DEFAULT_STREAM_TIMEOUT_MS = 180000;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type=(["'])file\1/i;
 const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementation\s+plan|plan:|next\s+steps)\b/i;
@@ -93,6 +96,19 @@ const FILE_PATH_LITERAL_RE =
   /(?:^|\/)[\w.-]+\.(?:tsx?|jsx?|css|scss|json|html?|mdx?|vue|svelte|astro|svg|png|jpe?g|gif|webp)$/i;
 const PROJECT_OBJECTIVE_CANDIDATES_KEY = '__bolt_project_objective_candidates_v1';
 const MAX_PROJECT_OBJECTIVE_KEYS = 200;
+
+export function resolveDefaultStreamTimeoutMs(provider?: string, model?: string) {
+  if (provider?.trim().toUpperCase() === 'FREE') {
+    return HOSTED_FREE_STREAM_TIMEOUT_MS;
+  }
+
+  return LONG_THINK_MODEL_RE.test(model || '') ? LONG_THINK_STREAM_TIMEOUT_MS : DEFAULT_STREAM_TIMEOUT_MS;
+}
+
+export function shouldTrackCommentaryRunActivity(options?: { trackRunActivity?: boolean }) {
+  return options?.trackRunActivity !== false;
+}
+
 const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
 
 type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
@@ -1166,6 +1182,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           detail?: string,
           options?: {
             usePool?: boolean;
+            trackRunActivity?: boolean;
           },
         ) => {
           if (firstCommentaryAt === null) {
@@ -1209,7 +1226,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           dataStream.writeData({
             ...payload,
           });
-          markRunActivity();
+
+          if (shouldTrackCommentaryRunActivity(options)) {
+            markRunActivity();
+          }
         };
 
         const startCommentaryHeartbeat = () => {
@@ -1223,7 +1243,10 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               currentStep: lastProgressMessageForHeartbeat,
               lastVisibleResult: lastVisibleResultForHeartbeat,
             });
-            writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, { usePool: true });
+            writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, {
+              usePool: true,
+              trackRunActivity: false,
+            });
           }, COMMENTARY_HEARTBEAT_INTERVAL_MS);
         };
 
@@ -1369,8 +1392,10 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
           writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
         };
 
-        const longThinkSelection = resolvedSelectionForLogs.model || selectedModel || '';
-        const defaultStreamTimeoutMs = LONG_THINK_MODEL_RE.test(longThinkSelection) ? 300000 : 180000;
+        const defaultStreamTimeoutMs = resolveDefaultStreamTimeoutMs(
+          resolvedSelectionForLogs.provider || selectedProvider,
+          resolvedSelectionForLogs.model || selectedModel,
+        );
         const configuredStreamTimeoutMs = Number(
           envVars?.BOLT_STREAM_TIMEOUT_MS || process?.env?.BOLT_STREAM_TIMEOUT_MS || defaultStreamTimeoutMs,
         );
@@ -1380,7 +1405,7 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
         const streamTimeoutMs =
           Number.isFinite(configuredStreamTimeoutMs) && configuredStreamTimeoutMs >= 30000
             ? configuredStreamTimeoutMs
-            : 180000;
+            : defaultStreamTimeoutMs;
         const streamMaxRetries =
           Number.isFinite(configuredStreamMaxRetries) && configuredStreamMaxRetries >= 0
             ? configuredStreamMaxRetries
