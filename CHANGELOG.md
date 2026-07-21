@@ -27,6 +27,8 @@
 - Recovery smoke no longer blocks on presentation copy from the compact Workspace status UI; it validates the stronger contracts directly through rendered preview content, persisted runtime files, deliberate break detection, restored source, and healthy preview state.
 - Hosted preview ports are reserved atomically before availability probes yield, preventing concurrent project starts from selecting the same Vite port and briefly displaying another session's app.
 - Preview and published-project HTTP/WebSocket proxies now require the requested port to belong to the current session, enforcing project isolation even when a client presents stale preview or deployment metadata.
+- Visible follow-up prompts now use a render-stable queued dispatcher, so runtime/status rerenders cannot keep resetting the idle-send timer and leave an accepted improvement prompt permanently queued.
+- Hidden recovery continuations are claimed before dispatch and retried only after actual request failures, preventing loading-state rerenders from spawning duplicate `/api/chat` streams for one prompt.
 
 ### Added
 

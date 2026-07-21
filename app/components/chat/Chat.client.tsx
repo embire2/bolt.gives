@@ -72,7 +72,7 @@ import type {
 } from '~/types/context';
 import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
-import { getHiddenContinuationDelay, shouldDispatchHiddenContinuation } from '~/lib/runtime/continuation-dispatch';
+import { getHiddenContinuationDelay } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
 import { classifyRecoverableStreamError, shouldIgnoreDisconnectAfterCompletedRun } from '~/lib/runtime/recovery-errors';
 import { securedFetch } from '~/lib/hooks/useCsrf';
@@ -90,6 +90,11 @@ import {
   selectSyntheticRuntimeHandoffCandidate,
   shouldApplySyntheticRuntimeHandoff,
 } from './synthetic-runtime-handoff';
+import {
+  useQueuedFollowUpDispatch,
+  useSingleFlightQueuedDispatch,
+  type QueuedVisibleFollowUp,
+} from './useQueuedFollowUpDispatch';
 
 const logger = createScopedLogger('Chat');
 const ARCHITECT_NAME = 'Architect';
@@ -159,11 +164,7 @@ type QueuedHiddenContinuation = {
   successDescription?: string;
   attempt: number;
   scheduledAt: number;
-};
-
-type QueuedVisibleFollowUp = {
-  content: string;
-  queuedAt: number;
+  promptGeneration: number;
 };
 
 function hasMaterializedStarterWorkspace(fileMap: FileMap | undefined): boolean {
@@ -874,95 +875,62 @@ export const ChatImpl = memo(
           ...args,
           attempt: 1,
           scheduledAt: Date.now() + delayMs,
+          promptGeneration: manualPromptGenerationRef.current,
         });
       },
       [],
     );
 
-    useEffect(() => {
-      if (!queuedHiddenContinuation) {
-        return undefined;
-      }
-
-      const maxAttempts = 4;
-
-      if (
-        !shouldDispatchHiddenContinuation({
-          isLoading,
-          fakeLoading,
-          scheduledAt: queuedHiddenContinuation.scheduledAt,
-          now: Date.now(),
-        })
-      ) {
-        const delayMs = Math.max(100, queuedHiddenContinuation.scheduledAt - Date.now());
-        const timer = window.setTimeout(() => {
-          setQueuedHiddenContinuation((current) => (current ? { ...current } : current));
-        }, delayMs);
-
-        return () => {
-          window.clearTimeout(timer);
-        };
-      }
-
-      let cancelled = false;
-
-      void append({
-        id: `${Date.now()}-${queuedHiddenContinuation.idSuffix}`,
-        role: 'user',
-        content: queuedHiddenContinuation.content,
-        annotations: ['hidden'],
-      })
-        .then(() => {
-          if (cancelled) {
-            return;
-          }
-
-          if (queuedHiddenContinuation.successDescription) {
-            appendStepRunnerEvent({
-              type: 'telemetry',
-              timestamp: new Date().toISOString(),
-              description: queuedHiddenContinuation.successDescription,
-              output: `attempt=${queuedHiddenContinuation.attempt}/${maxAttempts}`,
-            });
-          }
-
-          setQueuedHiddenContinuation(null);
-        })
-        .catch((dispatchError) => {
-          if (cancelled) {
-            return;
-          }
-
+    useSingleFlightQueuedDispatch({
+      queuedItem: queuedHiddenContinuation,
+      isBusy: isLoading || fakeLoading,
+      setQueuedItem: setQueuedHiddenContinuation,
+      scheduledAt: (item) => item.scheduledAt,
+      dispatch: (item) =>
+        append({
+          id: `${Date.now()}-${item.idSuffix}`,
+          role: 'user',
+          content: item.content,
+          annotations: ['hidden'],
+        }),
+      onSuccess: (item) => {
+        if (item.successDescription) {
           appendStepRunnerEvent({
-            type: 'error',
+            type: 'telemetry',
             timestamp: new Date().toISOString(),
-            description: `${queuedHiddenContinuation.failureDescription} (${queuedHiddenContinuation.attempt}/${maxAttempts})`,
-            error: dispatchError instanceof Error ? dispatchError.message : 'Unknown continuation dispatch error',
+            description: item.successDescription,
+            output: `attempt=${item.attempt}/4`,
           });
-
-          if (queuedHiddenContinuation.attempt >= maxAttempts) {
-            setQueuedHiddenContinuation(null);
-
-            return;
-          }
-
-          const nextAttempt = queuedHiddenContinuation.attempt + 1;
-          const delayMs = getHiddenContinuationDelay({
-            attempt: nextAttempt,
-            isBusy: isLoadingRef.current || fakeLoadingRef.current,
-          });
-
-          setQueuedHiddenContinuation({
-            ...queuedHiddenContinuation,
-            attempt: nextAttempt,
-            scheduledAt: Date.now() + delayMs,
-          });
+        }
+      },
+      onError: (item, dispatchError) => {
+        appendStepRunnerEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: `${item.failureDescription} (${item.attempt}/4)`,
+          error: dispatchError instanceof Error ? dispatchError.message : 'Unknown continuation dispatch error',
         });
 
-      return () => {
-        cancelled = true;
-      };
-    }, [append, fakeLoading, isLoading, queuedHiddenContinuation]);
+        if (item.attempt >= 4 || item.promptGeneration !== manualPromptGenerationRef.current) {
+          return;
+        }
+
+        const nextAttempt = item.attempt + 1;
+        const delayMs = getHiddenContinuationDelay({
+          attempt: nextAttempt,
+          isBusy: isLoadingRef.current || fakeLoadingRef.current,
+        });
+
+        setQueuedHiddenContinuation(
+          (current) =>
+            current || {
+              ...item,
+              attempt: nextAttempt,
+              scheduledAt: Date.now() + delayMs,
+            },
+        );
+      },
+    });
 
     const dispatchAutoContinuation = useCallback(
       (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
@@ -3078,21 +3046,12 @@ CONTINUE IMMEDIATELY:
       textareaRef.current?.blur();
     };
 
-    useEffect(() => {
-      if (!queuedVisibleFollowUp || isLoading || fakeLoading) {
-        return undefined;
-      }
-
-      const timer = window.setTimeout(() => {
-        const queued = queuedVisibleFollowUp;
-        setQueuedVisibleFollowUp(null);
-        void sendMessage({} as React.UIEvent, queued.content);
-      }, 250);
-
-      return () => {
-        window.clearTimeout(timer);
-      };
-    }, [fakeLoading, isLoading, queuedVisibleFollowUp, sendMessage]);
+    useQueuedFollowUpDispatch({
+      queuedFollowUp: queuedVisibleFollowUp,
+      isBusy: isLoading || fakeLoading,
+      setQueuedFollowUp: setQueuedVisibleFollowUp,
+      dispatch: (content) => sendMessage({} as React.UIEvent, content),
+    });
 
     useEffect(() => {
       if (actionAlert) {
