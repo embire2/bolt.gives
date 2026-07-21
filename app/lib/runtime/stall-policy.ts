@@ -21,7 +21,18 @@ const LONG_THINK_POLICY: StallPolicy = {
   maxAutoContinuations: 3,
 };
 
-export function resolveStallPolicy(model: string | undefined): StallPolicy {
+const HOSTED_FREE_POLICY: StallPolicy = {
+  starterContinuationThresholdMs: 25000,
+  warningThresholdMs: 45000,
+  recoveryThresholdMs: 120000,
+  maxAutoContinuations: 3,
+};
+
+export function resolveStallPolicy(model: string | undefined, providerName?: string): StallPolicy {
+  if (providerName?.trim().toUpperCase() === 'FREE') {
+    return HOSTED_FREE_POLICY;
+  }
+
   if (!model) {
     return DEFAULT_POLICY;
   }

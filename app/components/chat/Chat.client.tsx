@@ -934,7 +934,7 @@ export const ChatImpl = memo(
 
     const dispatchAutoContinuation = useCallback(
       (args: { idSuffix: string; content: string; failureDescription: string; successDescription?: string }) => {
-        const stallPolicy = resolveStallPolicy(runContextRef.current.model);
+        const stallPolicy = resolveStallPolicy(runContextRef.current.model, runContextRef.current.providerName);
 
         if (autoContinuationCountRef.current >= stallPolicy.maxAutoContinuations) {
           appendStepRunnerEvent({
@@ -1348,7 +1348,7 @@ Requirements:
             return;
           }
 
-          const stallPolicy = resolveStallPolicy(runContextRef.current.model);
+          const stallPolicy = resolveStallPolicy(runContextRef.current.model, runContextRef.current.providerName);
           const performanceRecord = performance as Performance & {
             memory?: {
               usedJSHeapSize?: number;

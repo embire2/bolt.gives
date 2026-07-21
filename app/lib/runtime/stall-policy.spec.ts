@@ -17,4 +17,12 @@ describe('resolveStallPolicy', () => {
     expect(policy.recoveryThresholdMs).toBe(60000);
     expect(policy.starterContinuationThresholdMs).toBe(25000);
   });
+
+  it('keeps hosted FREE recovery bounded even when its model matches long-think names', () => {
+    const policy = resolveStallPolicy('gpt-5.6', 'FREE');
+
+    expect(policy.warningThresholdMs).toBe(45000);
+    expect(policy.recoveryThresholdMs).toBe(120000);
+    expect(policy.starterContinuationThresholdMs).toBe(25000);
+  });
 });
