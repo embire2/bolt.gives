@@ -32,6 +32,7 @@
 - Follow-up prompts no longer inherit the previous run's preview-ready unlock timer; only preview verification from the active request can stop that request, preventing silent follow-up cancellation after 20 seconds.
 - Hosted FREE `gpt-5.6` requests now use the bounded 120-second client recovery policy instead of inheriting the 260-second BYOK long-think allowance solely from the model name.
 - The browser now arms a one-shot timer from the server-advertised FREE stream deadline, so rerenders caused by hidden reasoning, commentary, or telemetry events cannot restart the recovery boundary.
+- Hosted FREE build responses that return HTTP 200 without a build action or a preview from the active request now enter single-flight continuation immediately instead of leaving follow-up prompts silently incomplete.
 - Commentary heartbeats no longer count as provider stream activity, allowing genuinely stalled model requests to enter recovery instead of remaining open indefinitely.
 - Hosted FREE streams now recover after 120 seconds without model activity, while BYOK long-thinking models retain their longer allowance and invalid timeout overrides fall back to the selected provider's safe default.
 - FREE timeout selection now resolves provider/model annotations from message history when redundant request fields are absent, and invisible reasoning-only chunks no longer mask a run that has produced no actionable coding output.

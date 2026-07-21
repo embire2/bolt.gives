@@ -59,6 +59,7 @@ import {
   getRemainingHostedFreeDeadlineMs,
   hasExceededHostedFreeDeadline,
   resolveStallPolicy,
+  shouldRecoverHostedFreeCompletion,
 } from '~/lib/runtime/stall-policy';
 import {
   isHostedRuntimeEnabled,
@@ -763,8 +764,6 @@ export const ChatImpl = memo(
         handleError(e, 'chat');
       },
       onFinish: (message, response) => {
-        clearHostedFreeDeadlineTimer();
-
         const normalizedUsage = normalizeUsageEvent(response.usage);
 
         if (normalizedUsage) {
@@ -779,6 +778,27 @@ export const ChatImpl = memo(
             usage: normalizedUsage,
             messageLength: message.content.length,
           });
+        }
+
+        const requestElapsedMs = Date.now() - requestLifecycleStartedAtRef.current;
+        const shouldRecoverEmptyBuild = shouldRecoverHostedFreeCompletion({
+          providerName: runContextRef.current.providerName,
+          chatMode,
+          assistantContent: message.content,
+          requestStartedAtMs: requestLifecycleStartedAtRef.current,
+          lastPreviewReadyAtMs: lastPreviewReadyAtRef.current,
+        });
+
+        if (shouldRecoverEmptyBuild) {
+          triggerStallRecovery({
+            meaningfulStallSeconds: Math.round(requestElapsedMs / 1000),
+            telemetryMessage: 'server-hosted | FREE completion contained no build actions or current-run preview',
+            hostedFreeDeadlineExceeded: false,
+            requestElapsedMs,
+            recoveryError: 'Hosted FREE completed without actionable build output',
+          });
+        } else {
+          clearHostedFreeDeadlineTimer();
         }
 
         logger.debug('Finished streaming');
@@ -1100,11 +1120,13 @@ Requirements:
         telemetryMessage,
         hostedFreeDeadlineExceeded,
         requestElapsedMs,
+        recoveryError,
       }: {
         meaningfulStallSeconds: number;
         telemetryMessage: string;
         hostedFreeDeadlineExceeded: boolean;
         requestElapsedMs: number;
+        recoveryError?: string;
       }) => {
         if (stallRecoveryTriggeredRef.current) {
           return false;
@@ -1128,9 +1150,11 @@ Requirements:
           type: 'error',
           timestamp: new Date().toISOString(),
           description: 'Auto-recovery triggered for stalled stream',
-          error: hostedFreeDeadlineExceeded
-            ? `Hosted FREE request exceeded ${Math.round(requestElapsedMs / 1000)}s`
-            : `No stream progress for ${meaningfulStallSeconds}s`,
+          error:
+            recoveryError ||
+            (hostedFreeDeadlineExceeded
+              ? `Hosted FREE request exceeded ${Math.round(requestElapsedMs / 1000)}s`
+              : `No stream progress for ${meaningfulStallSeconds}s`),
           output: `${telemetryMessage} | autoContinue=${hasRequestContext ? 'yes' : 'no'}`,
         });
 

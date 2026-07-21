@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getRemainingHostedFreeDeadlineMs, hasExceededHostedFreeDeadline, resolveStallPolicy } from './stall-policy';
+import {
+  getRemainingHostedFreeDeadlineMs,
+  hasExceededHostedFreeDeadline,
+  resolveStallPolicy,
+  shouldRecoverHostedFreeCompletion,
+} from './stall-policy';
 
 describe('resolveStallPolicy', () => {
   it('returns long-think thresholds for gpt-5/codex models', () => {
@@ -42,5 +47,35 @@ describe('resolveStallPolicy', () => {
     expect(getRemainingHostedFreeDeadlineMs({ requestStartedAtMs: 10_000, nowMs: 45_000, maxDurationMs: 30_000 })).toBe(
       0,
     );
+  });
+
+  it('recovers a hosted FREE build that completes without actions or a new preview', () => {
+    expect(
+      shouldRecoverHostedFreeCompletion({
+        providerName: 'FREE',
+        chatMode: 'build',
+        assistantContent: '',
+        requestStartedAtMs: 20_000,
+        lastPreviewReadyAtMs: 10_000,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRecoverHostedFreeCompletion({
+        providerName: 'FREE',
+        chatMode: 'build',
+        assistantContent: '<boltArtifact id="app">updated</boltArtifact>',
+        requestStartedAtMs: 20_000,
+        lastPreviewReadyAtMs: 10_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRecoverHostedFreeCompletion({
+        providerName: 'FREE',
+        chatMode: 'build',
+        assistantContent: '',
+        requestStartedAtMs: 20_000,
+        lastPreviewReadyAtMs: 25_000,
+      }),
+    ).toBe(false);
   });
 });
