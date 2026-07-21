@@ -5,6 +5,7 @@ import {
   shouldAttemptHostedPreviewVerification,
   shouldContinuePendingHostedPreviewVerification,
   shouldTrackCommentaryRunActivity,
+  shouldTrackModelStreamChunkActivity,
 } from '../../app/routes/api.chat';
 
 describe('api.chat hosted preview continuation policy', () => {
@@ -67,5 +68,12 @@ describe('api.chat stream recovery policy', () => {
   it('does not treat commentary heartbeats as provider stream activity', () => {
     expect(shouldTrackCommentaryRunActivity()).toBe(true);
     expect(shouldTrackCommentaryRunActivity({ trackRunActivity: false })).toBe(false);
+  });
+
+  it('requires visible or actionable model output to reset stream recovery', () => {
+    expect(shouldTrackModelStreamChunkActivity({ type: 'reasoning' })).toBe(false);
+    expect(shouldTrackModelStreamChunkActivity({ type: 'text-delta' })).toBe(true);
+    expect(shouldTrackModelStreamChunkActivity({ type: 'tool-call-delta' })).toBe(true);
+    expect(shouldTrackModelStreamChunkActivity()).toBe(false);
   });
 });

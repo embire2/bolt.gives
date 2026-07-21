@@ -7,6 +7,21 @@ import {
 } from './message-selection';
 
 describe('message-selection', () => {
+  it('resolves provider and model from message history when request selection fields are absent', () => {
+    const selection = resolvePreferredModelProvider(
+      [
+        {
+          role: 'user' as const,
+          content: '[Model: gpt-5.6]\n\n[Provider: FREE]\n\nImprove the existing calendar.',
+        },
+      ],
+      undefined,
+      undefined,
+    );
+
+    expect(selection).toEqual({ model: 'gpt-5.6', provider: 'FREE' });
+  });
+
   it('prefers cookie selection when latest user message has no provider/model envelope', () => {
     const messages = [
       {

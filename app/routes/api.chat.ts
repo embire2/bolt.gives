@@ -109,6 +109,10 @@ export function shouldTrackCommentaryRunActivity(options?: { trackRunActivity?: 
   return options?.trackRunActivity !== false;
 }
 
+export function shouldTrackModelStreamChunkActivity(chunk?: { type?: string }) {
+  return Boolean(chunk?.type && chunk.type !== 'reasoning');
+}
+
 const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
 
 type ContinuationReason = ReturnType<typeof analyzeRunContinuation>['reason'] | 'preview-not-verified';
@@ -1392,9 +1396,10 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
           writeCommentary('next-step', 'Final response generated and ready for delivery.', 'complete');
         };
 
+        const streamTimeoutSelection = resolvePreferredModelProvider(messages, selectedModel, selectedProvider);
         const defaultStreamTimeoutMs = resolveDefaultStreamTimeoutMs(
-          resolvedSelectionForLogs.provider || selectedProvider,
-          resolvedSelectionForLogs.model || selectedModel,
+          streamTimeoutSelection.provider,
+          streamTimeoutSelection.model,
         );
         const configuredStreamTimeoutMs = Number(
           envVars?.BOLT_STREAM_TIMEOUT_MS || process?.env?.BOLT_STREAM_TIMEOUT_MS || defaultStreamTimeoutMs,
@@ -1793,8 +1798,10 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
           maxSteps: maxLLMSteps,
-          onChunk: () => {
-            markRunActivity();
+          onChunk: ({ chunk }) => {
+            if (shouldTrackModelStreamChunkActivity(chunk)) {
+              markRunActivity();
+            }
           },
           onError: ({ error }) => {
             logger.error('Streaming error:', error);
