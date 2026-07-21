@@ -26,6 +26,9 @@ import {
  */
 
 interface PagesEnv {
+  ASSETS?: {
+    fetch(input: Request | string | URL): Promise<Response>;
+  };
   RATE_LIMIT_KV?: unknown;
   BOLT_RUNTIME_CONTROL_PUBLIC_URL?: string;
   BOLT_RUNTIME_CONTROL_URL?: string;
@@ -41,12 +44,32 @@ export function shouldProxyRuntimeRequest(pathname: string) {
   return pathname === '/runtime' || pathname.startsWith('/runtime/');
 }
 
-export function isMissingStaticAssetRequest(request: Request) {
+export function isStaticAssetRequest(request: Request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return false;
   }
 
   return STATIC_ASSET_EXTENSION_RE.test(new URL(request.url).pathname);
+}
+
+export async function fetchPagesStaticAsset(request: Request, env: PagesEnv) {
+  if (!env?.ASSETS?.fetch) {
+    return null;
+  }
+
+  const response = await env.ASSETS.fetch(request);
+
+  if (response.status !== 404) {
+    return response;
+  }
+
+  return new Response(null, {
+    status: 404,
+    headers: {
+      'Cache-Control': 'no-store',
+      ...createSecurityHeaders(env as Record<string, string | undefined>, request),
+    },
+  });
 }
 
 export function normalizeRuntimeControlBaseUrl(value?: string) {
@@ -116,14 +139,12 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   // Pages serves existing files before Functions. A static-looking request
   // reaching this catch-all is therefore missing and should not invoke Remix
   // SSR, which otherwise emits a full route-error stack for every asset 404.
-  if (isMissingStaticAssetRequest(request)) {
-    return new Response(null, {
-      status: 404,
-      headers: {
-        'Cache-Control': 'no-store',
-        ...createSecurityHeaders(env as Record<string, string | undefined>, request),
-      },
-    });
+  if (isStaticAssetRequest(request)) {
+    const assetResponse = await fetchPagesStaticAsset(request, env);
+
+    if (assetResponse) {
+      return assetResponse;
+    }
   }
 
   // 1. Distributed rate-limit store, if a KV binding is configured.

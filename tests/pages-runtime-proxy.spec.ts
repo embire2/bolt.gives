@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRuntimeProxyHeaders,
   buildRuntimeProxyTargetUrl,
-  isMissingStaticAssetRequest,
+  fetchPagesStaticAsset,
+  isStaticAssetRequest,
   normalizeRuntimeControlBaseUrl,
   shouldProxyRuntimeRequest,
 } from '../functions/[[path]]';
@@ -45,15 +46,42 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
   });
 
   it('short-circuits missing static assets before Remix SSR', () => {
-    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/app-screenshot.png'))).toBe(true);
-    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/assets/missing.js'))).toBe(true);
-    expect(isMissingStaticAssetRequest(new Request('https://alpha1.bolt.gives/chat'))).toBe(false);
+    expect(isStaticAssetRequest(new Request('https://alpha1.bolt.gives/app-screenshot.png'))).toBe(true);
+    expect(isStaticAssetRequest(new Request('https://alpha1.bolt.gives/assets/missing.js'))).toBe(true);
+    expect(isStaticAssetRequest(new Request('https://alpha1.bolt.gives/chat'))).toBe(false);
     expect(
-      isMissingStaticAssetRequest(
+      isStaticAssetRequest(
         new Request('https://alpha1.bolt.gives/api/export.pdf', {
           method: 'POST',
         }),
       ),
     ).toBe(false);
+  });
+
+  it('serves existing Pages assets and keeps missing assets lightweight', async () => {
+    const existingRequest = new Request('https://alpha1.bolt.gives/assets/app.js');
+    const existingResponse = await fetchPagesStaticAsset(existingRequest, {
+      ASSETS: {
+        fetch: async () =>
+          new Response('console.log("loaded")', {
+            headers: { 'Content-Type': 'application/javascript' },
+          }),
+      },
+    });
+    const missingResponse = await fetchPagesStaticAsset(
+      new Request('https://alpha1.bolt.gives/assets/missing.js'),
+      {
+        ASSETS: {
+          fetch: async () => new Response('not found', { status: 404 }),
+        },
+      },
+    );
+
+    expect(existingResponse?.status).toBe(200);
+    expect(existingResponse?.headers.get('content-type')).toContain('application/javascript');
+    expect(await existingResponse?.text()).toContain('loaded');
+    expect(missingResponse?.status).toBe(404);
+    expect(missingResponse?.headers.get('cache-control')).toBe('no-store');
+    expect(await missingResponse?.text()).toBe('');
   });
 });
