@@ -798,6 +798,7 @@ export const ChatImpl = memo(
     }, [chatStarted, input, model, provider?.name]);
 
     const boundedChatData = useMemo(() => (chatData || []).slice(-MAX_CHAT_DATA_EVENTS), [chatData]);
+    const boundedChatDataLengthRef = useRef(boundedChatData.length);
     const lastDataEventAtRef = useRef(Date.now());
     const stallReportedRef = useRef(false);
     const stallRecoveryTriggeredRef = useRef(false);
@@ -834,6 +835,10 @@ export const ChatImpl = memo(
     useEffect(() => {
       messagesRef.current = messages;
     }, [messages]);
+
+    useEffect(() => {
+      boundedChatDataLengthRef.current = boundedChatData.length;
+    }, [boundedChatData.length]);
 
     useEffect(() => {
       if (isRuntimeScannerEnabled && actionAlert?.type === 'error' && !isLoading && !fakeLoading) {
@@ -1384,8 +1389,8 @@ Requirements:
           const meaningfulStallMs = Date.now() - lastMeaningfulTimestamp;
           const meaningfulStallSeconds = Math.round(meaningfulStallMs / 1000);
           const telemetryMessage = hostedRuntimeEnabled
-            ? `server-hosted | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`
-            : `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatData.length}/${MAX_CHAT_DATA_EVENTS} | messages ${messages.length} | stall ${stallSeconds}s`;
+            ? `server-hosted | data ${boundedChatDataLengthRef.current}/${MAX_CHAT_DATA_EVENTS} | messages ${messagesRef.current.length} | stall ${stallSeconds}s`
+            : `memory ${heapUsedMb}/${heapLimitMb} MB | data ${boundedChatDataLengthRef.current}/${MAX_CHAT_DATA_EVENTS} | messages ${messagesRef.current.length} | stall ${stallSeconds}s`;
 
           const now = Date.now();
           const requestElapsedMs = now - requestLifecycleStartedAtRef.current;
@@ -1543,13 +1548,11 @@ Requirements:
       };
     }, [
       append,
-      boundedChatData.length,
       dispatchAutoContinuation,
       dispatchStarterContinuation,
       fakeLoading,
       hostedRuntimeEnabled,
       isLoading,
-      messages.length,
       stop,
     ]);
 
