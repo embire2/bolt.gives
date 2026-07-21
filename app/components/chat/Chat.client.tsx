@@ -55,7 +55,11 @@ import type { ArchitectDiagnosis } from '~/lib/runtime/architect';
 import type { AgentMode, AgentPlanStep } from '~/lib/runtime/agent-workflow';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import { getLastMeaningfulProgressTimestamp } from '~/lib/runtime/stall-progress';
-import { hasExceededHostedFreeDeadline, resolveStallPolicy } from '~/lib/runtime/stall-policy';
+import {
+  getRemainingHostedFreeDeadlineMs,
+  hasExceededHostedFreeDeadline,
+  resolveStallPolicy,
+} from '~/lib/runtime/stall-policy';
 import {
   isHostedRuntimeEnabled,
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
@@ -570,6 +574,14 @@ export const ChatImpl = memo(
       providerName: provider.name,
     });
     const hostedFreeStreamDeadlineMsRef = useRef(HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS);
+    const hostedFreeDeadlineTimerRef = useRef<number | null>(null);
+    const hostedFreeDeadlineRecoveryRef = useRef<() => void>(() => undefined);
+    const clearHostedFreeDeadlineTimer = useCallback(() => {
+      if (hostedFreeDeadlineTimerRef.current !== null && typeof window !== 'undefined') {
+        window.clearTimeout(hostedFreeDeadlineTimerRef.current);
+        hostedFreeDeadlineTimerRef.current = null;
+      }
+    }, []);
     const { showChat } = useStore(chatStore);
     const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
@@ -731,12 +743,28 @@ export const ChatImpl = memo(
 
         hostedFreeStreamDeadlineMsRef.current =
           Number.isFinite(deadlineMs) && deadlineMs >= 10_000 ? deadlineMs : HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS;
+        clearHostedFreeDeadlineTimer();
+
+        if (runContextRef.current.providerName.trim().toUpperCase() === 'FREE' && typeof window !== 'undefined') {
+          const remainingDeadlineMs = getRemainingHostedFreeDeadlineMs({
+            requestStartedAtMs: requestLifecycleStartedAtRef.current,
+            nowMs: Date.now(),
+            maxDurationMs: hostedFreeStreamDeadlineMsRef.current,
+          });
+          hostedFreeDeadlineTimerRef.current = window.setTimeout(() => {
+            hostedFreeDeadlineTimerRef.current = null;
+            hostedFreeDeadlineRecoveryRef.current();
+          }, remainingDeadlineMs);
+        }
       },
       onError: (e) => {
+        clearHostedFreeDeadlineTimer();
         setFakeLoading(false);
         handleError(e, 'chat');
       },
       onFinish: (message, response) => {
+        clearHostedFreeDeadlineTimer();
+
         const normalizedUsage = normalizeUsageEvent(response.usage);
 
         if (normalizedUsage) {
@@ -758,6 +786,8 @@ export const ChatImpl = memo(
       initialMessages,
       initialInput: Cookies.get(PROMPT_COOKIE_KEY) || '',
     });
+
+    useEffect(() => clearHostedFreeDeadlineTimer, [clearHostedFreeDeadlineTimer]);
 
     useEffect(() => {
       let delayedPromptCheck: number | null = null;
@@ -1063,6 +1093,122 @@ Requirements:
       },
       [dispatchAutoContinuation, hostedRuntimeEnabled],
     );
+
+    const triggerStallRecovery = useCallback(
+      ({
+        meaningfulStallSeconds,
+        telemetryMessage,
+        hostedFreeDeadlineExceeded,
+        requestElapsedMs,
+      }: {
+        meaningfulStallSeconds: number;
+        telemetryMessage: string;
+        hostedFreeDeadlineExceeded: boolean;
+        requestElapsedMs: number;
+      }) => {
+        if (stallRecoveryTriggeredRef.current) {
+          return false;
+        }
+
+        stallRecoveryTriggeredRef.current = true;
+        clearHostedFreeDeadlineTimer();
+
+        const activeRunContext = runContextRef.current;
+        const hasRequestContext = latestUserRequestRef.current.trim().length > 0;
+
+        logger.error('stream stalled and auto-recovery engaged', {
+          stallSeconds: meaningfulStallSeconds,
+          telemetryMessage,
+          hasRequestContext,
+          provider: activeRunContext.providerName,
+          model: activeRunContext.model,
+        });
+
+        appendStepRunnerEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: 'Auto-recovery triggered for stalled stream',
+          error: hostedFreeDeadlineExceeded
+            ? `Hosted FREE request exceeded ${Math.round(requestElapsedMs / 1000)}s`
+            : `No stream progress for ${meaningfulStallSeconds}s`,
+          output: `${telemetryMessage} | autoContinue=${hasRequestContext ? 'yes' : 'no'}`,
+        });
+
+        stop();
+        setFakeLoading(false);
+
+        if (!hasRequestContext) {
+          return true;
+        }
+
+        const recoveryPrompt = buildModelSelectionEnvelope({
+          model: activeRunContext.model,
+          providerName: activeRunContext.providerName,
+          selectionReason: 'Auto-recovery resumed after stalled stream.',
+          includeSelectionReason: true,
+          content: `The previous run stalled after scaffold/install/start with no final response.
+Continue from the current project state without re-scaffolding.
+Original request:
+${latestUserRequestRef.current}
+
+Requirements:
+1) Continue implementation from current files.
+2) If dependencies are already installed, do not repeat installs unless required.
+3) Start/verify preview and confirm it is running.
+4) Start by emitting executable <boltAction> steps instead of planning prose.
+5) Return a clear final response with what was completed and any remaining gaps.`,
+        });
+
+        appendStepRunnerEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Dispatching hidden continuation prompt',
+          output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
+        });
+
+        dispatchAutoContinuation({
+          idSuffix: 'stall-recovery',
+          content: recoveryPrompt,
+          failureDescription: 'Failed to dispatch stalled-stream continuation',
+          successDescription: 'Hidden stalled-stream continuation dispatched',
+        });
+
+        return true;
+      },
+      [clearHostedFreeDeadlineTimer, dispatchAutoContinuation, stop],
+    );
+
+    useEffect(() => {
+      hostedFreeDeadlineRecoveryRef.current = () => {
+        const now = Date.now();
+        const requestElapsedMs = now - requestLifecycleStartedAtRef.current;
+
+        if (
+          !hasExceededHostedFreeDeadline({
+            providerName: runContextRef.current.providerName,
+            elapsedMs: requestElapsedMs,
+            maxDurationMs: hostedFreeStreamDeadlineMsRef.current,
+          })
+        ) {
+          return;
+        }
+
+        const meaningfulStallMs =
+          now -
+          getLastMeaningfulProgressTimestamp(
+            workbenchStore.stepRunnerEvents.get(),
+            requestLifecycleStartedAtRef.current,
+            [lastMessageProgressAtRef.current, lastDataEventAtRef.current],
+          );
+
+        triggerStallRecovery({
+          meaningfulStallSeconds: Math.round(meaningfulStallMs / 1000),
+          telemetryMessage: `server-hosted | absolute FREE deadline ${Math.round(requestElapsedMs / 1000)}s`,
+          hostedFreeDeadlineExceeded: true,
+          requestElapsedMs,
+        });
+      };
+    }, [triggerStallRecovery]);
 
     useEffect(() => {
       if (!boundedChatData || boundedChatData.length === 0) {
@@ -1430,6 +1576,7 @@ Requirements:
               output: `idle=${meaningfulStallSeconds}s`,
             });
 
+            clearHostedFreeDeadlineTimer();
             stop();
             setFakeLoading(false);
 
@@ -1449,6 +1596,7 @@ Requirements:
               error: `No meaningful progress for ${meaningfulStallSeconds}s`,
             });
 
+            clearHostedFreeDeadlineTimer();
             stop();
             setFakeLoading(false);
             dispatchStarterContinuation('stream-stalled');
@@ -1477,66 +1625,12 @@ Requirements:
             (meaningfulStallMs > stallPolicy.recoveryThresholdMs || hostedFreeDeadlineExceeded) &&
             !stallRecoveryTriggeredRef.current
           ) {
-            stallRecoveryTriggeredRef.current = true;
-
-            const activeRunContext = runContextRef.current;
-            const hasRequestContext = latestUserRequestRef.current.trim().length > 0;
-            const shouldAutoContinue = hasRequestContext;
-
-            logger.error('stream stalled and auto-recovery engaged', {
-              stallSeconds: meaningfulStallSeconds,
+            triggerStallRecovery({
+              meaningfulStallSeconds,
               telemetryMessage,
-              hasRequestContext,
-              provider: activeRunContext.providerName,
-              model: activeRunContext.model,
+              hostedFreeDeadlineExceeded,
+              requestElapsedMs,
             });
-
-            appendStepRunnerEvent({
-              type: 'error',
-              timestamp: new Date().toISOString(),
-              description: 'Auto-recovery triggered for stalled stream',
-              error: hostedFreeDeadlineExceeded
-                ? `Hosted FREE request exceeded ${Math.round(requestElapsedMs / 1000)}s`
-                : `No stream progress for ${meaningfulStallSeconds}s`,
-              output: `${telemetryMessage} | autoContinue=${shouldAutoContinue ? 'yes' : 'no'}`,
-            });
-
-            stop();
-            setFakeLoading(false);
-
-            if (shouldAutoContinue) {
-              const recoveryPrompt = buildModelSelectionEnvelope({
-                model: activeRunContext.model,
-                providerName: activeRunContext.providerName,
-                selectionReason: 'Auto-recovery resumed after stalled stream.',
-                includeSelectionReason: true,
-                content: `The previous run stalled after scaffold/install/start with no final response.
-Continue from the current project state without re-scaffolding.
-Original request:
-${latestUserRequestRef.current}
-
-Requirements:
-1) Continue implementation from current files.
-2) If dependencies are already installed, do not repeat installs unless required.
-3) Start/verify preview and confirm it is running.
-4) Start by emitting executable <boltAction> steps instead of planning prose.
-5) Return a clear final response with what was completed and any remaining gaps.`,
-              });
-
-              appendStepRunnerEvent({
-                type: 'telemetry',
-                timestamp: new Date().toISOString(),
-                description: 'Dispatching hidden continuation prompt',
-                output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
-              });
-
-              dispatchAutoContinuation({
-                idSuffix: 'stall-recovery',
-                content: recoveryPrompt,
-                failureDescription: 'Failed to dispatch stalled-stream continuation',
-                successDescription: 'Hidden stalled-stream continuation dispatched',
-              });
-            }
           }
         }, telemetrySampleMs);
       }
@@ -1548,12 +1642,14 @@ Requirements:
       };
     }, [
       append,
+      clearHostedFreeDeadlineTimer,
       dispatchAutoContinuation,
       dispatchStarterContinuation,
       fakeLoading,
       hostedRuntimeEnabled,
       isLoading,
       stop,
+      triggerStallRecovery,
     ]);
 
     useEffect(() => {
@@ -1791,6 +1887,7 @@ Requirements:
     };
 
     const abort = () => {
+      clearHostedFreeDeadlineTimer();
       stop();
       chatStore.setKey('aborted', true);
       workbenchStore.abortAllActions();
@@ -1840,6 +1937,7 @@ Requirements:
         logger.error(`${context} request failed`, diagnostics);
         console.error(`[chat:${context}:diagnostics]`, diagnostics);
 
+        clearHostedFreeDeadlineTimer();
         stop();
         setFakeLoading(false);
 
@@ -2029,7 +2127,7 @@ Requirements:
 
         setData([]);
       },
-      [buildChatRequestDiagnostics, dispatchAutoContinuation, stop],
+      [buildChatRequestDiagnostics, clearHostedFreeDeadlineTimer, dispatchAutoContinuation, stop],
     );
 
     const clearApiErrorAlert = useCallback(() => {

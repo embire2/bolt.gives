@@ -57,3 +57,20 @@ export function hasExceededHostedFreeDeadline(options: {
     options.elapsedMs >= options.maxDurationMs
   );
 }
+
+export function getRemainingHostedFreeDeadlineMs(options: {
+  requestStartedAtMs: number;
+  nowMs: number;
+  maxDurationMs: number;
+}): number {
+  if (
+    !Number.isFinite(options.requestStartedAtMs) ||
+    !Number.isFinite(options.nowMs) ||
+    !Number.isFinite(options.maxDurationMs) ||
+    options.maxDurationMs <= 0
+  ) {
+    return 0;
+  }
+
+  return Math.max(0, options.maxDurationMs - Math.max(0, options.nowMs - options.requestStartedAtMs));
+}
