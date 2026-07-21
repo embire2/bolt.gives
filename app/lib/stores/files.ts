@@ -18,7 +18,6 @@ import {
   getLockedFoldersForChat,
   isPathInLockedFolder,
   migrateLegacyLocks,
-  clearCache,
 } from '~/lib/persistence/lockedFiles';
 import { getCurrentChatId } from '~/utils/fileLocks';
 
@@ -657,18 +656,6 @@ export class FilesStore {
     setTimeout(() => {
       this.#loadLockedFiles(currentChatId);
     }, 2000);
-
-    /**
-     * Set up a less frequent periodic check to ensure locks remain applied.
-     * This is now less critical since we have the storage event listener.
-     */
-    setInterval(() => {
-      // Clear the cache to force a fresh read from localStorage
-      clearCache();
-
-      const latestChatId = getCurrentChatId();
-      this.#loadLockedFiles(latestChatId);
-    }, 30000); // Reduced from 10s to 30s
   }
 
   /**

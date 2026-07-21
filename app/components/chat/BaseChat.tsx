@@ -1077,22 +1077,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       Getting started (no bolt.gives signup required)
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
-                      <div>
-                        1. Pick a provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.) in the chat box.
-                      </div>
-                      <div>
-                        2. If you choose a cloud provider, you will need to sign up with that provider to get an API
-                        key.
-                      </div>
-                      <div>3. Add the API key in the chat box (key icon) or via Settings, then start chatting.</div>
+                      <div>1. Start with FREE and MagnetAPI.org ChatGPT-5.6. No account or API key is required.</div>
+                      <div>2. Or pick your own provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.).</div>
+                      <div>3. For another cloud provider, add its API key in the chat box or Settings.</div>
                       <div>
                         4. If you self-host for a team or customers, open <code>{adminPanelUrl}</code> or{' '}
                         <code>/tenant-admin</code> to manage registrations, tenant accounts, and Cloudflare trial
                         instances on this server.
                       </div>
                       <div className="mt-2 text-xs">
-                        Note: keys are stored in your browser and sent with your requests to talk to your selected
-                        provider.
+                        Note: keys you supply for other providers stay in your browser and are sent only with requests
+                        to that provider. The hosted FREE key remains server-side.
                       </div>
                     </div>
                   </div>

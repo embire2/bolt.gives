@@ -62,7 +62,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Protected `FREE` coding now uses MagnetAPI.org model `gpt-5.6` through the OpenAI-compatible Responses API, preserving structured tool calls without exposing the operator token to browsers or managed Pages projects.
 - Initial `/chat` assets fell from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files, about 40% fewer bytes and 46% fewer initial requests.
 - Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.
-- Health, notification, and Shout Out Box polling perform less idle work, pause or slow down where appropriate, and persist acknowledged connection states.
+- Health, notification, Shout Out Box, and locked-file state perform less idle work, use event-driven updates where possible, and persist acknowledged connection states.
 - `pnpm run build` now enforces a 1 MB per-asset and 2 MB initial-route budget under a 3 GB heap ceiling.
 
 ### Quiet hosted Vite previews

@@ -106,6 +106,17 @@ describe('FilesStore locking', () => {
     expect(setItemSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('does not poll locked-file storage after the watcher starts', async () => {
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const webcontainer = makeWebcontainer('/workspace');
+
+    new FilesStore(Promise.resolve(webcontainer));
+
+    await vi.waitFor(() => expect(webcontainer.internal.watchPaths).toHaveBeenCalledTimes(1));
+    expect(intervalSpy).not.toHaveBeenCalled();
+    intervalSpy.mockRestore();
+  });
+
   it('rejects writes outside the webcontainer workdir', async () => {
     const webcontainer = makeWebcontainer('/workspace');
     const store = new FilesStore(Promise.resolve(webcontainer));

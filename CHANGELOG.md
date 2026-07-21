@@ -13,7 +13,7 @@
 - The hosted FREE daily quota now estimates `gpt-5.6` usage at MagnetAPI's documented 10% of the existing GPT-5 reference rates instead of the previous generic-provider fallback.
 - Initial `/chat` assets dropped from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files by deferring settings integrations, plugins, PDF export, Git cloning, and terminal assets until requested.
 - Production builds now enforce a 1 MB per-asset and 2 MB initial-route budget, and the normal build heap ceiling was reduced from 8 GB to 3 GB for more predictable self-host builds.
-- Connection health checks now use one bounded `/api/health` probe every 30 seconds, Shout Out Box polling slows while closed and pauses in hidden tabs, and notification state no longer creates a redundant timer for every log update.
+- Connection health checks now use one bounded `/api/health` probe every 30 seconds, Shout Out Box polling slows while closed and pauses in hidden tabs, notification state no longer creates a redundant timer for every log update, and locked-file state relies on event-driven updates instead of clearing/reloading storage every 30 seconds.
 - The public contributor application form has been retired to stop spam. `/contribute` now renders a no-form GitHub contribution page and POST submissions return `410 Gone` without emailing the operator inbox.
 - Hosted `FREE` managed-instance runs now use deterministic starter bootstrap before model continuation, preventing empty runtime workspaces when a model initially emits inspection-only shell actions.
 - The Appointment Scheduler first-party template pack now materializes a real React first-pass app with calendar slots,
