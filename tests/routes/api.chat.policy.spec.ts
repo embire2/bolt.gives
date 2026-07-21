@@ -68,6 +68,8 @@ describe('api.chat stream recovery policy', () => {
 
   it('sets a wall-clock deadline only for hosted FREE streams', () => {
     expect(resolveStreamMaxDurationMs('FREE')).toBe(150_000);
+    expect(resolveStreamMaxDurationMs('FREE', '30000')).toBe(30_000);
+    expect(resolveStreamMaxDurationMs('FREE', 'invalid')).toBe(150_000);
     expect(resolveStreamMaxDurationMs('OpenAI')).toBeUndefined();
   });
 

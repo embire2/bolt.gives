@@ -70,6 +70,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Follow-up prompts accepted during an active run dispatch once the run becomes idle even while preview/status updates continue rerendering the workspace; the queue no longer starves behind a repeatedly reset timer.
 - Hidden recovery requests use single-flight dispatch, reducing duplicate model streams and avoiding the CPU, network, and provider usage caused by continuation rerenders.
 - Commentary remains visible during long runs without masking provider stalls. Hosted FREE requests enter recovery after 120 seconds without visible/actionable model output and have a Cloudflare-lifecycle-safe 150-second response deadline that cancels stalled upstream work before single-flight continuation; BYOK long-thinking models keep their longer timeout.
+- Operators can temporarily lower that FREE response cap with the server-only `BOLT_FREE_STREAM_MAX_DURATION_MS` setting (minimum 10 seconds) for staging diagnostics; it is never read from browser input.
 - Automatic managed-instance rollouts yield to active coding sessions and run with deployment-specific resource limits; browser release smokes also tear down their generated preview process before exit.
 
 ### Quiet hosted Vite previews

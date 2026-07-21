@@ -115,8 +115,16 @@ export function shouldTrackModelStreamChunkActivity(chunk?: { type?: string }) {
   return Boolean(chunk?.type && chunk.type !== 'reasoning');
 }
 
-export function resolveStreamMaxDurationMs(provider?: string) {
-  return provider?.trim().toUpperCase() === 'FREE' ? HOSTED_FREE_STREAM_MAX_DURATION_MS : undefined;
+export function resolveStreamMaxDurationMs(provider?: string, configuredMaxDuration?: unknown) {
+  if (provider?.trim().toUpperCase() !== 'FREE') {
+    return undefined;
+  }
+
+  const parsedMaxDuration = Number(configuredMaxDuration);
+
+  return Number.isFinite(parsedMaxDuration) && parsedMaxDuration >= 10_000
+    ? parsedMaxDuration
+    : HOSTED_FREE_STREAM_MAX_DURATION_MS;
 }
 
 const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
@@ -1444,9 +1452,15 @@ Next: Keep the Workspace open while the preview retries and switches to the gene
 
           activeStreamAbortController = null;
         };
+
+        const streamMaxDurationMs = resolveStreamMaxDurationMs(
+          streamTimeoutSelection.provider,
+          envVars?.BOLT_FREE_STREAM_MAX_DURATION_MS || process?.env?.BOLT_FREE_STREAM_MAX_DURATION_MS,
+        );
+
         streamRecovery = new StreamRecoveryManager({
           timeout: streamTimeoutMs,
-          maxDuration: resolveStreamMaxDurationMs(streamTimeoutSelection.provider),
+          maxDuration: streamMaxDurationMs,
           maxRetries: streamMaxRetries,
           onTimeout: () => {
             const signal = recoveryController.registerTimeout();
@@ -3225,7 +3239,10 @@ Next: I am sending the final result now.`,
     );
 
     const responseSelection = resolvePreferredModelProvider(messages, selectedModel, selectedProvider);
-    const responseMaxDurationMs = resolveStreamMaxDurationMs(responseSelection.provider);
+    const responseMaxDurationMs = resolveStreamMaxDurationMs(
+      responseSelection.provider,
+      envVars?.BOLT_FREE_STREAM_MAX_DURATION_MS || process?.env?.BOLT_FREE_STREAM_MAX_DURATION_MS,
+    );
     const responseStream = responseMaxDurationMs
       ? enforceDataStreamDeadline(dataStream, {
           maxDuration: responseMaxDurationMs,
@@ -3249,6 +3266,7 @@ Next: I am sending the final result now.`,
         Connection: 'keep-alive',
         'Cache-Control': 'no-cache',
         'Text-Encoding': 'chunked',
+        'X-Bolt-Stream-Deadline-Ms': responseMaxDurationMs?.toString() || 'disabled',
       },
     });
   } catch (error: any) {
