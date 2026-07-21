@@ -74,6 +74,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - A hosted FREE build that completes with no file action and no workspace change is treated as incomplete and continued automatically; an empty HTTP 200 or a health check of the unchanged preview no longer strands a follow-up prompt.
 - Follow-up validation is request-scoped: a prior assistant artifact cannot satisfy a later empty response.
 - MagnetAPI availability is checked before Chat spends work on a hosted FREE run. An exhausted operator wallet produces a non-retryable hosted-funding notice rather than a generic error or a loop of hidden continuations.
+- Collaboration documents are isolated by runtime project and file path, so users editing common paths such as `/src/App.tsx` cannot collide with another project’s Yjs state.
 - Hidden recovery requests use single-flight dispatch, reducing duplicate model streams and avoiding the CPU, network, and provider usage caused by continuation rerenders.
 - Commentary remains visible during long runs without masking provider stalls. Hosted FREE requests enter recovery after 120 seconds without visible/actionable model output and have a Cloudflare-lifecycle-safe 150-second response deadline that cancels stalled upstream work before single-flight continuation; BYOK long-thinking models keep their longer timeout.
 - Operators can temporarily lower that FREE response cap with the server-only `BOLT_FREE_STREAM_MAX_DURATION_MS` setting (minimum 10 seconds) for staging diagnostics; it is never read from browser input.

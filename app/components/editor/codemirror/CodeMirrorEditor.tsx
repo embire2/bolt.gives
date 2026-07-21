@@ -293,7 +293,6 @@ export const CodeMirrorEditor = memo(
 
       let state = editorStates.get(doc.filePath);
       const collaborationEnabled = isCollaborationEnabled() && Boolean(doc.filePath);
-      const needsCollaborationBinding = collaborationEnabled && activeCollaborationFileRef.current !== doc.filePath;
 
       if (!state) {
         state = newEditorState(doc.value, theme, settings, onScrollRef, debounceScroll, onSaveRef, [
@@ -312,23 +311,31 @@ export const CodeMirrorEditor = memo(
         view.dispatch({
           effects: [collaborationCompartment.reconfigure([])],
         });
-      } else if (needsCollaborationBinding) {
-        void import('~/lib/collaboration/client').then(async ({ getCollaborationExtension }) => {
-          if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
-            return;
-          }
+      } else {
+        void import('~/lib/collaboration/client').then(
+          async ({ getCollaborationExtension, getCollaborationRoomName }) => {
+            if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
+              return;
+            }
 
-          const extension = await getCollaborationExtension(doc.filePath, doc.value);
+            const roomName = getCollaborationRoomName(doc.filePath);
 
-          if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
-            return;
-          }
+            if (activeCollaborationFileRef.current === roomName) {
+              return;
+            }
 
-          activeCollaborationFileRef.current = doc.filePath;
-          viewRef.current.dispatch({
-            effects: [collaborationCompartment.reconfigure([extension])],
-          });
-        });
+            const extension = await getCollaborationExtension(doc.filePath, doc.value);
+
+            if (!viewRef.current || !docRef.current || docRef.current.filePath !== doc.filePath) {
+              return;
+            }
+
+            activeCollaborationFileRef.current = roomName;
+            viewRef.current.dispatch({
+              effects: [collaborationCompartment.reconfigure([extension])],
+            });
+          },
+        );
       }
 
       setEditorDocument(

@@ -2,7 +2,9 @@ import type { Extension } from '@codemirror/state';
 import type { WebsocketProvider as YWebsocketProvider } from 'y-websocket';
 import type { Doc as YDoc, Text as YText, UndoManager as YUndoManager } from 'yjs';
 import { logStore } from '~/lib/stores/logs';
+import { workbenchStore } from '~/lib/stores/workbench';
 import { getCollaborationServerUrl } from './config';
+import { buildCollaborationRoomName, resolveCollaborationProjectScope } from './room';
 
 type CollaborationRuntime = {
   yCollab: typeof import('y-codemirror.next').yCollab;
@@ -65,14 +67,23 @@ function getOrCreateClientId() {
   return clientId;
 }
 
-function toRoomName(filePath: string) {
-  return encodeURIComponent(filePath);
+export function getCollaborationRoomName(filePath: string) {
+  const projectScope = resolveCollaborationProjectScope({
+    hostedRuntimeSessionId: workbenchStore.hostedRuntimeSessionId,
+    host: typeof window !== 'undefined' ? window.location.host : 'server',
+    pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
+  });
+
+  return buildCollaborationRoomName(projectScope, filePath);
 }
 
-async function createBinding(filePath: string, initialContent: string): Promise<CollaborationBinding> {
+async function createBinding(
+  filePath: string,
+  roomName: string,
+  initialContent: string,
+): Promise<CollaborationBinding> {
   const { WebsocketProvider: websocketProviderClass, Y } = await loadCollaborationRuntime();
   const doc = new Y.Doc();
-  const roomName = toRoomName(filePath);
   const yText = doc.getText('content');
   const undoManager = new Y.UndoManager(yText);
   const provider = new websocketProviderClass(getCollaborationServerUrl(), roomName, doc, {
@@ -114,11 +125,12 @@ async function createBinding(filePath: string, initialContent: string): Promise<
 }
 
 async function getBinding(filePath: string, initialContent: string): Promise<CollaborationBinding> {
-  let binding = bindings.get(filePath);
+  const roomName = getCollaborationRoomName(filePath);
+  let binding = bindings.get(roomName);
 
   if (!binding) {
-    binding = await createBinding(filePath, initialContent);
-    bindings.set(filePath, binding);
+    binding = await createBinding(filePath, roomName, initialContent);
+    bindings.set(roomName, binding);
   } else if (binding.yText.length === 0 && initialContent) {
     binding.yText.insert(0, initialContent);
   }

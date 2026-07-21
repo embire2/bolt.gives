@@ -36,6 +36,7 @@
 - Follow-up completion checks now compare the assistant message against the request-start baseline, preventing the previous successful artifact from being mistaken for output from an empty follow-up.
 - Chat now runs the same MagnetAPI availability preflight as direct LLM calls, recognizes upstream `Payment Required` responses even after a cached success, avoids futile recovery retries, and shows a clear operator-funding error instead of a generic failed stream.
 - The strict calendar E2E now streams serialized browser warnings and errors while it runs, making provider, preview, and client lifecycle failures diagnosable before the final timeout.
+- Yjs collaboration rooms are now scoped by the project runtime session instead of the file path alone. Identical paths such as `/src/App.tsx` from different projects no longer share updates or persisted documents, preventing cross-project state corruption and hydration `RangeError` failures.
 - Commentary heartbeats no longer count as provider stream activity, allowing genuinely stalled model requests to enter recovery instead of remaining open indefinitely.
 - Hosted FREE streams now recover after 120 seconds without model activity, while BYOK long-thinking models retain their longer allowance and invalid timeout overrides fall back to the selected provider's safe default.
 - FREE timeout selection now resolves provider/model annotations from message history when redundant request fields are absent, and invisible reasoning-only chunks no longer mask a run that has produced no actionable coding output.
