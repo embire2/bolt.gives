@@ -47,7 +47,7 @@ The current hosted product baseline is:
 - Managed `FREE` provider restricted to four hosted coding models with ChatGPT-5.6 SOL as default:
   - provider: `FREE`
   - models: `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`
-  - upstream: MagnetAPI.org Responses API
+  - upstream: MagnetAPI.org Responses API for ChatGPT-5.6 SOL and Messages API for Claude models
   - users may switch models during a session without resetting project history or runtime context
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`

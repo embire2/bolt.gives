@@ -59,7 +59,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ### v3.1.0 highlights
 
-- Protected `FREE` coding now offers ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through MagnetAPI.org's OpenAI-compatible Responses API without exposing the operator token to browsers or managed Pages projects.
+- Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.
 - The FREE model switcher stays visible in Chat and the compact Workspace composer. A change applies to the next prompt while preserving the current conversation, project memory, files, preview, and runtime workspace.
 - Initial `/chat` assets fell from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files, about 40% fewer bytes and 46% fewer initial requests.
 - Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.

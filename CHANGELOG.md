@@ -12,7 +12,7 @@
 - Managed Cloudflare rollout commands now use an isolated Wrangler workspace so fleet refreshes cannot disrupt the live coding process while a prompt is streaming.
 - Self-hosted production now serves a precompiled Pages Functions worker directly under Node instead of keeping `wrangler pages dev` and its esbuild watcher in the live request path, preventing development-subprocess exits from severing long model runs.
 - FREE model selection is always visible in the Chat composer and compact Workspace prompt. Users can change the model for the next prompt without losing chat history, project memory, current files, or the active runtime workspace.
-- The FREE adapter uses MagnetAPI's OpenAI-compatible Responses API so agent tool calls remain structured; the operator token stays on the canonical server and is never included in browser or managed Pages payloads.
+- The FREE adapter now uses MagnetAPI's documented model-specific transports: ChatGPT-5.6 SOL uses OpenAI-compatible Responses, while Opus 4.8, Sonnet 5, and Fable 5 use Claude-compatible Messages. Agent tool calls remain structured and the operator token stays on the canonical server rather than browser or managed Pages payloads.
 - Magnet Responses payloads now receive the missing strict-SDK compatibility fields server-side, preventing successful model output from being misreported as `Invalid JSON response`; live smoke also rejects HTTP 200 error envelopes.
 - Structured Responses input is adapted to Magnet's supported `instructions` and role-labeled text format, preserving the actual task and conversation history instead of models receiving an empty message.
 - Hosted FREE build responses are capped at 2,048 completion tokens per step so focused edits complete within the stream window and recovery can continue incrementally instead of waiting on oversized file rewrites.
@@ -60,7 +60,7 @@
 
 ### Added
 
-- Regression coverage now protects MagnetAPI preflight errors, all four Responses API model choices, server-side FREE allowlisting, in-session switching, selected-model quota accounting, server-only credentials, connection acknowledgement persistence, lazy settings loading, and initial-route bundle budgets.
+- Regression coverage now protects MagnetAPI preflight errors, Responses and Messages model routing, all four FREE choices, server-side allowlisting, in-session switching, selected-model quota accounting, server-only credentials, connection acknowledgement persistence, lazy settings loading, and initial-route bundle budgets.
 - Built-in web app updater now exposes a root-level update banner on every page, supports optional dismissal, blocks the app with a mandatory update modal when release policy requires it, shows release features, and streams live update progress over Server-Sent Events.
 - The self-update flow now creates a rollback checkpoint, preserves local working tree changes in a git stash before resetting to `origin/main`, installs dependencies, builds the updated app, and schedules service restart for production systemd deployments.
 - Release policy parsing now lets operators mark GitHub Releases as `Update policy: optional` or `Update policy: mandatory`, with `BOLT_UPDATE_POLICY` and `BOLT_MANDATORY_UPDATE_VERSION` overrides for self-hosted/operator environments.

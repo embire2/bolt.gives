@@ -15,7 +15,7 @@ const FEATURE_FEED: FeatureDefinition[] = [
     id: 'release-v3.1.0',
     name: 'v3.1.0 faster startup and four FREE coding models',
     description:
-      'The protected FREE route now offers MagnetAPI.org ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 with in-session switching and Responses API tool calls, while optional settings, PDF, Git, terminal, and plugin code stay off the initial chat path.',
+      'The protected FREE route now offers MagnetAPI.org ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 with in-session switching and model-native Responses or Messages tool calls, while optional settings, PDF, Git, terminal, and plugin code stay off the initial chat path.',
     releaseDate: '2026-07-22',
   },
   {

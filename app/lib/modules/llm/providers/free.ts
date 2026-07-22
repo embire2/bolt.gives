@@ -1,4 +1,5 @@
 import type { LanguageModelV1 } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { BaseProvider } from '~/lib/modules/llm/base-provider';
 import type { ModelInfo } from '~/lib/modules/llm/types';
@@ -159,6 +160,23 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
   });
 };
 
+const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
+  const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+  const apiKey = headers.get('x-api-key');
+
+  if (apiKey && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiKey}`);
+  }
+
+  headers.delete('x-api-key');
+
+  return fetch(input, { ...init, headers });
+};
+
+export function isHostedFreeClaudeModel(model: string): boolean {
+  return model.startsWith('claude-');
+}
+
 export function clearHostedFreeModelResolution() {
   // Legacy helper retained for API compatibility with existing tests/callers.
 }
@@ -197,6 +215,18 @@ export default class FreeProvider extends BaseProvider {
       throw new Error(`Missing API key for ${this.name} provider`);
     }
 
+    const resolvedModel = resolveHostedFreeModel(options.model);
+
+    if (isHostedFreeClaudeModel(resolvedModel)) {
+      const magnetApi = createAnthropic({
+        apiKey,
+        baseURL: FREE_HOSTED_API_BASE_URL,
+        fetch: hostedFreeClaudeFetch,
+      });
+
+      return magnetApi(resolvedModel) as LanguageModelV1;
+    }
+
     const magnetApi = createOpenAI({
       apiKey,
       baseURL: FREE_HOSTED_API_BASE_URL,
@@ -204,6 +234,6 @@ export default class FreeProvider extends BaseProvider {
       fetch: hostedFreeFetch,
     });
 
-    return magnetApi.responses(resolveHostedFreeModel(options.model)) as LanguageModelV1;
+    return magnetApi.responses(resolvedModel) as LanguageModelV1;
   }
 }

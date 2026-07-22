@@ -1,22 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, {
   clearHostedFreeModelResolution,
+  isHostedFreeClaudeModel,
   normalizeHostedFreeRequest,
   normalizeHostedFreeResponse,
 } from './free';
 import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL, FREE_HOSTED_MODELS } from '~/lib/modules/llm/free-provider-config';
 
-const { responsesSpy, createOpenAISpy } = vi.hoisted(() => {
+const { anthropicModelSpy, createAnthropicSpy, responsesSpy, createOpenAISpy } = vi.hoisted(() => {
+  const anthropicModelSpy = vi.fn();
+  const createAnthropicSpy = vi.fn((_options?: { fetch?: typeof fetch }) => anthropicModelSpy);
   const responsesSpy = vi.fn();
   const createOpenAISpy = vi.fn((_options?: { fetch?: typeof fetch }) => ({
     responses: responsesSpy,
   }));
 
   return {
+    anthropicModelSpy,
+    createAnthropicSpy,
     responsesSpy,
     createOpenAISpy,
   };
 });
+
+vi.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: createAnthropicSpy,
+}));
 
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: createOpenAISpy,
@@ -52,16 +61,64 @@ describe('FreeProvider', () => {
     expect(result).toBe(modelInstance);
   });
 
-  it.each(FREE_HOSTED_MODELS)('routes $label through the Responses transport', ({ name }) => {
+  it('routes ChatGPT-5.6 SOL through the Responses transport', () => {
     const provider = new FreeProvider();
-    responsesSpy.mockReturnValue({ id: name });
+    responsesSpy.mockReturnValue({ id: FREE_HOSTED_MODEL });
 
     provider.getModelInstance({
-      model: name,
+      model: FREE_HOSTED_MODEL,
       serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
     });
 
-    expect(responsesSpy).toHaveBeenCalledWith(name);
+    expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
+    expect(createAnthropicSpy).not.toHaveBeenCalled();
+  });
+
+  it.each(FREE_HOSTED_MODELS.filter(({ name }) => isHostedFreeClaudeModel(name)))(
+    'routes $label through the Claude-compatible Messages transport',
+    ({ name }) => {
+      const provider = new FreeProvider();
+      anthropicModelSpy.mockReturnValue({ id: name });
+
+      provider.getModelInstance({
+        model: name,
+        serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+      });
+
+      expect(createAnthropicSpy).toHaveBeenCalledWith({
+        apiKey: 'magnet-test-key',
+        baseURL: 'https://api.magnetapi.org/v1',
+        fetch: expect.any(Function),
+      });
+      expect(anthropicModelSpy).toHaveBeenCalledWith(name);
+      expect(createOpenAISpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses bearer authorization for Magnet Claude requests without retaining x-api-key', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+
+    const provider = new FreeProvider();
+    anthropicModelSpy.mockReturnValue({ id: 'claude-model-instance' });
+
+    provider.getModelInstance({
+      model: 'claude-sonnet-5',
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createAnthropicSpy.mock.calls[0]?.[0]?.fetch;
+    await customFetch?.('https://api.magnetapi.org/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': 'magnet-test-key',
+        'anthropic-version': '2023-06-01',
+      },
+      body: '{}',
+    });
+
+    const forwardedHeaders = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers);
+    expect(forwardedHeaders.get('authorization')).toBe('Bearer magnet-test-key');
+    expect(forwardedHeaders.has('x-api-key')).toBe(false);
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {
