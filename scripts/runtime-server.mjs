@@ -4696,6 +4696,17 @@ export function resolveStalePreviewRedirectPath(session, requestUrl, pathname = 
   );
 }
 
+export function shouldServePreviewHandoffPage(options) {
+  if (options.hasPreviewOwnership || String(options.method || '').toUpperCase() !== 'GET') {
+    return false;
+  }
+
+  const upstreamPath = String(options.upstreamPath || '');
+  const accept = String(options.accept || '').toLowerCase();
+
+  return (upstreamPath === '/' || upstreamPath.startsWith('/?')) && accept.includes('text/html');
+}
+
 function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
   const escapeHtml = (value) =>
     String(value || '')
@@ -4715,6 +4726,7 @@ function sendPreviewRepairPage(res, session, detail = 'The preview server is war
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="2" />
     <title>Preview repair in progress</title>
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f3e8; color: #172033; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -5647,6 +5659,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   }
 
   const port = Number(portRaw);
+  const method = String(req.method || 'GET').toUpperCase();
   const nextPreviewPath = resolveStalePreviewRedirectPath(session, req.url || pathname, pathname);
 
   if (nextPreviewPath) {
@@ -5658,12 +5671,25 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
     return;
   }
 
-  if (!isPreviewPortOwnedBySession(session, port)) {
+  const hasPreviewOwnership = isPreviewPortOwnedBySession(session, port);
+
+  if (
+    shouldServePreviewHandoffPage({
+      hasPreviewOwnership,
+      method,
+      upstreamPath,
+      accept: req.headers.accept,
+    })
+  ) {
+    sendPreviewRepairPage(res, session, 'The previous preview is handing off to the updated project runtime.');
+    return;
+  }
+
+  if (!hasPreviewOwnership) {
     sendText(res, 409, 'Preview port ownership mismatch');
     return;
   }
 
-  const method = String(req.method || 'GET').toUpperCase();
   const scheduleRetry = () => {
     if (res.writableEnded || res.destroyed) {
       return;

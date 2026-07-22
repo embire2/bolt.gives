@@ -35,6 +35,7 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 const logger = createScopedLogger('stream-text');
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const LONG_THINK_BUILD_MAX_COMPLETION_TOKENS = 6000;
+const HOSTED_FREE_BUILD_MAX_COMPLETION_TOKENS = 2048;
 const DEFAULT_HOSTED_FREE_STREAM_RETRIES = 2;
 const DEFAULT_HOSTED_FREE_STREAM_RETRY_DELAY_MS = 900;
 
@@ -135,6 +136,23 @@ function getCompletionTokenLimit(modelDetails: any): number {
 
   // 3. Final fallback to MAX_TOKENS, but cap at reasonable limit for safety
   return Math.min(MAX_TOKENS, 16384);
+}
+
+export function resolveBuildCompletionLimit(options: {
+  safeMaxTokens: number;
+  providerName: string;
+  modelName: string;
+  chatMode: 'discuss' | 'build';
+}): number {
+  if (options.chatMode === 'build' && options.providerName === FREE_PROVIDER_NAME) {
+    return Math.min(options.safeMaxTokens, HOSTED_FREE_BUILD_MAX_COMPLETION_TOKENS);
+  }
+
+  if (options.chatMode === 'build' && LONG_THINK_MODEL_RE.test(options.modelName)) {
+    return Math.min(options.safeMaxTokens, LONG_THINK_BUILD_MAX_COMPLETION_TOKENS);
+  }
+
+  return options.safeMaxTokens;
 }
 
 function sanitizeText(text: string): string {
@@ -463,10 +481,12 @@ export async function streamText(props: {
 
   logger.info(`Sending llm call to ${provider.name} with model ${modelDetails.name}`);
 
-  const adjustedMaxTokens =
-    effectiveChatMode === 'build' && LONG_THINK_MODEL_RE.test(modelDetails.name)
-      ? Math.min(safeMaxTokens, LONG_THINK_BUILD_MAX_COMPLETION_TOKENS)
-      : safeMaxTokens;
+  const adjustedMaxTokens = resolveBuildCompletionLimit({
+    safeMaxTokens,
+    providerName: provider.name,
+    modelName: modelDetails.name,
+    chatMode: effectiveChatMode,
+  });
 
   // Log reasoning model detection and token parameters
   const isReasoning = isReasoningModel(modelDetails.name);

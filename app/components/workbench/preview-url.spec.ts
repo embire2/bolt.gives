@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildPreviewUrl, getPreviewIframeKey, normalizePreviewPath } from './preview-url';
+import {
+  buildPreviewUrl,
+  getPreviewIframeKey,
+  normalizePreviewPath,
+  resolvePreviewTransitionRevision,
+} from './preview-url';
 
 describe('preview URL handling', () => {
   it('normalizes preview paths before building iframe URLs', () => {
@@ -26,5 +31,36 @@ describe('preview URL handling', () => {
     const dashboard = buildPreviewUrl('https://alpha1.bolt.gives/runtime/preview/session/4100', '/dashboard', 1);
 
     expect(getPreviewIframeKey(home)).not.toBe(getPreviewIframeKey(dashboard));
+  });
+
+  it('cache-busts a hosted iframe when the runtime moves to a new preview URL', () => {
+    expect(
+      resolvePreviewTransitionRevision({
+        currentBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4101',
+        currentRevision: 3,
+        nextBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+      }),
+    ).toBe(4);
+  });
+
+  it('preserves an explicit runtime preview revision', () => {
+    expect(
+      resolvePreviewTransitionRevision({
+        currentBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4101',
+        currentRevision: 3,
+        nextBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+        nextRevision: 9,
+      }),
+    ).toBe(9);
+  });
+
+  it('keeps the canonical revision when later status events omit it', () => {
+    expect(
+      resolvePreviewTransitionRevision({
+        currentBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+        currentRevision: 4,
+        nextBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+      }),
+    ).toBe(4);
   });
 });

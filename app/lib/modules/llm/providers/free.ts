@@ -13,6 +13,152 @@ import {
 } from '~/lib/modules/llm/free-provider-config';
 import type { IProviderSetting } from '~/types/model';
 
+type JsonRecord = Record<string, unknown>;
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function normalizeHostedFreeResponse(payload: unknown): unknown {
+  if (!isJsonRecord(payload) || !Array.isArray(payload.output)) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    incomplete_details: payload.incomplete_details ?? null,
+    output: payload.output.map((item) => {
+      if (!isJsonRecord(item) || item.type !== 'message' || !Array.isArray(item.content)) {
+        return item;
+      }
+
+      return {
+        ...item,
+        content: item.content.map((part) =>
+          isJsonRecord(part) && part.type === 'output_text' && !Array.isArray(part.annotations)
+            ? { ...part, annotations: [] }
+            : part,
+        ),
+      };
+    }),
+  };
+}
+
+function extractResponseInputText(item: JsonRecord): string {
+  if (typeof item.content === 'string') {
+    return item.content;
+  }
+
+  if (Array.isArray(item.content)) {
+    return item.content
+      .map((part) => {
+        if (!isJsonRecord(part)) {
+          return '';
+        }
+
+        if (typeof part.text === 'string') {
+          return part.text;
+        }
+
+        if (typeof part.image_url === 'string') {
+          return '[image attached]';
+        }
+
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return '';
+}
+
+export function normalizeHostedFreeRequest(payload: unknown): unknown {
+  if (!isJsonRecord(payload) || !Array.isArray(payload.input)) {
+    return payload;
+  }
+
+  const instructions: string[] = typeof payload.instructions === 'string' ? [payload.instructions] : [];
+  const conversation: string[] = [];
+
+  for (const item of payload.input) {
+    if (!isJsonRecord(item)) {
+      continue;
+    }
+
+    if (item.role === 'system' || item.role === 'developer') {
+      const text = extractResponseInputText(item);
+
+      if (text) {
+        instructions.push(text);
+      }
+
+      continue;
+    }
+
+    if (item.role === 'user' || item.role === 'assistant') {
+      const text = extractResponseInputText(item);
+
+      if (text) {
+        conversation.push(`${String(item.role).toUpperCase()}:\n${text}`);
+      }
+
+      continue;
+    }
+
+    if (item.type === 'function_call') {
+      conversation.push(
+        `ASSISTANT TOOL CALL:\n${String(item.name || 'tool')}(${String(item.arguments || '{}')}) [call_id=${String(item.call_id || '')}]`,
+      );
+    } else if (item.type === 'function_call_output') {
+      conversation.push(`TOOL RESULT [call_id=${String(item.call_id || '')}]:\n${String(item.output || '')}`);
+    }
+  }
+
+  return {
+    ...payload,
+    instructions: instructions.filter(Boolean).join('\n\n'),
+    input: conversation.join('\n\n'),
+  };
+}
+
+const hostedFreeFetch: typeof fetch = async (input, init) => {
+  let requestInit = init;
+
+  if (typeof init?.body === 'string') {
+    try {
+      requestInit = { ...init, body: JSON.stringify(normalizeHostedFreeRequest(JSON.parse(init.body))) };
+    } catch {
+      // Leave non-JSON request bodies untouched.
+    }
+  }
+
+  const response = await fetch(input, requestInit);
+
+  if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
+    return response;
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = await response.clone().json();
+  } catch {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  headers.delete('transfer-encoding');
+
+  return new Response(JSON.stringify(normalizeHostedFreeResponse(payload)), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 export function clearHostedFreeModelResolution() {
   // Legacy helper retained for API compatibility with existing tests/callers.
 }
@@ -55,6 +201,7 @@ export default class FreeProvider extends BaseProvider {
       apiKey,
       baseURL: FREE_HOSTED_API_BASE_URL,
       compatibility: 'strict',
+      fetch: hostedFreeFetch,
     });
 
     return magnetApi.responses(resolveHostedFreeModel(options.model)) as LanguageModelV1;

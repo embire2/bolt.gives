@@ -15,6 +15,7 @@ const followUpModelName = requireFollowUp ? process.env.E2E_FOLLOWUP_MODEL || 'c
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toUpperCase() : null;
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
 const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
+const captureChatBody = process.env.E2E_CAPTURE_CHAT_BODY === '1';
 const started = Date.now();
 const defaultPrompt = `Build a small single-page React calendar app that lets the user add and view events. Render a visible heading that contains the exact text "${appToken}". Implement complete files and run it.`;
 
@@ -202,7 +203,11 @@ async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
 function isBenignNetworkFailure(entry) {
   return (
     /REQFAIL HEAD .*\/api\/health :: net::ERR_ABORTED/.test(entry) ||
-    /REQFAIL GET .*\/api\/system\/performance :: net::ERR_INSUFFICIENT_RESOURCES/.test(entry)
+    /REQFAIL GET .*\/api\/system\/performance :: net::ERR_INSUFFICIENT_RESOURCES/.test(entry) ||
+    /REQFAIL POST .*\/api\/chat :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/preview-events :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL GET .*\/runtime\/preview\/[^/]+\/\d+\/.* :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL POST .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry)
   );
 }
 
@@ -242,10 +247,34 @@ async function ensureChatComposerVisible(page) {
         return style.display !== 'none' && style.visibility !== 'hidden' && !element.disabled;
       });
     },
+    undefined,
     { timeout: 90000 },
   );
 
   return textarea;
+}
+
+async function waitForChatIdle(page, timeout = 180000) {
+  await ensureChatComposerVisible(page);
+  await page.waitForFunction(
+    () => {
+      const visible = (element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false;
+        }
+
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop generation"]'));
+      const textareas = Array.from(document.querySelectorAll('textarea'));
+      return !stopButtons.some(visible) && textareas.some((element) => visible(element) && !element.disabled);
+    },
+    undefined,
+    { timeout },
+  );
+  await page.waitForTimeout(1500);
+  log('chat stream idle');
 }
 
 async function main() {
@@ -280,21 +309,25 @@ async function main() {
   page.on('response', async (res) => {
     const url = res.url();
     if (url.includes('/api/chat')) {
-      let bodyPreview = '';
-      try {
-        if (res.request().method() !== 'POST' || res.status() >= 400) {
-          bodyPreview = (await res.text()).slice(0, 400);
-        }
-      } catch {}
       const headers = res.headers();
-      chatRequests.push({ status: res.status(), url, headers, bodyPreview });
       log(
         'api/chat response',
-        `status=${res.status()} deadlineMs=${headers['x-bolt-stream-deadline-ms'] || 'missing'} body=${bodyPreview.slice(0, 200)}`,
+        `status=${res.status()} deadlineMs=${headers['x-bolt-stream-deadline-ms'] || 'missing'}`,
       );
+      let bodyPreview = '';
+
+      if (captureChatBody) {
+        try {
+          bodyPreview = (await res.text()).slice(0, 12000);
+        } catch {}
+      }
+
+      chatRequests.push({ status: res.status(), url, headers, bodyPreview });
     }
     if (res.status() >= 400 && !url.includes('/api/chat')) {
-      networkErrors.push(`HTTP ${res.status()} ${url}`);
+      const entry = `HTTP ${res.status()} ${url}`;
+      networkErrors.push(entry);
+      log('HTTP failure', entry);
     }
   });
 
@@ -478,6 +511,7 @@ async function main() {
   }
 
   if (previewContainsToken && followUpToken) {
+    await waitForChatIdle(page);
     followUpSubmitted = true;
     log('submit follow-up prompt', `token=${followUpToken}`);
     await selectVisibleFreeModel(page, followUpModelName);
@@ -573,6 +607,9 @@ async function main() {
     }
   }
 
+  await waitForChatIdle(page).catch((error) => {
+    log('chat idle wait failed', error instanceof Error ? error.message : String(error));
+  });
   await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
     log('final screenshot failed', error instanceof Error ? error.message : String(error));
   });

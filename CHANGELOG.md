@@ -13,6 +13,15 @@
 - Self-hosted production now serves a precompiled Pages Functions worker directly under Node instead of keeping `wrangler pages dev` and its esbuild watcher in the live request path, preventing development-subprocess exits from severing long model runs.
 - FREE model selection is always visible in the Chat composer and compact Workspace prompt. Users can change the model for the next prompt without losing chat history, project memory, current files, or the active runtime workspace.
 - The FREE adapter uses MagnetAPI's OpenAI-compatible Responses API so agent tool calls remain structured; the operator token stays on the canonical server and is never included in browser or managed Pages payloads.
+- Magnet Responses payloads now receive the missing strict-SDK compatibility fields server-side, preventing successful model output from being misreported as `Invalid JSON response`; live smoke also rejects HTTP 200 error envelopes.
+- Structured Responses input is adapted to Magnet's supported `instructions` and role-labeled text format, preserving the actual task and conversation history instead of models receiving an empty message.
+- Hosted FREE build responses are capped at 2,048 completion tokens per step so focused edits complete within the stream window and recovery can continue incrementally instead of waiting on oversized file rewrites.
+- Hosted FREE build instructions now constrain existing-project work to one focused file per step and avoid rewriting an already-satisfied starter, reducing oversized provider streams without losing incremental follow-up capability.
+- Browser disconnects no longer recursively cancel an already-locked compiled response stream and crash the production web process.
+- Hosted preview URL transitions now carry a fresh revision, so Workspace reloads the current project after a runtime port handoff instead of displaying stale pre-follow-up content.
+- Hosted preview reconciliation now uses one canonical revisioned URL throughout each status update, eliminating reload loops between revisioned and unrevisioned iframe sources.
+- A preview document caught in the brief old-port handoff window now receives a self-refreshing repair page instead of HTTP 409; asset and cross-session ownership checks remain strict.
+- Context optimization now falls back to a deterministic five-file selection when a model misses the optional XML selector format, so malformed helper output cannot abort project creation or a follow-up coding prompt.
 - The hosted FREE daily quota records the selected model and uses conservative hosted-credit estimates for Claude choices so model switching cannot bypass the existing per-person daily spend cap.
 - Initial `/chat` assets dropped from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files by deferring settings integrations, plugins, PDF export, Git cloning, and terminal assets until requested.
 - Production builds now enforce a 1 MB per-asset and 2 MB initial-route budget, and the normal build heap ceiling was reduced from 8 GB to 3 GB for more predictable self-host builds.

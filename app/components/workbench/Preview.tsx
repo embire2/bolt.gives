@@ -24,7 +24,7 @@ import type { ElementInfo } from './Inspector';
 import type { PreviewInfo } from '~/lib/stores/previews';
 import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
 import { hasFallbackStarterPlaceholder, isStarterPlaceholderAlert } from '~/lib/runtime/starter-placeholder';
-import { buildPreviewUrl, getPreviewIframeKey } from './preview-url';
+import { buildPreviewUrl, getPreviewIframeKey, resolvePreviewTransitionRevision } from './preview-url';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -207,12 +207,22 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     ) => {
       lastHostedPreviewEventAtRef.current = Date.now();
 
-      const statusPreview = status.preview
-        ? {
-            ...status.preview,
-            baseUrl: normalizeHostedRuntimePreviewBaseUrlForBrowser(status.preview.baseUrl),
-          }
+      const normalizedStatusBaseUrl = status.preview
+        ? normalizeHostedRuntimePreviewBaseUrlForBrowser(status.preview.baseUrl)
         : null;
+      const statusPreview =
+        status.preview && normalizedStatusBaseUrl
+          ? {
+              ...status.preview,
+              baseUrl: normalizedStatusBaseUrl,
+              revision: resolvePreviewTransitionRevision({
+                currentBaseUrl: activePreview?.baseUrl,
+                currentRevision: activePreview?.revision,
+                nextBaseUrl: normalizedStatusBaseUrl,
+                nextRevision: status.preview.revision,
+              }),
+            }
+          : null;
 
       const previewSessionId =
         extractHostedRuntimeSessionIdFromPreviewBaseUrl(statusPreview?.baseUrl || activePreview?.baseUrl) ||
@@ -225,7 +235,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         workbenchStore.syncHostedPreview({
           port: statusPreview.port,
           baseUrl: statusPreview.baseUrl,
-          revision: activePreview?.revision,
+          revision: statusPreview.revision,
         });
       }
 
@@ -282,7 +292,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
       await inspectHostedPreviewIframe(previewSessionId, signature);
 
-      const previewTarget = status.preview || activePreview;
+      const previewTarget = statusPreview || activePreview;
 
       if (!previewTarget) {
         return;

@@ -52,6 +52,7 @@ import {
   sanitizeLegacyTailwindCss,
   shouldPauseManagedInstanceRolloutForSessions,
   shouldRefreshManagedInstanceForRollout,
+  shouldServePreviewHandoffPage,
   shouldRetryPreviewProxyResponse,
   startReservedPreviewProbe,
   startHostedPreviewForSession,
@@ -553,6 +554,33 @@ describe('runtime server workspace isolation', () => {
         '/runtime/preview/session-redirect/4100/src/main.tsx?import',
       ),
     ).toBe('/runtime/preview/session-redirect/4110/src/main.tsx?import');
+  });
+
+  it('serves a self-refreshing handoff only for an unowned preview document request', () => {
+    expect(
+      shouldServePreviewHandoffPage({
+        hasPreviewOwnership: false,
+        method: 'GET',
+        upstreamPath: '/',
+        accept: 'text/html,application/xhtml+xml',
+      }),
+    ).toBe(true);
+    expect(
+      shouldServePreviewHandoffPage({
+        hasPreviewOwnership: false,
+        method: 'GET',
+        upstreamPath: '/src/App.tsx',
+        accept: '*/*',
+      }),
+    ).toBe(false);
+    expect(
+      shouldServePreviewHandoffPage({
+        hasPreviewOwnership: true,
+        method: 'GET',
+        upstreamPath: '/',
+        accept: 'text/html',
+      }),
+    ).toBe(false);
   });
 
   it('releases reserved preview ports when a session terminates', () => {

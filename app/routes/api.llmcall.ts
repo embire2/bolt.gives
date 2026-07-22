@@ -56,6 +56,14 @@ function getCompletionTokenLimit(modelDetails: ModelInfo): number {
   return Math.min(MAX_TOKENS, 16384);
 }
 
+export function resolveLlmCallMaxTokens(modelCompletionLimit: number, requestedMaxTokens: unknown): number {
+  const requested = Number(requestedMaxTokens);
+
+  return Number.isFinite(requested) && requested > 0
+    ? Math.min(modelCompletionLimit, Math.floor(requested))
+    : modelCompletionLimit;
+}
+
 function validateTokenLimits(modelDetails: ModelInfo, requestedTokens: number): { valid: boolean; error?: string } {
   const modelMaxTokens = modelDetails.maxTokenAllowed || 128000;
   const maxCompletionTokens = getCompletionTokenLimit(modelDetails);
@@ -87,8 +95,9 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     model: string;
     provider: ProviderInfo;
     streamOutput?: boolean;
+    maxTokens?: number;
   }>();
-  const { system, message, model, provider, streamOutput } = requestBody;
+  const { system, message, model, provider, streamOutput, maxTokens } = requestBody;
 
   const { name: providerName } = provider;
 
@@ -241,7 +250,8 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         throw new Error('Model not found');
       }
 
-      const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
+      const modelCompletionLimit = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
+      const dynamicMaxTokens = resolveLlmCallMaxTokens(modelCompletionLimit, maxTokens);
 
       // Validate token limits before making API request
       const validation = validateTokenLimits(modelDetails, dynamicMaxTokens);

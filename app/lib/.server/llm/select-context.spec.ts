@@ -64,4 +64,35 @@ describe('selectContext', () => {
       }),
     ).resolves.toEqual({});
   });
+
+  it('falls back to relevant core files when the selector response is malformed', async () => {
+    const onFinish = vi.fn();
+    vi.mocked(generateText).mockResolvedValue({
+      text: 'I cannot provide that envelope.',
+      usage: {
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+      },
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const result = await selectContext({
+      messages: [{ id: 'user-1', role: 'user', content: 'Improve the calendar app.' }],
+      files: {
+        '/home/project/src/App.tsx': { type: 'file', content: 'export default App', isBinary: false },
+        '/home/project/src/calendar.ts': { type: 'file', content: 'export const calendar = true', isBinary: false },
+        '/home/project/src/main.tsx': { type: 'file', content: 'render()', isBinary: false },
+        '/home/project/package.json': { type: 'file', content: '{}', isBinary: false },
+        '/home/project/index.html': { type: 'file', content: '<main />', isBinary: false },
+        '/home/project/src/unrelated.ts': { type: 'file', content: 'export {}', isBinary: false },
+      },
+      summary: '',
+      onFinish,
+    });
+
+    expect(Object.keys(result)).toHaveLength(5);
+    expect(result).toHaveProperty('src/App.tsx');
+    expect(result).toHaveProperty('src/calendar.ts');
+    expect(onFinish).toHaveBeenCalledOnce();
+  });
 });

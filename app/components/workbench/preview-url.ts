@@ -38,3 +38,20 @@ export function getPreviewIframeKey(iframeUrl: string | undefined) {
     return iframeUrl;
   }
 }
+
+export function resolvePreviewTransitionRevision(options: {
+  currentBaseUrl?: string;
+  currentRevision?: number;
+  nextBaseUrl: string;
+  nextRevision?: number;
+}) {
+  if (typeof options.nextRevision === 'number') {
+    return options.nextRevision;
+  }
+
+  if (options.currentBaseUrl && options.currentBaseUrl !== options.nextBaseUrl) {
+    return (options.currentRevision || 0) + 1;
+  }
+
+  return options.currentRevision;
+}

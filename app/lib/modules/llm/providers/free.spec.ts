@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import FreeProvider, { clearHostedFreeModelResolution } from './free';
+import FreeProvider, {
+  clearHostedFreeModelResolution,
+  normalizeHostedFreeRequest,
+  normalizeHostedFreeResponse,
+} from './free';
 import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL, FREE_HOSTED_MODELS } from '~/lib/modules/llm/free-provider-config';
 
 const { responsesSpy, createOpenAISpy } = vi.hoisted(() => {
   const responsesSpy = vi.fn();
-  const createOpenAISpy = vi.fn(() => ({
+  const createOpenAISpy = vi.fn((_options?: { fetch?: typeof fetch }) => ({
     responses: responsesSpy,
   }));
 
@@ -21,6 +25,7 @@ vi.mock('@ai-sdk/openai', () => ({
 describe('FreeProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     clearHostedFreeModelResolution();
   });
@@ -41,6 +46,7 @@ describe('FreeProvider', () => {
       apiKey: 'magnet-test-key',
       baseURL: 'https://api.magnetapi.org/v1',
       compatibility: 'strict',
+      fetch: expect.any(Function),
     });
     expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
@@ -87,6 +93,7 @@ describe('FreeProvider', () => {
       apiKey: 'magnet-relayed-key',
       baseURL: 'https://api.magnetapi.org/v1',
       compatibility: 'strict',
+      fetch: expect.any(Function),
     });
     expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
@@ -96,5 +103,107 @@ describe('FreeProvider', () => {
     const provider = new FreeProvider();
     expect(provider.staticModels[0]?.label).toBe(FREE_HOSTED_MODEL_LABEL);
     expect(provider.staticModels.map((model) => model.label)).toEqual(FREE_HOSTED_MODELS.map((model) => model.label));
+  });
+
+  it('normalizes Magnet Responses payloads for the strict SDK schema', () => {
+    expect(
+      normalizeHostedFreeResponse({
+        id: 'response-1',
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'output_text', text: 'Ready' }],
+          },
+          { type: 'function_call', call_id: 'call-1', name: 'write_file', arguments: '{}' },
+        ],
+      }),
+    ).toEqual({
+      id: 'response-1',
+      incomplete_details: null,
+      output: [
+        {
+          type: 'message',
+          content: [{ type: 'output_text', text: 'Ready', annotations: [] }],
+        },
+        { type: 'function_call', call_id: 'call-1', name: 'write_file', arguments: '{}' },
+      ],
+    });
+  });
+
+  it('converts structured Responses input into Magnet-compatible history text', () => {
+    expect(
+      normalizeHostedFreeRequest({
+        model: 'claude-sonnet-5',
+        input: [
+          { role: 'system', content: 'You are a coding agent.' },
+          { role: 'user', content: [{ type: 'input_text', text: 'Build a calendar.' }] },
+          { role: 'assistant', content: [{ type: 'output_text', text: 'I created App.tsx.' }] },
+          { role: 'user', content: [{ type: 'input_text', text: 'Add reminders.' }] },
+        ],
+      }),
+    ).toEqual({
+      model: 'claude-sonnet-5',
+      instructions: 'You are a coding agent.',
+      input: 'USER:\nBuild a calendar.\n\nASSISTANT:\nI created App.tsx.\n\nUSER:\nAdd reminders.',
+    });
+  });
+
+  it('normalizes successful JSON responses before the strict SDK parses them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-1',
+            output: [{ type: 'message', content: [{ type: 'output_text', text: 'Ready' }] }],
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Encoding': 'gzip',
+              'Content-Length': '123',
+            },
+          },
+        ),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    responsesSpy.mockReturnValue({ id: 'free-model-instance' });
+
+    provider.getModelInstance({
+      model: FREE_HOSTED_MODEL,
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createOpenAISpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({
+        input: [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: [{ type: 'input_text', text: 'User task' }] },
+        ],
+      }),
+    });
+    const forwardedInit = vi.mocked(fetch).mock.calls[0]?.[1];
+
+    expect(response?.headers.get('content-encoding')).toBeNull();
+    expect(response?.headers.get('content-length')).toBeNull();
+    expect(JSON.parse(String(forwardedInit?.body))).toMatchObject({
+      instructions: 'System prompt',
+      input: 'USER:\nUser task',
+    });
+    expect(await response?.json()).toEqual({
+      id: 'response-1',
+      incomplete_details: null,
+      output: [
+        {
+          type: 'message',
+          content: [{ type: 'output_text', text: 'Ready', annotations: [] }],
+        },
+      ],
+    });
   });
 });

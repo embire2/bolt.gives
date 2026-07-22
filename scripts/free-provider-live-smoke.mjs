@@ -44,11 +44,19 @@ async function smokeTarget(baseUrl, model) {
         model,
         provider: { name: 'FREE' },
         streamOutput: false,
+        maxTokens: 64,
       }),
     });
     const text = await response.text();
+    let payload = null;
 
-    if (!response.ok || /invalid or missing api key|missing api key/i.test(text)) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      // Streaming/plain-text responses are valid for this endpoint configuration.
+    }
+
+    if (!response.ok || payload?.error === true || /invalid or missing api key|missing api key/i.test(text)) {
       throw new Error(
         `${baseUrl}: FREE/${model} smoke failed with ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
       );

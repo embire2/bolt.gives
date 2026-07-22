@@ -26,6 +26,14 @@ describe('PromptLibrary', () => {
     expect(prompt.length).toBeGreaterThan(0);
   });
 
+  it('keeps hosted FREE edits incremental so provider streams can finish predictably', () => {
+    const prompt = PromptLibrary.getPromptFromLibrary('free-hosted', options);
+
+    expect(prompt).toContain('emit at most ONE file action per response');
+    expect(prompt).toContain('Keep the entire response under 6,000 characters');
+    expect(prompt).toContain('If it already satisfies the request, do not rewrite it');
+  });
+
   it('falls back safely when the requested prompt generator throws', () => {
     const directDefault = PromptLibrary.getPromptFromLibrary('default', options);
     vi.spyOn(PromptLibrary.library.optimized, 'get').mockImplementation(() => {

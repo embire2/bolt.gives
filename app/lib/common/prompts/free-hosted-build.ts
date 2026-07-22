@@ -28,6 +28,10 @@ export const getHostedFreeBuildPrompt = (cwd: string = WORK_DIR) => stripIndents
   - Do not stop at starter scaffolding.
   - If the project contains the fallback starter, replace the active entry UI file first.
   - For Vite React starter projects, replace src/App.tsx or src/App.jsx first.
+  - Inspect the current snapshot before writing. If it already satisfies the request, do not rewrite it; emit only the required start action and finish.
+  - For an existing project, emit at most ONE file action per response. Change the smallest relevant source file and let the platform continue incrementally when more work is needed.
+  - Reuse existing CSS and components. Do not rewrite a stylesheet unless the user specifically requested a styling change that cannot be completed in the selected source file.
+  - Keep the entire response under 6,000 characters. Prefer a focused working edit over an oversized multi-file rewrite.
   - Keep starter infrastructure intact unless it is already broken.
   - Do not rewrite index.html, src/main.tsx, src/main.jsx, or vite.config.* unless a minimal repair is required.
   - Prefer plain CSS or the project's existing styling stack.

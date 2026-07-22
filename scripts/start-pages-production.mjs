@@ -145,7 +145,7 @@ function buildRequestUrl(request) {
   return `${protocol}://${host}${request.url || '/'}`;
 }
 
-async function writeWorkerResponse(response, serverResponse) {
+export async function writeWorkerResponse(response, serverResponse) {
   serverResponse.statusCode = response.status;
   serverResponse.statusMessage = response.statusText;
 
@@ -179,10 +179,8 @@ async function writeWorkerResponse(response, serverResponse) {
       }
     }
   } finally {
-    if (serverResponse.destroyed) {
-      await reader.cancel('Client disconnected').catch(() => undefined);
-    }
-
+    // The compiled Pages bridge owns the upstream stream. Calling cancel() here
+    // can recursively cancel an already-locked stream and terminate Node.
     reader.releaseLock();
   }
 
@@ -211,11 +209,20 @@ export async function startProductionServer(options = resolveProductionServerCon
   };
   const server = http.createServer((request, response) => {
     void (async () => {
+      const abortController = new AbortController();
+      const abortWorkerRequest = () => abortController.abort('Client disconnected');
+      request.once('aborted', abortWorkerRequest);
+      response.once('close', () => {
+        if (!response.writableEnded) {
+          abortWorkerRequest();
+        }
+      });
       const body = await readRequestBody(request);
       const workerRequest = new Request(buildRequestUrl(request), {
         method: request.method,
         headers: request.headers,
         body,
+        signal: abortController.signal,
       });
       const executionContext = {
         waitUntil(promise) {

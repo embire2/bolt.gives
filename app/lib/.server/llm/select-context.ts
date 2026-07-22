@@ -12,6 +12,58 @@ import { LLMManager } from '~/lib/modules/llm/manager';
 const ig = ignore().add(IGNORE_PATTERNS);
 const logger = createScopedLogger('select-context');
 
+function toRelativeProjectPath(filePath: string): string {
+  return filePath.replace(/^\/home\/project\//, '');
+}
+
+export function selectFallbackContextFiles(options: {
+  files: FileMap;
+  filePaths: string[];
+  currentFiles: string[];
+  userQuestion: string;
+  maxFiles?: number;
+}): FileMap {
+  const currentFiles = new Set(options.currentFiles.map(toRelativeProjectPath));
+  const questionTokens = new Set(
+    options.userQuestion
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3),
+  );
+  const priorityPatterns = [
+    [/^src\/app\.(?:[jt]sx?|vue|svelte)$/i, 50],
+    [/^src\/main\.(?:[jt]sx?)$/i, 45],
+    [/^package\.json$/i, 40],
+    [/^index\.html$/i, 35],
+    [/^(?:vite|next|remix)\.config\./i, 30],
+  ] as const;
+
+  const rankedPaths = options.filePaths
+    .map((fullPath) => {
+      const relativePath = toRelativeProjectPath(fullPath);
+      const normalizedPath = relativePath.toLowerCase();
+      const priority = priorityPatterns.reduce(
+        (score, [pattern, weight]) => Math.max(score, pattern.test(relativePath) ? weight : 0),
+        0,
+      );
+      const tokenScore = [...questionTokens].reduce(
+        (score, token) => score + (normalizedPath.includes(token) ? 10 : 0),
+        0,
+      );
+
+      return { fullPath, relativePath, score: priority + tokenScore };
+    })
+    .filter(({ relativePath }) => !currentFiles.has(relativePath))
+    .sort((left, right) => right.score - left.score || left.relativePath.localeCompare(right.relativePath));
+
+  return Object.fromEntries(
+    rankedPaths
+      .slice(0, options.maxFiles ?? 5)
+      .map(({ fullPath, relativePath }) => [relativePath, options.files[fullPath]])
+      .filter((entry): entry is [string, NonNullable<FileMap[string]>] => Boolean(entry[1])),
+  );
+}
+
 export async function selectContext(props: {
   messages: Message[];
   env?: Env;
@@ -191,8 +243,19 @@ export async function selectContext(props: {
   const response = resp.text;
   const updateContextBuffer = response.match(/<updateContextBuffer>([\s\S]*?)<\/updateContextBuffer>/);
 
+  if (onFinish) {
+    onFinish(resp);
+  }
+
   if (!updateContextBuffer) {
-    throw new Error('Invalid response. Please follow the response format');
+    logger.warn('Context selector returned an invalid envelope; using deterministic file selection.');
+
+    return selectFallbackContextFiles({
+      files,
+      filePaths,
+      currentFiles: currrentFiles,
+      userQuestion: extractTextContent(lastUserMessage),
+    });
   }
 
   const includeFiles =
@@ -228,10 +291,6 @@ export async function selectContext(props: {
 
     filteredFiles[path] = files[fullPath];
   });
-
-  if (onFinish) {
-    onFinish(resp);
-  }
 
   const totalFiles = Object.keys(filteredFiles).length;
   logger.info(`Total files: ${totalFiles}`);
