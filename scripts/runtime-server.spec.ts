@@ -10,6 +10,7 @@ import {
   authorizeFreeUsageQuotaSecret,
   authorizeHostedFreeRelaySecret,
   buildHostedWorkspaceBootstrapAlert,
+  buildPreviewRepairPage,
   buildFreeUsageQuotaDecision,
   buildManagedInstanceDeployArgs,
   buildManagedInstanceDeployArtifactDecision,
@@ -581,6 +582,15 @@ describe('runtime server workspace isolation', () => {
         accept: 'text/html',
       }),
     ).toBe(false);
+  });
+
+  it('waits for a healthy owned preview before leaving the handoff page', () => {
+    const html = buildPreviewRepairPage({ id: 'session-handoff', previewRecovery: { message: 'Repairing.' } });
+
+    expect(html).not.toContain('http-equiv="refresh"');
+    expect(html).toContain('/runtime/sessions/session-handoff/preview-status');
+    expect(html).toContain("method: 'HEAD'");
+    expect(html).toContain('window.location.replace');
   });
 
   it('releases reserved preview ports when a session terminates', () => {

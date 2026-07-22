@@ -4707,7 +4707,7 @@ export function shouldServePreviewHandoffPage(options) {
   return (upstreamPath === '/' || upstreamPath.startsWith('/?')) && accept.includes('text/html');
 }
 
-function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
+export function buildPreviewRepairPage(session, detail = 'The preview server is warming up or being repaired.') {
   const escapeHtml = (value) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -4716,17 +4716,13 @@ function sendPreviewRepairPage(res, session, detail = 'The preview server is war
   const recoveryMessage =
     session.previewRecovery?.message ||
     'bolt.gives detected a preview problem and is automatically applying repairs until the app is previewable.';
+  const statusUrl = `/runtime/sessions/${encodeURIComponent(session.id)}/preview-status`;
 
-  res.writeHead(200, {
-    'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': 'no-store',
-  });
-  res.end(`<!doctype html>
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="refresh" content="2" />
     <title>Preview repair in progress</title>
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f3e8; color: #172033; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -4748,8 +4744,37 @@ function sendPreviewRepairPage(res, session, detail = 'The preview server is war
       <div class="bar" aria-label="Repair in progress"></div>
       <code>${escapeHtml(detail)}</code>
     </main>
+    <script>
+      const statusUrl = ${JSON.stringify(statusUrl)};
+      async function openHealthyPreview() {
+        try {
+          const statusResponse = await fetch(statusUrl, { cache: 'no-store' });
+          const status = statusResponse.ok ? await statusResponse.json() : null;
+          if (status?.healthy && status?.preview?.baseUrl) {
+            const target = new URL(status.preview.baseUrl, window.location.origin);
+            const probe = await fetch(target, { method: 'HEAD', cache: 'no-store' });
+            if (probe.ok) {
+              target.searchParams.set('__bolt_handoff', Date.now().toString());
+              window.location.replace(target.toString());
+              return;
+            }
+          }
+        } catch {}
+        window.setTimeout(openHealthyPreview, 1000);
+      }
+      window.setTimeout(openHealthyPreview, 500);
+    </script>
   </body>
-</html>`);
+</html>`;
+}
+
+function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Bolt-Preview-Handoff': '1',
+  });
+  res.end(buildPreviewRepairPage(session, detail));
 }
 
 function getRequestHost(req) {
