@@ -152,10 +152,7 @@ describe('FreeProvider', () => {
     expect(buildRequest.tools).toEqual([
       expect.objectContaining({
         name: 'write_file',
-        input_schema: expect.objectContaining({
-          required: ['path'],
-          anyOf: [{ required: ['find', 'replace'] }, { required: ['content'] }],
-        }),
+        input_schema: expect.objectContaining({ required: ['path', 'content'] }),
       }),
     ]);
     expect(buildRequest.messages).toEqual([
@@ -343,11 +340,21 @@ describe('FreeProvider', () => {
       }),
     });
     const responseText = await response?.text();
+    const forwardedBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
     const textDeltaLine = responseText
       ?.split('\n')
       .find((line) => line.startsWith('data: ') && line.includes('"type":"text_delta"'));
     const artifact = textDeltaLine ? JSON.parse(textDeltaLine.slice('data: '.length)).delta.text : '';
 
+    expect(forwardedBody.tools).toEqual([
+      expect.objectContaining({
+        name: 'write_file',
+        input_schema: expect.objectContaining({
+          required: ['path', 'find', 'replace'],
+          properties: expect.not.objectContaining({ content: expect.anything() }),
+        }),
+      }),
+    ]);
     expect(artifact).toContain(
       'export default function App() { return <h1>Existing app</h1><p>Follow-up applied</p>; }',
     );

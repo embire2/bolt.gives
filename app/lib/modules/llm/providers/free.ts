@@ -243,21 +243,26 @@ export function normalizeHostedFreeClaudeRequest(payload: unknown): unknown {
   const tools = existingTools.filter(
     (tool) => !isJsonRecord(tool) || String(tool.name || '') !== HOSTED_FREE_CLAUDE_WRITE_TOOL,
   );
+  const hasWorkspaceFiles = extractHostedFreeClaudeWorkspaceFiles(systemText).size > 0;
 
   tools.push({
     name: HOSTED_FREE_CLAUDE_WRITE_TOOL,
-    description:
-      'Change exactly one project file. For an existing file, return path plus the smallest unique exact find string and its replacement; do not return the complete file. Use content only when creating a new file. The platform applies and previews the result automatically.',
+    description: hasWorkspaceFiles
+      ? 'Change exactly one existing project file. Return its path plus the smallest unique exact find string and its replacement. Do not return the complete file. The platform applies and previews the result automatically.'
+      : 'Create exactly one project file. Return its path and complete content. The platform applies and previews the result automatically.',
     input_schema: {
       type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Project-relative file path, for example src/App.tsx.' },
-        find: { type: 'string', description: 'Small unique exact text currently present in an existing file.' },
-        replace: { type: 'string', description: 'Replacement text for the exact find string.' },
-        content: { type: 'string', description: 'Complete contents. Use only when the path is a new file.' },
-      },
-      required: ['path'],
-      anyOf: [{ required: ['find', 'replace'] }, { required: ['content'] }],
+      properties: hasWorkspaceFiles
+        ? {
+            path: { type: 'string', description: 'Project-relative path from the workspace snapshot.' },
+            find: { type: 'string', description: 'Small unique exact text currently present in the file.' },
+            replace: { type: 'string', description: 'Replacement text for the exact find string.' },
+          }
+        : {
+            path: { type: 'string', description: 'Project-relative file path, for example src/App.tsx.' },
+            content: { type: 'string', description: 'Complete contents for the new file.' },
+          },
+      required: hasWorkspaceFiles ? ['path', 'find', 'replace'] : ['path', 'content'],
       additionalProperties: false,
     },
   });
