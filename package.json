@@ -17,8 +17,8 @@
   ],
   "scripts": {
     "deploy": "npm run build && wrangler pages deploy",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 remix vite:build && node scripts/postbuild-fixes.mjs && node scripts/client-bundle-budget.mjs",
-    "build:highmem": "cross-env NODE_OPTIONS=--max-old-space-size=6144 remix vite:build && node scripts/postbuild-fixes.mjs && node scripts/client-bundle-budget.mjs",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 remix vite:build && node scripts/postbuild-fixes.mjs && node scripts/build-pages-worker.mjs && node scripts/client-bundle-budget.mjs",
+    "build:highmem": "cross-env NODE_OPTIONS=--max-old-space-size=6144 remix vite:build && node scripts/postbuild-fixes.mjs && node scripts/build-pages-worker.mjs && node scripts/client-bundle-budget.mjs",
     "dev": "cross-env-shell NODE_OPTIONS=--max-old-space-size=4096 \"node pre-start.cjs && concurrently \\\"pnpm run collab:server\\\" \\\"pnpm run webbrowse:server\\\" \\\"remix vite:dev\\\" --names collab,webbrowse,app --kill-others-on-fail\"",
     "collab:server": "node scripts/collaboration-server.mjs",
     "webbrowse:server": "node scripts/web-browse-server.mjs",
@@ -31,6 +31,7 @@
     "prepare:devvars": "node scripts/prepare-dev-vars.mjs",
     "start:unix": "node scripts/start-pages-dev.mjs",
     "start": "node scripts/start-pages-dev.mjs",
+    "start:production": "node scripts/start-pages-production.mjs",
     "dockerstart": "node scripts/start-pages-dev.mjs --ip 0.0.0.0 --port 5173 --no-show-interactive-dev-session",
     "dockerrun": "docker run -it -d --name bolt-ai-live -p 5173:5173 --env-file .env.local bolt-ai",
     "dockerbuild:prod": "docker build -t bolt-ai:production -t bolt-ai:latest --target bolt-ai-production .",

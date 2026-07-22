@@ -441,7 +441,7 @@ The installer will:
   - `bolt-gives-webbrowse`
   - `bolt-gives-runtime`
 
-The `bolt-gives-app` launcher health-checks the local Wrangler Pages listener and forces a failed exit when it stops responding, so systemd restarts the app service instead of leaving Caddy pointed at a dead origin. The app worker uses a separate 1.5 GB heap default; build and agent-runtime processes retain their larger memory allowance.
+The `bolt-gives-app` launcher serves the precompiled Pages Functions worker directly under Node. Wrangler remains available for local development and Cloudflare deployment, but the production request path no longer depends on a long-lived Wrangler/esbuild watcher that can interrupt an active coding stream. The app worker uses a separate 1.5 GB heap default; build and agent-runtime processes retain their larger memory allowance.
 
 If the domain or PostgreSQL flags are omitted, the installer now prompts interactively for:
 

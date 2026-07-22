@@ -10,6 +10,7 @@
 
 - Large hosted model update: the managed `FREE` provider now offers MagnetAPI.org `gpt-5.6-sol` (ChatGPT-5.6 SOL), `claude-opus-4-8` (Opus 4.8), `claude-sonnet-5` (Sonnet 5), and `claude-fable-5` (Fable 5) across hosted, Pages, and managed-instance paths.
 - Managed Cloudflare rollout commands now use an isolated Wrangler workspace so fleet refreshes cannot disrupt the live coding process while a prompt is streaming.
+- Self-hosted production now serves a precompiled Pages Functions worker directly under Node instead of keeping `wrangler pages dev` and its esbuild watcher in the live request path, preventing development-subprocess exits from severing long model runs.
 - FREE model selection is always visible in the Chat composer and compact Workspace prompt. Users can change the model for the next prompt without losing chat history, project memory, current files, or the active runtime workspace.
 - The FREE adapter uses MagnetAPI's OpenAI-compatible Responses API so agent tool calls remain structured; the operator token stays on the canonical server and is never included in browser or managed Pages payloads.
 - The hosted FREE daily quota records the selected model and uses conservative hosted-credit estimates for Claude choices so model switching cannot bypass the existing per-person daily spend cap.

@@ -35,6 +35,7 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 
 - [x] Move the protected hosted FREE path to MagnetAPI.org Responses API tool calls with ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5.
 - [x] Keep FREE model switching visible in both Chat and Workspace while preserving project history and runtime context.
+- [x] Serve the self-hosted production worker directly under Node so active chat streams do not depend on a development esbuild watcher.
 - [x] Cut initial Chat assets by about 40% and enforce per-asset and route-level bundle budgets in production builds.
 - [x] Defer settings integrations, plugins, PDF export, Git cloning, and terminal assets until users request them.
 - [x] Reduce redundant connection, shoutbox, and notification polling on idle or hidden pages.
