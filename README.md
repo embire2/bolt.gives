@@ -55,11 +55,12 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ## Current Release (`v3.1.0`)
 
-`v3.1.0` is the current stable hosted and self-hosted release. It preserves the first-pass preview, history-aware follow-up, runtime-node, publishing, updater, and fleet-observability work from the v3.0.9 line while making the coding path substantially lighter and moving the protected FREE model to MagnetAPI.org ChatGPT-5.6.
+`v3.1.0` is the current stable hosted and self-hosted release. It preserves the first-pass preview, history-aware follow-up, runtime-node, publishing, updater, and fleet-observability work from the v3.0.9 line while making the coding path substantially lighter and adding four protected MagnetAPI.org FREE coding models.
 
 ### v3.1.0 highlights
 
-- Protected `FREE` coding now uses MagnetAPI.org model `gpt-5.6` through the OpenAI-compatible Responses API, preserving structured tool calls without exposing the operator token to browsers or managed Pages projects.
+- Protected `FREE` coding now offers ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through MagnetAPI.org's OpenAI-compatible Responses API without exposing the operator token to browsers or managed Pages projects.
+- The FREE model switcher stays visible in Chat and the compact Workspace composer. A change applies to the next prompt while preserving the current conversation, project memory, files, preview, and runtime workspace.
 - Initial `/chat` assets fell from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files, about 40% fewer bytes and 46% fewer initial requests.
 - Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.
 - Health, notification, Shout Out Box, and locked-file state perform less idle work, use event-driven updates where possible, and persist acknowledged connection states.
@@ -69,7 +70,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Concurrent hosted projects reserve unique preview ports before asynchronous socket checks, and preview plus published-project HTTP/WebSocket proxies verify session ownership, preventing one user's workspace from ever rendering another user's app.
 - Follow-up prompts accepted during an active run dispatch once the run becomes idle even while preview/status updates continue rerendering the workspace; the queue no longer starves behind a repeatedly reset timer.
 - A healthy preview from the previous run no longer cancels the next follow-up after its quiet-period unlock timer; preview completion is scoped to the request that produced it.
-- Hosted FREE recovery is provider-aware: `gpt-5.6` enters single-flight continuation after 120 seconds without meaningful progress, while BYOK GPT-5/Codex models retain their longer thinking allowance.
+- Hosted FREE recovery is provider-aware: FREE requests enter single-flight continuation after 120 seconds without meaningful progress, while BYOK GPT-5/Codex models retain their longer thinking allowance.
 - The browser also honors the server-advertised 150-second absolute FREE deadline with a one-shot response timer that is independent of stream rerenders, ensuring commentary or reasoning-only text cannot suppress recovery indefinitely.
 - A hosted FREE build that completes with no file action and no workspace change is treated as incomplete and continued automatically; an empty HTTP 200 or a health check of the unchanged preview no longer strands a follow-up prompt.
 - Follow-up validation is request-scoped: a prior assistant artifact cannot satisfy a later empty response.
@@ -238,11 +239,11 @@ Bring-your-own-key model support has also been refreshed for current coding-capa
 
 `v3.0.9.3` restored web browsing reliability and made direct website scrape-to-build prompts first-class: when a build prompt includes a public website URL, the server browses that page, extracts source copy/headings/links, and injects that context before generation so the new project can preserve useful data while producing original code and styling.
 
-Large hosted model update: the managed `FREE` provider now uses MagnetAPI.org model `gpt-5.6`, displayed as `MagnetAPI.org - ChatGPT-5.6`, through the protected server-side route. Managed instances and self-hosted deployments that configure `MAGNET_API_KEY` inherit that same locked model without exposing the operator-funded key to the browser.
+Large hosted model update: the managed `FREE` provider now offers MagnetAPI.org models `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5` through the protected server-side route. Managed instances and self-hosted deployments that configure `MAGNET_API_KEY` inherit the same allowlisted choices without exposing the operator-funded key to the browser.
 
 `v3.0.9.2` restored managed Cloudflare trial coding by allowing credentialed hosted `FREE` relay calls through the server CSRF gate for chat routes, then verifying the shared relay secret through the runtime verifier before any model call is allowed. The compact Workspace Activity drawer from `v3.0.9.1` remains in place, so generated files and preview remain visible while live progress continues updating.
 
-The hosted `FREE` path is locked to MagnetAPI.org ChatGPT-5.6 and stays server-side. Project creation applies deterministic starter bootstrap for hosted FREE runs, syncs completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
+The hosted `FREE` path is restricted to the four approved MagnetAPI.org coding models and stays server-side. Project creation applies deterministic starter bootstrap for hosted FREE runs, syncs completed generated files into the managed runtime before preview verification, repairs common raw JSX angle text as files land, rejects incomplete/prose-only handoffs, waits for recovered preview states to settle, refuses package-only Vite autostarts before they can hold the session lock, and verifies real preview plus persisted runtime snapshot content with strict browser E2E coverage.
 
 The browser startup path keeps preview/deploy controls out of the initial header chunk until chat starts. This preserves deploy access once a preview exists without reintroducing workbench initialization cycles during landing-page hydration.
 
@@ -271,7 +272,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 - Tighten Cloudflare managed-instance lifecycle around health-verified updates and rollback.
 - Expand operator visibility inside `admin.bolt.gives` with trial capacity, deployment state, and outbound communication history.
-- Keep the built-in `FREE` + MagnetAPI.org ChatGPT-5.6 path reliable across hosted, Pages, and managed instances.
+- Keep all four built-in `FREE` MagnetAPI.org coding choices reliable across hosted, Pages, and managed instances.
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
@@ -287,7 +288,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
-- Hosted `FREE` provider ships locked to MagnetAPI.org model `gpt-5.6` through a protected server-side Responses API route.
+- Hosted `FREE` ships with ChatGPT-5.6 SOL as default plus Opus 4.8, Sonnet 5, and Fable 5 through a protected server-side Responses API route.
 - Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `MAGNET_API_KEY` in managed/customer projects.
 - Cloudflare Pages and managed fleet hosts use the central collaboration WebSocket transport at `wss://bolt.gives/collab`, avoiding same-host `/collab` 404s on Pages domains.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
@@ -521,12 +522,12 @@ Important:
 
 Hosted-instance note:
 
-- If you run a managed/shared instance, define `MAGNET_API_KEY` on the canonical server to expose the locked hosted coder without exposing the token to users.
+- If you run a managed/shared instance, define `MAGNET_API_KEY` on the canonical server to expose the allowlisted hosted coders without exposing the token to users.
 - Keep `OPEN_ROUTER_API_KEY` unset on hosted/shared instances if you want the public `OpenRouter` provider to remain user-supplied.
-- The hosted `FREE` coder is pinned to MagnetAPI.org model `gpt-5.6`. If that protected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to another model.
+- The hosted `FREE` coder is restricted to ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5. If a selected route is unavailable, the UI surfaces a clear retry/switch-provider error instead of silently routing to an unapproved model.
 - Managed Cloudflare instances do not receive the MagnetAPI token itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 - Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay and quota config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
-- Hosted FREE relay authorization falls back to the local runtime service on the operator host, so the built-in MagnetAPI.org ChatGPT-5.6 path works on Pages-hosted managed trials without asking users for their own API key.
+- Hosted FREE relay authorization falls back to the local runtime service on the operator host, so all four built-in MagnetAPI.org choices work on Pages-hosted managed trials without asking users for their own API key.
 - Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
 - Live browser E2E checks now require generated and follow-up tokens to persist in the hosted runtime snapshot, with bounded snapshot/status fetch timeouts so release validation cannot hang silently.
@@ -756,7 +757,7 @@ Optional, depending on how they want the AI runtime to behave:
 - `MAGNET_API_KEY=...`
   - Use this only if they want the built-in hosted `FREE` provider to work on **their** deployment.
   - This stays server-side in Cloudflare. It is **not** exposed to browser users.
-  - The shipped FREE path is locked to MagnetAPI.org model `gpt-5.6`.
+  - The shipped FREE path is restricted to `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`.
 - `BOLT_FREE_DAILY_USD_LIMIT=1`
   - Optional override for hosted `FREE` daily spend per person.
   - The default is `$1` and the ledger resets at `00:00 GMT+2`.
@@ -787,7 +788,7 @@ On first load, the expected default UX is:
 
 - land on `Chat`
 - provider already set to `FREE`
-- model label already showing `MagnetAPI.org - ChatGPT-5.6`
+- model selector already showing `ChatGPT-5.6 SOL`, with Opus 4.8, Sonnet 5, and Fable 5 available
 
 ### 7. Give the user their own subdomain
 

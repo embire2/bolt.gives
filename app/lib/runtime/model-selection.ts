@@ -98,6 +98,10 @@ function scorePreferredModel(model: ModelInfo): number {
     score += 900;
   }
 
+  if (normalized.includes('claude-sonnet-5')) {
+    score += 900;
+  }
+
   if (normalized.includes('minimax-m3')) {
     score += 890;
   }

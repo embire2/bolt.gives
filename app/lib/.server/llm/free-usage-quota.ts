@@ -192,7 +192,7 @@ export async function assertFreeUsageQuotaAllowed(options: {
   return quota || null;
 }
 
-function estimateFreeUsageCostUsd(usage: UsageLike | null | undefined) {
+function estimateFreeUsageCostUsd(usage: UsageLike | null | undefined, modelName: string | undefined) {
   const normalizedUsage = normalizeUsage(usage);
 
   if (!normalizedUsage) {
@@ -201,7 +201,7 @@ function estimateFreeUsageCostUsd(usage: UsageLike | null | undefined) {
 
   return estimateCostUSD({
     providerName: FREE_PROVIDER_NAME,
-    modelName: FREE_HOSTED_MODEL,
+    modelName: modelName || FREE_HOSTED_MODEL,
     usage: normalizedUsage,
   });
 }
@@ -219,7 +219,7 @@ export async function recordFreeUsageQuotaForRequest(options: {
   }
 
   const runtimeEnv = options.runtimeEnv || {};
-  const costUsd = estimateFreeUsageCostUsd(options.usage);
+  const costUsd = estimateFreeUsageCostUsd(options.usage, options.modelName);
 
   if (!Number.isFinite(costUsd) || costUsd <= 0) {
     return null;

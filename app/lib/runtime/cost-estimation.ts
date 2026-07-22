@@ -36,6 +36,11 @@ function resolveRatesPerMillion(providerName?: string, modelName?: string): { pr
     return { prompt: 0.125, completion: 1 };
   }
 
+  if (normalizedProvider === 'free' && normalizedModel.startsWith('claude-')) {
+    // Conservative hosted-credit estimate keeps the per-user $1 cap on the safe side.
+    return { prompt: 2, completion: 8 };
+  }
+
   if (normalizedProvider === 'openai' || normalizedProvider === 'azureopenai' || normalizedProvider === 'github') {
     if (normalizedModel.includes('gpt-5.2-codex') || normalizedModel.includes('gpt-5.1-codex')) {
       return { prompt: 1.25, completion: 10 };

@@ -1,5 +1,6 @@
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import type { ProviderInfo } from '~/types/model';
+import { FREE_PROVIDER_NAME } from '~/lib/modules/llm/free-provider-config';
 
 const STORAGE_KEY = 'bolt_model_orchestrator_settings';
 
@@ -271,6 +272,16 @@ export function selectModelForPrompt(options: {
         overridden: true,
       };
     }
+  }
+
+  if (currentSelectionIsValid && options.currentProvider.name === FREE_PROVIDER_NAME) {
+    return {
+      provider: options.currentProvider,
+      model: options.currentModel,
+      reason: 'Kept the user-selected FREE model for this prompt.',
+      complexity,
+      overridden: false,
+    };
   }
 
   if (!settings.enabled) {

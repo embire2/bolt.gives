@@ -32,29 +32,44 @@ try {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction(
     () => {
-      const comboboxText = Array.from(document.querySelectorAll('[role="combobox"]')).map((node) =>
-        node.textContent || '',
+      const comboboxText = Array.from(document.querySelectorAll('[role="combobox"]')).map(
+        (node) => node.textContent || '',
       );
 
       return (
         comboboxText.some((text) => text.includes('FREE')) &&
-        comboboxText.some((text) => text.includes('MagnetAPI.org - ChatGPT-5.6'))
+        comboboxText.some((text) => text.includes('ChatGPT-5.6 SOL'))
       );
     },
     { timeout: 90000 },
   );
 
-  const comboboxes = page.getByRole('combobox');
-  const providerText = (await comboboxes.nth(0).textContent()) || '';
-  const modelText = (await comboboxes.nth(1).textContent()) || '';
+  const providerText = (await page.getByRole('combobox').filter({ hasText: 'FREE' }).first().textContent()) || '';
+  const modelSelect = page.getByRole('combobox', { name: 'FREE coding model' });
+  const modelLabels = (await modelSelect.locator('option').allTextContents()).map((label) => label.trim());
+  const expectedModelLabels = ['ChatGPT-5.6 SOL', 'Opus 4.8', 'Sonnet 5', 'Fable 5'];
 
   if (!providerText.includes('FREE')) {
     throw new Error(`Expected FREE provider on startup, received: ${providerText}`);
   }
 
-  if (!modelText.includes('MagnetAPI.org - ChatGPT-5.6')) {
-    throw new Error(`Expected MagnetAPI.org - ChatGPT-5.6 model label on startup, received: ${modelText}`);
+  if (JSON.stringify(modelLabels) !== JSON.stringify(expectedModelLabels)) {
+    throw new Error(
+      `Expected FREE model choices ${expectedModelLabels.join(', ')}, received: ${modelLabels.join(', ')}`,
+    );
   }
+
+  if ((await modelSelect.inputValue()) !== 'gpt-5.6-sol') {
+    throw new Error(`Expected ChatGPT-5.6 SOL on startup, received: ${await modelSelect.inputValue()}`);
+  }
+
+  await modelSelect.selectOption('claude-sonnet-5');
+
+  if ((await modelSelect.inputValue()) !== 'claude-sonnet-5') {
+    throw new Error('Expected FREE model selection to switch to Sonnet 5.');
+  }
+
+  await modelSelect.selectOption('gpt-5.6-sol');
 
   await page.screenshot({
     path: path.join(outDir, 'free-startup-label.png'),
@@ -67,7 +82,8 @@ try {
         ok: true,
         baseUrl: chatUrl,
         provider: providerText.trim(),
-        model: modelText.trim(),
+        model: await modelSelect.inputValue(),
+        modelChoices: modelLabels,
       },
       null,
       2,

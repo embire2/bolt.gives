@@ -8,9 +8,10 @@ import { closePageThenCleanupSession, resolveCodingAppUrl } from './live-release
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
 const providerName = process.env.E2E_PROVIDER || 'FREE';
-const modelName = process.env.E2E_MODEL || 'gpt-5.6';
+const modelName = process.env.E2E_MODEL || 'gpt-5.6-sol';
 const appToken = `CAL_${Date.now().toString(36)}`.toUpperCase();
 const requireFollowUp = process.env.E2E_REQUIRE_FOLLOWUP === '1';
+const followUpModelName = requireFollowUp ? process.env.E2E_FOLLOWUP_MODEL || 'claude-sonnet-5' : null;
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toUpperCase() : null;
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
 const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
@@ -54,6 +55,24 @@ function log(stage, details = '') {
 }
 function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function selectVisibleFreeModel(page, model) {
+  if (!model) {
+    return;
+  }
+
+  const selector = page
+    .locator('select[aria-label="FREE workspace coding model"]:visible, select[aria-label="FREE coding model"]:visible')
+    .first();
+  await selector.waitFor({ state: 'visible', timeout: 30000 });
+  await selector.selectOption(model);
+
+  if ((await selector.inputValue()) !== model) {
+    throw new Error(`FREE model switch did not persist: expected ${model}`);
+  }
+
+  log('switched FREE model', model);
 }
 
 function normalizeText(value) {
@@ -461,6 +480,7 @@ async function main() {
   if (previewContainsToken && followUpToken) {
     followUpSubmitted = true;
     log('submit follow-up prompt', `token=${followUpToken}`);
+    await selectVisibleFreeModel(page, followUpModelName);
     const followUpTextarea = await ensureChatComposerVisible(page);
     await followUpTextarea.fill(followUpPrompt);
     await followUpTextarea.press('Enter');
@@ -580,6 +600,7 @@ async function main() {
     baseUrl,
     providerName,
     modelName,
+    followUpModelName,
     appToken,
     requireFollowUp,
     followUpToken,

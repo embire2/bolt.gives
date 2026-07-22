@@ -23,7 +23,7 @@ const SEO_KEYWORDS = [
   'Cloudflare Pages AI app',
   'transparent agentic coding',
   'browser based coding agent',
-  'MagnetAPI.org ChatGPT-5.6 coding workspace',
+  'MagnetAPI.org FREE AI coding models',
   'bolt.gives contributor project',
 ].join(', ');
 
@@ -56,11 +56,11 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.1.0 release with a lighter startup path and protected MagnetAPI.org ChatGPT-5.6 coding.',
+  'Stable v3.1.0 release with a lighter startup path and four protected MagnetAPI.org FREE coding models.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
-  `Hosted ${FREE_PROVIDER_NAME} provider locked to ${FREE_HOSTED_MODEL_LABEL} through the protected server-side path.`,
+  `Hosted ${FREE_PROVIDER_NAME} users can switch between ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through the protected server-side path.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
   'Dedicated runtime-node setup can create per-project Ubuntu CLI workspaces with isolated PostgreSQL databases.',
@@ -414,7 +414,7 @@ export default function Index() {
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">roadmap</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
-                  <div className="text-2xl font-black">{FREE_HOSTED_MODEL_LABEL}</div>
+                  <div className="text-2xl font-black">4 coding models</div>
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{FREE_PROVIDER_NAME}</div>
                 </div>
               </div>

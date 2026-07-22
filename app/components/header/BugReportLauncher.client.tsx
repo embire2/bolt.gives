@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Cookies from 'js-cookie';
+import { FREE_HOSTED_MODEL } from '~/lib/modules/llm/free-provider-config';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { profileStore } from '~/lib/stores/profile';
@@ -42,7 +43,7 @@ function getCurrentProvider() {
 }
 
 function getCurrentModel() {
-  return Cookies.get('selectedModel') || 'gpt-5.6';
+  return Cookies.get('selectedModel') || FREE_HOSTED_MODEL;
 }
 
 function getBrowserLabel() {

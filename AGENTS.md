@@ -44,10 +44,11 @@ The current hosted product baseline is:
 - Technical feed / execution transparency
 - Hosted server-first runtime for install/build/dev/test/preview on managed instances
 - Preview auto-recovery via server-side health checks
-- Managed `FREE` provider locked to one hosted model:
+- Managed `FREE` provider restricted to four hosted coding models with ChatGPT-5.6 SOL as default:
   - provider: `FREE`
-  - model: `gpt-5.6`
+  - models: `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`
   - upstream: MagnetAPI.org Responses API
+  - users may switch models during a session without resetting project history or runtime context
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`

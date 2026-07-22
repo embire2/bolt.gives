@@ -5,6 +5,7 @@ import {
   resolvePreferredModelProvider,
   sanitizeSelectionWithApiKeys,
 } from './message-selection';
+import { FREE_HOSTED_MODEL } from '~/lib/modules/llm/free-provider-config';
 
 describe('message-selection', () => {
   it('resolves provider and model from message history when request selection fields are absent', () => {
@@ -12,14 +13,14 @@ describe('message-selection', () => {
       [
         {
           role: 'user' as const,
-          content: '[Model: gpt-5.6]\n\n[Provider: FREE]\n\nImprove the existing calendar.',
+          content: '[Model: gpt-5.6-sol]\n\n[Provider: FREE]\n\nImprove the existing calendar.',
         },
       ],
       undefined,
       undefined,
     );
 
-    expect(selection).toEqual({ model: 'gpt-5.6', provider: 'FREE' });
+    expect(selection).toEqual({ model: 'gpt-5.6-sol', provider: 'FREE' });
   });
 
   it('prefers cookie selection when latest user message has no provider/model envelope', () => {
@@ -105,5 +106,23 @@ describe('message-selection', () => {
     });
 
     expect(selection.provider).toBe('AmazonBedrock');
+  });
+
+  it('keeps an approved FREE model selected for the next prompt', () => {
+    const selection = sanitizeSelectionWithApiKeys({
+      selection: { model: 'claude-sonnet-5', provider: 'FREE' },
+      apiKeys: { FREE: 'magnet-server-key' },
+    });
+
+    expect(selection).toEqual({ model: 'claude-sonnet-5', provider: 'FREE' });
+  });
+
+  it('does not allow a client to route FREE through an arbitrary model ID', () => {
+    const selection = sanitizeSelectionWithApiKeys({
+      selection: { model: 'unapproved/expensive-model', provider: 'FREE' },
+      apiKeys: { FREE: 'magnet-server-key' },
+    });
+
+    expect(selection).toEqual({ model: FREE_HOSTED_MODEL, provider: 'FREE' });
   });
 });

@@ -24,7 +24,7 @@ await page.addInitScript(({ provider, model }) => {
   // Expose workbench for diagnostics
   const orig = Object.defineProperty;
   // nothing - we'll import via eval later
-}, { provider: 'FREE', model: 'gpt-5.6' });
+}, { provider: 'FREE', model: 'gpt-5.6-sol' });
 
 let sseDone = false;
 const sseChunks = [];

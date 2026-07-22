@@ -675,8 +675,9 @@ export const ChatImpl = memo(
       }
 
       const visibleDefaultModel = provider.staticModels?.[0]?.name || DEFAULT_MODEL;
+      const isVisibleFreeModel = provider.staticModels?.some((freeModel) => freeModel.name === model);
 
-      if (!visibleDefaultModel || model === visibleDefaultModel) {
+      if (!visibleDefaultModel || isVisibleFreeModel) {
         return;
       }
 

@@ -7,7 +7,7 @@ import { isStaticAssetRequestUrl, resolveCodingAppUrl, selectBreakTarget } from 
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'https://alpha1.bolt.gives');
 const providerName = process.env.E2E_PROVIDER || 'FREE';
-const modelName = process.env.E2E_MODEL || 'gpt-5.6';
+const modelName = process.env.E2E_MODEL || 'gpt-5.6-sol';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
 const secure = baseUrl.startsWith('https://');
 const appToken = `LUMA_${Date.now().toString(36)}`;

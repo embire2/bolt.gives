@@ -230,6 +230,7 @@ interface WorkspaceCompactPromptProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement> | undefined;
   provider?: ProviderInfo;
   model?: string;
+  setModel?: (model: string) => void;
   isStreaming: boolean;
   handleInputChange?: ((event: React.ChangeEvent<HTMLTextAreaElement>) => void) | undefined;
   handlePaste: (event: React.ClipboardEvent) => void;
@@ -243,6 +244,7 @@ function WorkspaceCompactPrompt({
   textareaRef,
   provider,
   model,
+  setModel,
   isStreaming,
   handleInputChange,
   handlePaste,
@@ -252,17 +254,34 @@ function WorkspaceCompactPrompt({
 }: WorkspaceCompactPromptProps) {
   const hasPromptDraft = input.trim().length > 0;
   const buttonLabel = isStreaming && !hasPromptDraft ? 'Stop current run' : 'Send workspace prompt';
+  const freeModels = provider?.name === 'FREE' ? provider.staticModels || [] : [];
+  const selectedFreeModel = freeModels.some((entry) => entry.name === model) ? model : freeModels[0]?.name;
 
   return (
     <div data-testid="workspace-compact-prompt" className="z-prompt w-full py-1">
       <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/95 px-2 py-1.5 shadow-[0_-8px_26px_rgba(15,23,42,0.10)] backdrop-blur">
         <div className="flex items-center gap-2">
-          <div className="hidden min-w-0 shrink-0 items-center gap-1.5 text-[11px] text-bolt-elements-textTertiary sm:flex">
+          <div className="hidden min-w-0 shrink-0 items-center gap-1.5 text-[11px] text-bolt-elements-textTertiary lg:flex">
             <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary">
               {(provider as any)?.label || provider?.name || 'Provider'}
             </span>
-            {model ? <span className="max-w-[170px] truncate">{model}</span> : null}
+            {freeModels.length === 0 && model ? <span className="max-w-[170px] truncate">{model}</span> : null}
           </div>
+          {freeModels.length > 1 ? (
+            <select
+              aria-label="FREE workspace coding model"
+              title="Change the model for your next prompt"
+              className="w-[126px] shrink-0 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 py-2 text-xs font-medium text-bolt-elements-textPrimary outline-none focus:border-bolt-elements-focus sm:w-[180px]"
+              value={selectedFreeModel}
+              onChange={(event) => setModel?.(event.target.value)}
+            >
+              {freeModels.map((freeModel) => (
+                <option key={freeModel.name} value={freeModel.name}>
+                  {freeModel.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <div className="relative min-w-0 flex-1">
             <textarea
               ref={textareaRef}
@@ -981,6 +1000,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         textareaRef={textareaRef}
         provider={provider}
         model={model}
+        setModel={setModel}
         isStreaming={isStreaming}
         handleInputChange={handleInputChange}
         handlePaste={handlePaste}
@@ -1077,7 +1097,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       Getting started (no bolt.gives signup required)
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
-                      <div>1. Start with FREE and MagnetAPI.org ChatGPT-5.6. No account or API key is required.</div>
+                      <div>
+                        1. Start with FREE and choose ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, or Fable 5. No account or API
+                        key is required.
+                      </div>
                       <div>2. Or pick your own provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.).</div>
                       <div>3. For another cloud provider, add its API key in the chat box or Settings.</div>
                       <div>

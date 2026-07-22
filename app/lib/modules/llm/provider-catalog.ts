@@ -1,13 +1,14 @@
 import type { ProviderInfo } from '~/types/model';
 import {
   FREE_HOSTED_MODEL,
-  FREE_HOSTED_MODEL_LABEL,
   FREE_HOSTED_MODEL_MAX_TOKENS,
+  FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
+  FREE_HOSTED_MODELS,
   FREE_HOSTED_API_TOKEN_KEY,
 } from '~/lib/modules/llm/free-provider-config';
 
 export const DEFAULT_PROVIDER_NAME = 'FREE';
-export const DEFAULT_MODEL_NAME = FREE_HOSTED_MODEL;
+export const DEFAULT_MODEL_NAME: string = FREE_HOSTED_MODEL;
 
 export const PROVIDER_BASE_URL_ENV_KEYS: Record<string, { baseUrlKey?: string; apiTokenKey?: string }> = {
   FREE: { apiTokenKey: FREE_HOSTED_API_TOKEN_KEY },
@@ -47,14 +48,12 @@ export const PROVIDER_BASE_URL_ENV_KEYS: Record<string, { baseUrlKey?: string; a
 export const PROVIDER_CATALOG: ProviderInfo[] = [
   {
     name: 'FREE',
-    staticModels: [
-      {
-        name: DEFAULT_MODEL_NAME,
-        label: FREE_HOSTED_MODEL_LABEL,
-        provider: 'FREE',
-        maxTokenAllowed: FREE_HOSTED_MODEL_MAX_TOKENS,
-      },
-    ],
+    staticModels: FREE_HOSTED_MODELS.map((model) => ({
+      ...model,
+      provider: 'FREE',
+      maxTokenAllowed: FREE_HOSTED_MODEL_MAX_TOKENS,
+      maxCompletionTokens: FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
+    })),
     allowsUserApiKey: false,
   },
   { name: 'OpenAI', staticModels: [] },

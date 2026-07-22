@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderInfo } from '~/types/model';
 
 const localStorageState = new Map<string, string>();
@@ -28,11 +28,14 @@ const freeProvider: ProviderInfo = {
   allowsUserApiKey: false,
   staticModels: [
     {
-      name: 'gpt-5.6',
-      label: 'MagnetAPI.org - ChatGPT-5.6',
+      name: 'gpt-5.6-sol',
+      label: 'ChatGPT-5.6 SOL',
       provider: 'FREE',
       maxTokenAllowed: 64000,
     },
+    { name: 'claude-opus-4-8', label: 'Opus 4.8', provider: 'FREE', maxTokenAllowed: 64000 },
+    { name: 'claude-sonnet-5', label: 'Sonnet 5', provider: 'FREE', maxTokenAllowed: 64000 },
+    { name: 'claude-fable-5', label: 'Fable 5', provider: 'FREE', maxTokenAllowed: 64000 },
   ],
 };
 
@@ -52,26 +55,55 @@ describe('ModelSelector', () => {
     ModelSelector = (await import('./ModelSelector')).ModelSelector;
   });
 
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', localStorageMock);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ providers: [] }),
+      })),
+    );
+  });
+
   afterEach(() => {
     cleanup();
     localStorageMock.clear();
     vi.unstubAllGlobals();
   });
 
-  it('shows the locked FREE model label even before async model options load', () => {
-    vi.stubGlobal('localStorage', localStorageMock);
-
+  it('shows the default FREE model label even before async model options load', () => {
     render(
       <ModelSelector
         provider={freeProvider}
         providerList={[freeProvider]}
-        model="gpt-5.6"
+        model="gpt-5.6-sol"
         modelList={[]}
         apiKeys={{}}
       />,
     );
 
-    expect(screen.getAllByRole('combobox')[1].textContent).toContain('MagnetAPI.org - ChatGPT-5.6');
+    expect(screen.getAllByRole('combobox')[1].textContent).toContain('ChatGPT-5.6 SOL');
     expect(screen.queryByText('Select model')).toBeNull();
+  });
+
+  it('lets users choose any approved FREE model', () => {
+    const setModel = vi.fn();
+
+    render(
+      <ModelSelector
+        provider={freeProvider}
+        providerList={[freeProvider]}
+        model="gpt-5.6-sol"
+        setModel={setModel}
+        modelList={freeProvider.staticModels}
+        apiKeys={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByRole('option', { name: /Sonnet 5/i }));
+
+    expect(setModel).toHaveBeenCalledWith('claude-sonnet-5');
   });
 });

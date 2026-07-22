@@ -10,12 +10,16 @@ const targets = (
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
+const models = (process.env.FREE_PROVIDER_SMOKE_MODELS || 'gpt-5.6-sol,claude-opus-4-8,claude-sonnet-5,claude-fable-5')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 function toLlmCallUrl(baseUrl) {
   return new URL('/api/llmcall', baseUrl).toString();
 }
 
-async function smokeTarget(baseUrl) {
+async function smokeTarget(baseUrl, model) {
   const url = toLlmCallUrl(baseUrl);
   const origin = new URL(url).origin;
   const csrf = `free-smoke-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
@@ -37,7 +41,7 @@ async function smokeTarget(baseUrl) {
       body: JSON.stringify({
         system: 'Reply with exactly OK.',
         message: 'OK?',
-        model: 'gpt-5.6',
+        model,
         provider: { name: 'FREE' },
         streamOutput: false,
       }),
@@ -46,12 +50,13 @@ async function smokeTarget(baseUrl) {
 
     if (!response.ok || /invalid or missing api key|missing api key/i.test(text)) {
       throw new Error(
-        `${baseUrl}: FREE provider smoke failed with ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
+        `${baseUrl}: FREE/${model} smoke failed with ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
       );
     }
 
     return {
       baseUrl,
+      model,
       ok: true,
       status: response.status,
     };
@@ -63,7 +68,9 @@ async function smokeTarget(baseUrl) {
 const results = [];
 
 for (const target of targets) {
-  results.push(await smokeTarget(target));
+  for (const model of models) {
+    results.push(await smokeTarget(target, model));
+  }
 }
 
 console.log(JSON.stringify({ ok: true, results }, null, 2));

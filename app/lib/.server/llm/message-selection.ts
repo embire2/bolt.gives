@@ -1,5 +1,6 @@
 import type { Message } from 'ai';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
+import { FREE_PROVIDER_NAME, resolveHostedFreeModel } from '~/lib/modules/llm/free-provider-config';
 import { extractPropertiesFromMessage } from './utils';
 
 export type ResolvedModelProvider = {
@@ -11,6 +12,17 @@ type ChatMessage = Omit<Message, 'id'>;
 
 const LOCAL_PROVIDER_NAMES = new Set(['Ollama', 'LMStudio', 'OpenAILike']);
 const DEFAULT_PROVIDER_PRIORITY = ['OpenAI', 'Anthropic', 'OpenRouter', 'Google', 'Groq', 'Together'];
+
+function normalizeSelectionForProvider(selection: ResolvedModelProvider): ResolvedModelProvider {
+  if (selection.provider !== FREE_PROVIDER_NAME) {
+    return selection;
+  }
+
+  return {
+    ...selection,
+    model: resolveHostedFreeModel(selection.model),
+  };
+}
 
 function isValidBedrockApiKey(rawKey: string): boolean {
   try {
@@ -184,7 +196,7 @@ export function sanitizeSelectionWithApiKeys(options: {
   } = options;
 
   if (hasUsableProviderCredential(selection.provider, apiKeys)) {
-    return selection;
+    return normalizeSelectionForProvider(selection);
   }
 
   const candidateProviders = [
@@ -199,13 +211,10 @@ export function sanitizeSelectionWithApiKeys(options: {
   const fallbackProvider = uniqueCandidates.find((candidate) => hasUsableProviderCredential(candidate, apiKeys));
 
   if (!fallbackProvider) {
-    return selection;
+    return normalizeSelectionForProvider(selection);
   }
 
-  return {
-    ...selection,
-    provider: fallbackProvider,
-  };
+  return normalizeSelectionForProvider({ ...selection, provider: fallbackProvider });
 }
 
 export function ensureLatestUserMessageSelectionEnvelope(

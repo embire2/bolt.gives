@@ -165,4 +165,48 @@ describe('ensureFreeProviderAvailability', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('preflights and caches each selected hosted model independently', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await ensureFreeProviderAvailability({
+      providerName: FREE_PROVIDER_NAME,
+      modelName: 'claude-opus-4-8',
+      apiKey: 'magnet-real-secret',
+    });
+    await ensureFreeProviderAvailability({
+      providerName: FREE_PROVIDER_NAME,
+      modelName: 'claude-sonnet-5',
+      apiKey: 'magnet-real-secret',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain('claude-opus-4-8');
+    expect(String(fetchSpy.mock.calls[1]?.[1]?.body)).toContain('claude-sonnet-5');
+  });
+
+  it('falls back to the default before probing an unapproved FREE model', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: 'arbitrary-model',
+        apiKey: 'magnet-real-secret',
+      }),
+    ).resolves.toEqual({ resolvedModelName: FREE_HOSTED_MODEL, usedFallback: true });
+
+    expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain(FREE_HOSTED_MODEL);
+    expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).not.toContain('arbitrary-model');
+  });
 });

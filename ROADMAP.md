@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 
 Status legend:
 
@@ -33,7 +33,8 @@ Release theme: harden hosted operations, updater safety, managed fleet observabi
 
 ### Shipped in v3.1.0
 
-- [x] Move the protected hosted FREE path to MagnetAPI.org `gpt-5.6` using Responses API tool calls.
+- [x] Move the protected hosted FREE path to MagnetAPI.org Responses API tool calls with ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5.
+- [x] Keep FREE model switching visible in both Chat and Workspace while preserving project history and runtime context.
 - [x] Cut initial Chat assets by about 40% and enforce per-asset and route-level bundle budgets in production builds.
 - [x] Defer settings integrations, plugins, PDF export, Git cloning, and terminal assets until users request them.
 - [x] Reduce redundant connection, shoutbox, and notification polling on idle or hidden pages.
@@ -490,7 +491,7 @@ Release theme: turn the current hosted reliability baseline into a more observab
 
 3. Prompt-to-preview quality
 
-- [x] Upgrade the managed hosted `FREE` model to MagnetAPI.org `gpt-5.6` / `MagnetAPI.org - ChatGPT-5.6` across default startup, managed-instance, and E2E paths.
+- [x] Upgrade managed hosted `FREE` to four allowlisted MagnetAPI.org coding models across default startup, managed-instance, and E2E paths.
 - [~] Ship first-party template packs for the most common app requests.
 - [~] Add CI smoke coverage for each first-party template pack.
 - [~] Reduce empty scaffold / starter-only outcomes on real user requests.

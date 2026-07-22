@@ -81,6 +81,17 @@ interface ChatBoxProps {
 
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
   const hasPromptDraft = props.input.trim().length > 0 || props.uploadedFiles.length > 0;
+  const freeModels = props.provider?.name === 'FREE' ? props.provider.staticModels || [] : [];
+  const selectedFreeModel = freeModels.some((entry: { name: string }) => entry.name === props.model)
+    ? props.model
+    : freeModels[0]?.name;
+  const selectedModelLabel =
+    props.modelList.find(
+      (entry: { name: string; provider: string }) =>
+        entry.name === props.model && entry.provider === props.provider?.name,
+    )?.label ||
+    props.provider?.staticModels?.find((entry: { name: string }) => entry.name === props.model)?.label ||
+    props.model;
 
   return (
     <div
@@ -126,11 +137,27 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
         <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textPrimary">
           {props.provider?.label || props.provider?.name || 'Not selected'}
         </span>
-        {props.model ? (
+        {freeModels.length > 1 ? (
+          <label className="flex min-w-0 items-center gap-2 text-bolt-elements-textTertiary">
+            <span>Model</span>
+            <select
+              aria-label="FREE coding model"
+              className="min-w-0 max-w-[210px] rounded border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-2 py-1 font-medium text-bolt-elements-textPrimary outline-none focus:border-bolt-elements-focus"
+              value={selectedFreeModel}
+              onChange={(event) => props.setModel?.(event.target.value)}
+            >
+              {freeModels.map((freeModel: { name: string; label: string }) => (
+                <option key={freeModel.name} value={freeModel.name}>
+                  {freeModel.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : props.model ? (
           <>
             <span className="text-bolt-elements-textTertiary">Model</span>
             <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textPrimary">
-              {props.model}
+              {selectedModelLabel}
             </span>
           </>
         ) : null}
@@ -139,7 +166,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
           className="ml-auto rounded border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary hover:border-bolt-elements-focus hover:text-bolt-elements-textPrimary"
           onClick={() => props.setIsModelSettingsCollapsed(false)}
         >
-          Change provider
+          Providers & models
         </button>
       </div>
       <div>

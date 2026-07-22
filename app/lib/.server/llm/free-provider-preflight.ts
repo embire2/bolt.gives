@@ -1,8 +1,8 @@
 import { clearHostedFreeModelResolution } from '~/lib/modules/llm/providers/free';
 import {
   FREE_HOSTED_API_BASE_URL,
-  FREE_HOSTED_MODEL,
   FREE_PROVIDER_NAME,
+  resolveHostedFreeModel,
 } from '~/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '~/lib/runtime/credentials';
 import { createScopedLogger } from '~/utils/logger';
@@ -11,6 +11,7 @@ type FreeProviderPreflightResult = {
   ok: boolean;
   expiresAt: number;
   fingerprint: string;
+  modelName: string;
   message?: string;
 };
 
@@ -107,12 +108,15 @@ export async function ensureFreeProviderAvailability(options: {
   modelName: string;
   apiKey?: string;
 }) {
-  if (options.providerName !== FREE_PROVIDER_NAME || options.modelName !== FREE_HOSTED_MODEL) {
+  if (options.providerName !== FREE_PROVIDER_NAME) {
     return {
       resolvedModelName: options.modelName,
       usedFallback: false,
     };
   }
+
+  const resolvedModelName = resolveHostedFreeModel(options.modelName);
+  const usedFallback = resolvedModelName !== options.modelName;
 
   const apiKey = normalizeCredential(options.apiKey);
 
@@ -123,27 +127,32 @@ export async function ensureFreeProviderAvailability(options: {
   const fingerprint = fingerprintToken(apiKey);
   const now = Date.now();
 
-  if (cachedResult && cachedResult.fingerprint === fingerprint && cachedResult.expiresAt > now) {
+  if (
+    cachedResult &&
+    cachedResult.fingerprint === fingerprint &&
+    cachedResult.modelName === resolvedModelName &&
+    cachedResult.expiresAt > now
+  ) {
     if (!cachedResult.ok) {
       throw new Error(cachedResult.message || 'FREE_PROVIDER_RATE_LIMITED');
     }
 
     return {
-      resolvedModelName: FREE_HOSTED_MODEL,
-      usedFallback: false,
+      resolvedModelName,
+      usedFallback,
     };
   }
 
   const hostedProbe = await probeHostedModel({
     apiKey,
-    modelName: FREE_HOSTED_MODEL,
+    modelName: resolvedModelName,
   });
 
   if (hostedProbe.ok) {
     logger.info(
       `FREE preflight available ${JSON.stringify({
         providerName: options.providerName,
-        modelName: FREE_HOSTED_MODEL,
+        modelName: resolvedModelName,
         status: hostedProbe.status,
       })}`,
     );
@@ -151,11 +160,12 @@ export async function ensureFreeProviderAvailability(options: {
       ok: true,
       expiresAt: now + SUCCESS_TTL_MS,
       fingerprint,
+      modelName: resolvedModelName,
     };
 
     return {
-      resolvedModelName: FREE_HOSTED_MODEL,
-      usedFallback: false,
+      resolvedModelName,
+      usedFallback,
     };
   }
 
@@ -164,15 +174,15 @@ export async function ensureFreeProviderAvailability(options: {
   const creditsExhausted = isHostedFreeCreditsExhausted(hostedProbe.status, hostedProbe.message);
   const upstreamRateLimited = isRateLimited(hostedProbe.status, hostedProbe.message);
   const errorMessage = creditsExhausted
-    ? `FREE_PROVIDER_CREDITS_EXHAUSTED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
+    ? `FREE_PROVIDER_CREDITS_EXHAUSTED: ${resolvedModelName}(${hostedProbe.message})`
     : upstreamRateLimited
-      ? `FREE_PROVIDER_RATE_LIMITED: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`
-      : `FREE_PROVIDER_UNAVAILABLE: ${FREE_HOSTED_MODEL}(${hostedProbe.message})`;
+      ? `FREE_PROVIDER_RATE_LIMITED: ${resolvedModelName}(${hostedProbe.message})`
+      : `FREE_PROVIDER_UNAVAILABLE: ${resolvedModelName}(${hostedProbe.message})`;
 
   logger.warn(
     `FREE preflight failed ${JSON.stringify({
       providerName: options.providerName,
-      modelName: FREE_HOSTED_MODEL,
+      modelName: resolvedModelName,
       status: hostedProbe.status,
       errorMessage,
     })}`,
@@ -182,6 +192,7 @@ export async function ensureFreeProviderAvailability(options: {
     ok: false,
     expiresAt: now + (upstreamRateLimited ? RATE_LIMIT_TTL_MS : SUCCESS_TTL_MS),
     fingerprint,
+    modelName: resolvedModelName,
     message: errorMessage,
   };
 

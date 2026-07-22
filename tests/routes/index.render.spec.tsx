@@ -57,7 +57,7 @@ describe('index route fallback shell', () => {
       ),
     ).toBeTruthy();
     expect(screen.getAllByText('FREE').length).toBeGreaterThan(0);
-    expect(screen.getByText(/MagnetAPI.org - ChatGPT-5.6/i)).toBeTruthy();
+    expect(screen.getByText(/ChatGPT-5.6 SOL/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
   });
 });

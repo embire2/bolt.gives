@@ -4,6 +4,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { PROVIDER_CATALOG } from '~/lib/modules/llm/provider-catalog';
 
 const localStorageState = new Map<string, string>();
 
@@ -341,5 +342,28 @@ describe('BaseChat surface tabs', () => {
 
     expect(screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('chat-input-region'))).toBe(true);
     expect(screen.queryByTestId('workspace-compact-prompt')).toBeNull();
+  });
+
+  it('lets users switch the FREE model from the compact workspace prompt', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    const setModel = vi.fn();
+    const freeProvider = PROVIDER_CATALOG.find((entry) => entry.name === 'FREE');
+
+    render(<BaseChat chatStarted provider={freeProvider} model="gpt-5.6-sol" setModel={setModel} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Workspace' }));
+
+    const modelSelect = await screen.findByRole('combobox', { name: 'FREE workspace coding model' });
+    fireEvent.change(modelSelect, { target: { value: 'claude-sonnet-5' } });
+
+    expect(setModel).toHaveBeenCalledWith('claude-sonnet-5');
+    expect(screen.getByPlaceholderText('Ask Cody to change this project...')).toBeTruthy();
   });
 });

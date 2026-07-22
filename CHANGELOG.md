@@ -4,13 +4,14 @@
 
 - No unreleased changes yet.
 
-## v3.1.0 (2026-07-21)
+## v3.1.0 (2026-07-22)
 
 ### Changed
 
-- Large hosted model update: the managed `FREE` provider now locks to MagnetAPI.org model `gpt-5.6`, displayed as `MagnetAPI.org - ChatGPT-5.6`, across hosted, Pages, and managed-instance startup paths.
+- Large hosted model update: the managed `FREE` provider now offers MagnetAPI.org `gpt-5.6-sol` (ChatGPT-5.6 SOL), `claude-opus-4-8` (Opus 4.8), `claude-sonnet-5` (Sonnet 5), and `claude-fable-5` (Fable 5) across hosted, Pages, and managed-instance paths.
+- FREE model selection is always visible in the Chat composer and compact Workspace prompt. Users can change the model for the next prompt without losing chat history, project memory, current files, or the active runtime workspace.
 - The FREE adapter uses MagnetAPI's OpenAI-compatible Responses API so agent tool calls remain structured; the operator token stays on the canonical server and is never included in browser or managed Pages payloads.
-- The hosted FREE daily quota now estimates `gpt-5.6` usage at MagnetAPI's documented 10% of the existing GPT-5 reference rates instead of the previous generic-provider fallback.
+- The hosted FREE daily quota records the selected model and uses conservative hosted-credit estimates for Claude choices so model switching cannot bypass the existing per-person daily spend cap.
 - Initial `/chat` assets dropped from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files by deferring settings integrations, plugins, PDF export, Git cloning, and terminal assets until requested.
 - Production builds now enforce a 1 MB per-asset and 2 MB initial-route budget, and the normal build heap ceiling was reduced from 8 GB to 3 GB for more predictable self-host builds.
 - Connection health checks now use one bounded `/api/health` probe every 30 seconds, Shout Out Box polling slows while closed and pauses in hidden tabs, notification state no longer creates a redundant timer for every log update, and locked-file state relies on event-driven updates instead of clearing/reloading storage every 30 seconds.
@@ -30,7 +31,7 @@
 - Visible follow-up prompts now use a render-stable queued dispatcher, so runtime/status rerenders cannot keep resetting the idle-send timer and leave an accepted improvement prompt permanently queued.
 - Hidden recovery continuations are claimed before dispatch and retried only after actual request failures, preventing loading-state rerenders from spawning duplicate `/api/chat` streams for one prompt.
 - Follow-up prompts no longer inherit the previous run's preview-ready unlock timer; only preview verification from the active request can stop that request, preventing silent follow-up cancellation after 20 seconds.
-- Hosted FREE `gpt-5.6` requests now use the bounded 120-second client recovery policy instead of inheriting the 260-second BYOK long-think allowance solely from the model name.
+- Hosted FREE requests now use the bounded 120-second client recovery policy instead of inheriting the 260-second BYOK long-think allowance solely from the model name.
 - The browser now arms a one-shot timer from the server-advertised FREE stream deadline, so rerenders caused by hidden reasoning, commentary, or telemetry events cannot restart the recovery boundary.
 - Hosted FREE build responses that return HTTP 200 without a build action or an actual workspace change now enter single-flight continuation immediately; merely re-verifying the unchanged preview cannot strand a follow-up.
 - Follow-up completion checks now compare the assistant message against the request-start baseline, preventing the previous successful artifact from being mistaken for output from an empty follow-up.
@@ -48,7 +49,7 @@
 
 ### Added
 
-- Regression coverage now protects MagnetAPI preflight errors, Responses API selection, server-only FREE credentials, connection acknowledgement persistence, lazy settings loading, and initial-route bundle budgets.
+- Regression coverage now protects MagnetAPI preflight errors, all four Responses API model choices, server-side FREE allowlisting, in-session switching, selected-model quota accounting, server-only credentials, connection acknowledgement persistence, lazy settings loading, and initial-route bundle budgets.
 - Built-in web app updater now exposes a root-level update banner on every page, supports optional dismissal, blocks the app with a mandatory update modal when release policy requires it, shows release features, and streams live update progress over Server-Sent Events.
 - The self-update flow now creates a rollback checkpoint, preserves local working tree changes in a git stash before resetting to `origin/main`, installs dependencies, builds the updated app, and schedules service restart for production systemd deployments.
 - Release policy parsing now lets operators mark GitHub Releases as `Update policy: optional` or `Update policy: mandatory`, with `BOLT_UPDATE_POLICY` and `BOLT_MANDATORY_UPDATE_VERSION` overrides for self-hosted/operator environments.

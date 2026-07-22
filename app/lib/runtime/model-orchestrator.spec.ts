@@ -122,6 +122,41 @@ describe('model-orchestrator', () => {
     expect(decision.overridden).toBe(false);
   });
 
+  it('does not override an explicit valid FREE model choice', () => {
+    const freeProvider: ProviderInfo = {
+      name: 'FREE',
+      staticModels: [],
+      allowsUserApiKey: false,
+    };
+    const decision = selectModelForPrompt({
+      prompt:
+        'Design architecture for a distributed migration with rollback, websocket integration, and security controls.',
+      currentModel: 'claude-sonnet-5',
+      currentProvider: freeProvider,
+      availableProviders: [...providers, freeProvider],
+      availableModels: [
+        ...models,
+        {
+          name: 'claude-sonnet-5',
+          label: 'Sonnet 5',
+          provider: 'FREE',
+          maxTokenAllowed: 64000,
+        },
+      ],
+      settings: {
+        enabled: true,
+        shortPromptTokenThreshold: 180,
+        lowComplexityKeywordThreshold: 2,
+        localPreferredProvider: 'Ollama',
+        cloudFallbackProvider: 'Anthropic',
+      },
+    });
+
+    expect(decision.provider.name).toBe('FREE');
+    expect(decision.model).toBe('claude-sonnet-5');
+    expect(decision.overridden).toBe(false);
+  });
+
   it('keeps current selection when orchestrator is disabled (manual override precedence)', () => {
     const decision = selectModelForPrompt({
       prompt: 'Any prompt',

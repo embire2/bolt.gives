@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, { clearHostedFreeModelResolution } from './free';
-import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL } from '~/lib/modules/llm/free-provider-config';
+import { FREE_HOSTED_MODEL, FREE_HOSTED_MODEL_LABEL, FREE_HOSTED_MODELS } from '~/lib/modules/llm/free-provider-config';
 
 const { responsesSpy, createOpenAISpy } = vi.hoisted(() => {
   const responsesSpy = vi.fn();
@@ -25,7 +25,7 @@ describe('FreeProvider', () => {
     clearHostedFreeModelResolution();
   });
 
-  it('uses the dedicated server-side MagnetAPI key and Responses transport for the locked FREE model', () => {
+  it('uses the dedicated server-side MagnetAPI key and falls back to the default for an unapproved model', () => {
     const provider = new FreeProvider();
     const modelInstance = { id: 'free-model-instance' };
     responsesSpy.mockReturnValue(modelInstance);
@@ -44,6 +44,18 @@ describe('FreeProvider', () => {
     });
     expect(responsesSpy).toHaveBeenCalledWith(FREE_HOSTED_MODEL);
     expect(result).toBe(modelInstance);
+  });
+
+  it.each(FREE_HOSTED_MODELS)('routes $label through the Responses transport', ({ name }) => {
+    const provider = new FreeProvider();
+    responsesSpy.mockReturnValue({ id: name });
+
+    provider.getModelInstance({
+      model: name,
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    expect(responsesSpy).toHaveBeenCalledWith(name);
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {
@@ -80,8 +92,9 @@ describe('FreeProvider', () => {
     expect(result).toBe(modelInstance);
   });
 
-  it('exposes the visible hosted FREE model label expected by the UI', () => {
+  it('exposes all visible hosted FREE model labels expected by the UI', () => {
     const provider = new FreeProvider();
     expect(provider.staticModels[0]?.label).toBe(FREE_HOSTED_MODEL_LABEL);
+    expect(provider.staticModels.map((model) => model.label)).toEqual(FREE_HOSTED_MODELS.map((model) => model.label));
   });
 });

@@ -66,7 +66,7 @@ describe('cost-estimation', () => {
   it('uses MagnetAPI ten-percent rates for the hosted FREE model', () => {
     const cost = estimateCostUSD({
       providerName: 'FREE',
-      modelName: 'gpt-5.6',
+      modelName: 'gpt-5.6-sol',
       usage: {
         promptTokens: 1000,
         completionTokens: 1000,
@@ -74,6 +74,19 @@ describe('cost-estimation', () => {
     });
 
     expect(cost).toBeCloseTo(0.001125, 8);
+  });
+
+  it('uses conservative hosted-credit rates for FREE Claude models', () => {
+    const cost = estimateCostUSD({
+      providerName: 'FREE',
+      modelName: 'claude-fable-5',
+      usage: {
+        promptTokens: 1000,
+        completionTokens: 1000,
+      },
+    });
+
+    expect(cost).toBeCloseTo(0.01, 8);
   });
 
   it('formats very small non-zero values without collapsing to 0.0000', () => {
