@@ -4750,14 +4750,11 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
         try {
           const statusResponse = await fetch(statusUrl, { cache: 'no-store' });
           const status = statusResponse.ok ? await statusResponse.json() : null;
-          if (status?.healthy && status?.preview?.baseUrl) {
+          if (status?.healthy && status?.previewOwnershipConfirmed && status?.preview?.baseUrl) {
             const target = new URL(status.preview.baseUrl, window.location.origin);
-            const probe = await fetch(target, { method: 'HEAD', cache: 'no-store' });
-            if (probe.ok) {
-              target.searchParams.set('__bolt_handoff', Date.now().toString());
-              window.location.replace(target.toString());
-              return;
-            }
+            target.searchParams.set('__bolt_handoff', Date.now().toString());
+            window.location.replace(target.toString());
+            return;
           }
         } catch {}
         window.setTimeout(openHealthyPreview, 1000);
@@ -7393,6 +7390,9 @@ export function createRuntimeServer() {
         sendJson(res, 200, {
           sessionId: requestedSessionId,
           preview: session.preview || null,
+          previewOwnershipConfirmed: Boolean(
+            session.preview && isPreviewPortOwnedBySession(session, session.preview.port),
+          ),
           status: session.previewDiagnostics.status,
           healthy: session.previewDiagnostics.healthy,
           updatedAt: session.previewDiagnostics.updatedAt,

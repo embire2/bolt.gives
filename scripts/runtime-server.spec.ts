@@ -589,7 +589,8 @@ describe('runtime server workspace isolation', () => {
 
     expect(html).not.toContain('http-equiv="refresh"');
     expect(html).toContain('/runtime/sessions/session-handoff/preview-status');
-    expect(html).toContain("method: 'HEAD'");
+    expect(html).toContain('status?.previewOwnershipConfirmed');
+    expect(html).not.toContain("method: 'HEAD'");
     expect(html).toContain('window.location.replace');
   });
 
