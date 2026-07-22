@@ -32,6 +32,8 @@ describe('PromptLibrary', () => {
     expect(prompt).toContain('emit at most ONE file action per response');
     expect(prompt).toContain('Keep the entire response under 6,000 characters');
     expect(prompt).toContain('If it already satisfies the request, do not rewrite it');
+    expect(prompt).toContain('literal XML text in your response, not native tools');
+    expect(prompt).toContain('Never refuse because native tools are unavailable');
   });
 
   it('falls back safely when the requested prompt generator throws', () => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, {
   clearHostedFreeModelResolution,
   isHostedFreeClaudeModel,
+  normalizeHostedFreeClaudeRequest,
   normalizeHostedFreeClaudeStreamEvent,
   normalizeHostedFreeRequest,
   normalizeHostedFreeResponse,
@@ -140,6 +141,29 @@ describe('FreeProvider', () => {
     });
   });
 
+  it('adds the native write-file bridge only to hosted Bolt build requests', () => {
+    const buildRequest = normalizeHostedFreeClaudeRequest({
+      system: 'CRITICAL OUTPUT CONTRACT:\nReturn <boltArtifact with file actions.',
+      messages: [{ role: 'user', content: 'Update the app.' }],
+    }) as Record<string, unknown>;
+    const plainRequest = { system: 'Reply with OK.', messages: [{ role: 'user', content: 'OK?' }] };
+
+    expect(buildRequest.tool_choice).toEqual({ type: 'tool', name: 'write_file' });
+    expect(buildRequest.tools).toEqual([
+      expect.objectContaining({
+        name: 'write_file',
+        input_schema: expect.objectContaining({ required: ['path', 'content'] }),
+      }),
+    ]);
+    expect(buildRequest.messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('CRITICAL OUTPUT CONTRACT:'),
+      }),
+    ]);
+    expect(normalizeHostedFreeClaudeRequest(plainRequest)).toEqual(plainRequest);
+  });
+
   it('normalizes chunked Magnet Claude SSE without buffering the response', async () => {
     const encoder = new TextEncoder();
     const chunks = [
@@ -186,6 +210,65 @@ describe('FreeProvider', () => {
     expect(responseText).toContain('event: message_stop');
     expect(response?.headers.get('content-encoding')).toBeNull();
     expect(response?.headers.get('content-length')).toBeNull();
+  });
+
+  it('converts the native Magnet write-file stream into a Bolt file action', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":0}}}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool-1","name":"write_file","input":{}}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"path\\":\\"src/App.tsx\\","}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\\"content\\":\\"export default function App(){return <h1>OK</h1>}\\"}"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":20}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    anthropicModelSpy.mockReturnValue({ id: 'claude-model-instance' });
+
+    provider.getModelInstance({
+      model: 'claude-sonnet-5',
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createAnthropicSpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': 'magnet-test-key' },
+      body: JSON.stringify({
+        system: 'CRITICAL OUTPUT CONTRACT:\nReturn <boltArtifact with file actions.',
+        messages: [{ role: 'user', content: 'Update the app.' }],
+      }),
+    });
+    const responseText = await response?.text();
+    const forwardedBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    const textDeltaLine = responseText
+      ?.split('\n')
+      .find((line) => line.startsWith('data: ') && line.includes('"type":"text_delta"'));
+    const artifact = textDeltaLine ? JSON.parse(textDeltaLine.slice('data: '.length)).delta.text : '';
+
+    expect(forwardedBody.tool_choice).toEqual({ type: 'tool', name: 'write_file' });
+    expect(artifact).toContain('<boltArtifact id="free-claude-file"');
+    expect(artifact).toContain('<boltAction type="file" filePath="src/App.tsx">');
+    expect(artifact).toContain('export default function App(){return <h1>OK</h1>}');
+    expect(responseText).not.toContain('input_json_delta');
+    expect(responseText).toContain('"stop_reason":"end_turn"');
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {
