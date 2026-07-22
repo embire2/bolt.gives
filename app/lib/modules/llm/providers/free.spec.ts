@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, {
   clearHostedFreeModelResolution,
   isHostedFreeClaudeModel,
+  normalizeHostedFreeClaudeStreamEvent,
   normalizeHostedFreeRequest,
   normalizeHostedFreeResponse,
 } from './free';
@@ -119,6 +120,72 @@ describe('FreeProvider', () => {
     const forwardedHeaders = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers);
     expect(forwardedHeaders.get('authorization')).toBe('Bearer magnet-test-key');
     expect(forwardedHeaders.has('x-api-key')).toBe(false);
+  });
+
+  it('adds the strict-SDK output token field to streamed Magnet Claude message starts', () => {
+    expect(
+      normalizeHostedFreeClaudeStreamEvent({
+        type: 'message_start',
+        message: {
+          id: 'message-1',
+          usage: { input_tokens: 0 },
+        },
+      }),
+    ).toEqual({
+      type: 'message_start',
+      message: {
+        id: 'message-1',
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    });
+  });
+
+  it('normalizes chunked Magnet Claude SSE without buffering the response', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":0}',
+      '}}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Content-Encoding': 'gzip',
+            'Content-Length': '200',
+          },
+        }),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    anthropicModelSpy.mockReturnValue({ id: 'claude-model-instance' });
+
+    provider.getModelInstance({
+      model: 'claude-sonnet-5',
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createAnthropicSpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': 'magnet-test-key' },
+      body: '{}',
+    });
+    const responseText = await response?.text();
+
+    expect(responseText).toContain('"usage":{"input_tokens":0,"output_tokens":0}');
+    expect(responseText).toContain('event: message_stop');
+    expect(response?.headers.get('content-encoding')).toBeNull();
+    expect(response?.headers.get('content-length')).toBeNull();
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {

@@ -160,8 +160,97 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
   });
 };
 
+export function normalizeHostedFreeClaudeStreamEvent(payload: unknown): unknown {
+  if (!isJsonRecord(payload) || payload.type !== 'message_start' || !isJsonRecord(payload.message)) {
+    return payload;
+  }
+
+  const usage = payload.message.usage;
+
+  if (!isJsonRecord(usage) || typeof usage.output_tokens === 'number') {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    message: {
+      ...payload.message,
+      usage: {
+        ...usage,
+        output_tokens: 0,
+      },
+    },
+  };
+}
+
+function normalizeHostedFreeClaudeSseBlock(block: string): string {
+  return block
+    .split(/\r?\n/)
+    .map((line) => {
+      const dataMatch = line.match(/^(data:\s*)(.+)$/);
+
+      if (!dataMatch || dataMatch[2] === '[DONE]') {
+        return line;
+      }
+
+      try {
+        return `${dataMatch[1]}${JSON.stringify(normalizeHostedFreeClaudeStreamEvent(JSON.parse(dataMatch[2])))}`;
+      } catch {
+        return line;
+      }
+    })
+    .join('\n');
+}
+
+function normalizeHostedFreeClaudeSse(response: Response): Response {
+  if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+    return response;
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buffer += decoder.decode(chunk, { stream: true });
+
+        while (true) {
+          const boundary = buffer.match(/\r?\n\r?\n/);
+
+          if (!boundary || boundary.index === undefined) {
+            break;
+          }
+
+          const block = buffer.slice(0, boundary.index);
+          buffer = buffer.slice(boundary.index + boundary[0].length);
+          controller.enqueue(encoder.encode(`${normalizeHostedFreeClaudeSseBlock(block)}\n\n`));
+        }
+      },
+      flush(controller) {
+        buffer += decoder.decode();
+
+        if (buffer) {
+          controller.enqueue(encoder.encode(normalizeHostedFreeClaudeSseBlock(buffer)));
+        }
+      },
+    }),
+  );
+  const headers = new Headers(response.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  headers.delete('transfer-encoding');
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
-  const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+  const requestHeaders = typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined;
+  const headers = new Headers(init?.headers || requestHeaders);
   const apiKey = headers.get('x-api-key');
 
   if (apiKey && !headers.has('authorization')) {
@@ -170,7 +259,7 @@ const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
 
   headers.delete('x-api-key');
 
-  return fetch(input, { ...init, headers });
+  return normalizeHostedFreeClaudeSse(await fetch(input, { ...init, headers }));
 };
 
 export function isHostedFreeClaudeModel(model: string): boolean {
