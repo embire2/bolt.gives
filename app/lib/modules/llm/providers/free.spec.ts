@@ -152,7 +152,10 @@ describe('FreeProvider', () => {
     expect(buildRequest.tools).toEqual([
       expect.objectContaining({
         name: 'write_file',
-        input_schema: expect.objectContaining({ required: ['path', 'content'] }),
+        input_schema: expect.objectContaining({
+          required: ['path'],
+          anyOf: [{ required: ['find', 'replace'] }, { required: ['content'] }],
+        }),
       }),
     ]);
     expect(buildRequest.messages).toEqual([
@@ -269,6 +272,87 @@ describe('FreeProvider', () => {
     expect(artifact).toContain('export default function App(){return <h1>OK</h1>}');
     expect(responseText).not.toContain('input_json_delta');
     expect(responseText).toContain('"stop_reason":"end_turn"');
+  });
+
+  it('reconstructs a complete workspace file from a minimal exact replacement', async () => {
+    const encoder = new TextEncoder();
+    const toolInput = JSON.stringify({
+      path: '/home/project/src/App.tsx',
+      find: '<h1>Existing app</h1>',
+      replace: '<h1>Existing app</h1><p>Follow-up applied</p>',
+    });
+    const events = [
+      ['message_start', { type: 'message_start', message: { usage: { input_tokens: 0 } } }],
+      [
+        'content_block_start',
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tool-1', name: 'write_file', input: {} },
+        },
+      ],
+      [
+        'content_block_delta',
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: toolInput } },
+      ],
+      ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+      [
+        'message_delta',
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'tool_use', stop_sequence: null },
+          usage: { output_tokens: 20 },
+        },
+      ],
+      ['message_stop', { type: 'message_stop' }],
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        events.forEach(([event, payload]) =>
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)),
+        );
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    anthropicModelSpy.mockReturnValue({ id: 'claude-model-instance' });
+
+    provider.getModelInstance({
+      model: 'claude-sonnet-5',
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createAnthropicSpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': 'magnet-test-key' },
+      body: JSON.stringify({
+        system:
+          'CRITICAL OUTPUT CONTRACT:\nReturn <boltArtifact with file actions.\n<boltAction type="file" filePath="src/App.tsx">export default function App() { return <h1>Existing app</h1>; }</boltAction>',
+        messages: [{ role: 'user', content: 'Apply the follow-up.' }],
+      }),
+    });
+    const responseText = await response?.text();
+    const textDeltaLine = responseText
+      ?.split('\n')
+      .find((line) => line.startsWith('data: ') && line.includes('"type":"text_delta"'));
+    const artifact = textDeltaLine ? JSON.parse(textDeltaLine.slice('data: '.length)).delta.text : '';
+
+    expect(artifact).toContain(
+      'export default function App() { return <h1>Existing app</h1><p>Follow-up applied</p>; }',
+    );
+    expect(artifact).not.toContain('"find"');
+    expect(responseText).not.toContain('input_json_delta');
   });
 
   it('refuses to start when the dedicated server-side key is missing', () => {

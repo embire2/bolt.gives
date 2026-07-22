@@ -247,14 +247,17 @@ export function normalizeHostedFreeClaudeRequest(payload: unknown): unknown {
   tools.push({
     name: HOSTED_FREE_CLAUDE_WRITE_TOOL,
     description:
-      'Write exactly one complete project file for the requested change. Use an existing path from the workspace snapshot when editing. The platform will apply and preview this file automatically.',
+      'Change exactly one project file. For an existing file, return path plus the smallest unique exact find string and its replacement; do not return the complete file. Use content only when creating a new file. The platform applies and previews the result automatically.',
     input_schema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Project-relative file path, for example src/App.tsx.' },
-        content: { type: 'string', description: 'Complete replacement contents for the file.' },
+        find: { type: 'string', description: 'Small unique exact text currently present in an existing file.' },
+        replace: { type: 'string', description: 'Replacement text for the exact find string.' },
+        content: { type: 'string', description: 'Complete contents. Use only when the path is a new file.' },
       },
-      required: ['path', 'content'],
+      required: ['path'],
+      anyOf: [{ required: ['find', 'replace'] }, { required: ['content'] }],
       additionalProperties: false,
     },
   });
@@ -271,6 +274,7 @@ export function normalizeHostedFreeClaudeRequest(payload: unknown): unknown {
 type HostedFreeClaudeToolStreamState = {
   partialJsonByIndex: Map<number, string>;
   convertedIndexes: Set<number>;
+  workspaceFiles: Map<string, string>;
 };
 
 function formatHostedFreeClaudeSseEvent(event: string, payload: unknown): string {
@@ -281,12 +285,57 @@ function escapeBoltFilePath(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function buildBoltArtifactFromHostedFreeClaudeToolInput(input: unknown): string {
-  if (!isJsonRecord(input) || typeof input.path !== 'string' || typeof input.content !== 'string') {
+function normalizeHostedFreeClaudeWorkspacePath(path: string): string {
+  return path
+    .replace(/^\/home\/project\//, '')
+    .replace(/^\.\//, '')
+    .replace(/^\//, '');
+}
+
+function isSafeHostedFreeClaudeWorkspacePath(path: string): boolean {
+  return Boolean(path) && !path.split('/').some((segment) => segment === '..');
+}
+
+function extractHostedFreeClaudeWorkspaceFiles(systemText: string): Map<string, string> {
+  const files = new Map<string, string>();
+  const fileActionPattern = /<boltAction\b[^>]*\btype="file"[^>]*\bfilePath="([^"]+)"[^>]*>([\s\S]*?)<\/boltAction>/g;
+
+  for (const match of systemText.matchAll(fileActionPattern)) {
+    files.set(normalizeHostedFreeClaudeWorkspacePath(match[1]), match[2]);
+  }
+
+  return files;
+}
+
+function buildBoltArtifactFromHostedFreeClaudeToolInput(input: unknown, workspaceFiles: Map<string, string>): string {
+  if (!isJsonRecord(input) || typeof input.path !== 'string') {
     return '';
   }
 
-  return `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(input.path)}">${input.content}</boltAction>\n</boltArtifact>`;
+  const path = normalizeHostedFreeClaudeWorkspacePath(input.path);
+
+  if (!isSafeHostedFreeClaudeWorkspacePath(path)) {
+    return '';
+  }
+
+  let content = typeof input.content === 'string' ? input.content : undefined;
+
+  if (typeof input.find === 'string' && typeof input.replace === 'string') {
+    const currentContent = workspaceFiles.get(path);
+    const firstMatch = currentContent?.indexOf(input.find) ?? -1;
+
+    if (!input.find || firstMatch < 0 || currentContent?.lastIndexOf(input.find) !== firstMatch) {
+      return '';
+    }
+
+    content = `${currentContent?.slice(0, firstMatch)}${input.replace}${currentContent?.slice(firstMatch + input.find.length)}`;
+  }
+
+  if (content === undefined) {
+    return '';
+  }
+
+  return `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${content}</boltAction>\n</boltArtifact>`;
 }
 
 function normalizeHostedFreeClaudeSseBlock(block: string, state: HostedFreeClaudeToolStreamState): string | null {
@@ -358,6 +407,7 @@ function normalizeHostedFreeClaudeSseBlock(block: string, state: HostedFreeClaud
     try {
       artifact = buildBoltArtifactFromHostedFreeClaudeToolInput(
         JSON.parse(state.partialJsonByIndex.get(index) || '{}'),
+        state.workspaceFiles,
       );
     } catch {
       artifact = '';
@@ -391,7 +441,7 @@ function normalizeHostedFreeClaudeSseBlock(block: string, state: HostedFreeClaud
   return formatHostedFreeClaudeSseEvent(event, payload);
 }
 
-function normalizeHostedFreeClaudeSse(response: Response): Response {
+function normalizeHostedFreeClaudeSse(response: Response, workspaceFiles = new Map<string, string>()): Response {
   if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
     return response;
   }
@@ -402,6 +452,7 @@ function normalizeHostedFreeClaudeSse(response: Response): Response {
   const toolState: HostedFreeClaudeToolStreamState = {
     partialJsonByIndex: new Map(),
     convertedIndexes: new Set(),
+    workspaceFiles,
   };
   const body = response.body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
@@ -462,16 +513,21 @@ const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
   headers.delete('x-api-key');
 
   let requestInit = init;
+  let workspaceFiles = new Map<string, string>();
 
   if (typeof init?.body === 'string') {
     try {
-      requestInit = { ...init, body: JSON.stringify(normalizeHostedFreeClaudeRequest(JSON.parse(init.body))) };
+      const payload = JSON.parse(init.body);
+      workspaceFiles = isJsonRecord(payload)
+        ? extractHostedFreeClaudeWorkspaceFiles(extractHostedFreeClaudeSystemText(payload.system))
+        : workspaceFiles;
+      requestInit = { ...init, body: JSON.stringify(normalizeHostedFreeClaudeRequest(payload)) };
     } catch {
       // Leave non-JSON request bodies untouched.
     }
   }
 
-  return normalizeHostedFreeClaudeSse(await fetch(input, { ...requestInit, headers }));
+  return normalizeHostedFreeClaudeSse(await fetch(input, { ...requestInit, headers }), workspaceFiles);
 };
 
 export function isHostedFreeClaudeModel(model: string): boolean {
