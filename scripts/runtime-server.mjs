@@ -100,6 +100,8 @@ const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6
 const MANAGED_INSTANCE_NODE_OPTIONS =
   process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
+const MANAGED_INSTANCE_WRANGLER_WORK_DIR =
+  process.env.RUNTIME_MANAGED_INSTANCE_WRANGLER_WORK_DIR || '/tmp/bolt-gives-managed-cloudflare';
 const PREVIEW_READY_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_READY_TIMEOUT_MS || '60000');
 const COMMAND_TIMEOUT_MS = Number(process.env.RUNTIME_COMMAND_TIMEOUT_MS || '900000');
 const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAIT_MS || '12000');
@@ -1213,10 +1215,58 @@ async function maybeRecoverManagedInstanceRegistryFromAdminAssignments(registry)
   return await buildManagedInstanceRegistryFromAdminAssignments();
 }
 
+export function resolveManagedInstanceProcessCwd(
+  command,
+  args,
+  requestedCwd = REPO_ROOT,
+  wranglerWorkDir = MANAGED_INSTANCE_WRANGLER_WORK_DIR,
+) {
+  return command === 'pnpm' && args[0] === 'exec' && args[1] === 'wrangler' ? wranglerWorkDir : requestedCwd;
+}
+
+async function ensureManagedInstanceWranglerWorkDir(workDir) {
+  await fs.mkdir(workDir, { recursive: true });
+
+  for (const entry of ['build', 'functions', 'node_modules', 'package.json', 'tsconfig.json', 'wrangler.toml']) {
+    const target = path.join(REPO_ROOT, entry);
+    const linkPath = path.join(workDir, entry);
+
+    try {
+      const existingTarget = await fs.readlink(linkPath);
+
+      if (path.resolve(workDir, existingTarget) !== target) {
+        throw new Error(`Managed Wrangler workspace has an unexpected ${entry} link.`);
+      }
+    } catch (error) {
+      if (error?.code === 'EINVAL') {
+        throw new Error(`Managed Wrangler workspace entry is not a symlink: ${linkPath}`);
+      }
+
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+
+      try {
+        await fs.symlink(target, linkPath, ['build', 'functions', 'node_modules'].includes(entry) ? 'dir' : 'file');
+      } catch (symlinkError) {
+        if (symlinkError?.code !== 'EEXIST' || path.resolve(workDir, await fs.readlink(linkPath)) !== target) {
+          throw symlinkError;
+        }
+      }
+    }
+  }
+}
+
 async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {}, input = '' } = {}) {
+  const processCwd = resolveManagedInstanceProcessCwd(command, args, cwd);
+
+  if (processCwd !== cwd) {
+    await ensureManagedInstanceWranglerWorkDir(processCwd);
+  }
+
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd,
+      cwd: processCwd,
       env: {
         ...process.env,
         NODE_OPTIONS: MANAGED_INSTANCE_NODE_OPTIONS,

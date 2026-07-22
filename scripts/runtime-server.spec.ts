@@ -42,6 +42,7 @@ import {
   resolveStalePreviewRedirectPath,
   recordPreviewResponse,
   releaseReservedPreviewPorts,
+  resolveManagedInstanceProcessCwd,
   resolveRuntimeWorkspaceRoot,
   resolvePublishedProjectUpgradeTarget,
   resolveSessionSnapshotFiles,
@@ -269,6 +270,20 @@ describe('runtime server workspace isolation', () => {
         '--commit-hash',
         '3d400050b6d8529edc2a994e9a9bbbf650974029',
       ]),
+    );
+  });
+
+  it('isolates managed Wrangler commands from the live app working directory', () => {
+    expect(
+      resolveManagedInstanceProcessCwd(
+        'pnpm',
+        ['exec', 'wrangler', 'pages', 'deploy', '/srv/bolt-gives/build/client'],
+        '/srv/bolt-gives',
+        '/tmp/bolt-gives-managed-cloudflare-test',
+      ),
+    ).toBe('/tmp/bolt-gives-managed-cloudflare-test');
+    expect(resolveManagedInstanceProcessCwd('git', ['rev-parse', 'HEAD'], '/srv/bolt-gives', '/tmp/ignored')).toBe(
+      '/srv/bolt-gives',
     );
   });
 
