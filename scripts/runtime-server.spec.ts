@@ -557,13 +557,21 @@ describe('runtime server workspace isolation', () => {
     ).toBe('/runtime/preview/session-redirect/4110/src/main.tsx?import');
   });
 
-  it('serves a self-refreshing handoff only for an unowned preview document request', () => {
+  it('serves a handoff only for an unowned preview root request', () => {
     expect(
       shouldServePreviewHandoffPage({
         hasPreviewOwnership: false,
         method: 'GET',
         upstreamPath: '/',
         accept: 'text/html,application/xhtml+xml',
+      }),
+    ).toBe(true);
+    expect(
+      shouldServePreviewHandoffPage({
+        hasPreviewOwnership: false,
+        method: 'GET',
+        upstreamPath: '/',
+        accept: '*/*',
       }),
     ).toBe(true);
     expect(

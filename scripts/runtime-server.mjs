@@ -4702,9 +4702,8 @@ export function shouldServePreviewHandoffPage(options) {
   }
 
   const upstreamPath = String(options.upstreamPath || '');
-  const accept = String(options.accept || '').toLowerCase();
 
-  return (upstreamPath === '/' || upstreamPath.startsWith('/?')) && accept.includes('text/html');
+  return upstreamPath === '/' || upstreamPath.startsWith('/?');
 }
 
 export function buildPreviewRepairPage(session, detail = 'The preview server is warming up or being repaired.') {
