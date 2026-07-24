@@ -9,6 +9,7 @@
 - Workspace and commentary status now pair each command start with its later command completion, so historical `step-start` events cannot leave an idle project permanently marked `Working`.
 - Progress summaries now use the newest progress event instead of preferring an older `in-progress` event over a later completed event.
 - Hosted runtime sync and start delivery is idempotent: an unchanged workspace snapshot or repeated start command now reuses the verified Vite process instead of restarting a healthy Preview and leaving it in `starting`.
+- A delayed automatic repair now returns to idle as soon as the strict root-and-entry-module health probe verifies the current Preview, preventing a healthy app from remaining stuck behind `Preview repair is queued`.
 - Completed, verified runs supersede older `recovery: in-progress` commentary and footer badges, so Chat reports `Preview ready` / `verified` instead of contradicting the healthy runtime.
 - Stale preview-port redirects now retain the same cross-origin isolation headers as normal preview responses, preventing the redirected iframe from being blocked by the browser.
 - Vitest excludes generated `test-results` artifacts, keeping transient live-network diagnostics out of the deterministic unit-test gate.
@@ -20,7 +21,7 @@
 
 ### Tests
 
-- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
+- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation and settlement, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
 
 ## v3.1.0 (2026-07-22)
 

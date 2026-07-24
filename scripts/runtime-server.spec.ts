@@ -57,6 +57,7 @@ import {
   shouldServePreviewHandoffPage,
   shouldRetryPreviewProxyResponse,
   shouldReuseHealthyPreviewStart,
+  settleHealthyQueuedPreviewRepair,
   startReservedPreviewProbe,
   startHostedPreviewForSession,
   syncWorkspaceSnapshot,
@@ -2387,6 +2388,55 @@ The latest release of react-calendar is "6.0.1".`),
     expect(session.previewRecovery.state).toBe('idle');
     expect(session.previewDiagnostics.status).toBe('starting');
     expect(session.previewDiagnostics.healthy).toBe(false);
+  });
+
+  it('settles a queued preview repair when strict health verification passes', () => {
+    const session = {
+      id: 'healthy-queued-repair',
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/healthy-queued-repair/4100',
+      },
+      previewSubscribers: new Set(),
+      previewDiagnostics: {
+        status: 'repairing',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: ['[recovery] Preview repair queued.'],
+        alert: {
+          type: 'info',
+          title: 'Preview Repair In Progress',
+          description: 'Repairing',
+          content: 'Repairing',
+          source: 'preview',
+        },
+      },
+      previewRecovery: {
+        state: 'running',
+        token: 3,
+        message: 'Preview repair is queued.',
+        updatedAt: null,
+      },
+    };
+
+    expect(
+      settleHealthyQueuedPreviewRepair(session as any, {
+        healthy: true,
+        statusCode: 200,
+        alert: null,
+      }),
+    ).toBe(true);
+    expect(session.previewRecovery).toMatchObject({
+      state: 'idle',
+      token: 3,
+      message: null,
+    });
+    expect(session.previewDiagnostics).toMatchObject({
+      status: 'ready',
+      healthy: true,
+      alert: null,
+    });
+    expect(session.previewDiagnostics.recentLogs.join('\n')).toContain('strict preview health verification passed');
   });
 
   it('serializes session operations so overlapping sync/command work cannot race the same workspace', async () => {

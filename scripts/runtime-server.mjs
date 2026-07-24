@@ -2330,6 +2330,26 @@ function clearPreviewRecoveryState(session) {
   broadcastPreviewState(session);
 }
 
+export function settleHealthyQueuedPreviewRepair(session, probe) {
+  if (probe?.alert || !probe?.healthy) {
+    return false;
+  }
+
+  clearPreviewRecoveryState(session);
+  touchPreviewDiagnostics(session, {
+    status: session.preview ? 'ready' : 'idle',
+    healthy: true,
+    alert: null,
+  });
+  appendPreviewDiagnosticEntries(
+    session,
+    'recovery',
+    'Queued preview repair was cancelled because strict preview health verification passed.',
+  );
+
+  return true;
+}
+
 function cloneFileMap(fileMap) {
   return JSON.parse(JSON.stringify(fileMap || {}));
 }
@@ -2820,13 +2840,7 @@ function schedulePreviewAutoRestore(session, alert) {
       }
 
       if (!probe.alert) {
-        if (probe.healthy) {
-          touchPreviewDiagnostics(session, {
-            status: session.preview ? 'ready' : 'idle',
-            healthy: true,
-            alert: null,
-          });
-        }
+        settleHealthyQueuedPreviewRepair(session, probe);
 
         return;
       }
