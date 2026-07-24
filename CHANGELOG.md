@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- The Wrangler runtime-home regression test now controls all XDG directory inputs instead of inheriting runner-specific paths, keeping the same production override behavior while making local and GitHub results deterministic.
 - The production Cloudflare Pages workflow now polls a fresh immutable deployment URL until the edge serves the expected application shell, so normal propagation delay cannot fail an otherwise successful release with an immediate transient `404`.
 - Web-only GitHub jobs now skip the unused Electron binary download, and CodeQL runs one current v4 JavaScript/TypeScript analysis instead of duplicate language jobs, preventing transient Electron CDN failures and avoidable hosted-runner pressure from failing a release.
 - FREE Claude upstream outages reported through `/api/llmcall` now remain retryable `503` provider failures instead of being misclassified as a client `401` merely because Magnet's diagnostic mentions an API key; the Claude adapter also preserves authentication when SDK request and init headers are split.

@@ -85,6 +85,8 @@ Web-only GitHub build, release, quality, Pages, and security jobs skip the unuse
 
 Production Pages releases also wait for Cloudflare's immutable deployment URL to serve the expected application shell before the workflow passes. A short edge-propagation window can no longer turn a successful upload into a false release failure.
 
+Wrangler runtime-home coverage supplies its own XDG directories rather than inheriting machine-specific runner defaults, so the same isolation contract is tested locally and in GitHub Actions.
+
 ### v3.1.0 highlights
 
 - Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.

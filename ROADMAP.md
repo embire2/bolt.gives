@@ -20,6 +20,7 @@ Next release target:
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
+- [x] Make Wrangler runtime-home regression coverage deterministic across local and GitHub XDG environments.
 - [x] Make production Pages smoke wait for Cloudflare edge propagation instead of failing a successful deployment on an immediate transient `404`.
 - [x] Remove unused Electron binary downloads from web-only CI and consolidate CodeQL on the supported JavaScript/TypeScript v4 analysis.
 - [x] Preserve retryable FREE Claude outage semantics and bearer authentication across split SDK request headers.

@@ -142,8 +142,12 @@ describe('start pages dev script helpers', () => {
   it('redirects wrangler runtime state into a writable home under /tmp', () => {
     const runtimeHome = path.join('/tmp', 'bolt-gives-wrangler-home-spec');
     fs.rmSync(runtimeHome, { recursive: true, force: true });
+    const baseEnv: NodeJS.ProcessEnv = { ...process.env, BOLT_WRANGLER_HOME: runtimeHome };
+    delete baseEnv.XDG_CONFIG_HOME;
+    delete baseEnv.XDG_CACHE_HOME;
+    delete baseEnv.XDG_DATA_HOME;
 
-    const env = createWranglerRuntimeEnv({ ...process.env, BOLT_WRANGLER_HOME: runtimeHome });
+    const env = createWranglerRuntimeEnv(baseEnv);
 
     expect(env.HOME).toBe(runtimeHome);
     expect(env.XDG_CONFIG_HOME).toBe(path.join(runtimeHome, '.config'));
