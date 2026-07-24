@@ -3,9 +3,8 @@
 import { chromium } from 'playwright';
 import { isStaticAssetRequestUrl } from './live-release-smoke-utils.mjs';
 import {
-  detectPromptSurface,
   inferExpectedSurface,
-  matchesExpectedSurface,
+  waitForExpectedSurface,
 } from './post-deploy-health-check-utils.mjs';
 
 const baseUrls = (process.env.BASE_URLS || process.argv.slice(2).join(',') || 'https://alpha1.bolt.gives')
@@ -35,14 +34,10 @@ try {
       pageErrors.push(error.message);
     });
 
-    await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 120000 });
-
     const expectedSurface = inferExpectedSurface(baseUrl);
-    const promptVisible = await detectPromptSurface(page);
-    const title = await page.title();
-    const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-    const expectedSurfaceVisible =
-      expectedSurface === 'chat' ? promptVisible : matchesExpectedSurface(expectedSurface, { title, bodyText });
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+
+    const { promptVisible, expectedSurfaceVisible, title } = await waitForExpectedSurface(page, expectedSurface);
 
     const result = {
       ok: asset404s.length === 0 && pageErrors.length === 0 && expectedSurfaceVisible,

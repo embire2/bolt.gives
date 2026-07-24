@@ -41,6 +41,7 @@ try {
         comboboxText.some((text) => text.includes('ChatGPT-5.6 SOL'))
       );
     },
+    undefined,
     { timeout: 90000 },
   );
 

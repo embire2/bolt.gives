@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build production artifact
+        run: pnpm run build
+
       - name: Start local runtime stack
         run: |
           pnpm run prepare:devvars
@@ -38,7 +41,9 @@ jobs:
           echo $! > /tmp/bolt-runtime.pid
           node scripts/collaboration-server.mjs > /tmp/bolt-collab.log 2>&1 &
           echo $! > /tmp/bolt-collab.pid
-          node scripts/start-pages-production.mjs --ip 127.0.0.1 --port 8788 > /tmp/bolt-app.log 2>&1 &
+          BOLT_HOSTED_FREE_RELAY_ORIGIN=http://127.0.0.1:1 \
+            BOLT_HOSTED_FREE_RELAY_SECRET=release-gate-local-only \
+            node scripts/start-pages-production.mjs --ip 127.0.0.1 --port 8788 > /tmp/bolt-app.log 2>&1 &
           echo $! > /tmp/bolt-app.pid
 
       - name: Wait for local release smoke target

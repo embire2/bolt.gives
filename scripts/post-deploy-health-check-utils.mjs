@@ -62,3 +62,43 @@ export function matchesExpectedSurface(expectedSurface, { title = '', bodyText =
 
   return false;
 }
+
+export async function waitForExpectedSurface(
+  page,
+  expectedSurface,
+  { timeoutMs = 90000, pollIntervalMs = 500 } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  let observation = {
+    promptVisible: false,
+    expectedSurfaceVisible: false,
+    title: '',
+    bodyText: '',
+  };
+
+  do {
+    const promptVisible = await detectPromptSurface(page);
+    const title = await page.title().catch(() => '');
+    const bodyText = await page
+      .locator('body')
+      .innerText({ timeout: Math.min(5000, Math.max(timeoutMs, 1)) })
+      .catch(() => '');
+    const expectedSurfaceVisible =
+      expectedSurface === 'chat' ? promptVisible : matchesExpectedSurface(expectedSurface, { title, bodyText });
+
+    observation = {
+      promptVisible,
+      expectedSurfaceVisible,
+      title,
+      bodyText,
+    };
+
+    if (expectedSurfaceVisible || Date.now() >= deadline) {
+      return observation;
+    }
+
+    await page.waitForTimeout(Math.min(pollIntervalMs, Math.max(deadline - Date.now(), 0)));
+  } while (Date.now() < deadline);
+
+  return observation;
+}

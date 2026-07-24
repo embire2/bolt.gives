@@ -5,6 +5,7 @@ import {
   inferExpectedSurface,
   matchesExpectedSurface,
   PROMPT_SURFACE_SELECTORS,
+  waitForExpectedSurface,
 } from './post-deploy-health-check-utils.mjs';
 
 function mockPage(visibleSelectors: Set<string>, throwingSelectors = new Set<string>()) {
@@ -61,5 +62,42 @@ describe('post-deploy health check surface detection', () => {
       true,
     );
     expect(matchesExpectedSurface('managed-instances', { bodyText: 'Plain landing page' })).toBe(false);
+  });
+
+  it('waits for a delayed prompt surface instead of depending on network idleness', async () => {
+    let checks = 0;
+    const page = {
+      locator(selector: string) {
+        if (selector === 'body') {
+          return {
+            async innerText() {
+              return '';
+            },
+          };
+        }
+
+        return {
+          first() {
+            return {
+              async isVisible() {
+                checks += 1;
+                return selector === 'textarea' && checks >= 6;
+              },
+            };
+          },
+        };
+      },
+      async title() {
+        return '';
+      },
+      async waitForTimeout() {},
+    };
+
+    await expect(
+      waitForExpectedSurface(page as any, 'chat', { timeoutMs: 1000, pollIntervalMs: 1 }),
+    ).resolves.toMatchObject({
+      promptVisible: true,
+      expectedSurfaceVisible: true,
+    });
   });
 });
