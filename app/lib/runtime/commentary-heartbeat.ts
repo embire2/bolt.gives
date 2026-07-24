@@ -1,5 +1,5 @@
 import type { AgentCommentaryPhase } from '~/types/context';
-export const COMMENTARY_HEARTBEAT_INTERVAL_MS = 60_000;
+export const COMMENTARY_HEARTBEAT_INTERVAL_MS = 10_000;
 
 const NEXT_STEP_BY_PHASE: Record<AgentCommentaryPhase, string> = {
   plan: 'I will keep following the next planning event that the runtime emits.',

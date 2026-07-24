@@ -23,6 +23,7 @@ export type AgentCommentaryAnnotation = {
   type: 'agent-commentary';
   phase: AgentCommentaryPhase;
   status: 'in-progress' | 'complete' | 'warning' | 'recovered';
+  heartbeat?: boolean;
   order: number;
   message: string;
   detail?: string;

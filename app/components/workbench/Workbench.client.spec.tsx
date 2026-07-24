@@ -92,6 +92,7 @@ vi.mock('~/components/chat/ExecutionTransparencyPanel', () => ({
 }));
 
 let Workbench: (typeof import('./Workbench.client'))['Workbench'];
+let buildWorkspaceSummary: (typeof import('./Workbench.client'))['buildWorkspaceSummary'];
 let workbenchStore: (typeof import('~/lib/stores/workbench'))['workbenchStore'];
 
 describe('Workbench view selection', () => {
@@ -103,7 +104,9 @@ describe('Workbench view selection', () => {
       writable: true,
     });
 
-    Workbench = (await import('./Workbench.client')).Workbench;
+    const workbenchModule = await import('./Workbench.client');
+    Workbench = workbenchModule.Workbench;
+    buildWorkspaceSummary = workbenchModule.buildWorkspaceSummary;
     workbenchStore = (await import('~/lib/stores/workbench')).workbenchStore;
   });
 
@@ -148,5 +151,57 @@ describe('Workbench view selection', () => {
       expect(workbenchStore.currentView.get()).toBe('code');
     });
     expect(screen.getByTestId('code-panel')).toBeTruthy();
+  });
+
+  it('reports preview ready after a historical shell step has completed', () => {
+    const startedAt = new Date(Date.now() - 3_000).toISOString();
+    const completedAt = new Date(Date.now() - 2_000).toISOString();
+
+    expect(
+      buildWorkspaceSummary({
+        data: [
+          {
+            type: 'progress',
+            label: 'response',
+            status: 'in-progress',
+            order: 1,
+            message: 'Generating Response',
+          },
+          {
+            type: 'progress',
+            label: 'response',
+            status: 'complete',
+            order: 2,
+            message: 'Response Generated',
+          },
+        ],
+        stepRunnerEvents: [
+          { type: 'step-start', timestamp: startedAt, description: 'Start application', stepIndex: 0 },
+          { type: 'step-end', timestamp: completedAt, description: 'Start application', stepIndex: 0, exitCode: 0 },
+          { type: 'telemetry', timestamp: new Date().toISOString(), description: 'Preview verified' },
+        ],
+        isStreaming: false,
+        hasPreview: true,
+      }).stateLabel,
+    ).toBe('Preview ready');
+  });
+
+  it('keeps one stable working state while an automatic preview repair is running', () => {
+    const summary = buildWorkspaceSummary({
+      data: [],
+      stepRunnerEvents: [],
+      alert: {
+        type: 'error',
+        title: 'Preview Error',
+        description: 'The preview is restarting after a dependency fix.',
+        content: 'Restart in progress.',
+        source: 'preview',
+      },
+      isStreaming: true,
+      hasPreview: true,
+    });
+
+    expect(summary.stateLabel).toBe('Working');
+    expect(summary.current).toContain('preview is restarting');
   });
 });

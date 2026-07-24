@@ -2,7 +2,23 @@
 
 ## Unreleased
 
-- No unreleased changes yet.
+### Fixed
+
+- Verified hosted previews no longer surface a false `Network error` or enter another hidden repair pass when the browser intentionally closes a late-running FREE provider stream after the generated app is already healthy.
+- FREE stream timeouts that arrive after request-scoped preview verification now finalize the successful run instead of alternating the Workspace between `Working` and `Needs repair`.
+- Workspace and commentary status now pair each command start with its later command completion, so historical `step-start` events cannot leave an idle project permanently marked `Working`.
+- Progress summaries now use the newest progress event instead of preferring an older `in-progress` event over a later completed event.
+- Stale preview-port redirects now retain the same cross-origin isolation headers as normal preview responses, preventing the redirected iframe from being blocked by the browser.
+- Vitest excludes generated `test-results` artifacts, keeping transient live-network diagnostics out of the deterministic unit-test gate.
+
+### Changed
+
+- Plain-English agent commentary heartbeats now run every 10 seconds. Heartbeats are explicitly marked and do not count as meaningful model progress, so transparency cannot suppress stalled-stream recovery.
+- The hosted Calendar E2E now rejects visible server/network/timeout/repair errors, fatal chat console diagnostics, a non-idle composer, or an unhealthy final runtime even when the iframe happened to render.
+
+### Tests
+
+- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
 
 ## v3.1.0 (2026-07-22)
 

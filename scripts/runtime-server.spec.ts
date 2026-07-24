@@ -10,6 +10,7 @@ import {
   authorizeFreeUsageQuotaSecret,
   authorizeHostedFreeRelaySecret,
   buildHostedWorkspaceBootstrapAlert,
+  buildPreviewRedirectHeaders,
   buildPreviewRepairPage,
   buildFreeUsageQuotaDecision,
   buildManagedInstanceDeployArgs,
@@ -338,11 +339,9 @@ describe('runtime server workspace isolation', () => {
   });
 
   it('yields automatic fleet rollout capacity to active coding sessions', () => {
-    expect(
-      shouldPauseManagedInstanceRolloutForSessions([
-        { processes: new Map([['preview', { pid: 123 }]]) },
-      ]),
-    ).toBe(true);
+    expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map([['preview', { pid: 123 }]]) }])).toBe(
+      true,
+    );
     expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map(), autoRestoreInFlight: true }])).toBe(
       true,
     );
@@ -374,6 +373,18 @@ describe('runtime server workspace isolation', () => {
     ).toEqual(
       expect.objectContaining({
         vary: 'Origin',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+      }),
+    );
+  });
+
+  it('keeps stale preview redirects compatible with the isolated preview iframe', () => {
+    expect(buildPreviewRedirectHeaders('/runtime/preview/session-redirect/4110/')).toEqual(
+      expect.objectContaining({
+        Location: '/runtime/preview/session-redirect/4110/',
+        'Cache-Control': 'no-store',
         'Cross-Origin-Resource-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'Cross-Origin-Opener-Policy': 'same-origin',

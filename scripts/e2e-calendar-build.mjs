@@ -41,6 +41,7 @@ const events = [];
 const networkErrors = [];
 const consoleErrors = [];
 const chatRequests = [];
+const chatRequestInputs = [];
 const previewStatusEvents = [];
 const previewTextHistory = [];
 const runtimeSnapshotChecks = [];
@@ -211,6 +212,14 @@ function isBenignNetworkFailure(entry) {
   );
 }
 
+function isFatalConsoleError(entry) {
+  return (
+    /\[error\].*\[chat:.*:diagnostics\]/i.test(entry) ||
+    /BOLT_STREAM_TIMEOUT/i.test(entry) ||
+    /Custom error: (?:Network error|Generation stream timed out)/i.test(entry)
+  );
+}
+
 async function keepPreviewSurfaceVisible(page) {
   const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
 
@@ -306,6 +315,34 @@ async function main() {
 
     networkErrors.push(`REQFAIL ${req.method()} ${req.url()} :: ${req.failure()?.errorText}`);
   });
+  page.on('request', (req) => {
+    if (!req.url().includes('/api/chat') || req.method() !== 'POST') {
+      return;
+    }
+
+    try {
+      const payload = req.postDataJSON();
+      const requestMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+      const latestUserMessage = requestMessages.findLast((message) => message?.role === 'user');
+      const latestUserContent =
+        typeof latestUserMessage?.content === 'string'
+          ? latestUserMessage.content
+          : JSON.stringify(latestUserMessage?.content || '');
+
+      chatRequestInputs.push({
+        selectedProvider: payload?.selectedProvider || null,
+        selectedModel: payload?.selectedModel || null,
+        messageCount: requestMessages.length,
+        messageRoles: requestMessages.map((message) => message?.role || 'unknown'),
+        latestUserContent: normalizeText(latestUserContent).slice(0, 500),
+        fileCount: payload?.files && typeof payload.files === 'object' ? Object.keys(payload.files).length : 0,
+        hostedRuntimeSessionId: payload?.hostedRuntimeSessionId || null,
+        chatMode: payload?.chatMode || null,
+      });
+    } catch {
+      chatRequestInputs.push({ parseError: true });
+    }
+  });
   page.on('response', async (res) => {
     const url = res.url();
     if (url.includes('/api/chat')) {
@@ -366,6 +403,8 @@ async function main() {
   let followUpSubmitted = false;
   let followUpPreviewContainsTokens = false;
   let followUpSnapshotContainsTokens = false;
+  let chatBecameIdle = false;
+  let finalRuntimeStatus = null;
   let bodyTextLast = '';
   let lastPreviewText = '';
   let lastPreviewSrc = '';
@@ -512,12 +551,14 @@ async function main() {
 
   if (previewContainsToken && followUpToken) {
     await waitForChatIdle(page);
+    chatBecameIdle = true;
     followUpSubmitted = true;
     log('submit follow-up prompt', `token=${followUpToken}`);
     await selectVisibleFreeModel(page, followUpModelName);
     const followUpTextarea = await ensureChatComposerVisible(page);
     await followUpTextarea.fill(followUpPrompt);
     await followUpTextarea.press('Enter');
+    chatBecameIdle = false;
     await page.screenshot({ path: path.join(outDir, '03-followup-submitted.png'), fullPage: true });
 
     while (Date.now() < checkDeadline) {
@@ -607,9 +648,32 @@ async function main() {
     }
   }
 
-  await waitForChatIdle(page).catch((error) => {
-    log('chat idle wait failed', error instanceof Error ? error.message : String(error));
-  });
+  await waitForChatIdle(page)
+    .then(() => {
+      chatBecameIdle = true;
+    })
+    .catch((error) => {
+      log('chat idle wait failed', error instanceof Error ? error.message : String(error));
+    });
+  bodyTextLast =
+    (await page
+      .locator('body')
+      .innerText()
+      .catch(() => bodyTextLast)) || bodyTextLast;
+  const finalUiError = bodyTextLast.match(
+    /(Server Error|Network error|BOLT_STREAM_TIMEOUT|Needs repair|Something went wrong|Application Error)/i,
+  );
+
+  if (finalUiError && !sawError) {
+    sawError = true;
+    log('final UI error text', finalUiError[0]);
+  }
+
+  if (hostedRuntimeSessionId) {
+    const finalStatusResult = await fetchRuntimeJson(page, hostedRuntimeSessionId, 'preview-status');
+    finalRuntimeStatus = finalStatusResult.payload;
+  }
+
   await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
     log('final screenshot failed', error instanceof Error ? error.message : String(error));
   });
@@ -631,8 +695,12 @@ async function main() {
       (!hostedRuntimeSessionId || snapshotContainsToken) &&
       (!requireFollowUp ||
         (followUpPreviewContainsTokens && (!hostedRuntimeSessionId || followUpSnapshotContainsTokens))) &&
+      chatBecameIdle &&
+      !sawError &&
       chatRequests.some((request) => request.status === 200) &&
+      consoleErrors.every((entry) => !isFatalConsoleError(entry)) &&
       networkErrors.every(isBenignNetworkFailure) &&
+      (!hostedRuntimeSessionId || (finalRuntimeStatus?.status === 'ready' && finalRuntimeStatus?.healthy === true)) &&
       runtimeCleanup.ok,
     baseUrl,
     providerName,
@@ -651,10 +719,14 @@ async function main() {
     followUpSubmitted,
     followUpPreviewContainsTokens,
     followUpSnapshotContainsTokens,
+    chatBecameIdle,
     hostedRuntimeSessionId,
+    finalRuntimeStatus,
     runtimeCleanup,
+    chatRequestInputs,
     chatRequests,
     consoleErrors: consoleErrors.slice(0, 60),
+    fatalConsoleErrors: consoleErrors.filter(isFatalConsoleError).slice(0, 60),
     networkErrors: networkErrors.slice(0, 60),
     fatalNetworkErrors: networkErrors.filter((entry) => !isBenignNetworkFailure(entry)).slice(0, 60),
     previewStatusEvents,
@@ -679,9 +751,11 @@ async function main() {
         followUpSubmitted,
         followUpPreviewContainsTokens,
         followUpSnapshotContainsTokens,
+        chatBecameIdle,
         elapsedSec: summary.elapsedSec,
         chatRequestStatuses: chatRequests.map((r) => r.status),
         consoleErrorCount: consoleErrors.length,
+        fatalConsoleErrorCount: summary.fatalConsoleErrors.length,
         networkErrorCount: networkErrors.length,
         fatalNetworkErrorCount: summary.fatalNetworkErrors.length,
       },

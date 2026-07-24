@@ -107,4 +107,41 @@ describe('CommentaryFeed', () => {
     expect(screen.getByText(/Unknown option: 'progress'/i)).toBeTruthy();
     expect(screen.getByText(/Architect is preparing the smallest safe fix/i)).toBeTruthy();
   });
+
+  it('does not report a completed historical command as still running', () => {
+    const startedAt = new Date(Date.now() - 4_000).toISOString();
+    const endedAt = new Date(Date.now() - 3_000).toISOString();
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: startedAt,
+        description: 'Start application',
+        stepIndex: 0,
+      },
+      {
+        type: 'step-end',
+        timestamp: endedAt,
+        description: 'Start application',
+        stepIndex: 0,
+        exitCode: 0,
+      },
+      {
+        type: 'complete',
+        timestamp: new Date(Date.now() - 2_000).toISOString(),
+        description: 'All steps complete',
+      },
+      {
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Preview verified',
+      },
+    ]);
+
+    render(<CommentaryFeed data={[]} />);
+
+    expect(screen.getByText(/^Ready$/i)).toBeTruthy();
+    expect(screen.getByText(/workspace is ready for inspection/i)).toBeTruthy();
+    expect(screen.queryByText(/Running Start application now/i)).toBeNull();
+  });
 });

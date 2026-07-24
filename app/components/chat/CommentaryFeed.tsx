@@ -91,6 +91,16 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
   const latestError = [...stepRunnerEvents].reverse().find((event) => event.type === 'error');
   const latestCompletedStep = [...stepRunnerEvents].reverse().find((event) => event.type === 'step-end');
   const latestStartedStep = [...stepRunnerEvents].reverse().find((event) => event.type === 'step-start');
+  const latestRunCompletion = [...stepRunnerEvents].reverse().find((event) => event.type === 'complete');
+  const latestStartedAt = latestStartedStep ? Date.parse(latestStartedStep.timestamp) : Number.NaN;
+  const latestCompletedAt = latestCompletedStep ? Date.parse(latestCompletedStep.timestamp) : Number.NaN;
+  const activeStartedStep =
+    latestStartedStep &&
+    (latestCompletedStep === undefined ||
+      (Number.isFinite(latestStartedAt) &&
+        (!Number.isFinite(latestCompletedAt) || latestStartedAt > latestCompletedAt)))
+      ? latestStartedStep
+      : undefined;
 
   if (!latestEvent) {
     return null;
@@ -111,7 +121,25 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
     };
   }
 
-  if (latestEvent.type === 'complete') {
+  if (activeStartedStep) {
+    return {
+      status: 'in-progress' as const,
+      phaseLabel: 'Doing',
+      now:
+        normalizeStepDescription(
+          latestEvent.type === 'step-start'
+            ? `Running ${activeStartedStep.description || 'the next command'} now.`
+            : activeStartedStep.description || latestEvent.description,
+        ) || 'Running the next command now.',
+      last:
+        normalizeStepDescription(latestCompletedStep?.output) ||
+        normalizeStepDescription(latestCompletedStep?.description) ||
+        'Execution has started and the workspace is updating.',
+      next: 'The current command output will stream here, then the next file or preview step will follow.',
+    };
+  }
+
+  if (latestEvent.type === 'complete' || latestRunCompletion || hasPreviewVerification(stepRunnerEvents)) {
     return {
       status: 'complete' as const,
       phaseLabel: 'Ready',
@@ -121,24 +149,6 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
         normalizeStepDescription(latestCompletedStep?.description) ||
         'All planned execution steps completed.',
       next: 'Inspect the files and preview, or continue with the next change request.',
-    };
-  }
-
-  if (latestStartedStep) {
-    return {
-      status: 'in-progress' as const,
-      phaseLabel: 'Doing',
-      now:
-        normalizeStepDescription(
-          latestEvent.type === 'step-start'
-            ? `Running ${latestStartedStep.description || 'the next command'} now.`
-            : latestStartedStep.description || latestEvent.description,
-        ) || 'Running the next command now.',
-      last:
-        normalizeStepDescription(latestCompletedStep?.output) ||
-        normalizeStepDescription(latestCompletedStep?.description) ||
-        'Execution has started and the workspace is updating.',
-      next: 'The current command output will stream here, then the next file or preview step will follow.',
     };
   }
 
@@ -187,8 +197,7 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
 
   const latestCommentary = commentaryEvents.at(-1);
   const latestCommentaryDetail = parseContractDetail(latestCommentary?.detail);
-  const currentProgress =
-    progressEvents.filter((event) => event.status === 'in-progress').at(-1) || progressEvents.at(-1);
+  const currentProgress = progressEvents.at(-1);
   const lastCompletedProgress = progressEvents.filter((event) => event.status === 'complete').at(-1);
   const lastCompletedCheckpoint = checkpointEvents.filter((event) => event.status === 'complete').at(-1);
   const latestStepEvent = stepRunnerEvents.at(-1);
@@ -219,8 +228,9 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
     return null;
   }
 
-  const summaryStatus =
-    latestCommentary?.status || stepRunnerSummary?.status || (currentProgress ? 'in-progress' : 'idle');
+  const summaryStatus = stepRunnerTakesPriority
+    ? stepRunnerSummary?.status || latestCommentary?.status || (currentProgress ? 'in-progress' : 'idle')
+    : latestCommentary?.status || stepRunnerSummary?.status || (currentProgress ? 'in-progress' : 'idle');
   const summaryTone = getSummaryTone(summaryStatus);
   const nowMessage =
     (stepRunnerTakesPriority ? stepRunnerSummary?.now : latestCommentary?.message) ||

@@ -110,6 +110,7 @@ export default defineConfig((config) => {
         '**/node_modules/**',
         '**/dist/**',
         '**/cypress/**',
+        '**/test-results/**',
         '**/.{idea,git,cache,output,temp}/**',
         '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
         '**/tests/preview/**', // Exclude preview tests that require Playwright

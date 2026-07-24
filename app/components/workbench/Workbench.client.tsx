@@ -96,7 +96,7 @@ function normalizeWorkspaceLine(value: string | null | undefined) {
   return normalized || null;
 }
 
-function buildWorkspaceSummary(args: {
+export function buildWorkspaceSummary(args: {
   data?: JSONValue[] | undefined;
   stepRunnerEvents: InteractiveStepRunnerEvent[];
   alert?: ActionAlert;
@@ -106,11 +106,44 @@ function buildWorkspaceSummary(args: {
   const commentaryEvents = (args.data || []).filter(isAgentCommentaryAnnotation);
   const progressEvents = (args.data || []).filter(isProgressAnnotation);
   const latestCommentary = commentaryEvents.at(-1);
-  const latestProgress =
-    progressEvents.filter((event) => event.status === 'in-progress').at(-1) || progressEvents.at(-1);
+  const latestProgress = progressEvents.at(-1);
   const latestEvent = args.stepRunnerEvents.at(-1);
   const latestStartedStep = [...args.stepRunnerEvents].reverse().find((event) => event.type === 'step-start');
   const latestCompletedStep = [...args.stepRunnerEvents].reverse().find((event) => event.type === 'step-end');
+  const latestStartedAt = latestStartedStep ? Date.parse(latestStartedStep.timestamp) : Number.NaN;
+  const latestCompletedAt = latestCompletedStep ? Date.parse(latestCompletedStep.timestamp) : Number.NaN;
+  const activeStartedStep =
+    latestStartedStep &&
+    (latestCompletedStep === undefined ||
+      (Number.isFinite(latestStartedAt) &&
+        (!Number.isFinite(latestCompletedAt) || latestStartedAt > latestCompletedAt)))
+      ? latestStartedStep
+      : undefined;
+
+  if (args.isStreaming || activeStartedStep) {
+    return {
+      tone: 'active' as const,
+      stateLabel: 'Working',
+      current:
+        normalizeWorkspaceLine(
+          args.alert?.description ||
+            activeStartedStep?.description ||
+            latestEvent?.description ||
+            latestCommentary?.message ||
+            latestProgress?.message,
+        ) ||
+        (args.alert
+          ? 'A preview issue was detected and the automatic repair is in progress.'
+          : 'The workspace is updating files and commands right now.'),
+      last:
+        normalizeWorkspaceLine(latestCompletedStep?.output || latestCompletedStep?.description) ||
+        normalizeWorkspaceLine(deriveProgressMessage(progressEvents, args.stepRunnerEvents)) ||
+        'The last completed command output will appear here.',
+      next: args.alert
+        ? 'The current repair will finish, then the preview will be checked again automatically.'
+        : 'The next visible update will appear here as soon as the current command or file change finishes.',
+    };
+  }
 
   if (args.alert) {
     return {
@@ -123,25 +156,6 @@ function buildWorkspaceSummary(args: {
         normalizeWorkspaceLine(latestCompletedStep?.description || latestCompletedStep?.output) ||
         'The previous action finished, but the app still failed when previewing.',
       next: 'Architect is applying the smallest safe fix now, then the preview will be rechecked automatically.',
-    };
-  }
-
-  if (latestStartedStep || (args.isStreaming && latestEvent)) {
-    return {
-      tone: 'active' as const,
-      stateLabel: 'Working',
-      current:
-        normalizeWorkspaceLine(
-          latestStartedStep?.description ||
-            latestEvent?.description ||
-            latestCommentary?.message ||
-            latestProgress?.message,
-        ) || 'The workspace is updating files and commands right now.',
-      last:
-        normalizeWorkspaceLine(latestCompletedStep?.output || latestCompletedStep?.description) ||
-        normalizeWorkspaceLine(deriveProgressMessage(progressEvents, args.stepRunnerEvents)) ||
-        'The last completed command output will appear here.',
-      next: 'The next visible update will appear here as soon as the current command or file change finishes.',
     };
   }
 

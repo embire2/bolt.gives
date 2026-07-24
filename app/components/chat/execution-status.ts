@@ -1,5 +1,16 @@
+import type { JSONValue } from 'ai';
 import type { InteractiveStepRunnerEvent } from '~/lib/runtime/interactive-step-runner';
 import type { AgentCommentaryAnnotation, ProgressAnnotation } from '~/types/context';
+
+export function isCommentaryHeartbeatEvent(value: JSONValue | undefined): boolean {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).type === 'agent-commentary' &&
+    (value as Record<string, unknown>).heartbeat === true,
+  );
+}
 
 export function isPreviewReadyStepEvent(event: InteractiveStepRunnerEvent): boolean {
   if (event.type !== 'telemetry') {
@@ -38,8 +49,7 @@ export function deriveProgressMessage(
   progressEvents: ProgressAnnotation[],
   stepRunnerEvents: InteractiveStepRunnerEvent[],
 ): string {
-  const current =
-    progressEvents.filter((event) => event.status === 'in-progress').slice(-1)[0] || progressEvents.slice(-1)[0];
+  const current = progressEvents.at(-1);
 
   if (!current) {
     return 'Idle';

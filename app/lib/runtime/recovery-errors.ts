@@ -20,7 +20,11 @@ export function classifyRecoverableStreamError(message: string | undefined | nul
   const disconnectLike =
     normalizedMessage.includes('stream disconnected before completion') ||
     normalizedMessage.includes('websocket closed by server before response.completed') ||
-    normalizedMessage.includes('websocket closed before completion');
+    normalizedMessage.includes('websocket closed before completion') ||
+    normalizedMessage.includes('network error') ||
+    normalizedMessage.includes('failed to fetch') ||
+    normalizedMessage.includes('fetch failed') ||
+    normalizedMessage.includes('request aborted');
 
   return {
     timeoutLike,
@@ -35,9 +39,9 @@ export function isHostedFreeFundingError(message: string | undefined | null): bo
 }
 
 export function shouldIgnoreDisconnectAfterCompletedRun(context: CompletedRunDisconnectContext): boolean {
-  const { disconnectLike } = classifyRecoverableStreamError(context.message);
+  const { disconnectLike, timeoutLike } = classifyRecoverableStreamError(context.message);
 
-  if (!disconnectLike) {
+  if (!disconnectLike && !timeoutLike) {
     return false;
   }
 

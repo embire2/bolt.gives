@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildCommentaryHeartbeat } from './commentary-heartbeat';
+import { buildCommentaryHeartbeat, COMMENTARY_HEARTBEAT_INTERVAL_MS } from './commentary-heartbeat';
 
 describe('buildCommentaryHeartbeat', () => {
+  it('publishes plain-English status at the ten-second product cadence', () => {
+    expect(COMMENTARY_HEARTBEAT_INTERVAL_MS).toBe(10_000);
+  });
+
   it('includes task context in the fallback heartbeat detail', () => {
     const heartbeat = buildCommentaryHeartbeat(120_000, 'action', {
       goal: 'a doctor appointment scheduling web app',

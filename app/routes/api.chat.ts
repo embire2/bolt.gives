@@ -1206,6 +1206,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           options?: {
             usePool?: boolean;
             trackRunActivity?: boolean;
+            heartbeat?: boolean;
           },
         ) => {
           if (firstCommentaryAt === null) {
@@ -1230,20 +1231,23 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             type: 'agent-commentary',
             phase,
             status,
+            ...(options?.heartbeat ? { heartbeat: true } : {}),
             order,
             message: contracted.message,
             timestamp: new Date().toISOString(),
             detail: contracted.detail,
           };
 
-          if (keyChanges) {
-            lastVisibleResultForHeartbeat = keyChanges;
-          } else {
-            lastVisibleResultForHeartbeat = contracted.message;
-          }
+          if (!options?.heartbeat) {
+            if (keyChanges) {
+              lastVisibleResultForHeartbeat = keyChanges;
+            } else {
+              lastVisibleResultForHeartbeat = contracted.message;
+            }
 
-          if (nextStep) {
-            lastProgressMessageForHeartbeat = nextStep;
+            if (nextStep) {
+              lastProgressMessageForHeartbeat = nextStep;
+            }
           }
 
           dataStream.writeData({
@@ -1269,6 +1273,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, {
               usePool: true,
               trackRunActivity: false,
+              heartbeat: true,
             });
           }, COMMENTARY_HEARTBEAT_INTERVAL_MS);
         };

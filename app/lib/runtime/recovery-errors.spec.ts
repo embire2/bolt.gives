@@ -24,6 +24,13 @@ describe('classifyRecoverableStreamError', () => {
     });
   });
 
+  it('flags generic hosted stream network failures as disconnects', () => {
+    expect(classifyRecoverableStreamError('Custom error: Network error. Please try again.')).toEqual({
+      timeoutLike: false,
+      disconnectLike: true,
+    });
+  });
+
   it('ignores a disconnect if the run already completed after the request started', () => {
     expect(
       shouldIgnoreDisconnectAfterCompletedRun({
@@ -44,6 +51,17 @@ describe('classifyRecoverableStreamError', () => {
         lastPreviewReadyAt: null,
       }),
     ).toBe(false);
+  });
+
+  it('ignores a timeout when the current request already produced a verified preview', () => {
+    expect(
+      shouldIgnoreDisconnectAfterCompletedRun({
+        message: 'BOLT_STREAM_TIMEOUT: hosted FREE generation exceeded 150000ms',
+        requestStartedAt: 1_000,
+        lastRunCompletedAt: null,
+        lastPreviewReadyAt: 2_000,
+      }),
+    ).toBe(true);
   });
 
   it('classifies hosted FREE funding failures as non-recoverable operator errors', () => {

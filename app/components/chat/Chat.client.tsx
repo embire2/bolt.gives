@@ -76,7 +76,7 @@ import type {
   SyntheticRunHandoffDataEvent,
   UsageDataEvent,
 } from '~/types/context';
-import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
+import { isCommentaryHeartbeatEvent, shouldUnlockPromptAfterPreviewReady } from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
@@ -1027,6 +1027,7 @@ export const ChatImpl = memo(
 
         autoContinuationCountRef.current += 1;
         requestLifecycleStartedAtRef.current = Date.now();
+        previewPromptUnlockTriggeredRef.current = false;
 
         const previousAssistantMessage = [...messagesRef.current]
           .reverse()
@@ -1259,7 +1260,9 @@ Requirements:
         return;
       }
 
-      lastDataEventAtRef.current = Date.now();
+      if (!isCommentaryHeartbeatEvent(boundedChatData.at(-1))) {
+        lastDataEventAtRef.current = Date.now();
+      }
 
       const lastUsageEvent = [...boundedChatData]
         .reverse()
@@ -1544,7 +1547,6 @@ Requirements:
         stallReportedRef.current = false;
         stallRecoveryTriggeredRef.current = false;
         lastTelemetryEmitAtRef.current = 0;
-        previewPromptUnlockTriggeredRef.current = false;
       } else {
         interval = window.setInterval(() => {
           if (typeof document !== 'undefined' && document.hidden && hostedRuntimeEnabled) {
@@ -1978,9 +1980,6 @@ Requirements:
       (error: any, context: 'chat' | 'template' | 'llmcall' = 'chat') => {
         const diagnostics = buildChatRequestDiagnostics(context, error);
 
-        logger.error(`${context} request failed`, diagnostics);
-        console.error(`[chat:${context}:diagnostics]`, diagnostics);
-
         clearHostedFreeDeadlineTimer();
         stop();
         setFakeLoading(false);
@@ -2048,7 +2047,9 @@ Requirements:
           });
 
         if (shouldIgnoreCompletedRunDisconnect) {
-          logStore.logWarning('Ignoring late stream disconnect after completed run', {
+          lastRunCompletedAtRef.current = Date.now();
+          previewPromptUnlockTriggeredRef.current = false;
+          logStore.logWarning('Verified preview preserved after late stream closure', {
             component: 'Chat',
             action: 'request',
             provider: diagnostics.provider,
@@ -2060,14 +2061,16 @@ Requirements:
           appendStepRunnerEvent({
             type: 'telemetry',
             timestamp: new Date().toISOString(),
-            description: 'Ignoring late stream disconnect after completed run',
+            description: 'Verified preview finalized after late stream closure',
             output: `provider=${diagnostics.provider} model=${diagnostics.model}`,
           });
           setLlmErrorAlert(undefined);
-          setData([]);
 
           return;
         }
+
+        logger.error(`${context} request failed`, diagnostics);
+        console.error(`[chat:${context}:diagnostics]`, diagnostics);
 
         logStore.logError(`${context} request failed`, error, {
           component: 'Chat',
@@ -2852,6 +2855,7 @@ Requirements:
       manualPromptGenerationRef.current += 1;
       lastRunCompletedAtRef.current = null;
       lastPreviewReadyAtRef.current = null;
+      previewPromptUnlockTriggeredRef.current = false;
       stallRecoveryTriggeredRef.current = false;
       starterContinuationTriggeredRef.current = false;
       starterBootstrapCommandsRef.current = null;

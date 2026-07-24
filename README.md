@@ -57,6 +57,14 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 `v3.1.0` is the current stable hosted and self-hosted release. It preserves the first-pass preview, history-aware follow-up, runtime-node, publishing, updater, and fleet-observability work from the v3.0.9 line while making the coding path substantially lighter and adding four protected MagnetAPI.org FREE coding models.
 
+### v3.2.0 reliability work in progress
+
+The current v3.2.0 work closes a false repair loop found by exercising the hosted FREE ChatGPT-5.6 SOL path in a real browser. A healthy, request-scoped preview now finalizes successfully even when the browser closes a late provider stream after the app is ready; that expected closure no longer appears as `Network error`, `BOLT_STREAM_TIMEOUT`, or a new hidden repair attempt.
+
+Execution state is derived from ordered command starts and completions rather than the existence of any historical start event. Workspace therefore settles on `Preview ready` when the runtime is healthy instead of remaining stuck on `Working`, and an active repair stays a calm `Working` state until it finishes rather than flashing between states.
+
+Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
+
 ### v3.1.0 highlights
 
 - Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.

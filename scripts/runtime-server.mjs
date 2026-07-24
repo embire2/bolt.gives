@@ -97,8 +97,7 @@ export function resolveRuntimeWorkspaceRoot(
 
 const PERSIST_ROOT = resolveRuntimeWorkspaceRoot();
 const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6142';
-const MANAGED_INSTANCE_NODE_OPTIONS =
-  process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
+const MANAGED_INSTANCE_NODE_OPTIONS = process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
 const MANAGED_INSTANCE_WRANGLER_WORK_DIR =
   process.env.RUNTIME_MANAGED_INSTANCE_WRANGLER_WORK_DIR || '/tmp/bolt-gives-managed-cloudflare';
@@ -1871,7 +1870,9 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
 
   for (const instance of registry.instances) {
     if (shouldPauseManagedInstanceRolloutForSessions(sessions.values())) {
-      console.warn('[runtime] managed rollout yielded to active coding sessions; remaining instances will resume later.');
+      console.warn(
+        '[runtime] managed rollout yielded to active coding sessions; remaining instances will resume later.',
+      );
       break;
     }
 
@@ -2044,6 +2045,13 @@ export function applyPreviewResponseHeaders(rawHeaders = {}) {
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Opener-Policy': 'same-origin',
   };
+}
+
+export function buildPreviewRedirectHeaders(location) {
+  return applyPreviewResponseHeaders({
+    Location: location,
+    'Cache-Control': 'no-store',
+  });
 }
 
 function shouldInspectPreviewResponseForAlerts(upstreamPath, contentType = '') {
@@ -3559,8 +3567,8 @@ function workspacePackageUsesVite(packageJsonRecord) {
 
   return Boolean(
     packageJson.dependencies?.vite ||
-      packageJson.devDependencies?.vite ||
-      Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
+    packageJson.devDependencies?.vite ||
+    Object.values(scripts).some((value) => typeof value === 'string' && /\bvite\b/i.test(value)),
   );
 }
 
@@ -3673,9 +3681,7 @@ export function applyHostedVitePreviewDefaults(content) {
     const serverOpenBraceIndex = source.indexOf('{', serverMatch.index);
     const serverCloseBraceIndex = findMatchingBrace(source, serverOpenBraceIndex);
     const serverBody =
-      serverCloseBraceIndex > serverOpenBraceIndex
-        ? source.slice(serverOpenBraceIndex + 1, serverCloseBraceIndex)
-        : '';
+      serverCloseBraceIndex > serverOpenBraceIndex ? source.slice(serverOpenBraceIndex + 1, serverCloseBraceIndex) : '';
 
     if (/\bhmr\s*:\s*false\b/.test(serverBody)) {
       return { changed: false, content: source };
@@ -5684,10 +5690,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   const nextPreviewPath = resolveStalePreviewRedirectPath(session, req.url || pathname, pathname);
 
   if (nextPreviewPath) {
-    res.writeHead(307, {
-      Location: nextPreviewPath,
-      'Cache-Control': 'no-store',
-    });
+    res.writeHead(307, buildPreviewRedirectHeaders(nextPreviewPath));
     res.end();
     return;
   }

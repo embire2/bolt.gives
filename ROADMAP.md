@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-22
+Last updated: 2026-07-24
 
 Status legend:
 
@@ -20,6 +20,11 @@ Next release target:
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
+- [x] Make verified hosted previews finalize cleanly after late FREE stream closure instead of showing false network/timeout errors or entering another repair pass.
+- [x] Derive Workspace and commentary state from ordered command start/completion events so completed projects settle on `Preview ready`.
+- [x] Emit plain-English active-run commentary every 10 seconds without allowing heartbeat events to mask a provider stall.
+- [x] Preserve preview isolation headers across stale-port redirects.
+- [x] Strengthen hosted browser acceptance so visible repair errors, fatal console diagnostics, a busy final composer, or an unhealthy runtime fail the E2E.
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.

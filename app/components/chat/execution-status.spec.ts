@@ -6,6 +6,7 @@ import {
   deriveProgressMessage,
   deriveWhyThisAction,
   hasPreviewVerification,
+  isCommentaryHeartbeatEvent,
   shouldUnlockPromptAfterPreviewReady,
 } from './execution-status';
 
@@ -62,6 +63,42 @@ describe('execution-status helpers', () => {
         createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified'),
       ]),
     ).toBe('Response Generated (preview verified)');
+  });
+
+  it('uses the newest progress event instead of a stale in-progress event', () => {
+    const progressEvents: ProgressAnnotation[] = [
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'in-progress',
+        order: 1,
+        message: 'Generating Response',
+      },
+      {
+        type: 'progress',
+        label: 'response',
+        status: 'complete',
+        order: 2,
+        message: 'Response Generated',
+      },
+    ];
+
+    expect(deriveProgressMessage(progressEvents, [])).toBe('Response Generated');
+  });
+
+  it('identifies commentary heartbeats so they do not hide a stalled runtime', () => {
+    expect(
+      isCommentaryHeartbeatEvent({
+        type: 'agent-commentary',
+        heartbeat: true,
+        phase: 'action',
+        status: 'in-progress',
+        order: 2,
+        message: 'I am still running pnpm install.',
+        timestamp: new Date().toISOString(),
+      }),
+    ).toBe(true);
+    expect(isCommentaryHeartbeatEvent({ type: 'progress', message: 'Generating Response' })).toBe(false);
   });
 
   it('keeps the original progress text when preview is still pending', () => {
