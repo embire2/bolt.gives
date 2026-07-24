@@ -2161,40 +2161,6 @@ Requirements:
           return;
         }
 
-        logger.error(`${context} request failed`, diagnostics);
-        console.error(`[chat:${context}:diagnostics]`, diagnostics);
-
-        logStore.logError(`${context} request failed`, error, {
-          component: 'Chat',
-          action: 'request',
-          error: errorInfo.message,
-          context,
-          retryable: errorInfo.isRetryable,
-          errorType,
-          provider: diagnostics.provider,
-          diagnostics,
-        });
-
-        appendStepRunnerEvent({
-          type: 'error',
-          timestamp: new Date().toISOString(),
-          description: `${context} generation failed`,
-          error: errorInfo.message,
-          output: JSON.stringify(
-            {
-              provider: diagnostics.provider,
-              model: diagnostics.model,
-              route: diagnostics.route,
-              messageCount: diagnostics.messageCount,
-              isLoading: diagnostics.isLoading,
-              errorName: diagnostics.errorName,
-              errorMessage: diagnostics.errorMessage,
-            },
-            null,
-            2,
-          ),
-        });
-
         let queuedAutoRecovery = false;
 
         if (
@@ -2237,7 +2203,7 @@ Requirements:
             output: `provider=${activeRunContext.providerName} model=${activeRunContext.model}`,
           });
 
-          dispatchAutoContinuation({
+          queuedAutoRecovery = dispatchAutoContinuation({
             idSuffix: timeoutLikeError ? 'timeout-recovery' : 'disconnect-recovery',
             content: recoveryPrompt,
             failureDescription: timeoutLikeError
@@ -2249,24 +2215,68 @@ Requirements:
           });
         }
 
-        // Create API error alert
         if (queuedAutoRecovery) {
+          logger.warn('recoverable chat stream interrupted; auto-recovery queued', diagnostics);
+          logStore.logWarning('Recoverable chat stream interruption', {
+            component: 'Chat',
+            action: 'request',
+            context,
+            provider: diagnostics.provider,
+            recovery: timeoutLikeError ? 'timeout-continuation' : 'disconnect-continuation',
+            diagnostics,
+          });
           setLlmErrorAlert(undefined);
           toast.info(
             timeoutLikeError
               ? 'The run timed out. Auto-recovery is continuing from the current workspace state.'
               : 'The stream disconnected before completion. Auto-recovery is continuing from the current workspace state.',
           );
-        } else {
-          setLlmErrorAlert({
-            type: 'error',
-            title,
-            description: errorInfo.message,
-            provider: diagnostics.provider,
-            errorType,
-          });
+          setData([]);
+
+          return;
         }
 
+        logger.error(`${context} request failed`, diagnostics);
+        console.error(`[chat:${context}:diagnostics]`, diagnostics);
+
+        logStore.logError(`${context} request failed`, error, {
+          component: 'Chat',
+          action: 'request',
+          error: errorInfo.message,
+          context,
+          retryable: errorInfo.isRetryable,
+          errorType,
+          provider: diagnostics.provider,
+          diagnostics,
+        });
+
+        appendStepRunnerEvent({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          description: `${context} generation failed`,
+          error: errorInfo.message,
+          output: JSON.stringify(
+            {
+              provider: diagnostics.provider,
+              model: diagnostics.model,
+              route: diagnostics.route,
+              messageCount: diagnostics.messageCount,
+              isLoading: diagnostics.isLoading,
+              errorName: diagnostics.errorName,
+              errorMessage: diagnostics.errorMessage,
+            },
+            null,
+            2,
+          ),
+        });
+
+        setLlmErrorAlert({
+          type: 'error',
+          title,
+          description: errorInfo.message,
+          provider: diagnostics.provider,
+          errorType,
+        });
         setData([]);
       },
       [buildChatRequestDiagnostics, clearHostedFreeDeadlineTimer, dispatchAutoContinuation, hostedRuntimeEnabled, stop],

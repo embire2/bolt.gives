@@ -317,8 +317,6 @@ export class ActionRunner {
         this.#pendingHostedRuntimeFiles.delete(filePath);
       }
     }
-
-    this.#emitHostedPreviewRefresh();
   }
 
   async #syncHostedRuntimeSnapshotFromFiles(files: FileMap) {
@@ -343,8 +341,6 @@ export class ActionRunner {
         this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
       }
     }
-
-    this.#emitHostedPreviewRefresh();
   }
 
   async #flushHostedRuntimePendingFiles() {
@@ -383,8 +379,6 @@ export class ActionRunner {
         this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
       }
     }
-
-    this.#emitHostedPreviewRefresh();
   }
 
   #setHostedPreview(preview: HostedRuntimePreviewInfo) {
@@ -405,19 +399,6 @@ export class ActionRunner {
       revision: this.#hostedRuntimePreviewRevision,
     };
 
-    this.#onPreviewReady?.(this.#lastHostedRuntimePreview);
-  }
-
-  #emitHostedPreviewRefresh() {
-    if (!this.#lastHostedRuntimePreview) {
-      return;
-    }
-
-    this.#hostedRuntimePreviewRevision += 1;
-    this.#lastHostedRuntimePreview = {
-      ...this.#lastHostedRuntimePreview,
-      revision: this.#hostedRuntimePreviewRevision,
-    };
     this.#onPreviewReady?.(this.#lastHostedRuntimePreview);
   }
 

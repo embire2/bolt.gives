@@ -372,6 +372,8 @@ async function main() {
   await page.addInitScript(
     ({ provider, model }) => {
       const host = window.location.hostname;
+      document.cookie = `selectedProvider=${encodeURIComponent(provider)}; Path=/; SameSite=Lax`;
+      document.cookie = `selectedModel=${encodeURIComponent(model)}; Path=/; SameSite=Lax`;
       localStorage.setItem(
         `bolt_instance_selection_v1:${host}`,
         JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
@@ -689,6 +691,20 @@ async function main() {
     log('runtime session cleanup', JSON.stringify(runtimeCleanup));
   }
 
+  const initialSelectionOk = chatRequestInputs.some(
+    (input) =>
+      input.selectedProvider === providerName &&
+      input.selectedModel === modelName &&
+      String(input.latestUserContent || '').includes(appToken),
+  );
+  const followUpSelectionOk =
+    !requireFollowUp ||
+    chatRequestInputs.some(
+      (input) =>
+        input.selectedProvider === providerName &&
+        input.selectedModel === followUpModelName &&
+        String(input.latestUserContent || '').includes(followUpToken),
+    );
   const summary = {
     ok:
       previewContainsToken &&
@@ -701,6 +717,8 @@ async function main() {
       consoleErrors.every((entry) => !isFatalConsoleError(entry)) &&
       networkErrors.every(isBenignNetworkFailure) &&
       (!hostedRuntimeSessionId || (finalRuntimeStatus?.status === 'ready' && finalRuntimeStatus?.healthy === true)) &&
+      initialSelectionOk &&
+      followUpSelectionOk &&
       runtimeCleanup.ok,
     baseUrl,
     providerName,
@@ -719,6 +737,8 @@ async function main() {
     followUpSubmitted,
     followUpPreviewContainsTokens,
     followUpSnapshotContainsTokens,
+    initialSelectionOk,
+    followUpSelectionOk,
     chatBecameIdle,
     hostedRuntimeSessionId,
     finalRuntimeStatus,
@@ -751,6 +771,8 @@ async function main() {
         followUpSubmitted,
         followUpPreviewContainsTokens,
         followUpSnapshotContainsTokens,
+        initialSelectionOk,
+        followUpSelectionOk,
         chatBecameIdle,
         elapsedSec: summary.elapsedSec,
         chatRequestStatuses: chatRequests.map((r) => r.status),

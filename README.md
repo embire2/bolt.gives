@@ -69,7 +69,13 @@ Queued automatic repair also settles immediately when the runtime's strict root-
 
 Follow-up file batches now advance a server-owned Preview revision that survives any required Vite process restart and reaches the browser after the updated app passes health verification. The existing iframe reloads once for that completed revision, so users see their improvement without HMR websocket noise, a stale app, or repeated per-file flashing.
 
+The browser no longer creates speculative revisions immediately after a file sync. Initial loads, follow-up refreshes, and repair handoffs wait for the server's health-verified revision, and every handoff response carries the same cross-origin isolation headers as the generated app. This removes transient blocked-response failures while preserving the stable Preview frame.
+
+Recoverable FREE stream disconnects are shown as automatic continuation activity rather than fatal request failures. If the continuation succeeds, Chat clears the recovery state and leaves the user with the healthy app instead of stale `Network error` text.
+
 Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
+
+The E2E also verifies the provider and model carried by the real `/api/chat` requests. A run cannot pass as a ChatGPT-5.6 SOL test if provider bootstrap silently selects another configured provider.
 
 ### v3.1.0 highlights
 

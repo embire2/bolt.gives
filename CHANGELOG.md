@@ -5,24 +5,28 @@
 ### Fixed
 
 - Verified hosted previews no longer surface a false `Network error` or enter another hidden repair pass when the browser intentionally closes a late-running FREE provider stream after the generated app is already healthy.
+- Recoverable provider disconnects now enter the single-flight continuation path before Chat records a fatal execution event, so a successful automatic continuation does not leave stale `Network error` text or a fatal console diagnostic behind.
 - The browser's absolute FREE deadline and server stream timeouts now finalize a request-scoped verified preview instead of emitting an error event, launching a hidden continuation, or alternating the Workspace between `Working` and `Needs repair`.
 - Workspace and commentary status now pair each command start with its later command completion, so historical `step-start` events cannot leave an idle project permanently marked `Working`.
 - Progress summaries now use the newest progress event instead of preferring an older `in-progress` event over a later completed event.
 - Hosted runtime sync and start delivery is idempotent: an unchanged workspace snapshot or repeated start command now reuses the verified Vite process instead of restarting a healthy Preview and leaving it in `starting`.
 - A delayed automatic repair now returns to idle as soon as the strict root-and-entry-module health probe verifies the current Preview, preventing a healthy app from remaining stuck behind `Preview repair is queued`.
 - Completed hosted workspace changes now advance a monotonic session-owned Preview revision that survives Vite process restarts, and the stable iframe reloads once after the healthy revision lands. Repeated start events preserve that revision, so follow-up edits appear without restoring the old per-chunk flashing behavior.
+- Browser-side file sync no longer invents an early Preview revision. The iframe waits for the runtime's health-verified server revision before reloading, avoiding transient loads while Vite is restarting.
 - Completed, verified runs supersede older `recovery: in-progress` commentary and footer badges, so Chat reports `Preview ready` / `verified` instead of contradicting the healthy runtime.
 - Stale preview-port redirects now retain the same cross-origin isolation headers as normal preview responses, preventing the redirected iframe from being blocked by the browser.
+- Preview repair/handoff pages now use the same COEP, COOP, and CORP headers as generated-app responses, preventing transient `ERR_BLOCKED_BY_RESPONSE` failures during initial and follow-up runtime handoffs.
 - Vitest excludes generated `test-results` artifacts, keeping transient live-network diagnostics out of the deterministic unit-test gate.
 
 ### Changed
 
 - Plain-English agent commentary heartbeats now run every 10 seconds. Heartbeats are explicitly marked and do not count as meaningful model progress, so transparency cannot suppress stalled-stream recovery.
 - The hosted Calendar E2E now rejects visible server/network/timeout/repair errors, fatal chat console diagnostics, a non-idle composer, or an unhealthy final runtime even when the iframe happened to render.
+- The hosted Calendar E2E now pins provider/model selection through both cookies and per-instance storage and verifies the actual `/api/chat` payload for the initial request and follow-up, preventing a silent fallback from being mistaken for a FREE model test.
 
 ### Tests
 
-- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation and settlement, server-owned Preview revisions, stable-iframe follow-up reloads, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
+- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation and settlement, server-owned Preview revisions, server-confirmed iframe refreshes, isolation-safe handoff pages, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
 
 ## v3.1.0 (2026-07-22)
 

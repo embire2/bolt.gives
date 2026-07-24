@@ -1339,18 +1339,20 @@ describe('ActionRunner start actions', () => {
     );
   });
 
-  it('bumps the hosted preview revision after syncing new files into a running preview', async () => {
+  it('waits for a server-confirmed preview revision after syncing files', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const previewUpdates = vi.fn();
     const writeFile = vi.fn().mockResolvedValue(undefined);
 
+    let serverRevision = 0;
     hostedRuntimeMocks.runHostedRuntimeCommand.mockImplementation(async ({ onEvent }) => {
       onEvent?.({
         type: 'ready',
         preview: {
           port: 4100,
           baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-1/4100',
+          revision: serverRevision,
         },
       });
 
@@ -1426,8 +1428,10 @@ describe('ActionRunner start actions', () => {
     expect(previewUpdates).toHaveBeenLastCalledWith({
       port: 4100,
       baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-1/4100',
-      revision: 1,
+      revision: 0,
     });
+
+    serverRevision = 1;
 
     const repeatedStartAction: ActionCallbackData = {
       ...startAction,

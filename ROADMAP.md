@@ -25,10 +25,14 @@ Release theme: finish account lifecycle hardening, expand first-pass template co
 - [x] Make hosted workspace syncs and start commands idempotent so duplicate server/browser delivery cannot restart an already healthy Preview.
 - [x] Settle queued automatic repair after strict root-and-entry-module health verification so healthy projects cannot remain stuck in recovery.
 - [x] Advance a server-owned Preview revision for completed workspace changes and reload the stable iframe once so follow-up edits become visible without per-file flashing.
+- [x] Wait for a health-verified server revision before refreshing Preview instead of reloading immediately after browser file sync.
+- [x] Treat recoverable stream disconnects as continuation telemetry rather than leaving a stale fatal error after recovery succeeds.
 - [x] Mark stale in-progress recovery commentary as superseded after a verified completion and settle current execution badges on the healthy runtime state.
 - [x] Emit plain-English active-run commentary every 10 seconds without allowing heartbeat events to mask a provider stall.
 - [x] Preserve preview isolation headers across stale-port redirects.
+- [x] Preserve preview isolation headers on repair/handoff documents so runtime transitions cannot be blocked by the browser.
 - [x] Strengthen hosted browser acceptance so visible repair errors, fatal console diagnostics, a busy final composer, or an unhealthy runtime fail the E2E.
+- [x] Verify the actual FREE provider and model in initial and follow-up E2E request payloads.
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.

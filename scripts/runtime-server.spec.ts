@@ -12,6 +12,7 @@ import {
   bumpSessionPreviewRevision,
   buildHostedWorkspaceBootstrapAlert,
   buildPreviewRedirectHeaders,
+  buildPreviewRepairHeaders,
   buildPreviewRepairPage,
   buildFreeUsageQuotaDecision,
   buildManagedInstanceDeployArgs,
@@ -389,6 +390,19 @@ describe('runtime server workspace isolation', () => {
       expect.objectContaining({
         Location: '/runtime/preview/session-redirect/4110/',
         'Cache-Control': 'no-store',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+      }),
+    );
+  });
+
+  it('keeps preview handoff pages compatible with the isolated preview iframe', () => {
+    expect(buildPreviewRepairHeaders()).toEqual(
+      expect.objectContaining({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Bolt-Preview-Handoff': '1',
         'Cross-Origin-Resource-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'Cross-Origin-Opener-Policy': 'same-origin',

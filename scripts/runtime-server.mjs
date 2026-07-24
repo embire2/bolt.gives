@@ -2054,6 +2054,14 @@ export function buildPreviewRedirectHeaders(location) {
   });
 }
 
+export function buildPreviewRepairHeaders() {
+  return applyPreviewResponseHeaders({
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Bolt-Preview-Handoff': '1',
+  });
+}
+
 function shouldInspectPreviewResponseForAlerts(upstreamPath, contentType = '') {
   const normalizedPath = String(upstreamPath || '').split('?')[0] || '/';
   const normalizedType = String(contentType || '').toLowerCase();
@@ -4881,11 +4889,7 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
 }
 
 function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
-  res.writeHead(200, {
-    'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': 'no-store',
-    'X-Bolt-Preview-Handoff': '1',
-  });
+  res.writeHead(200, buildPreviewRepairHeaders());
   res.end(buildPreviewRepairPage(session, detail));
 }
 
