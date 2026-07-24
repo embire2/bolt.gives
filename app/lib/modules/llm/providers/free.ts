@@ -508,7 +508,12 @@ function normalizeHostedFreeClaudeSse(response: Response, workspaceFiles = new M
 
 const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
   const requestHeaders = typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined;
-  const headers = new Headers(init?.headers || requestHeaders);
+  const headers = new Headers(requestHeaders);
+
+  new Headers(init?.headers).forEach((value, key) => {
+    headers.set(key, value);
+  });
+
   const apiKey = headers.get('x-api-key');
 
   if (apiKey && !headers.has('authorization')) {

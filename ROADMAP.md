@@ -20,6 +20,7 @@ Next release target:
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
+- [x] Preserve retryable FREE Claude outage semantics and bearer authentication across split SDK request headers.
 - [x] Align GitHub build jobs with Wrangler's Node 22 requirement and gate the locally compiled production artifact before release smoke.
 - [x] Route FREE Claude-model preflight through MagnetAPI Messages instead of the GPT Responses endpoint.
 - [x] Make verified hosted previews finalize cleanly at the absolute FREE deadline or after late stream closure instead of showing false network/timeout errors or entering another repair pass.

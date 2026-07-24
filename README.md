@@ -75,6 +75,8 @@ Recoverable FREE stream disconnects are shown as automatic continuation activity
 
 FREE model availability checks now follow the same MagnetAPI transport split as generation: ChatGPT-5.6 SOL uses `/v1/responses`, while Opus 4.8, Sonnet 5, and Fable 5 use the Claude-compatible `/v1/messages` contract. A Claude model can no longer be rejected by a preflight sent to the wrong API family.
 
+If Magnet returns an upstream Claude outage containing generic API-key guidance, bolt.gives preserves it as a retryable hosted-provider failure rather than telling the user their instance is missing a key. Request and init headers are merged before translating Anthropic's `x-api-key` header to Magnet's bearer contract.
+
 Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
 
 The E2E also verifies the provider and model carried by the real `/api/chat` requests. A run cannot pass as a ChatGPT-5.6 SOL test if provider bootstrap silently selects another configured provider.

@@ -123,6 +123,39 @@ describe('FreeProvider', () => {
     expect(forwardedHeaders.has('x-api-key')).toBe(false);
   });
 
+  it('preserves request authentication when the SDK supplies separate init headers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+
+    const provider = new FreeProvider();
+    anthropicModelSpy.mockReturnValue({ id: 'claude-model-instance' });
+
+    provider.getModelInstance({
+      model: 'claude-sonnet-5',
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createAnthropicSpy.mock.calls[0]?.[0]?.fetch;
+    const request = new Request('https://api.magnetapi.org/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': 'magnet-test-key',
+      },
+    });
+
+    await customFetch?.(request, {
+      method: 'POST',
+      headers: {
+        'anthropic-version': '2023-06-01',
+      },
+      body: '{}',
+    });
+
+    const forwardedHeaders = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers);
+    expect(forwardedHeaders.get('authorization')).toBe('Bearer magnet-test-key');
+    expect(forwardedHeaders.get('anthropic-version')).toBe('2023-06-01');
+    expect(forwardedHeaders.has('x-api-key')).toBe(false);
+  });
+
   it('adds the strict-SDK output token field to streamed Magnet Claude message starts', () => {
     expect(
       normalizeHostedFreeClaudeStreamEvent({

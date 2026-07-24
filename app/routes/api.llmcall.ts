@@ -64,6 +64,14 @@ export function resolveLlmCallMaxTokens(modelCompletionLimit: number, requestedM
     : modelCompletionLimit;
 }
 
+export function isHostedFreeProviderFailure(message: string): boolean {
+  return /FREE_PROVIDER_(?:RATE_LIMITED|CREDITS_EXHAUSTED|UNAVAILABLE)/.test(message);
+}
+
+export function isLlmCallApiKeyError(message: string): boolean {
+  return message.includes('API key') && !isHostedFreeProviderFailure(message);
+}
+
 function validateTokenLimits(modelDetails: ModelInfo, requestedTokens: number): { valid: boolean; error?: string } {
   const modelMaxTokens = modelDetails.maxTokenAllowed || 128000;
   const maxCompletionTokens = getCompletionTokenLimit(modelDetails);
@@ -199,7 +207,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     } catch (error: unknown) {
       console.log(error);
 
-      if (error instanceof Error && error.message?.includes('API key')) {
+      if (error instanceof Error && isHostedFreeProviderFailure(error.message)) {
+        throw error;
+      }
+
+      if (error instanceof Error && isLlmCallApiKeyError(error.message)) {
         throw new Response('Invalid or missing API key', {
           status: 401,
           statusText: 'Unauthorized',
@@ -381,22 +393,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         );
       }
 
-      if (error instanceof Error && error.message?.includes('API key')) {
-        return new Response(
-          JSON.stringify({
-            ...errorResponse,
-            message: 'Invalid or missing API key',
-            statusCode: 401,
-            isRetryable: false,
-          }),
-          {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-            statusText: 'Unauthorized',
-          },
-        );
-      }
-
       if (error instanceof Error && error.message?.includes('FREE_PROVIDER_RATE_LIMITED')) {
         return new Response(
           JSON.stringify({
@@ -444,6 +440,22 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             status: 503,
             headers: { 'Content-Type': 'application/json' },
             statusText: 'Hosted FREE Provider Unavailable',
+          },
+        );
+      }
+
+      if (error instanceof Error && isLlmCallApiKeyError(error.message)) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message: 'Invalid or missing API key',
+            statusCode: 401,
+            isRetryable: false,
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Unauthorized',
           },
         );
       }
