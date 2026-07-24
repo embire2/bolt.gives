@@ -1,4 +1,4 @@
-import { clearHostedFreeModelResolution } from '~/lib/modules/llm/providers/free';
+import { clearHostedFreeModelResolution, isHostedFreeClaudeModel } from '~/lib/modules/llm/providers/free';
 import {
   FREE_HOSTED_API_BASE_URL,
   FREE_PROVIDER_NAME,
@@ -20,7 +20,7 @@ const logger = createScopedLogger('free-provider-preflight');
 
 const SUCCESS_TTL_MS = 60_000;
 const RATE_LIMIT_TTL_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function fingerprintToken(token: string): string {
   return `${token.slice(0, 6)}:${token.length}`;
@@ -61,17 +61,27 @@ export function resetFreeProviderPreflightCache() {
 }
 
 async function probeHostedModel(options: { apiKey: string; modelName: string }) {
-  const response = await fetch(`${FREE_HOSTED_API_BASE_URL}/responses`, {
+  const usesClaudeMessages = isHostedFreeClaudeModel(options.modelName);
+  const response = await fetch(`${FREE_HOSTED_API_BASE_URL}/${usesClaudeMessages ? 'messages' : 'responses'}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
       'Content-Type': 'application/json',
+      ...(usesClaudeMessages ? { 'anthropic-version': '2023-06-01' } : {}),
     },
-    body: JSON.stringify({
-      model: options.modelName,
-      input: 'Reply with OK',
-      max_output_tokens: 16,
-    }),
+    body: JSON.stringify(
+      usesClaudeMessages
+        ? {
+            model: options.modelName,
+            max_tokens: 16,
+            messages: [{ role: 'user', content: 'Reply with OK' }],
+          }
+        : {
+            model: options.modelName,
+            input: 'Reply with OK',
+            max_output_tokens: 16,
+          },
+    ),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 

@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Hosted FREE preflight now probes Opus 4.8, Sonnet 5, and Fable 5 through MagnetAPI's Claude-compatible `/v1/messages` route instead of incorrectly sending those model names to `/v1/responses`; small availability probes also allow 30 seconds for normal upstream latency.
 - Verified hosted previews no longer surface a false `Network error` or enter another hidden repair pass when the browser intentionally closes a late-running FREE provider stream after the generated app is already healthy.
 - Recoverable provider disconnects now enter the single-flight continuation path before Chat records a fatal execution event, so a successful automatic continuation does not leave stale `Network error` text or a fatal console diagnostic behind.
 - The browser's absolute FREE deadline and server stream timeouts now finalize a request-scoped verified preview instead of emitting an error event, launching a hidden continuation, or alternating the Workspace between `Working` and `Needs repair`.

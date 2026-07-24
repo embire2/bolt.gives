@@ -73,6 +73,8 @@ The browser no longer creates speculative revisions immediately after a file syn
 
 Recoverable FREE stream disconnects are shown as automatic continuation activity rather than fatal request failures. If the continuation succeeds, Chat clears the recovery state and leaves the user with the healthy app instead of stale `Network error` text.
 
+FREE model availability checks now follow the same MagnetAPI transport split as generation: ChatGPT-5.6 SOL uses `/v1/responses`, while Opus 4.8, Sonnet 5, and Fable 5 use the Claude-compatible `/v1/messages` contract. A Claude model can no longer be rejected by a preflight sent to the wrong API family.
+
 Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
 
 The E2E also verifies the provider and model carried by the real `/api/chat` requests. A run cannot pass as a ChatGPT-5.6 SOL test if provider bootstrap silently selects another configured provider.

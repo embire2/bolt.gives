@@ -20,6 +20,7 @@ Next release target:
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
+- [x] Route FREE Claude-model preflight through MagnetAPI Messages instead of the GPT Responses endpoint.
 - [x] Make verified hosted previews finalize cleanly at the absolute FREE deadline or after late stream closure instead of showing false network/timeout errors or entering another repair pass.
 - [x] Derive Workspace and commentary state from ordered command start/completion events so completed projects settle on `Preview ready`.
 - [x] Make hosted workspace syncs and start commands idempotent so duplicate server/browser delivery cannot restart an already healthy Preview.

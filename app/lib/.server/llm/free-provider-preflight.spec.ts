@@ -190,6 +190,36 @@ describe('ensureFreeProviderAvailability', () => {
     expect(String(fetchSpy.mock.calls[1]?.[1]?.body)).toContain('claude-sonnet-5');
   });
 
+  it('uses the Claude Messages contract when preflighting hosted Claude models', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await ensureFreeProviderAvailability({
+      providerName: FREE_PROVIDER_NAME,
+      modelName: 'claude-opus-4-8',
+      apiKey: 'magnet-real-secret',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.magnetapi.org/v1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'anthropic-version': '2023-06-01',
+        }),
+      }),
+    );
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({
+      model: 'claude-opus-4-8',
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'Reply with OK' }],
+    });
+  });
+
   it('falls back to the default before probing an unapproved FREE model', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
