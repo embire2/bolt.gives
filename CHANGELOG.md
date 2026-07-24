@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- GitHub build and release workflows now use Node 22.22 for Wrangler 4, build from a frozen lockfile, validate the locally built production artifact before smoke tests, and no longer fail solely because an optional provider smoke secret is absent.
 - Hosted FREE preflight now probes Opus 4.8, Sonnet 5, and Fable 5 through MagnetAPI's Claude-compatible `/v1/messages` route instead of incorrectly sending those model names to `/v1/responses`; small availability probes also allow 30 seconds for normal upstream latency.
 - Verified hosted previews no longer surface a false `Network error` or enter another hidden repair pass when the browser intentionally closes a late-running FREE provider stream after the generated app is already healthy.
 - Recoverable provider disconnects now enter the single-flight continuation path before Chat records a fatal execution event, so a successful automatic continuation does not leave stale `Network error` text or a fatal console diagnostic behind.

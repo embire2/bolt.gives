@@ -972,6 +972,8 @@ pnpm run gate:release:live
 - live version + changelog version match `package.json`
 - screenshot capture assertions pass (no server-error capture states, expected dimensions, non-empty output)
 
+GitHub build jobs use Node 22.22 because the current Wrangler 4 precompiler requires Node 22 or newer. The release workflow starts the compiled production worker locally before running screenshot, startup-label, and asset-health gates; provider-backed generation is reported as skipped when its optional GitHub Actions secret is not configured.
+
 ## Docker Images (GHCR)
 
 This repo includes a `Docker Publish` GitHub Actions workflow that can build and (optionally) push images to GitHub Container Registry.

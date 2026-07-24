@@ -8,7 +8,7 @@ inputs:
   node-version:
     required: false
     type: string
-    default: '20.18.0'
+    default: '22.22.0'
 
 runs:
   using: composite
@@ -28,5 +28,5 @@ runs:
     - name: Install dependencies and build project
       shell: bash
       run: |
-        pnpm install
+        pnpm install --frozen-lockfile
         pnpm run build

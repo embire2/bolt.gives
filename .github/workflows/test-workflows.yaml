@@ -50,7 +50,7 @@ jobs:
       - name: Verify Node.js version
         run: |
           echo "Node.js version: $(node --version)"
-          if [[ "$(node --version)" == *"20.18.0"* ]]; then
+          if [[ "$(node --version)" == *"22.22.0"* ]]; then
             echo "✅ Correct Node.js version"
           else
             echo "❌ Wrong Node.js version"
@@ -134,7 +134,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.18.0'
+          node-version: '22.22.0'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
