@@ -388,7 +388,17 @@ export class ActionRunner {
   }
 
   #setHostedPreview(preview: HostedRuntimePreviewInfo) {
-    this.#hostedRuntimePreviewRevision = 0;
+    const previousPreview = this.#lastHostedRuntimePreview;
+    const samePreview = previousPreview?.port === preview.port && previousPreview?.baseUrl === preview.baseUrl;
+    const incomingRevision = Number(preview.revision);
+
+    if (Number.isFinite(incomingRevision) && incomingRevision >= 0) {
+      this.#hostedRuntimePreviewRevision = samePreview
+        ? Math.max(this.#hostedRuntimePreviewRevision, incomingRevision)
+        : incomingRevision;
+    } else if (!samePreview) {
+      this.#hostedRuntimePreviewRevision = 0;
+    }
 
     this.#lastHostedRuntimePreview = {
       ...preview,

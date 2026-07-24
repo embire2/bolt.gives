@@ -9,6 +9,7 @@ import {
   applyUnavailablePackageVersionRepair,
   authorizeFreeUsageQuotaSecret,
   authorizeHostedFreeRelaySecret,
+  bumpSessionPreviewRevision,
   buildHostedWorkspaceBootstrapAlert,
   buildPreviewRedirectHeaders,
   buildPreviewRepairPage,
@@ -731,6 +732,25 @@ describe('runtime server workspace isolation', () => {
       port: 4120,
       baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-public-origin/4120',
     });
+  });
+
+  it('bumps the server preview revision after a changed workspace snapshot', () => {
+    const session = {
+      id: 'session-preview-revision',
+      preview: {
+        port: 4120,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-preview-revision/4120',
+        revision: 4,
+      },
+      previewSubscribers: new Set(),
+    };
+
+    expect(bumpSessionPreviewRevision(session as any)).toEqual({
+      port: 4120,
+      baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-preview-revision/4120',
+      revision: 5,
+    });
+    expect(session.preview.revision).toBe(5);
   });
 
   it('builds a compact preview summary without shipping recent logs to the browser event stream', () => {

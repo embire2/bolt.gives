@@ -1428,5 +1428,18 @@ describe('ActionRunner start actions', () => {
       baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-1/4100',
       revision: 1,
     });
+
+    const repeatedStartAction: ActionCallbackData = {
+      ...startAction,
+      actionId: 'repeat-start-hosted-preview-refresh',
+    };
+    runner.addAction(repeatedStartAction);
+    await runner.runAction(repeatedStartAction);
+
+    expect(previewUpdates).toHaveBeenLastCalledWith({
+      port: 4100,
+      baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-1/4100',
+      revision: 1,
+    });
   });
 });

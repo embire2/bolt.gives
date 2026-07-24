@@ -55,3 +55,35 @@ export function resolvePreviewTransitionRevision(options: {
 
   return options.currentRevision;
 }
+
+interface PreviewTransition {
+  port: number;
+  baseUrl: string;
+  revision?: number;
+}
+
+export function shouldSyncHostedPreviewTransition(
+  currentPreview: PreviewTransition | undefined,
+  nextPreview: PreviewTransition,
+  allowRevisionChange: boolean,
+) {
+  return (
+    !currentPreview ||
+    currentPreview.baseUrl !== nextPreview.baseUrl ||
+    currentPreview.port !== nextPreview.port ||
+    (allowRevisionChange && currentPreview.revision !== nextPreview.revision)
+  );
+}
+
+export function resolvePreviewRevisionReloadUrl(options: {
+  baseUrl: string;
+  displayPath: string;
+  currentRevision: number;
+  nextRevision: number;
+}) {
+  if (options.currentRevision === options.nextRevision) {
+    return null;
+  }
+
+  return buildPreviewUrl(options.baseUrl, options.displayPath, options.nextRevision);
+}

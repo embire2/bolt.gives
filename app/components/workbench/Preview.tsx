@@ -24,7 +24,13 @@ import type { ElementInfo } from './Inspector';
 import type { PreviewInfo } from '~/lib/stores/previews';
 import { extractPreviewAlertFromDocument, extractPreviewAlertFromText } from '~/lib/runtime/preview-error';
 import { hasFallbackStarterPlaceholder, isStarterPlaceholderAlert } from '~/lib/runtime/starter-placeholder';
-import { buildPreviewUrl, getPreviewIframeKey, resolvePreviewTransitionRevision } from './preview-url';
+import {
+  buildPreviewUrl,
+  getPreviewIframeKey,
+  resolvePreviewRevisionReloadUrl,
+  resolvePreviewTransitionRevision,
+  shouldSyncHostedPreviewTransition,
+} from './preview-url';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -230,7 +236,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
 
       if (
         statusPreview &&
-        (!activePreview || statusPreview.baseUrl !== activePreview.baseUrl || statusPreview.port !== activePreview.port)
+        shouldSyncHostedPreviewTransition(activePreview, statusPreview, status.status === 'ready' && status.healthy)
       ) {
         workbenchStore.syncHostedPreview({
           port: statusPreview.port,
@@ -437,7 +443,17 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
 
     if (lastPreviewRevisionRef.current !== revision) {
+      const revisionUrl = resolvePreviewRevisionReloadUrl({
+        baseUrl,
+        displayPath,
+        currentRevision: lastPreviewRevisionRef.current,
+        nextRevision: revision,
+      });
       lastPreviewRevisionRef.current = revision;
+
+      if (revisionUrl) {
+        setIframeUrl(revisionUrl);
+      }
     }
   }, [activePreview?.baseUrl, activePreview?.revision, displayPath]);
 

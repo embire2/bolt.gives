@@ -3,7 +3,9 @@ import {
   buildPreviewUrl,
   getPreviewIframeKey,
   normalizePreviewPath,
+  resolvePreviewRevisionReloadUrl,
   resolvePreviewTransitionRevision,
+  shouldSyncHostedPreviewTransition,
 } from './preview-url';
 
 describe('preview URL handling', () => {
@@ -62,5 +64,60 @@ describe('preview URL handling', () => {
         nextBaseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
       }),
     ).toBe(4);
+  });
+
+  it('syncs a healthy same-port preview when the runtime revision changes', () => {
+    expect(
+      shouldSyncHostedPreviewTransition(
+        {
+          port: 4100,
+          baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+          revision: 1,
+        },
+        {
+          port: 4100,
+          baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+          revision: 2,
+        },
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldSyncHostedPreviewTransition(
+        {
+          port: 4100,
+          baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+          revision: 1,
+        },
+        {
+          port: 4100,
+          baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+          revision: 2,
+        },
+        false,
+      ),
+    ).toBe(false);
+  });
+
+  it('reloads the stable iframe URL once for a completed preview revision', () => {
+    const nextUrl = resolvePreviewRevisionReloadUrl({
+      baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+      displayPath: '/',
+      currentRevision: 1,
+      nextRevision: 2,
+    });
+
+    expect(nextUrl).toBe('https://alpha1.bolt.gives/runtime/preview/session/4100/?__bolt_preview_rev=2');
+    expect(getPreviewIframeKey(nextUrl || undefined)).toBe(
+      getPreviewIframeKey('https://alpha1.bolt.gives/runtime/preview/session/4100/?__bolt_preview_rev=1'),
+    );
+    expect(
+      resolvePreviewRevisionReloadUrl({
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session/4100',
+        displayPath: '/',
+        currentRevision: 2,
+        nextRevision: 2,
+      }),
+    ).toBeNull();
   });
 });

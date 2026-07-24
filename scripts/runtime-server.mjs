@@ -4733,6 +4733,21 @@ export function updateSessionPreview(session, req, port) {
   return session.preview;
 }
 
+export function bumpSessionPreviewRevision(session) {
+  if (!session.preview) {
+    return null;
+  }
+
+  const currentRevision = Number(session.preview.revision || 0);
+  session.preview = {
+    ...session.preview,
+    revision: Number.isFinite(currentRevision) ? currentRevision + 1 : 1,
+  };
+  broadcastPreviewState(session);
+
+  return session.preview;
+}
+
 export function startReservedPreviewProbe(session, req, kind, previewPort, previewCoordinator) {
   if (kind !== 'start' || !Number.isFinite(Number(previewPort)) || Number(previewPort) <= 0) {
     return false;
@@ -7834,6 +7849,7 @@ export function createRuntimeServer() {
             );
           }
           await refreshSessionCurrentFileMapFromDisk(session);
+          bumpSessionPreviewRevision(session);
           scheduleHostedAutoStartAfterSync(session);
           schedulePreviewVerificationAfterMutation(session, 'a workspace sync');
         });

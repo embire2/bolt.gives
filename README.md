@@ -67,6 +67,8 @@ Hosted workspace delivery is now idempotent across the server-first and browser 
 
 Queued automatic repair also settles immediately when the runtime's strict root-and-entry-module probe verifies the current app. A transient process exit can therefore restart cleanly without leaving a healthy project permanently labelled `Needs repair` or `Working`.
 
+Follow-up file batches now advance a server-owned Preview revision after the updated app passes health verification. The existing iframe reloads once for that completed revision, so users see their improvement without HMR websocket noise, a stale app, or repeated per-file flashing.
+
 Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
 
 ### v3.1.0 highlights
