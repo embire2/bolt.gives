@@ -81,6 +81,8 @@ Plain-English commentary is emitted at least every 10 seconds during active work
 
 The E2E also verifies the provider and model carried by the real `/api/chat` requests. A run cannot pass as a ChatGPT-5.6 SOL test if provider bootstrap silently selects another configured provider.
 
+Web-only GitHub build, release, quality, Pages, and security jobs skip the unused Electron runtime download. CodeQL uses one `javascript-typescript` v4 analysis, reducing CI bandwidth and hosted-runner pressure without weakening JavaScript or TypeScript coverage.
+
 ### v3.1.0 highlights
 
 - Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.
