@@ -753,6 +753,33 @@ describe('runtime server workspace isolation', () => {
     expect(session.preview.revision).toBe(5);
   });
 
+  it('preserves a workspace revision when the preview process starts or restarts later', () => {
+    const session = {
+      id: 'session-restarted-preview-revision',
+      preview: undefined,
+      previewRevision: 0,
+      previewSubscribers: new Set(),
+    };
+
+    expect(bumpSessionPreviewRevision(session as any)).toBeNull();
+    expect(session.previewRevision).toBe(1);
+    expect(
+      updateSessionPreview(
+        session as any,
+        {
+          headers: {
+            'x-bolt-public-origin': 'https://alpha1.bolt.gives',
+          },
+        } as any,
+        4121,
+      ),
+    ).toEqual({
+      port: 4121,
+      baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-restarted-preview-revision/4121',
+      revision: 1,
+    });
+  });
+
   it('builds a compact preview summary without shipping recent logs to the browser event stream', () => {
     expect(
       buildPreviewStateSummary({

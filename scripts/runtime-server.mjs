@@ -3000,6 +3000,7 @@ function getSession(sessionId) {
       processes: new Map(),
       previewSubscribers: new Set(),
       preview: undefined,
+      previewRevision: 0,
       previewStartCommand: null,
       previewStartMutationId: null,
       previewDiagnostics: createPreviewDiagnostics(),
@@ -4722,10 +4723,13 @@ export function updateSessionPreview(session, req, port) {
 
   reservedPreviewPorts.set(resolvedPort, session.id);
 
+  const previewRevision = Math.max(Number(session.previewRevision || 0), Number(session.preview?.revision || 0));
+  session.previewRevision = Number.isFinite(previewRevision) ? previewRevision : 0;
   session.preview = {
     ...(session.preview || {}),
     port: resolvedPort,
     baseUrl: previewBaseUrl,
+    ...(session.previewRevision > 0 ? { revision: session.previewRevision } : {}),
   };
 
   broadcastPreviewState(session);
@@ -4734,18 +4738,19 @@ export function updateSessionPreview(session, req, port) {
 }
 
 export function bumpSessionPreviewRevision(session) {
-  if (!session.preview) {
-    return null;
+  const currentRevision = Math.max(Number(session.previewRevision || 0), Number(session.preview?.revision || 0));
+  session.previewRevision = Number.isFinite(currentRevision) ? currentRevision + 1 : 1;
+
+  if (session.preview) {
+    session.preview = {
+      ...session.preview,
+      revision: session.previewRevision,
+    };
   }
 
-  const currentRevision = Number(session.preview.revision || 0);
-  session.preview = {
-    ...session.preview,
-    revision: Number.isFinite(currentRevision) ? currentRevision + 1 : 1,
-  };
   broadcastPreviewState(session);
 
-  return session.preview;
+  return session.preview || null;
 }
 
 export function startReservedPreviewProbe(session, req, kind, previewPort, previewCoordinator) {
