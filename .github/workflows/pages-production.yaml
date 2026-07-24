@@ -74,10 +74,23 @@ jobs:
 
       - name: Smoke test deployed site
         if: steps.check-secrets.outputs.configured == 'true'
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          echo "Production URL: ${{ steps.deploy.outputs.url }}"
-          curl -fLsS "${{ steps.deploy.outputs.url }}" >/tmp/pages.html
-          grep -q "bolt.gives" /tmp/pages.html
+          echo "Production URL: $DEPLOYMENT_URL"
+          for attempt in $(seq 1 12); do
+            if curl --connect-timeout 10 --max-time 20 -fLsS "$DEPLOYMENT_URL" -o /tmp/pages.html &&
+              grep -q "bolt.gives" /tmp/pages.html; then
+              echo "Production deployment is ready."
+              exit 0
+            fi
+
+            echo "Deployment is not ready (attempt $attempt/12); retrying in 5 seconds."
+            sleep 5
+          done
+
+          echo "Production deployment did not become ready: $DEPLOYMENT_URL" >&2
+          exit 1
 
       - name: Production deployment not configured
         if: steps.check-secrets.outputs.configured == 'false'

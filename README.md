@@ -83,6 +83,8 @@ The E2E also verifies the provider and model carried by the real `/api/chat` req
 
 Web-only GitHub build, release, quality, Pages, and security jobs skip the unused Electron runtime download. CodeQL uses one `javascript-typescript` v4 analysis, reducing CI bandwidth and hosted-runner pressure without weakening JavaScript or TypeScript coverage.
 
+Production Pages releases also wait for Cloudflare's immutable deployment URL to serve the expected application shell before the workflow passes. A short edge-propagation window can no longer turn a successful upload into a false release failure.
+
 ### v3.1.0 highlights
 
 - Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.

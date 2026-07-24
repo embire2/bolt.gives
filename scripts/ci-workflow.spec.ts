@@ -32,4 +32,13 @@ describe('GitHub workflow dependency setup', () => {
     expect(workflow).toContain('github/codeql-action/analyze@v4');
     expect(workflow).not.toMatch(/github\/codeql-action\/(?:init|autobuild|analyze)@v3/);
   });
+
+  it('waits for Cloudflare edge propagation before failing production smoke', () => {
+    const workflow = readRepoFile('.github/workflows/pages-production.yaml');
+
+    expect(workflow).toContain('DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}');
+    expect(workflow).toContain('for attempt in $(seq 1 12); do');
+    expect(workflow).toContain('Deployment is not ready (attempt $attempt/12); retrying in 5 seconds.');
+    expect(workflow).toContain('Production deployment did not become ready: $DEPLOYMENT_URL');
+  });
 });

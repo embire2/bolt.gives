@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- The production Cloudflare Pages workflow now polls a fresh immutable deployment URL until the edge serves the expected application shell, so normal propagation delay cannot fail an otherwise successful release with an immediate transient `404`.
 - Web-only GitHub jobs now skip the unused Electron binary download, and CodeQL runs one current v4 JavaScript/TypeScript analysis instead of duplicate language jobs, preventing transient Electron CDN failures and avoidable hosted-runner pressure from failing a release.
 - FREE Claude upstream outages reported through `/api/llmcall` now remain retryable `503` provider failures instead of being misclassified as a client `401` merely because Magnet's diagnostic mentions an API key; the Claude adapter also preserves authentication when SDK request and init headers are split.
 - GitHub build and release workflows now use Node 22.22 for Wrangler 4, build from a frozen lockfile, validate the locally built production artifact before smoke tests, and no longer fail solely because an optional provider smoke secret is absent.
