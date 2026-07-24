@@ -59,9 +59,11 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ### v3.2.0 reliability work in progress
 
-The current v3.2.0 work closes a false repair loop found by exercising the hosted FREE ChatGPT-5.6 SOL path in a real browser. A healthy, request-scoped preview now finalizes successfully even when the browser closes a late provider stream after the app is ready; that expected closure no longer appears as `Network error`, `BOLT_STREAM_TIMEOUT`, or a new hidden repair attempt.
+The current v3.2.0 work closes a false repair loop found by exercising the hosted FREE ChatGPT-5.6 SOL path in a real browser. A healthy, request-scoped preview now finalizes successfully when the absolute FREE deadline closes a late provider stream after the app is ready; that expected closure no longer appears as `Network error`, `BOLT_STREAM_TIMEOUT`, an error event, or a new hidden repair attempt.
 
 Execution state is derived from ordered command starts and completions rather than the existence of any historical start event. Workspace therefore settles on `Preview ready` when the runtime is healthy instead of remaining stuck on `Working`, and an active repair stays a calm `Working` state until it finishes rather than flashing between states.
+
+Hosted workspace delivery is now idempotent across the server-first and browser action paths. Re-sending the same file snapshot does not invalidate a healthy Preview, and a repeated unchanged start command reuses the verified Vite process instead of killing and relaunching it. Superseded recovery commentary is labelled as historical while the current footer settles on `complete`, `Preview ready`, and `verified`.
 
 Plain-English commentary is emitted at least every 10 seconds during active work. Heartbeats are marked separately from real model/file/runtime progress so they keep users informed without preventing stall detection and recovery. The hosted browser E2E now requires a healthy final runtime, an idle follow-up prompt, generated and follow-up content in the same project, and no visible or console-level stream/repair errors.
 

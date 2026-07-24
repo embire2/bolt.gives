@@ -9,7 +9,12 @@ import type {
   ToolCallDataEvent,
 } from '~/types/context';
 import { workbenchStore, type ArtifactState } from '~/lib/stores/workbench';
-import { deriveActionCount, deriveProgressMessage, hasPreviewVerification } from './execution-status';
+import {
+  deriveActionCount,
+  deriveProgressMessage,
+  hasPreviewVerification,
+  hasSettledVerifiedExecution,
+} from './execution-status';
 
 function isProgress(value: JSONValue): value is ProgressAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -125,19 +130,21 @@ export function ExecutionStickyFooter(props: ExecutionStickyFooterProps) {
     [artifactActionCount, data, stepRunnerEvents],
   );
   const lastCommentary = commentaryEvents.slice(-1)[0];
-  const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);
-  const phase = mapPhase(lastCommentary?.phase);
-  const failedCheckpoint = checkpointEvents
-    .slice()
-    .reverse()
-    .find((event) => event.status === 'error');
-  const recoveryState = failedCheckpoint
-    ? `failed (${failedCheckpoint.checkpointType})`
-    : lastCommentary?.phase === 'recovery'
-      ? lastCommentary.status
-      : 'stable';
-  const resolvedRecoveryState =
-    hasPreviewVerification(stepRunnerEvents) && recoveryState === 'stable' ? 'verified' : recoveryState;
+  const executionSettled = hasSettledVerifiedExecution(stepRunnerEvents, Boolean(isStreaming));
+  const currentStep = executionSettled ? 'Preview ready' : deriveProgressMessage(progressEvents, stepRunnerEvents);
+  const phase = executionSettled ? 'complete' : mapPhase(lastCommentary?.phase);
+  const latestCheckpoint = checkpointEvents.at(-1);
+  const recoveryState =
+    latestCheckpoint?.status === 'error'
+      ? `failed (${latestCheckpoint.checkpointType})`
+      : lastCommentary?.phase === 'recovery'
+        ? lastCommentary.status
+        : 'stable';
+  const resolvedRecoveryState = executionSettled
+    ? 'verified'
+    : hasPreviewVerification(stepRunnerEvents) && recoveryState === 'stable'
+      ? 'verified'
+      : recoveryState;
 
   if (!isStreaming && progressEvents.length === 0 && commentaryEvents.length === 0 && checkpointEvents.length === 0) {
     return null;

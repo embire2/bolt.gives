@@ -5,9 +5,11 @@
 ### Fixed
 
 - Verified hosted previews no longer surface a false `Network error` or enter another hidden repair pass when the browser intentionally closes a late-running FREE provider stream after the generated app is already healthy.
-- FREE stream timeouts that arrive after request-scoped preview verification now finalize the successful run instead of alternating the Workspace between `Working` and `Needs repair`.
+- The browser's absolute FREE deadline and server stream timeouts now finalize a request-scoped verified preview instead of emitting an error event, launching a hidden continuation, or alternating the Workspace between `Working` and `Needs repair`.
 - Workspace and commentary status now pair each command start with its later command completion, so historical `step-start` events cannot leave an idle project permanently marked `Working`.
 - Progress summaries now use the newest progress event instead of preferring an older `in-progress` event over a later completed event.
+- Hosted runtime sync and start delivery is idempotent: an unchanged workspace snapshot or repeated start command now reuses the verified Vite process instead of restarting a healthy Preview and leaving it in `starting`.
+- Completed, verified runs supersede older `recovery: in-progress` commentary and footer badges, so Chat reports `Preview ready` / `verified` instead of contradicting the healthy runtime.
 - Stale preview-port redirects now retain the same cross-origin isolation headers as normal preview responses, preventing the redirected iframe from being blocked by the browser.
 - Vitest excludes generated `test-results` artifacts, keeping transient live-network diagnostics out of the deterministic unit-test gate.
 
@@ -18,7 +20,7 @@
 
 ### Tests
 
-- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
+- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
 
 ## v3.1.0 (2026-07-22)
 

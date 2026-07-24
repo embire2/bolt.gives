@@ -144,4 +144,37 @@ describe('CommentaryFeed', () => {
     expect(screen.getByText(/workspace is ready for inspection/i)).toBeTruthy();
     expect(screen.queryByText(/Running Start application now/i)).toBeNull();
   });
+
+  it('marks older in-progress commentary as superseded after verified completion', () => {
+    const commentaryAt = new Date(Date.now() - 4_000).toISOString();
+    const completedAt = new Date(Date.now() - 2_000).toISOString();
+    const data = [
+      {
+        type: 'agent-commentary',
+        phase: 'recovery',
+        status: 'in-progress',
+        order: 1,
+        message: 'I am still restarting the preview.',
+        timestamp: commentaryAt,
+      },
+    ] as JSONValue[];
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'complete',
+        timestamp: completedAt,
+        description: 'All steps complete',
+      },
+      {
+        type: 'telemetry',
+        timestamp: new Date().toISOString(),
+        description: 'Preview verified',
+      },
+    ]);
+
+    render(<CommentaryFeed data={data} />);
+
+    expect(screen.getByText(/^superseded$/i)).toBeTruthy();
+    expect(screen.getByText(/^Ready$/i)).toBeTruthy();
+  });
 });

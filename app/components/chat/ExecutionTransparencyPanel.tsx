@@ -19,6 +19,7 @@ import {
   deriveProgressMessage,
   deriveWhyThisAction,
   hasPreviewVerification,
+  hasSettledVerifiedExecution,
 } from './execution-status';
 import type { ArtifactState } from '~/lib/stores/workbench';
 
@@ -147,7 +148,8 @@ export function ExecutionTransparencyPanel(props: ExecutionTransparencyPanelProp
     usage: usageEvent,
   });
 
-  const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);
+  const executionSettled = hasSettledVerifiedExecution(stepRunnerEvents, Boolean(isStreaming));
+  const currentStep = executionSettled ? 'Preview ready' : deriveProgressMessage(progressEvents, stepRunnerEvents);
   const whyThisAction = deriveWhyThisAction(commentaryEvents, progressEvents, stepRunnerEvents);
   const previewStatus = hasPreviewVerification(stepRunnerEvents) ? 'verified' : 'pending';
 

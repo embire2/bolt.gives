@@ -2986,6 +2986,8 @@ function getSession(sessionId) {
       processes: new Map(),
       previewSubscribers: new Set(),
       preview: undefined,
+      previewStartCommand: null,
+      previewStartMutationId: null,
       previewDiagnostics: createPreviewDiagnostics(),
       previewRecovery: createPreviewRecoveryState(),
       currentFileMap: {},
@@ -4516,6 +4518,61 @@ function toRelativeWorkspacePath(filePath) {
   return normalized.replace(/^\/+/, '');
 }
 
+function collectComparableWorkspaceFiles(fileMap) {
+  const files = new Map();
+
+  for (const [filePath, dirent] of Object.entries(fileMap || {})) {
+    if (!dirent || dirent.type !== 'file') {
+      continue;
+    }
+
+    const relativePath = toRelativeWorkspacePath(filePath);
+
+    if (!relativePath) {
+      continue;
+    }
+
+    files.set(relativePath, {
+      isBinary: Boolean(dirent.isBinary),
+      content: String(dirent.content || ''),
+    });
+  }
+
+  return files;
+}
+
+export function workspaceSnapshotHasChanges(currentFileMap, incomingFileMap, options = {}) {
+  const { prune = false } = options;
+  const currentFiles = collectComparableWorkspaceFiles(currentFileMap);
+  const incomingFiles = collectComparableWorkspaceFiles(incomingFileMap);
+
+  for (const [filePath, incomingFile] of incomingFiles.entries()) {
+    const currentFile = currentFiles.get(filePath);
+
+    if (
+      !currentFile ||
+      currentFile.isBinary !== incomingFile.isBinary ||
+      currentFile.content !== incomingFile.content
+    ) {
+      return true;
+    }
+  }
+
+  for (const [filePath, dirent] of Object.entries(incomingFileMap || {})) {
+    if (dirent !== null && dirent !== undefined) {
+      continue;
+    }
+
+    const relativePath = toRelativeWorkspacePath(filePath);
+
+    if (relativePath && currentFiles.has(relativePath)) {
+      return true;
+    }
+  }
+
+  return prune && currentFiles.size !== incomingFiles.size;
+}
+
 export async function syncWorkspaceSnapshot(session, fileMap, options = {}) {
   const { prune = true } = options;
   await ensureDir(session.dir);
@@ -4597,6 +4654,25 @@ function createEventWriter(res) {
   return (event) => {
     res.write(`${JSON.stringify(event)}\n`);
   };
+}
+
+export function shouldReuseHealthyPreviewStart(session, effectiveCommand, options = {}) {
+  const previewProcess = session.processes?.get?.('preview')?.process;
+  const previewProcessActive = Boolean(
+    previewProcess && previewProcess.exitCode == null && previewProcess.killed !== true,
+  );
+
+  return Boolean(
+    options.previewOwnershipConfirmed &&
+    session.preview &&
+    previewProcessActive &&
+    session.previewDiagnostics?.status === 'ready' &&
+    session.previewDiagnostics?.healthy === true &&
+    !session.previewDiagnostics?.alert &&
+    session.previewStartCommand === effectiveCommand &&
+    Number.isFinite(Number(session.previewStartMutationId)) &&
+    Number(session.previewStartMutationId) === Number(session.workspaceMutationId),
+  );
 }
 
 function getRequestOrigin(req) {
@@ -5303,6 +5379,8 @@ async function terminateSessionProcesses(session, options = {}) {
   session.processes.clear();
   releaseReservedPreviewPorts(session);
   session.preview = undefined;
+  session.previewStartCommand = null;
+  session.previewStartMutationId = null;
 
   if (Number.isFinite(preservePreviewPort) && preservePreviewPort > 0) {
     reservedPreviewPorts.set(preservePreviewPort, session.id);
@@ -5419,6 +5497,34 @@ async function handleRunCommand(req, res, session, body) {
     return;
   }
 
+  if (
+    kind === 'start' &&
+    shouldReuseHealthyPreviewStart(session, effectiveCommand, {
+      previewOwnershipConfirmed: isPreviewPortOwnedBySession(session, previewPort),
+    })
+  ) {
+    const currentProbe = await probeSessionPreviewHealth(session);
+
+    if (currentProbe.healthy && !currentProbe.alert) {
+      touchPreviewDiagnostics(session, {
+        status: 'ready',
+        healthy: true,
+        alert: null,
+      });
+      writeEvent({
+        type: 'status',
+        message: 'Reusing the existing healthy hosted preview for this unchanged start command',
+      });
+      writeEvent({
+        type: 'ready',
+        preview: session.preview,
+      });
+      writeEvent({ type: 'exit', exitCode: 0 });
+      res.end();
+      return;
+    }
+  }
+
   if (kind === 'start') {
     try {
       const preparation = await prepareHostedWorkspaceForStart(session, { writeEvent, startCommand: effectiveCommand });
@@ -5525,6 +5631,8 @@ async function handleRunCommand(req, res, session, body) {
       session.processes.delete(processKey);
       releaseReservedPreviewPorts(session);
       session.preview = undefined;
+      session.previewStartCommand = null;
+      session.previewStartMutationId = null;
 
       const message = `Hosted preview process exited with code ${exitCode ?? 1}.`;
 
@@ -5605,6 +5713,8 @@ async function handleRunCommand(req, res, session, body) {
         healthy: true,
         alert: null,
       });
+      session.previewStartCommand = effectiveCommand;
+      session.previewStartMutationId = session.workspaceMutationId;
       attachPreviewProcessLivenessMonitor();
       writeEvent({
         type: 'ready',
@@ -5633,6 +5743,8 @@ async function handleRunCommand(req, res, session, body) {
       session.processes.delete(processKey);
       releaseReservedPreviewPorts(session);
       session.preview = undefined;
+      session.previewStartCommand = null;
+      session.previewStartMutationId = null;
       writeEvent({ type: 'exit', exitCode });
       clearTimeout(timeout);
       settled = true;
@@ -7666,9 +7778,23 @@ export function createRuntimeServer() {
         const body = await readJsonBody(req);
         const incomingFiles = body.files || {};
         const prune = body.prune === true;
+        let workspaceChanged = false;
         void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, async () => {
           session.publicOrigin = getRequestOrigin(req);
+          let currentFiles = session.currentFileMap || {};
+
+          if (prune) {
+            currentFiles = await buildWorkspaceFileMapFromDisk(session).catch(() => currentFiles);
+          }
+
+          if (!workspaceSnapshotHasChanges(currentFiles, incomingFiles, { prune })) {
+            session.currentFileMap = cloneFileMap(currentFiles);
+            scheduleHostedAutoStartAfterSync(session);
+            return;
+          }
+
+          workspaceChanged = true;
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
           const supportRepair = await repairHostedWorkspaceSupportFilesAfterSync(session);
@@ -7701,6 +7827,7 @@ export function createRuntimeServer() {
           ok: true,
           sessionId: requestedSessionId,
           preview: session.preview || null,
+          changed: workspaceChanged,
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Workspace sync failed');

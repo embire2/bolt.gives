@@ -20,8 +20,10 @@ Next release target:
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
-- [x] Make verified hosted previews finalize cleanly after late FREE stream closure instead of showing false network/timeout errors or entering another repair pass.
+- [x] Make verified hosted previews finalize cleanly at the absolute FREE deadline or after late stream closure instead of showing false network/timeout errors or entering another repair pass.
 - [x] Derive Workspace and commentary state from ordered command start/completion events so completed projects settle on `Preview ready`.
+- [x] Make hosted workspace syncs and start commands idempotent so duplicate server/browser delivery cannot restart an already healthy Preview.
+- [x] Mark stale in-progress recovery commentary as superseded after a verified completion and settle current execution badges on the healthy runtime state.
 - [x] Emit plain-English active-run commentary every 10 seconds without allowing heartbeat events to mask a provider stall.
 - [x] Preserve preview isolation headers across stale-port redirects.
 - [x] Strengthen hosted browser acceptance so visible repair errors, fatal console diagnostics, a busy final composer, or an unhealthy runtime fail the E2E.

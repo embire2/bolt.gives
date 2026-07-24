@@ -63,6 +63,7 @@ import {
   shouldRecoverHostedFreeCompletion,
 } from '~/lib/runtime/stall-policy';
 import {
+  fetchHostedRuntimePreviewStatus,
   isHostedRuntimeEnabled,
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
 } from '~/lib/runtime/hosted-runtime-client';
@@ -76,7 +77,12 @@ import type {
   SyntheticRunHandoffDataEvent,
   UsageDataEvent,
 } from '~/types/context';
-import { isCommentaryHeartbeatEvent, shouldUnlockPromptAfterPreviewReady } from './execution-status';
+import {
+  hasHealthyRuntimePreviewForCurrentObjective,
+  isCommentaryHeartbeatEvent,
+  shouldFinalizeVerifiedPreviewAtDeadline,
+  shouldUnlockPromptAfterPreviewReady,
+} from './execution-status';
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '~/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay } from '~/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '~/lib/runtime/api-key-storage';
@@ -581,7 +587,8 @@ export const ChatImpl = memo(
     });
     const hostedFreeStreamDeadlineMsRef = useRef(HOSTED_FREE_DEFAULT_STREAM_DEADLINE_MS);
     const hostedFreeDeadlineTimerRef = useRef<number | null>(null);
-    const hostedFreeDeadlineRecoveryRef = useRef<() => void>(() => undefined);
+    const hostedFreeDeadlineRecoveryRef = useRef<() => void | Promise<void>>(() => undefined);
+    const hostedFreeDeadlineCheckInFlightRef = useRef(false);
     const clearHostedFreeDeadlineTimer = useCallback(() => {
       if (hostedFreeDeadlineTimerRef.current !== null && typeof window !== 'undefined') {
         window.clearTimeout(hostedFreeDeadlineTimerRef.current);
@@ -760,14 +767,14 @@ export const ChatImpl = memo(
           });
           hostedFreeDeadlineTimerRef.current = window.setTimeout(() => {
             hostedFreeDeadlineTimerRef.current = null;
-            hostedFreeDeadlineRecoveryRef.current();
+            void hostedFreeDeadlineRecoveryRef.current();
           }, remainingDeadlineMs);
         }
       },
       onError: (e) => {
         clearHostedFreeDeadlineTimer();
         setFakeLoading(false);
-        handleError(e, 'chat');
+        void handleError(e, 'chat');
       },
       onFinish: (message, response) => {
         const normalizedUsage = normalizeUsageEvent(response.usage);
@@ -867,8 +874,10 @@ export const ChatImpl = memo(
     const lastAssistantProgressSignatureRef = useRef('');
     const requestAssistantBaselineSignatureRef = useRef('');
     const requestWorkspaceBaselineRef = useRef(workbenchStore.files.get());
+    const userObjectiveWorkspaceBaselineRef = useRef(requestWorkspaceBaselineRef.current);
     const latestUserRequestRef = useRef('');
     const requestLifecycleStartedAtRef = useRef(Date.now());
+    const userObjectiveStartedAtRef = useRef(requestLifecycleStartedAtRef.current);
     const lastRunCompletedAtRef = useRef<number | null>(null);
     const lastPreviewReadyAtRef = useRef<number | null>(null);
     const pendingStarterContinuationRef = useRef<string | null>(null);
@@ -1224,7 +1233,7 @@ Requirements:
     );
 
     useEffect(() => {
-      hostedFreeDeadlineRecoveryRef.current = () => {
+      hostedFreeDeadlineRecoveryRef.current = async () => {
         const now = Date.now();
         const requestElapsedMs = now - requestLifecycleStartedAtRef.current;
 
@@ -1238,22 +1247,77 @@ Requirements:
           return;
         }
 
-        const meaningfulStallMs =
-          now -
-          getLastMeaningfulProgressTimestamp(
-            workbenchStore.stepRunnerEvents.get(),
-            requestLifecycleStartedAtRef.current,
-            [lastMessageProgressAtRef.current, lastDataEventAtRef.current],
+        if (hostedFreeDeadlineCheckInFlightRef.current) {
+          return;
+        }
+
+        hostedFreeDeadlineCheckInFlightRef.current = true;
+
+        try {
+          const meaningfulStallMs =
+            now -
+            getLastMeaningfulProgressTimestamp(
+              workbenchStore.stepRunnerEvents.get(),
+              requestLifecycleStartedAtRef.current,
+              [lastMessageProgressAtRef.current, lastDataEventAtRef.current],
+            );
+          let shouldFinalizeVerifiedPreview = shouldFinalizeVerifiedPreviewAtDeadline(
+            lastPreviewReadyAtRef.current,
+            userObjectiveStartedAtRef.current,
+            true,
           );
 
-        triggerStallRecovery({
-          meaningfulStallSeconds: Math.round(meaningfulStallMs / 1000),
-          telemetryMessage: `server-hosted | absolute FREE deadline ${Math.round(requestElapsedMs / 1000)}s`,
-          hostedFreeDeadlineExceeded: true,
-          requestElapsedMs,
-        });
+          if (!shouldFinalizeVerifiedPreview && hostedRuntimeEnabled) {
+            const sessionId = workbenchStore.hostedRuntimeSessionId;
+            const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+
+            if (sessionId && workspaceChanged) {
+              try {
+                const runtimeStatus = await fetchHostedRuntimePreviewStatus(sessionId);
+                shouldFinalizeVerifiedPreview = hasHealthyRuntimePreviewForCurrentObjective(
+                  workspaceChanged,
+                  runtimeStatus,
+                );
+
+                if (shouldFinalizeVerifiedPreview) {
+                  lastPreviewReadyAtRef.current = now;
+                }
+              } catch {
+                // A failed health probe must fall through to normal recovery.
+              }
+            }
+          }
+
+          if (shouldFinalizeVerifiedPreview) {
+            stallRecoveryTriggeredRef.current = true;
+            previewPromptUnlockTriggeredRef.current = true;
+            lastRunCompletedAtRef.current = now;
+            clearHostedFreeDeadlineTimer();
+
+            appendStepRunnerEvent({
+              type: 'complete',
+              timestamp: new Date(now).toISOString(),
+              description: 'Verified preview finalized at the hosted FREE deadline',
+              output: 'The generated app is healthy and ready for follow-up prompts.',
+            });
+
+            stop();
+            setFakeLoading(false);
+
+            return;
+          }
+
+          triggerStallRecovery({
+            meaningfulStallSeconds: Math.round(meaningfulStallMs / 1000),
+            telemetryMessage: `server-hosted | absolute FREE deadline ${Math.round(requestElapsedMs / 1000)}s`,
+            hostedFreeDeadlineExceeded: true,
+            requestElapsedMs,
+          });
+        } finally {
+          hostedFreeDeadlineCheckInFlightRef.current = false;
+        }
       };
-    }, [triggerStallRecovery]);
+    }, [clearHostedFreeDeadlineTimer, hostedRuntimeEnabled, stop, triggerStallRecovery]);
 
     useEffect(() => {
       if (!boundedChatData || boundedChatData.length === 0) {
@@ -1609,7 +1673,7 @@ Requirements:
               recentStepEvents,
               meaningfulStallMs,
               previewReadyQuietThresholdMs,
-              requestLifecycleStartedAtRef.current,
+              userObjectiveStartedAtRef.current,
             ) &&
             !previewPromptUnlockTriggeredRef.current
           ) {
@@ -1667,14 +1731,17 @@ Requirements:
             });
           }
 
-          if (
-            (meaningfulStallMs > stallPolicy.recoveryThresholdMs || hostedFreeDeadlineExceeded) &&
-            !stallRecoveryTriggeredRef.current
-          ) {
+          if (hostedFreeDeadlineExceeded) {
+            void hostedFreeDeadlineRecoveryRef.current();
+
+            return;
+          }
+
+          if (meaningfulStallMs > stallPolicy.recoveryThresholdMs && !stallRecoveryTriggeredRef.current) {
             triggerStallRecovery({
               meaningfulStallSeconds,
               telemetryMessage,
-              hostedFreeDeadlineExceeded,
+              hostedFreeDeadlineExceeded: false,
               requestElapsedMs,
             });
           }
@@ -1977,7 +2044,7 @@ Requirements:
     );
 
     const handleError = useCallback(
-      (error: any, context: 'chat' | 'template' | 'llmcall' = 'chat') => {
+      async (error: any, context: 'chat' | 'template' | 'llmcall' = 'chat') => {
         const diagnostics = buildChatRequestDiagnostics(context, error);
 
         clearHostedFreeDeadlineTimer();
@@ -2037,18 +2104,43 @@ Requirements:
         const { timeoutLike: timeoutLikeError, disconnectLike: disconnectLikeError } = classifyRecoverableStreamError(
           errorInfo.message,
         );
-        const shouldIgnoreCompletedRunDisconnect =
+        let shouldIgnoreCompletedRunDisconnect =
           context === 'chat' &&
           shouldIgnoreDisconnectAfterCompletedRun({
             message: errorInfo.message,
-            requestStartedAt: requestLifecycleStartedAtRef.current,
+            requestStartedAt: userObjectiveStartedAtRef.current,
             lastRunCompletedAt: lastRunCompletedAtRef.current,
             lastPreviewReadyAt: lastPreviewReadyAtRef.current,
           });
 
+        if (
+          !shouldIgnoreCompletedRunDisconnect &&
+          context === 'chat' &&
+          hostedRuntimeEnabled &&
+          (timeoutLikeError || disconnectLikeError)
+        ) {
+          const sessionId = workbenchStore.hostedRuntimeSessionId;
+          const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+
+          if (sessionId && workspaceChanged) {
+            try {
+              const runtimeStatus = await fetchHostedRuntimePreviewStatus(sessionId);
+              shouldIgnoreCompletedRunDisconnect = hasHealthyRuntimePreviewForCurrentObjective(
+                workspaceChanged,
+                runtimeStatus,
+              );
+
+              if (shouldIgnoreCompletedRunDisconnect) {
+                lastPreviewReadyAtRef.current = Date.now();
+              }
+            } catch {
+              // Preserve the real stream error when runtime health cannot be verified.
+            }
+          }
+        }
+
         if (shouldIgnoreCompletedRunDisconnect) {
           lastRunCompletedAtRef.current = Date.now();
-          previewPromptUnlockTriggeredRef.current = false;
           logStore.logWarning('Verified preview preserved after late stream closure', {
             component: 'Chat',
             action: 'request',
@@ -2177,7 +2269,7 @@ Requirements:
 
         setData([]);
       },
-      [buildChatRequestDiagnostics, clearHostedFreeDeadlineTimer, dispatchAutoContinuation, stop],
+      [buildChatRequestDiagnostics, clearHostedFreeDeadlineTimer, dispatchAutoContinuation, hostedRuntimeEnabled, stop],
     );
 
     const clearApiErrorAlert = useCallback(() => {
@@ -2270,7 +2362,7 @@ Requirements:
         });
 
         Promise.resolve(reload(options)).catch((reloadError) => {
-          handleError(reloadError, 'chat');
+          void handleError(reloadError, 'chat');
         });
       },
       [handleError, reload, setMessages],
@@ -2840,8 +2932,10 @@ Requirements:
         return;
       }
 
-      requestLifecycleStartedAtRef.current = Date.now();
-      lastMessageProgressAtRef.current = requestLifecycleStartedAtRef.current;
+      const requestStartedAt = Date.now();
+      requestLifecycleStartedAtRef.current = requestStartedAt;
+      userObjectiveStartedAtRef.current = requestStartedAt;
+      lastMessageProgressAtRef.current = requestStartedAt;
 
       const previousAssistantMessage = [...messagesRef.current]
         .reverse()
@@ -2850,6 +2944,7 @@ Requirements:
         ? `${previousAssistantMessage.id}:${previousAssistantMessage.content.length}`
         : '';
       requestWorkspaceBaselineRef.current = workbenchStore.files.get();
+      userObjectiveWorkspaceBaselineRef.current = requestWorkspaceBaselineRef.current;
       lastAssistantProgressSignatureRef.current = '';
       latestUserRequestRef.current = finalMessageContent;
       manualPromptGenerationRef.current += 1;
@@ -3111,7 +3206,7 @@ CONTINUE IMMEDIATELY:
                   title: 'Starter Runtime Bootstrap',
                   commands: bootstrapCommands,
                 }).catch((runtimeBootstrapError) => {
-                  handleError(runtimeBootstrapError, 'chat');
+                  void handleError(runtimeBootstrapError, 'chat');
                 });
               }
 

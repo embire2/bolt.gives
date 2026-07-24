@@ -5,8 +5,11 @@ import {
   deriveActionCount,
   deriveProgressMessage,
   deriveWhyThisAction,
+  hasHealthyRuntimePreviewForCurrentObjective,
   hasPreviewVerification,
+  hasSettledVerifiedExecution,
   isCommentaryHeartbeatEvent,
+  shouldFinalizeVerifiedPreviewAtDeadline,
   shouldUnlockPromptAfterPreviewReady,
 } from './execution-status';
 
@@ -24,6 +27,51 @@ describe('execution-status helpers', () => {
     expect(
       hasPreviewVerification([createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified')]),
     ).toBe(true);
+  });
+
+  it('settles stale recovery UI only after the latest command completes with a verified preview', () => {
+    const startedAt = new Date(Date.now() - 3_000).toISOString();
+    const completedAt = new Date(Date.now() - 2_000).toISOString();
+    const verifiedAt = new Date(Date.now() - 1_000).toISOString();
+    const events: InteractiveStepRunnerEvent[] = [
+      {
+        type: 'step-start',
+        timestamp: startedAt,
+        description: 'Start application',
+      },
+      {
+        type: 'step-end',
+        timestamp: completedAt,
+        description: 'Start application',
+        exitCode: 0,
+      },
+      {
+        type: 'complete',
+        timestamp: completedAt,
+        description: 'All steps complete',
+      },
+      {
+        ...createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified'),
+        timestamp: verifiedAt,
+      },
+    ];
+
+    expect(hasSettledVerifiedExecution(events, false)).toBe(true);
+    expect(hasSettledVerifiedExecution(events, true)).toBe(false);
+    expect(
+      hasSettledVerifiedExecution(
+        [
+          ...events,
+          {
+            type: 'error',
+            timestamp: new Date().toISOString(),
+            description: 'Preview failed after completion',
+            error: 'connection refused',
+          },
+        ],
+        false,
+      ),
+    ).toBe(false);
   });
 
   it('unlocks the prompt after preview verification once the quiet threshold is reached', () => {
@@ -45,6 +93,31 @@ describe('execution-status helpers', () => {
     const followUpStartedAt = Date.parse(previousPreview.timestamp) + 1;
 
     expect(shouldUnlockPromptAfterPreviewReady([previousPreview], 20_000, 20_000, followUpStartedAt)).toBe(false);
+  });
+
+  it('finalizes a FREE deadline only when the current request already verified its preview', () => {
+    expect(shouldFinalizeVerifiedPreviewAtDeadline(2_000, 1_000, true)).toBe(true);
+    expect(shouldFinalizeVerifiedPreviewAtDeadline(900, 1_000, true)).toBe(false);
+    expect(shouldFinalizeVerifiedPreviewAtDeadline(2_000, 1_000, false)).toBe(false);
+  });
+
+  it('accepts runtime health only after the current user objective changed the workspace', () => {
+    const healthyStatus = {
+      status: 'ready',
+      healthy: true,
+      alert: null,
+      recovery: { state: 'idle' },
+    };
+
+    expect(hasHealthyRuntimePreviewForCurrentObjective(true, healthyStatus)).toBe(true);
+    expect(hasHealthyRuntimePreviewForCurrentObjective(false, healthyStatus)).toBe(false);
+    expect(
+      hasHealthyRuntimePreviewForCurrentObjective(true, {
+        ...healthyStatus,
+        status: 'repairing',
+        recovery: { state: 'running' },
+      }),
+    ).toBe(false);
   });
 
   it('upgrades preview pending progress once preview is verified', () => {

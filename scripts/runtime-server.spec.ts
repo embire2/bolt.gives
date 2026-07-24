@@ -56,11 +56,13 @@ import {
   shouldRefreshManagedInstanceForRollout,
   shouldServePreviewHandoffPage,
   shouldRetryPreviewProxyResponse,
+  shouldReuseHealthyPreviewStart,
   startReservedPreviewProbe,
   startHostedPreviewForSession,
   syncWorkspaceSnapshot,
   updateSessionPreview,
   waitForProjectManifest,
+  workspaceSnapshotHasChanges,
   writeJsonAtomically,
   workspaceHasOwnProjectManifest,
 } from './runtime-server.mjs';
@@ -798,6 +800,91 @@ describe('runtime server workspace isolation', () => {
         status: 'active',
       },
     });
+  });
+
+  it('treats repeated hosted workspace snapshots as no-op mutations', () => {
+    const currentFiles = {
+      '/home/project/src/App.tsx': {
+        type: 'file',
+        content: 'export default function App(){return <h1>Ready</h1>}',
+        isBinary: false,
+      },
+      '/home/project/package.json': {
+        type: 'file',
+        content: '{"scripts":{"dev":"vite"}}',
+        isBinary: false,
+      },
+    };
+
+    expect(workspaceSnapshotHasChanges(currentFiles, currentFiles, { prune: true })).toBe(false);
+    expect(
+      workspaceSnapshotHasChanges(
+        currentFiles,
+        {
+          '/home/project/src/App.tsx': {
+            type: 'file',
+            content: 'export default function App(){return <h1>Updated</h1>}',
+            isBinary: false,
+          },
+        },
+        { prune: false },
+      ),
+    ).toBe(true);
+    expect(
+      workspaceSnapshotHasChanges(
+        currentFiles,
+        {
+          '/home/project/src/App.tsx': null,
+        },
+        { prune: false },
+      ),
+    ).toBe(true);
+  });
+
+  it('reuses only the healthy preview for the same command and workspace mutation', () => {
+    const command = 'pnpm run dev --host 127.0.0.1 --port 4100';
+    const session = {
+      preview: {
+        port: 4100,
+        baseUrl: 'https://alpha1.bolt.gives/runtime/preview/session-reuse/4100',
+      },
+      processes: new Map([
+        [
+          'preview',
+          {
+            process: {
+              exitCode: null,
+              killed: false,
+            },
+          },
+        ],
+      ]),
+      previewDiagnostics: {
+        status: 'ready',
+        healthy: true,
+        alert: null,
+      },
+      previewStartCommand: command,
+      previewStartMutationId: 3,
+      workspaceMutationId: 3,
+    };
+
+    expect(shouldReuseHealthyPreviewStart(session, command, { previewOwnershipConfirmed: true })).toBe(true);
+    expect(
+      shouldReuseHealthyPreviewStart(
+        {
+          ...session,
+          workspaceMutationId: 4,
+        },
+        command,
+        { previewOwnershipConfirmed: true },
+      ),
+    ).toBe(false);
+    expect(
+      shouldReuseHealthyPreviewStart(session, 'pnpm run preview --host 127.0.0.1 --port 4100', {
+        previewOwnershipConfirmed: true,
+      }),
+    ).toBe(false);
   });
 
   it('routes published project websocket upgrades to the active preview port', () => {

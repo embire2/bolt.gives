@@ -3,7 +3,7 @@ import { useStore } from '@nanostores/react';
 import { useEffect, useMemo, useRef, type Ref } from 'react';
 import { workbenchStore } from '~/lib/stores/workbench';
 import type { AgentCommentaryAnnotation, CheckpointDataEvent, ProgressAnnotation } from '~/types/context';
-import { deriveProgressMessage, hasPreviewVerification } from './execution-status';
+import { deriveProgressMessage, hasPreviewVerification, isPreviewReadyStepEvent } from './execution-status';
 
 function isAgentCommentaryAnnotation(value: JSONValue): value is AgentCommentaryAnnotation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -52,13 +52,17 @@ function getPhaseLabel(phase: AgentCommentaryAnnotation['phase']): string {
   }
 }
 
-function getStatusClasses(status: AgentCommentaryAnnotation['status']): string {
+function getStatusClasses(status: AgentCommentaryAnnotation['status'] | 'superseded'): string {
   if (status === 'complete' || status === 'recovered') {
     return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
   }
 
   if (status === 'warning') {
     return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+  }
+
+  if (status === 'superseded') {
+    return 'text-bolt-elements-textTertiary bg-bolt-elements-background-depth-2 border-bolt-elements-borderColor';
   }
 
   return 'text-sky-400 bg-sky-500/10 border-sky-500/30';
@@ -204,6 +208,10 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
   const stepRunnerSummary = summarizeStepRunnerState(stepRunnerEvents);
   const latestCommentaryTimestamp = latestCommentary?.timestamp ? Date.parse(latestCommentary.timestamp) : 0;
   const latestStepTimestamp = latestStepEvent?.timestamp ? Date.parse(latestStepEvent.timestamp) : 0;
+  const latestSettledTimestamp = [...stepRunnerEvents]
+    .reverse()
+    .find((event) => event.type === 'complete' || isPreviewReadyStepEvent(event))?.timestamp;
+  const latestSettledAt = latestSettledTimestamp ? Date.parse(latestSettledTimestamp) : Number.NEGATIVE_INFINITY;
   const stepRunnerTakesPriority =
     Boolean(stepRunnerSummary) &&
     (stepRunnerSummary?.status === 'warning' ||
@@ -295,6 +303,14 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
         >
           {commentaryEvents.map((event, index) => {
             const details = parseContractDetail(event.detail);
+            const eventTimestamp = Date.parse(event.timestamp);
+            const displayStatus =
+              event.status === 'in-progress' &&
+              Number.isFinite(eventTimestamp) &&
+              Number.isFinite(latestSettledAt) &&
+              eventTimestamp <= latestSettledAt
+                ? 'superseded'
+                : event.status;
 
             return (
               <div
@@ -305,8 +321,8 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
                     {getPhaseLabel(event.phase)}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[10px] ${getStatusClasses(event.status)}`}>
-                    {event.status}
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] ${getStatusClasses(displayStatus)}`}>
+                    {displayStatus}
                   </span>
                 </div>
                 <div className="whitespace-pre-wrap break-words text-sm text-bolt-elements-textPrimary">

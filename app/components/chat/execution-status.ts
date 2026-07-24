@@ -26,6 +26,44 @@ export function hasPreviewVerification(stepRunnerEvents: InteractiveStepRunnerEv
   return stepRunnerEvents.some(isPreviewReadyStepEvent);
 }
 
+function getLatestStepEventTimestamp(
+  stepRunnerEvents: InteractiveStepRunnerEvent[],
+  predicate: (event: InteractiveStepRunnerEvent) => boolean,
+): number {
+  for (let index = stepRunnerEvents.length - 1; index >= 0; index -= 1) {
+    const event = stepRunnerEvents[index];
+
+    if (!predicate(event)) {
+      continue;
+    }
+
+    const timestamp = Date.parse(event.timestamp);
+
+    if (Number.isFinite(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return Number.NEGATIVE_INFINITY;
+}
+
+export function hasSettledVerifiedExecution(
+  stepRunnerEvents: InteractiveStepRunnerEvent[],
+  isStreaming: boolean,
+): boolean {
+  if (isStreaming || !hasPreviewVerification(stepRunnerEvents)) {
+    return false;
+  }
+
+  const latestCompletionAt = getLatestStepEventTimestamp(stepRunnerEvents, (event) => event.type === 'complete');
+  const latestStartedAt = getLatestStepEventTimestamp(stepRunnerEvents, (event) => event.type === 'step-start');
+  const latestErrorAt = getLatestStepEventTimestamp(stepRunnerEvents, (event) => event.type === 'error');
+
+  return (
+    Number.isFinite(latestCompletionAt) && latestCompletionAt >= latestStartedAt && latestCompletionAt >= latestErrorAt
+  );
+}
+
 export function shouldUnlockPromptAfterPreviewReady(
   stepRunnerEvents: InteractiveStepRunnerEvent[],
   meaningfulStallMs: number,
@@ -43,6 +81,40 @@ export function shouldUnlockPromptAfterPreviewReady(
   });
 
   return hasCurrentRequestPreviewVerification && meaningfulStallMs >= thresholdMs;
+}
+
+export function shouldFinalizeVerifiedPreviewAtDeadline(
+  lastPreviewReadyAt: number | null,
+  requestStartedAt: number,
+  deadlineExceeded: boolean,
+): boolean {
+  return Boolean(
+    deadlineExceeded &&
+    lastPreviewReadyAt &&
+    Number.isFinite(lastPreviewReadyAt) &&
+    lastPreviewReadyAt >= requestStartedAt,
+  );
+}
+
+export function hasHealthyRuntimePreviewForCurrentObjective(
+  workspaceChanged: boolean,
+  status:
+    | {
+        status?: string;
+        healthy?: boolean;
+        alert?: unknown;
+        recovery?: { state?: string } | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  return Boolean(
+    workspaceChanged &&
+    status?.status === 'ready' &&
+    status.healthy === true &&
+    !status.alert &&
+    status.recovery?.state !== 'running',
+  );
 }
 
 export function deriveProgressMessage(
