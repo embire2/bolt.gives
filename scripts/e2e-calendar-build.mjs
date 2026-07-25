@@ -85,6 +85,48 @@ function normalizeText(value) {
     .trim();
 }
 
+async function readPreviewRenderedText(page, timeout = 1500) {
+  const body = page.frameLocator('iframe[title="preview"]').first().locator('body');
+  await body.waitFor({ state: 'attached', timeout });
+
+  return await body.evaluate((root) => {
+    const generatedContent = [];
+    const elements = [root, ...root.querySelectorAll('*')];
+
+    for (const element of elements) {
+      const elementStyle = getComputedStyle(element);
+
+      if (
+        elementStyle.display === 'none' ||
+        elementStyle.visibility === 'hidden' ||
+        Number(elementStyle.opacity) === 0
+      ) {
+        continue;
+      }
+
+      for (const pseudo of ['::before', '::after']) {
+        const style = getComputedStyle(element, pseudo);
+        const content = style.content;
+
+        if (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          Number(style.opacity) !== 0 &&
+          content &&
+          content !== 'none' &&
+          content !== 'normal' &&
+          content !== '""' &&
+          content !== "''"
+        ) {
+          generatedContent.push(content);
+        }
+      }
+    }
+
+    return `${root.innerText || ''}\n${generatedContent.join('\n')}`;
+  });
+}
+
 function extractRuntimeSessionId(previewUrl) {
   if (!previewUrl) {
     return null;
@@ -387,12 +429,7 @@ async function verifyPersistedProjectRestore(page, options) {
     }
 
     if (await preview.isVisible().catch(() => false)) {
-      const previewText = await page
-        .frameLocator('iframe[title="preview"]')
-        .first()
-        .locator('body')
-        .innerText({ timeout: 1500 })
-        .catch(() => '');
+      const previewText = await readPreviewRenderedText(page).catch(() => '');
       restoredPreviewContainsTokens = expectedTokens.every((token) => previewText.includes(token));
     }
 
@@ -603,12 +640,7 @@ async function main() {
 
     if (iframe) {
       try {
-        const pf = page.frameLocator('iframe[title="preview"]').first();
-        const inner =
-          (await pf
-            .locator('body')
-            .innerText({ timeout: 1500 })
-            .catch(() => '')) || '';
+        const inner = (await readPreviewRenderedText(page).catch(() => '')) || '';
         const normalizedPreview = normalizeText(inner);
 
         if (normalizedPreview && normalizedPreview !== lastPreviewText) {
@@ -735,12 +767,7 @@ async function main() {
 
       if (iframe) {
         try {
-          const pf = page.frameLocator('iframe[title="preview"]').first();
-          const inner =
-            (await pf
-              .locator('body')
-              .innerText({ timeout: 1500 })
-              .catch(() => '')) || '';
+          const inner = (await readPreviewRenderedText(page).catch(() => '')) || '';
           const normalizedPreview = normalizeText(inner);
 
           if (normalizedPreview && normalizedPreview !== lastPreviewText) {
