@@ -1634,8 +1634,10 @@ describe('runtime server workspace isolation', () => {
   });
 
   it('retries transient preview asset failures for browser GET requests only', () => {
+    expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 500, attempt: 0 })).toBe(true);
     expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 504, attempt: 0 })).toBe(true);
     expect(shouldRetryPreviewProxyResponse({ method: 'HEAD', statusCode: 502, attempt: 1 })).toBe(true);
+    expect(shouldRetryPreviewProxyResponse({ method: 'POST', statusCode: 500, attempt: 0 })).toBe(false);
     expect(shouldRetryPreviewProxyResponse({ method: 'POST', statusCode: 504, attempt: 0 })).toBe(false);
     expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 404, attempt: 0 })).toBe(false);
     expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 504, attempt: 99 })).toBe(false);

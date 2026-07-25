@@ -2113,7 +2113,7 @@ export function shouldRetryPreviewProxyResponse({ method = 'GET', statusCode = 0
     return false;
   }
 
-  if (![502, 503, 504].includes(Number(statusCode))) {
+  if (![500, 502, 503, 504].includes(Number(statusCode))) {
     return false;
   }
 
