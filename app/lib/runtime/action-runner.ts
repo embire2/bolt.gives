@@ -905,10 +905,6 @@ export class ActionRunner {
         this.#updateAction(actionId, { ...action } as any);
       }
 
-      if (shouldRunZombieCleanup(action.content)) {
-        await this.#runZombieKiller('start');
-      }
-
       await this.#runHostedShellLikeCommand({
         action,
         description: `Start application: ${action.content}`,

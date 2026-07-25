@@ -65,6 +65,8 @@ Execution state is derived from ordered command starts and completions rather th
 
 Hosted workspace delivery is now idempotent across the server-first and browser action paths. Re-sending the same file snapshot does not invalidate a healthy Preview, and a repeated unchanged start command reuses the verified Vite process instead of killing and relaunching it. Superseded recovery commentary is labelled as historical while the current footer settles on `complete`, `Preview ready`, and `verified`.
 
+Hosted start actions defer process ownership to the runtime instead of issuing a browser-triggered `pkill` first. This lets the server's health and command-signature checks reuse an unchanged Vite process, eliminating the brief repair flash and revision churn previously caused by redundant follow-up handoffs.
+
 Streamed browser file actions are delivered in debounced non-pruning batches between command boundaries, then reconciled with one authoritative full snapshot immediately before install/start. A partially rendered action stream can no longer prune previously generated files or start Vite without `index.html`, reducing runtime requests and eliminating a timing-dependent starter failure.
 
 Queued automatic repair also settles immediately when the runtime's strict root-and-entry-module probe verifies the current app. A transient process exit can therefore restart cleanly without leaving a healthy project permanently labelled `Needs repair` or `Working`.

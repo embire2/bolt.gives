@@ -1208,6 +1208,38 @@ describe('ActionRunner start actions', () => {
     );
   });
 
+  it('lets the hosted runtime reuse a healthy start without pre-killing its preview process', async () => {
+    hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
+
+    const { runner } = createRunnerHarness({
+      '/home/project/package.json': {
+        type: 'file',
+        content: '{"name":"runtime-test","scripts":{"dev":"vite"}}',
+        isBinary: false,
+      } as any,
+    });
+    const startAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'hosted-start-without-prekill',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    runner.addAction(startAction);
+    await runner.runAction(startAction);
+
+    expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledTimes(1);
+    expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'pnpm run dev --host 0.0.0.0 --port 5173',
+        kind: 'start',
+      }),
+    );
+  });
+
   it('only performs the initial hosted snapshot sync once when no local files changed', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
