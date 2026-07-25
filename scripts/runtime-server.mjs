@@ -4465,6 +4465,20 @@ export async function consumeRuntimeCommandStreamForReady(response) {
   };
 }
 
+export function settleSuccessfulHostedAutostart(session, mutationId) {
+  if (session.workspaceMutationId !== mutationId) {
+    return false;
+  }
+
+  touchPreviewDiagnostics(session, {
+    status: 'ready',
+    healthy: true,
+    alert: null,
+  });
+
+  return true;
+}
+
 function scheduleHostedAutoStartAfterSync(session) {
   if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
     return;
@@ -4488,11 +4502,10 @@ function scheduleHostedAutoStartAfterSync(session) {
           return;
         }
 
-        touchPreviewDiagnostics(session, {
-          status: 'starting',
-          healthy: false,
-          alert: null,
-        });
+        if (!settleSuccessfulHostedAutostart(session, mutationId)) {
+          return;
+        }
+
         appendPreviewDiagnosticEntries(
           session,
           'autostart',

@@ -65,6 +65,7 @@ import {
   shouldRetryPreviewProxyResponse,
   shouldReuseHealthyPreviewStart,
   settleHealthyQueuedPreviewRepair,
+  settleSuccessfulHostedAutostart,
   startReservedPreviewProbe,
   startHostedPreviewForSession,
   syncWorkspaceSnapshot,
@@ -186,6 +187,37 @@ describe('runtime server workspace isolation', () => {
       ready: true,
       exitCode: 0,
       stderr: '',
+    });
+  });
+
+  it('settles successful hosted autostart as ready without overwriting newer mutations', () => {
+    const session = {
+      workspaceMutationId: 4,
+      previewSubscribers: new Set(),
+      previewDiagnostics: {
+        status: 'starting',
+        healthy: false,
+        updatedAt: null,
+        recentLogs: [],
+        alert: null,
+      },
+    };
+
+    expect(settleSuccessfulHostedAutostart(session, 4)).toBe(true);
+    expect(session.previewDiagnostics).toMatchObject({
+      status: 'ready',
+      healthy: true,
+      alert: null,
+    });
+
+    session.workspaceMutationId = 5;
+    session.previewDiagnostics.status = 'starting';
+    session.previewDiagnostics.healthy = false;
+
+    expect(settleSuccessfulHostedAutostart(session, 4)).toBe(false);
+    expect(session.previewDiagnostics).toMatchObject({
+      status: 'starting',
+      healthy: false,
     });
   });
 
