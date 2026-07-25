@@ -1606,6 +1606,33 @@ describe('runtime server workspace isolation', () => {
       shouldRetryPreviewOwnershipMismatch({
         method: 'GET',
         requestedPort: 6102,
+        sessionPreviewPort: undefined,
+        sessionReservationMatches: true,
+        attempt: 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: undefined,
+        sessionReservationMatches: false,
+        attempt: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: 6103,
+        sessionReservationMatches: true,
+        attempt: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
         sessionPreviewPort: 6103,
         attempt: 0,
       }),

@@ -2124,17 +2124,19 @@ export function shouldRetryPreviewOwnershipMismatch({
   method = 'GET',
   requestedPort = 0,
   sessionPreviewPort = 0,
+  sessionReservationMatches = false,
   attempt = 0,
 } = {}) {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const requested = Number(requestedPort);
   const assigned = Number(sessionPreviewPort);
+  const isAssignedPort = Number.isInteger(assigned) && assigned > 0;
 
   if (
     !['GET', 'HEAD'].includes(normalizedMethod) ||
     !Number.isInteger(requested) ||
     requested <= 0 ||
-    requested !== assigned
+    (isAssignedPort ? requested !== assigned : sessionReservationMatches !== true)
   ) {
     return false;
   }
@@ -6281,6 +6283,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
         method,
         requestedPort: port,
         sessionPreviewPort: session.preview?.port,
+        sessionReservationMatches: isPreviewPortReserved(port, session.id),
         attempt,
       })
     ) {
