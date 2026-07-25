@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Saved projects now reopen with their complete visible conversation, source snapshot, and original hosted runtime session. Snapshot reads use the chat record's internal ID, first saves allocate that ID before writing files, writes finish before navigation, and delayed samplers cannot leak messages into a different project.
+- Saved projects now reopen with their complete visible conversation, source snapshot, and original hosted runtime session. History hydration uses the authoritative `/chat/:id` route parameter even when shared loader context is empty; snapshot reads use the chat record's internal ID, first saves allocate that ID before writing files, writes finish before navigation, and delayed samplers cannot leak messages into a different project.
 - Restoring saved MCP settings now sends the required CSRF credential and coalesces concurrent initializers, preventing duplicate `403` requests and console errors when a saved project is reopened.
 - Project history entries no longer disappear when an agent omits an artifact title or URL slug; the sidebar keeps the saved record under an `Untitled project` fallback route.
 - Hosted chat-created projects now connect their dedicated runtime-node PostgreSQL database to shell, build, and preview processes through an isolated server-side SSH tunnel. Existing database credentials are read from the private runtime-node workspace, verified against the registry hash, and never placed in browser state or generated source files.

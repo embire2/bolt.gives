@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
+import { useLoaderData, useNavigate, useParams, useSearchParams } from '@remix-run/react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { atom } from 'nanostores';
 import type { JSONValue, Message } from 'ai';
@@ -21,6 +21,7 @@ import type { Snapshot } from './types';
 import { detectProjectCommands } from '~/utils/projectCommands';
 import {
   hasRestorableSnapshotFiles,
+  resolvePersistedChatRouteId,
   resolvePersistedChatMessages,
   shouldNavigateAfterPersistedMessage,
   shouldPersistSnapshot,
@@ -51,7 +52,9 @@ async function getWorkbenchStore() {
 
 export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
   const navigate = useNavigate();
-  const { id: mixedId } = useLoaderData<{ id?: string }>();
+  const { id: routeParamId } = useParams<{ id?: string }>();
+  const { id: loaderId } = useLoaderData<{ id?: string }>();
+  const mixedId = resolvePersistedChatRouteId(routeParamId, loaderId);
   const [searchParams] = useSearchParams();
   const loadPersistedChat = options.loadPersistedChat !== false;
   const rewindId = searchParams.get('rewindTo');

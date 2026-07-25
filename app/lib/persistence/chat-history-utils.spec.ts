@@ -3,12 +3,19 @@ import type { Message } from 'ai';
 import type { Snapshot } from './types';
 import {
   hasRestorableSnapshotFiles,
+  resolvePersistedChatRouteId,
   resolvePersistedChatMessages,
   shouldNavigateAfterPersistedMessage,
   shouldPersistSnapshot,
 } from './chat-history-utils';
 
 describe('chat-history-utils', () => {
+  it('uses the URL route parameter when shared route loader context has no chat ID', () => {
+    expect(resolvePersistedChatRouteId('saved-project', undefined)).toBe('saved-project');
+    expect(resolvePersistedChatRouteId('saved-project', 'stale-loader-id')).toBe('saved-project');
+    expect(resolvePersistedChatRouteId(undefined, 'loader-fallback')).toBe('loader-fallback');
+  });
+
   it('does not treat empty snapshots as restorable workspaces', () => {
     const snapshot: Snapshot = {
       chatIndex: 'msg-1',

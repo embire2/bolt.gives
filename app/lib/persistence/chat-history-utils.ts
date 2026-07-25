@@ -2,6 +2,10 @@ import type { Message } from 'ai';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 
+export function resolvePersistedChatRouteId(routeParamId?: string, loaderId?: string): string | undefined {
+  return routeParamId?.trim() || loaderId?.trim() || undefined;
+}
+
 export function hasRestorableSnapshotFiles(snapshot?: Snapshot | null): boolean {
   if (!snapshot?.files) {
     return false;

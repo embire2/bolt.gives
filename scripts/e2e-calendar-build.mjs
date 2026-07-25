@@ -408,11 +408,20 @@ async function verifyPersistedProjectRestore(page, options) {
   await historyLink.waitFor({ state: 'visible', timeout: 30000 });
   await Promise.all([page.waitForURL((url) => url.pathname === projectPath, { timeout: 90000 }), historyLink.click()]);
   await ensureChatComposerVisible(page);
-  await page.waitForFunction(
-    (tokens) => tokens.every((token) => document.body.innerText.includes(token)),
-    expectedTokens,
-    { timeout: 90000 },
-  );
+  try {
+    await page.waitForFunction(
+      (tokens) => tokens.every((token) => document.body.innerText.includes(token)),
+      expectedTokens,
+      { timeout: 90000 },
+    );
+  } catch {
+    return {
+      ok: false,
+      persisted,
+      reason: 'The saved route opened, but its complete visible conversation did not hydrate.',
+      restoredBodyExcerpt: (await page.locator('body').innerText().catch(() => '')).slice(0, 2000),
+    };
+  }
   await keepPreviewSurfaceVisible(page);
 
   const deadline = Date.now() + 180000;
