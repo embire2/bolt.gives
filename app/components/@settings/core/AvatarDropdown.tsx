@@ -4,7 +4,7 @@ import { useStore } from '@nanostores/react';
 import { classNames } from '~/utils/classNames';
 import { profileStore } from '~/lib/stores/profile';
 import type { TabType, Profile } from './types';
-import { openBugReportLauncher } from '~/components/header/BugReportLauncher.client';
+import { openBugReportLauncher } from '~/components/header/bug-report';
 
 interface AvatarDropdownProps {
   onSelectTab: (tab: TabType) => void;

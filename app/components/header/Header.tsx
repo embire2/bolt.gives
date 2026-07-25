@@ -6,7 +6,6 @@ import { usePublicUrlConfig } from '~/lib/public-url-context';
 import { classNames } from '~/utils/classNames';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '~/lib/version';
-import { Shoutbox } from './Shoutbox.client';
 import { BugReportLauncher } from './BugReportLauncher.client';
 
 const HeaderActionButtons = lazy(() =>
@@ -63,7 +62,6 @@ export function Header() {
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <ClientOnly>{() => <BugReportLauncher />}</ClientOnly>
-        <ClientOnly>{() => <Shoutbox />}</ClientOnly>
         <a
           href="/tenant"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"

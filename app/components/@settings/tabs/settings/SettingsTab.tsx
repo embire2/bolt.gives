@@ -215,45 +215,6 @@ export default function SettingsTab() {
             />
           </div>
         </div>
-
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="i-ph:chat-teardrop-text-fill w-4 h-4 text-bolt-elements-textSecondary" />
-            <label className="block text-sm text-bolt-elements-textSecondary">Shout Out Box</label>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-bolt-elements-textSecondary">
-              {settings.shoutboxEnabled
-                ? 'Show cross-device shout-out messages in the header'
-                : 'Hide the shout-out header icon and mute message polling'}
-            </span>
-            <Switch
-              checked={settings.shoutboxEnabled}
-              onCheckedChange={(checked) => {
-                setSettings((prev) => ({ ...prev, shoutboxEnabled: checked }));
-
-                const existingProfile = JSON.parse(localStorage.getItem('bolt_user_profile') || '{}');
-                const existingSettings = JSON.parse(localStorage.getItem('settings') || '{}');
-                localStorage.setItem(
-                  'bolt_user_profile',
-                  JSON.stringify({
-                    ...existingProfile,
-                    shoutboxEnabled: checked,
-                  }),
-                );
-                localStorage.setItem(
-                  'settings',
-                  JSON.stringify({
-                    ...existingSettings,
-                    shoutboxEnabled: checked,
-                  }),
-                );
-                window.dispatchEvent(new CustomEvent('bolt-settings-updated'));
-                toast.success(`Shout Out Box ${checked ? 'enabled' : 'disabled'}`);
-              }}
-            />
-          </div>
-        </div>
       </motion.div>
 
       {/* Timezone */}
