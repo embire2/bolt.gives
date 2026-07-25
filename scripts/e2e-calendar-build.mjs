@@ -252,7 +252,8 @@ function isBenignNetworkFailure(entry) {
     /REQFAIL POST .*\/api\/chat :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/preview-events :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/preview\/[^/]+\/\d+\/.* :: net::ERR_ABORTED/.test(entry) ||
-    /REQFAIL POST .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry)
+    /REQFAIL POST .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL POST .*\/runtime\/sessions\/[^/]+\/sync :: net::ERR_ABORTED/.test(entry)
   );
 }
 

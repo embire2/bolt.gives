@@ -584,6 +584,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return;
       }
 
+      if (!isStreaming) {
+        return;
+      }
+
       if (workspaceAutoSurfaceRef.current) {
         return;
       }
@@ -594,7 +598,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       );
       setActiveSurface('workspace');
       workbenchStore.showWorkbench.set(true);
-    }, [stepRunnerEvents]);
+    }, [isStreaming, stepRunnerEvents]);
 
     useEffect(() => {
       const wasStreaming = previousStreamingRef.current;

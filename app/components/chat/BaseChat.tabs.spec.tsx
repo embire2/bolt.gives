@@ -198,7 +198,7 @@ describe('BaseChat surface tabs', () => {
       })),
     );
 
-    render(<BaseChat chatStarted />);
+    render(<BaseChat chatStarted isStreaming />);
 
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
@@ -270,6 +270,42 @@ describe('BaseChat surface tabs', () => {
     );
     expect(screen.getByTestId('persistent-chat-composer')).toBeTruthy();
     expect(screen.getByTestId('chat-input-region').closest('#chat-surface-panel')).toBeNull();
+  });
+
+  it('keeps restored chat visible when historical execution events hydrate', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: new Date().toISOString(),
+        description: 'Historical command: pnpm install',
+        stepIndex: 1,
+      },
+      {
+        type: 'step-end',
+        timestamp: new Date().toISOString(),
+        description: 'Historical command completed',
+        stepIndex: 1,
+      },
+    ]);
+
+    render(<BaseChat chatStarted isStreaming={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    });
+
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
   });
 
   it('boots into chat even if workspace was the last persisted active surface', async () => {

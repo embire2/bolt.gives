@@ -69,7 +69,7 @@ Queued automatic repair also settles immediately when the runtime's strict root-
 
 Follow-up file batches now advance a server-owned Preview revision that survives any required Vite process restart and reaches the browser after the updated app passes health verification. The existing iframe reloads once for that completed revision, so users see their improvement without HMR websocket noise, a stale app, or repeated per-file flashing.
 
-The browser no longer creates speculative revisions immediately after a file sync. Initial loads, follow-up refreshes, and repair handoffs wait for the server's health-verified revision, and every handoff response carries the same cross-origin isolation headers as the generated app. This removes transient blocked-response failures while preserving the stable Preview frame.
+The browser no longer creates speculative revisions immediately after a file sync. Initial loads, follow-up refreshes, and repair handoffs wait for the server's health-verified revision, and every handoff response carries the same cross-origin isolation headers as the generated app. Same-session Vite assets receive a bounded 15.2-second ownership-handoff window, with one revision-scoped blank-frame reload as a final browser fallback. This removes transient blocked-response failures while preserving the stable Preview frame.
 
 Recoverable FREE stream disconnects are shown as automatic continuation activity rather than fatal request failures. If the continuation succeeds, Chat clears the recovery state and leaves the user with the healthy app instead of stale `Network error` text.
 
@@ -87,7 +87,7 @@ Production Pages releases also wait for Cloudflare's immutable deployment URL to
 
 Wrangler runtime-home coverage supplies its own XDG directories rather than inheriting machine-specific runner defaults, so the same isolation contract is tested locally and in GitHub Actions.
 
-Saved projects now preserve one coherent identity across chat history, source snapshots, hosted runtime files, Preview, and the project database. Selecting a project in sidebar history restores the complete visible conversation and source snapshot, then reconnects the original hosted runtime session so follow-up prompts continue against the same app instead of a blank chat or a new workspace.
+Saved projects now preserve one coherent identity across chat history, source snapshots, hosted runtime files, Preview, and the project database. Selecting a project in sidebar history restores the complete visible conversation and source snapshot, then reconnects the original hosted runtime session so follow-up prompts continue against the same app instead of a blank chat or a new workspace. Historical command events remain available in Workspace without automatically hiding the restored Chat surface.
 
 Every hosted chat-created project also receives its own PostgreSQL role and database on the configured runtime node. The runtime server opens an isolated SSH tunnel and injects `DATABASE_URL` plus standard `PG*` variables only into that project's server-side shell/build/preview processes. Database passwords remain in private runtime service memory and runtime-node `.env` files; they are not written into generated browser source, IndexedDB, API responses, screenshots, or managed Pages payloads.
 

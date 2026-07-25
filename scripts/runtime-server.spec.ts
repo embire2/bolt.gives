@@ -1599,7 +1599,7 @@ describe('runtime server workspace isolation', () => {
         method: 'HEAD',
         requestedPort: 6102,
         sessionPreviewPort: 6102,
-        attempt: 4,
+        attempt: 6,
       }),
     ).toBe(true);
     expect(
@@ -1623,7 +1623,7 @@ describe('runtime server workspace isolation', () => {
         method: 'GET',
         requestedPort: 6102,
         sessionPreviewPort: 6102,
-        attempt: 5,
+        attempt: 7,
       }),
     ).toBe(false);
   });
