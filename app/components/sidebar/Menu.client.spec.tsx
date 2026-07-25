@@ -3,6 +3,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getAll } from '~/lib/persistence';
 
 vi.mock('framer-motion', () => ({
   cubicBezier: () => [0.4, 0, 0.2, 1],
@@ -42,7 +43,7 @@ vi.mock('~/components/ui/Button', () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));
 vi.mock('./HistoryItem', () => ({
-  HistoryItem: ({ item }: any) => <div>{item.description}</div>,
+  HistoryItem: ({ item }: any) => <a href={`/chat/${item.urlId}`}>{item.description}</a>,
 }));
 vi.mock('./date-binning', () => ({
   binDates: (items: any[]) => [{ category: 'Today', items }],
@@ -62,12 +63,10 @@ vi.mock('~/utils/classNames', () => ({
 vi.mock('~/lib/persistence', () => ({
   db: {},
   deleteById: vi.fn(),
+  duplicateChat: vi.fn(),
   getAll: vi.fn(async () => []),
+  getMessages: vi.fn(),
   chatId: { get: () => null },
-  useChatHistory: () => ({
-    duplicateCurrentChat: vi.fn(),
-    exportChat: vi.fn(),
-  }),
 }));
 
 let Menu: (typeof import('./Menu.client'))['Menu'];
@@ -101,5 +100,21 @@ describe('Menu sidebar behavior', () => {
     fireEvent.mouseMove(window, { pageX: 8, clientX: 8 });
 
     expect(screen.getByTestId('sidebar-shell').getAttribute('data-animate')).toBe('closed');
+  });
+
+  it('keeps saved projects visible when an agent did not provide a title', async () => {
+    vi.mocked(getAll).mockResolvedValueOnce([
+      {
+        id: '1',
+        messages: [],
+        timestamp: '2026-07-25T10:00:00.000Z',
+      },
+    ]);
+
+    render(<Menu />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
+
+    const projectLink = await screen.findByRole('link', { name: 'Untitled project' });
+    expect(projectLink.getAttribute('href')).toBe('/chat/1');
   });
 });

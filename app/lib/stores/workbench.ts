@@ -628,6 +628,27 @@ export class WorkbenchStore {
     return this.#hostedRuntimeSessionId;
   }
 
+  setHostedRuntimeSessionId(sessionId: string) {
+    const normalizedSessionId = String(sessionId || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 96);
+
+    if (!normalizedSessionId || normalizedSessionId !== sessionId.trim()) {
+      return false;
+    }
+
+    this.#hostedRuntimeSessionId = normalizedSessionId;
+
+    if (import.meta.hot) {
+      const hot = import.meta.hot as any;
+      hot.data ??= {};
+      hot.data.hostedRuntimeSessionId = this.#hostedRuntimeSessionId;
+    }
+
+    return true;
+  }
+
   get files() {
     return this.#filesStore.files;
   }

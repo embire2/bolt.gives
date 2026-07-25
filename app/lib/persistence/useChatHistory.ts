@@ -1,9 +1,9 @@
 import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { atom } from 'nanostores';
 import type { JSONValue, Message } from 'ai';
 import { toast } from 'react-toastify';
-import { logStore } from '~/lib/stores/logs'; // Import logStore
+import { logStore } from '~/lib/stores/logs';
 import {
   getMessages,
   getNextId,
@@ -16,13 +16,12 @@ import {
   setSnapshot,
   type IChatMetadata,
 } from './db';
-import { generateId } from '~/utils/fileUtils';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { detectProjectCommands } from '~/utils/projectCommands';
-import type { ContextAnnotation } from '~/types/context';
 import {
   hasRestorableSnapshotFiles,
+  resolvePersistedChatMessages,
   shouldNavigateAfterPersistedMessage,
   shouldPersistSnapshot,
 } from './chat-history-utils';
@@ -50,150 +49,22 @@ async function getWorkbenchStore() {
   return (await import('~/lib/stores/workbench')).workbenchStore;
 }
 
-export function useChatHistory() {
+export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
-
-  const [archivedMessages, setArchivedMessages] = useState<Message[]>([]);
+  const loadPersistedChat = options.loadPersistedChat !== false;
+  const rewindId = searchParams.get('rewindTo');
+  const loadKey = `${mixedId || 'new'}:${rewindId || 'latest'}`;
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
-  const [ready, setReady] = useState<boolean>(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [urlId, setUrlId] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!db) {
-      setReady(true);
-
-      if (persistenceEnabled) {
-        const error = new Error('Chat persistence is unavailable');
-        logStore.logError('Chat persistence initialization failed', error);
-        toast.error('Chat persistence is unavailable');
-      }
-
-      return;
-    }
-
-    if (mixedId) {
-      Promise.all([
-        getMessages(db, mixedId),
-        getSnapshot(db, mixedId), // Fetch snapshot from DB
-      ])
-        .then(async ([storedMessages, snapshot]) => {
-          if (storedMessages && storedMessages.messages.length > 0) {
-            /*
-             * const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`); // Remove localStorage usage
-             * const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} }; // Use snapshot from DB
-             */
-            const validSnapshot = snapshot || { chatIndex: '', files: {} }; // Ensure snapshot is not undefined
-            const summary = validSnapshot.summary;
-
-            const rewindId = searchParams.get('rewindTo');
-            let startingIdx = -1;
-            const endingIdx = rewindId
-              ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
-              : storedMessages.messages.length;
-            const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot.chatIndex);
-
-            if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
-              startingIdx = snapshotIndex;
-            }
-
-            if (snapshotIndex > 0 && storedMessages.messages[snapshotIndex].id == rewindId) {
-              startingIdx = -1;
-            }
-
-            let filteredMessages = storedMessages.messages.slice(startingIdx + 1, endingIdx);
-            let archivedMessages: Message[] = [];
-
-            if (startingIdx >= 0) {
-              archivedMessages = storedMessages.messages.slice(0, startingIdx + 1);
-            }
-
-            setArchivedMessages(archivedMessages);
-
-            if (startingIdx > 0 && hasRestorableSnapshotFiles(validSnapshot)) {
-              const files = Object.entries(validSnapshot?.files || {})
-                .map(([key, value]) => {
-                  if (value?.type !== 'file') {
-                    return null;
-                  }
-
-                  return {
-                    content: value.content,
-                    path: key,
-                  };
-                })
-                .filter((x): x is { content: string; path: string } => !!x); // Type assertion
-              const projectCommands = await detectProjectCommands(files);
-
-              const restoreMessageId = generateId();
-
-              filteredMessages = [
-                {
-                  id: generateId(),
-                  role: 'user',
-                  content: `Restore project from snapshot`, // Removed newline
-                  annotations: ['no-store', 'hidden'],
-                },
-                {
-                  id: restoreMessageId,
-                  role: 'assistant',
-
-                  content: `Bolt restored your chat from a snapshot. The workspace has been rehydrated and runtime setup will continue in the technical feed.${projectCommands.followupMessage ? `\n\n${projectCommands.followupMessage}` : ''}`,
-                  annotations: [
-                    'no-store',
-                    ...(summary
-                      ? [
-                          {
-                            chatId: restoreMessageId,
-                            type: 'chatSummary',
-                            summary,
-                          } satisfies ContextAnnotation,
-                        ]
-                      : []),
-                  ],
-                },
-
-                // Remove the separate user and assistant messages for commands
-                /*
-                 *...(commands !== null // This block is no longer needed
-                 *  ? [ ... ]
-                 *  : []),
-                 */
-                ...filteredMessages,
-              ];
-              await restoreSnapshot(mixedId, validSnapshot, projectCommands);
-            }
-
-            setInitialMessages(filteredMessages);
-
-            setUrlId(storedMessages.urlId);
-            description.set(storedMessages.description);
-            chatId.set(storedMessages.id);
-            chatMetadata.set(storedMessages.metadata);
-          } else {
-            navigate('/', { replace: true });
-          }
-
-          setReady(true);
-        })
-        .catch((error) => {
-          console.error(error);
-
-          logStore.logError('Failed to load chat messages or snapshot', error); // Updated error message
-          toast.error('Failed to load chat: ' + error.message); // More specific error
-        });
-    } else {
-      // Handle case where there is no mixedId (e.g., new chat)
-      setReady(true);
-    }
-  }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
+  const urlIdRef = useRef<string | undefined>();
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const takeSnapshot = useCallback(
-    async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
-      const id = chatId.get();
-
-      if (!id || !db) {
+    async (chatIdx: string, files: FileMap, targetChatId: string, runtimeSessionId: string, chatSummary?: string) => {
+      if (!db) {
         return;
       }
 
@@ -205,11 +76,11 @@ export function useChatHistory() {
         chatIndex: chatIdx,
         files,
         summary: chatSummary,
+        runtimeSessionId,
       };
 
-      // localStorage.setItem(`snapshot:${id}`, JSON.stringify(snapshot)); // Remove localStorage usage
       try {
-        await setSnapshot(db, id, snapshot);
+        await setSnapshot(db, targetChatId, snapshot);
       } catch (error) {
         console.error('Failed to save snapshot:', error);
         toast.error('Failed to save chat snapshot.');
@@ -219,16 +90,32 @@ export function useChatHistory() {
   );
 
   const restoreSnapshot = useCallback(
-    async (_id: string, snapshot?: Snapshot, projectCommands?: Awaited<ReturnType<typeof detectProjectCommands>>) => {
+    async (
+      snapshot?: Snapshot,
+      projectCommands?: Awaited<ReturnType<typeof detectProjectCommands>>,
+      shouldContinue: () => boolean = () => true,
+    ) => {
       const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
-      if (!hasRestorableSnapshotFiles(validSnapshot)) {
+      if (!hasRestorableSnapshotFiles(validSnapshot) || !shouldContinue()) {
         return;
       }
 
       const workbenchStore = await getWorkbenchStore();
 
+      if (!shouldContinue()) {
+        return;
+      }
+
+      if (validSnapshot.runtimeSessionId) {
+        workbenchStore.setHostedRuntimeSessionId(validSnapshot.runtimeSessionId);
+      }
+
       await workbenchStore.restoreSnapshot(validSnapshot.files);
+
+      if (!shouldContinue()) {
+        return;
+      }
 
       const runtimeArtifactId = 'restored-project-setup';
       const runtimeMessageId = `snapshot-runtime-${validSnapshot.chatIndex || Date.now()}`;
@@ -280,8 +167,197 @@ export function useChatHistory() {
     [],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!loadPersistedChat) {
+      setLoadedKey(loadKey);
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoadedKey(null);
+    setInitialMessages([]);
+    setUrlId(undefined);
+    urlIdRef.current = undefined;
+    description.set(undefined);
+    chatId.set(undefined);
+    chatMetadata.set(undefined);
+
+    if (!db) {
+      setLoadedKey(loadKey);
+
+      if (persistenceEnabled) {
+        const error = new Error('Chat persistence is unavailable');
+        logStore.logError('Chat persistence initialization failed', error);
+        toast.error('Chat persistence is unavailable');
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!mixedId) {
+      setLoadedKey(loadKey);
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadStoredChat = async () => {
+      try {
+        const storedMessages = await getMessages(db, mixedId);
+
+        if (!storedMessages || storedMessages.messages.length === 0) {
+          if (!cancelled) {
+            navigate('/', { replace: true });
+          }
+
+          return;
+        }
+
+        // Snapshots are keyed by the internal chat ID, not by the user-facing URL slug.
+        const snapshot = await getSnapshot(db, storedMessages.id);
+        const restored = resolvePersistedChatMessages(storedMessages.messages, snapshot, rewindId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (restored.shouldRestoreSnapshot && snapshot) {
+          const files = Object.entries(snapshot.files || {})
+            .map(([filePath, value]) => {
+              if (value?.type !== 'file') {
+                return null;
+              }
+
+              return {
+                content: value.content,
+                path: filePath,
+              };
+            })
+            .filter((file): file is { content: string; path: string } => Boolean(file));
+          const projectCommands = await detectProjectCommands(files);
+
+          if (cancelled) {
+            return;
+          }
+
+          await restoreSnapshot(snapshot, projectCommands, () => !cancelled);
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setInitialMessages(restored.visibleMessages);
+        setUrlId(storedMessages.urlId);
+        urlIdRef.current = storedMessages.urlId;
+        description.set(storedMessages.description);
+        chatId.set(storedMessages.id);
+        chatMetadata.set(storedMessages.metadata);
+        setLoadedKey(loadKey);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(error);
+        logStore.logError('Failed to load chat messages or snapshot', error);
+        toast.error(`Failed to load chat: ${error instanceof Error ? error.message : String(error)}`);
+        navigate('/', { replace: true });
+      }
+    };
+
+    void loadStoredChat();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadKey, loadPersistedChat, mixedId, navigate, restoreSnapshot, rewindId]);
+
+  const storeMessageHistory = useCallback(
+    (incomingMessages: Message[], isStreaming: boolean = false) => {
+      const queuedPersist = persistQueueRef.current.then(async () => {
+        if (!db || incomingMessages.length === 0) {
+          return;
+        }
+
+        const messages = incomingMessages.filter((message) => !message.annotations?.includes('no-store'));
+
+        if (messages.length === 0) {
+          return;
+        }
+
+        const workbenchStore = await getWorkbenchStore();
+        const { firstArtifact } = workbenchStore;
+        let targetChatId = chatId.get();
+
+        if (!targetChatId) {
+          targetChatId = await getNextId(db);
+          chatId.set(targetChatId);
+        }
+
+        let targetUrlId = urlIdRef.current;
+
+        if (!targetUrlId && firstArtifact?.id) {
+          targetUrlId = await getUrlId(db, firstArtifact.id);
+          urlIdRef.current = targetUrlId;
+          setUrlId(targetUrlId);
+        }
+
+        let chatSummary: string | undefined;
+        const lastMessage = messages[messages.length - 1];
+
+        if (lastMessage.role === 'assistant') {
+          const annotations = lastMessage.annotations as JSONValue[];
+          const summaryAnnotation = annotations?.find(
+            (annotation: JSONValue) =>
+              annotation && typeof annotation === 'object' && 'type' in annotation && annotation.type === 'chatSummary',
+          ) as { type: string; summary?: string } | undefined;
+          chatSummary = summaryAnnotation?.summary;
+        }
+
+        if (!description.get() && firstArtifact?.title) {
+          description.set(firstArtifact.title);
+        }
+
+        const shouldNavigate = shouldNavigateAfterPersistedMessage(messages, isStreaming, Boolean(firstArtifact?.id));
+
+        if (!targetUrlId && shouldNavigate) {
+          targetUrlId = targetChatId;
+          urlIdRef.current = targetUrlId;
+          setUrlId(targetUrlId);
+        }
+
+        await setMessages(db, targetChatId, messages, targetUrlId, description.get(), undefined, chatMetadata.get());
+        await takeSnapshot(
+          lastMessage.id,
+          workbenchStore.files.get(),
+          targetChatId,
+          workbenchStore.hostedRuntimeSessionId,
+          chatSummary,
+        );
+
+        if (!mixedId && shouldNavigate) {
+          navigateChat(navigate, targetUrlId || targetChatId);
+        }
+      });
+
+      persistQueueRef.current = queuedPersist.catch(() => undefined);
+
+      return queuedPersist;
+    },
+    [mixedId, navigate, takeSnapshot],
+  );
+
   return {
-    ready: !mixedId || ready,
+    ready: loadedKey === loadKey,
+    chatKey: loadKey,
     initialMessages,
     updateChatMestaData: async (metadata: IChatMetadata) => {
       const id = chatId.get();
@@ -291,88 +367,23 @@ export function useChatHistory() {
       }
 
       try {
-        await setMessages(db, id, initialMessages, urlId, description.get(), undefined, metadata);
+        const storedMessages = await getMessages(db, id);
+        await setMessages(
+          db,
+          id,
+          storedMessages.messages,
+          storedMessages.urlId,
+          storedMessages.description,
+          storedMessages.timestamp,
+          metadata,
+        );
         chatMetadata.set(metadata);
       } catch (error) {
         toast.error('Failed to update chat metadata');
         console.error(error);
       }
     },
-    storeMessageHistory: async (messages: Message[], isStreaming: boolean = false) => {
-      if (!db || messages.length === 0) {
-        return;
-      }
-
-      const workbenchStore = await getWorkbenchStore();
-      const { firstArtifact } = workbenchStore;
-      messages = messages.filter((m) => !m.annotations?.includes('no-store'));
-
-      let _urlId = urlId;
-
-      if (!urlId && firstArtifact?.id) {
-        const urlId = await getUrlId(db, firstArtifact.id);
-        _urlId = urlId;
-
-        if (!isStreaming) {
-          navigateChat(navigate, urlId);
-        }
-
-        setUrlId(urlId);
-      }
-
-      let chatSummary: string | undefined = undefined;
-      const lastMessage = messages[messages.length - 1];
-
-      if (lastMessage.role === 'assistant') {
-        const annotations = lastMessage.annotations as JSONValue[];
-        const filteredAnnotations = (annotations?.filter(
-          (annotation: JSONValue) =>
-            annotation && typeof annotation === 'object' && Object.keys(annotation).includes('type'),
-        ) || []) as { type: string; value: any } & { [key: string]: any }[];
-
-        if (filteredAnnotations.find((annotation) => annotation.type === 'chatSummary')) {
-          chatSummary = filteredAnnotations.find((annotation) => annotation.type === 'chatSummary')?.summary;
-        }
-      }
-
-      takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
-
-      if (!description.get() && firstArtifact?.title) {
-        description.set(firstArtifact?.title);
-      }
-
-      // Ensure chatId.get() is used here as well
-      if (initialMessages.length === 0 && !chatId.get()) {
-        const nextId = await getNextId(db);
-        const shouldNavigate = shouldNavigateAfterPersistedMessage(messages, isStreaming, Boolean(firstArtifact?.id));
-
-        chatId.set(nextId);
-
-        if (!urlId && shouldNavigate) {
-          navigateChat(navigate, nextId);
-        }
-      }
-
-      // Ensure chatId.get() is used for the final setMessages call
-      const finalChatId = chatId.get();
-
-      if (!finalChatId) {
-        console.error('Cannot save messages, chat ID is not set.');
-        toast.error('Failed to save chat messages: Chat ID missing.');
-
-        return;
-      }
-
-      await setMessages(
-        db,
-        finalChatId, // Use the potentially updated chatId
-        [...archivedMessages, ...messages],
-        _urlId,
-        description.get(),
-        undefined,
-        chatMetadata.get(),
-      );
-    },
+    storeMessageHistory,
     duplicateCurrentChat: async (listItemId: string) => {
       if (!db || (!mixedId && !listItemId)) {
         return;
@@ -404,7 +415,7 @@ export function useChatHistory() {
         }
       }
     },
-    exportChat: async (id = urlId) => {
+    exportChat: async (id = urlId || chatId.get()) => {
       if (!db || !id) {
         return;
       }

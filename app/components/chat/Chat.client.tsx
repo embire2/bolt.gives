@@ -480,7 +480,7 @@ function appendArchitectTimelineEvent(event: Omit<InteractiveStepRunnerEvent, 't
 export function Chat() {
   renderLogger.trace('Chat');
 
-  const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
+  const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
   const title = useStore(description);
 
   useEffect(() => {
@@ -502,6 +502,7 @@ export function Chat() {
     <>
       {ready && (
         <ChatImpl
+          key={chatKey}
           description={title}
           initialMessages={initialMessages}
           exportChat={exportChat}
@@ -512,24 +513,6 @@ export function Chat() {
     </>
   );
 }
-
-const processSampledMessages = createSampler(
-  (options: {
-    messages: Message[];
-    initialMessages: Message[];
-    isLoading: boolean;
-    parseMessages: (messages: Message[], isLoading: boolean) => void;
-    storeMessageHistory: (messages: Message[], isStreaming?: boolean) => Promise<void>;
-  }) => {
-    const { messages, initialMessages, isLoading, parseMessages, storeMessageHistory } = options;
-    parseMessages(messages, isLoading);
-
-    if (messages.length > initialMessages.length) {
-      storeMessageHistory(messages, isLoading).catch((error) => toast.error(error.message));
-    }
-  },
-  50,
-);
 
 interface ChatProps {
   initialMessages: Message[];
@@ -1974,6 +1957,31 @@ Requirements:
 
     const { enhancingPrompt, promptEnhanced, enhancePrompt, resetEnhancer } = usePromptEnhancer();
     const { parsedMessages, parseMessages } = useMessageParser();
+    const [processSampledMessages] = useState(() =>
+      createSampler(
+        (options: {
+          messages: Message[];
+          initialMessages: Message[];
+          isLoading: boolean;
+          parseMessages: (messages: Message[], isLoading: boolean) => void;
+          storeMessageHistory: (messages: Message[], isStreaming?: boolean) => Promise<void>;
+        }) => {
+          const {
+            messages: sampledMessages,
+            initialMessages: sampledInitialMessages,
+            isLoading: sampledIsLoading,
+            parseMessages: parseSampledMessages,
+            storeMessageHistory: persistSampledMessages,
+          } = options;
+          parseSampledMessages(sampledMessages, sampledIsLoading);
+
+          if (sampledMessages.length > sampledInitialMessages.length) {
+            persistSampledMessages(sampledMessages, sampledIsLoading).catch((error) => toast.error(error.message));
+          }
+        },
+        50,
+      ),
+    );
 
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 180 : 136;
 
@@ -1989,7 +1997,11 @@ Requirements:
         parseMessages,
         storeMessageHistory,
       });
-    }, [messages, isLoading, parseMessages]);
+    }, [initialMessages, isLoading, messages, parseMessages, processSampledMessages, storeMessageHistory]);
+
+    useEffect(() => {
+      return () => processSampledMessages.cancel();
+    }, [processSampledMessages]);
 
     const scrollTextArea = () => {
       const textarea = textareaRef.current;

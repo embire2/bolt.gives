@@ -39,7 +39,7 @@ const IGNORE_PATTERNS = [
 
 export function GitUrlImport() {
   const [searchParams] = useSearchParams();
-  const { ready: historyReady, importChat } = useChatHistory();
+  const { ready: historyReady, importChat } = useChatHistory({ loadPersistedChat: false });
   const { ready: gitReady, gitClone } = useGit();
   const [imported, setImported] = useState(false);
   const [loading, setLoading] = useState(true);

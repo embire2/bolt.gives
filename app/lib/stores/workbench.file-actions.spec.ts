@@ -202,6 +202,15 @@ describe('workbenchStore file actions', () => {
     ).toBe(true);
   });
 
+  it('restores a persisted hosted runtime session ID for the same project', () => {
+    const restored = workbenchStore.setHostedRuntimeSessionId('calendar_project_123');
+
+    expect(restored).toBe(true);
+    expect(workbenchStore.hostedRuntimeSessionId).toBe('calendar_project_123');
+    expect(workbenchStore.setHostedRuntimeSessionId('../unsafe/session')).toBe(false);
+    expect(workbenchStore.hostedRuntimeSessionId).toBe('calendar_project_123');
+  });
+
   it('keeps the preview selected when restoring a snapshot into a workspace with a ready preview', async () => {
     workbenchStore.previews.set([
       {

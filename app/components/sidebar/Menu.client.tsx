@@ -5,7 +5,7 @@ import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { SettingsButton, HelpButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
-import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+import { chatId, db, deleteById, duplicateChat, getAll, getMessages, type ChatHistoryItem } from '~/lib/persistence';
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
@@ -67,7 +67,6 @@ function CurrentDateTime() {
 }
 
 export const Menu = () => {
-  const { duplicateCurrentChat, exportChat } = useChatHistory();
   const menuRef = useRef<HTMLDivElement>(null);
   const [list, setList] = useState<ChatHistoryItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -85,7 +84,13 @@ export const Menu = () => {
   const loadEntries = useCallback(() => {
     if (db) {
       getAll(db)
-        .then((list) => list.filter((item) => item.urlId && item.description))
+        .then((list) =>
+          list.map((item) => ({
+            ...item,
+            urlId: item.urlId || item.id,
+            description: item.description?.trim() || 'Untitled project',
+          })),
+        )
         .then(setList)
         .catch((error) => toast.error(error.message));
     }
@@ -299,8 +304,51 @@ export const Menu = () => {
   }, []);
 
   const handleDuplicate = async (id: string) => {
-    await duplicateCurrentChat(id);
-    loadEntries(); // Reload the list after duplication
+    if (!db) {
+      toast.error('Chat history is unavailable.');
+      return;
+    }
+
+    try {
+      const newId = await duplicateChat(db, id);
+      window.location.href = `/chat/${newId}`;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to duplicate chat.');
+    }
+  };
+
+  const exportChat = async (id?: string) => {
+    if (!db || !id) {
+      return;
+    }
+
+    try {
+      const chat = await getMessages(db, id);
+      const blob = new Blob(
+        [
+          JSON.stringify(
+            {
+              messages: chat.messages,
+              description: chat.description,
+              exportDate: new Date().toISOString(),
+            },
+            null,
+            2,
+          ),
+        ],
+        { type: 'application/json' },
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `chat-${new Date().toISOString()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to export chat.');
+    }
   };
 
   const handleSettingsClick = () => {

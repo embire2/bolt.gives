@@ -3,6 +3,7 @@ import type { Message } from 'ai';
 import type { Snapshot } from './types';
 import {
   hasRestorableSnapshotFiles,
+  resolvePersistedChatMessages,
   shouldNavigateAfterPersistedMessage,
   shouldPersistSnapshot,
 } from './chat-history-utils';
@@ -67,5 +68,53 @@ describe('chat-history-utils', () => {
     expect(shouldNavigateAfterPersistedMessage(userOnlyMessages, true, false)).toBe(false);
     expect(shouldNavigateAfterPersistedMessage(withAssistant, false, false)).toBe(true);
     expect(shouldNavigateAfterPersistedMessage(userOnlyMessages, false, true)).toBe(true);
+  });
+
+  it('keeps the complete visible conversation when restoring the latest workspace snapshot', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: 'Build a calendar' },
+      { id: 'a1', role: 'assistant', content: 'Creating the calendar app.' },
+      { id: 'u2', role: 'user', content: 'Add reminders' },
+      { id: 'a2', role: 'assistant', content: 'Reminders added.' },
+    ];
+    const snapshot: Snapshot = {
+      chatIndex: 'a2',
+      files: {
+        'src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return <main>Calendar</main>; }',
+          isBinary: false,
+        },
+      },
+    };
+
+    expect(resolvePersistedChatMessages(messages, snapshot)).toEqual({
+      visibleMessages: messages,
+      shouldRestoreSnapshot: true,
+    });
+  });
+
+  it('rewinds visible history without applying a newer snapshot', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: 'Build a calendar' },
+      { id: 'a1', role: 'assistant', content: 'First pass.' },
+      { id: 'u2', role: 'user', content: 'Add reminders' },
+      { id: 'a2', role: 'assistant', content: 'Second pass.' },
+    ];
+    const snapshot: Snapshot = {
+      chatIndex: 'a2',
+      files: {
+        'src/App.tsx': {
+          type: 'file',
+          content: 'export default function App() { return <main>Calendar</main>; }',
+          isBinary: false,
+        },
+      },
+    };
+
+    expect(resolvePersistedChatMessages(messages, snapshot, 'a1')).toEqual({
+      visibleMessages: messages.slice(0, 2),
+      shouldRestoreSnapshot: false,
+    });
   });
 });

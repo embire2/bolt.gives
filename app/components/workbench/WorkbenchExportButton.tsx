@@ -2,7 +2,7 @@ import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportCh
 import { useChatHistory } from '~/lib/persistence';
 
 export function WorkbenchExportButton() {
-  const { exportChat } = useChatHistory();
+  const { exportChat } = useChatHistory({ loadPersistedChat: false });
 
   return <ExportChatButton exportChat={exportChat} />;
 }

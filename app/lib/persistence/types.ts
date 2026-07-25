@@ -4,4 +4,5 @@ export interface Snapshot {
   chatIndex: string;
   files: FileMap;
   summary?: string;
+  runtimeSessionId?: string;
 }
