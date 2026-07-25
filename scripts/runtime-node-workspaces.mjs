@@ -165,7 +165,8 @@ export function normalizeRuntimeNodeWorkspaceRegistry(input) {
         cliPasswordHash: typeof workspace.cliPasswordHash === 'string' ? workspace.cliPasswordHash : null,
         databaseName: String(workspace.databaseName || buildRuntimeNodeDatabaseName(projectSlug, id)),
         databaseUser: String(workspace.databaseUser || buildRuntimeNodeDatabaseUser(cliUsername, id)),
-        databasePasswordHash: typeof workspace.databasePasswordHash === 'string' ? workspace.databasePasswordHash : null,
+        databasePasswordHash:
+          typeof workspace.databasePasswordHash === 'string' ? workspace.databasePasswordHash : null,
         workspaceDir:
           typeof workspace.workspaceDir === 'string' && workspace.workspaceDir
             ? workspace.workspaceDir
@@ -185,12 +186,16 @@ export function normalizeRuntimeNodeWorkspaceRegistry(input) {
 }
 
 export function buildRuntimeNodeDatabaseName(projectSlug, id) {
-  const suffix = String(id || crypto.randomUUID()).replace(/-/g, '').slice(0, 8);
+  const suffix = String(id || crypto.randomUUID())
+    .replace(/-/g, '')
+    .slice(0, 8);
   return `bolt_${String(projectSlug || 'project').replace(/-/g, '_')}_${suffix}`.slice(0, 63);
 }
 
 export function buildRuntimeNodeDatabaseUser(cliUsername, id) {
-  const suffix = String(id || crypto.randomUUID()).replace(/-/g, '').slice(0, 8);
+  const suffix = String(id || crypto.randomUUID())
+    .replace(/-/g, '')
+    .slice(0, 8);
   return `bu_${String(cliUsername || 'client').replace(/-/g, '_')}_${suffix}`.slice(0, 63);
 }
 
@@ -285,6 +290,136 @@ export function sanitizeRuntimeNodeWorkspaceForClient(workspace, secrets = {}) {
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function buildRuntimeNodeSshInvocation(config, optionArgs = [], remoteCommand = null) {
+  const args = [
+    '-o',
+    'StrictHostKeyChecking=accept-new',
+    '-o',
+    'BatchMode=no',
+    '-p',
+    String(config.port || 22),
+    ...optionArgs,
+  ];
+
+  if (config.identityFile) {
+    args.push('-i', config.identityFile);
+  }
+
+  args.push(`${config.adminUser}@${config.host}`);
+
+  if (remoteCommand) {
+    args.push(remoteCommand);
+  }
+
+  const command = config.authMode === 'password' ? 'sshpass' : 'ssh';
+  const commandArgs = config.authMode === 'password' ? ['-e', 'ssh', ...args] : args;
+  const env = { ...process.env };
+
+  if (config.authMode === 'password') {
+    env.SSHPASS = config.sshPassword;
+  }
+
+  return {
+    command,
+    args: commandArgs,
+    env,
+  };
+}
+
+export function buildRuntimeNodeDatabaseTunnelInvocation(config, localPort) {
+  const port = Number(localPort);
+
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('A valid local database tunnel port is required.');
+  }
+
+  return buildRuntimeNodeSshInvocation(config, [
+    '-N',
+    '-T',
+    '-o',
+    'ExitOnForwardFailure=yes',
+    '-o',
+    'ServerAliveInterval=30',
+    '-o',
+    'ServerAliveCountMax=3',
+    '-L',
+    `127.0.0.1:${port}:127.0.0.1:5432`,
+  ]);
+}
+
+export function buildRuntimeNodeDatabaseCredentialReadScript(workspace) {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSPACE_ENV=${shellQuote(`${workspace.workspaceDir}/.env`)}
+
+read_workspace_env() {
+  if [ "$(id -u)" -eq 0 ]; then
+    cat "$WORKSPACE_ENV"
+  else
+    sudo cat "$WORKSPACE_ENV"
+  fi
+}
+
+DB_PASSWORD="$(read_workspace_env | awk -F= '$1 == "PGPASSWORD" { print substr($0, index($0, "=") + 1); exit }')"
+
+if [ -z "$DB_PASSWORD" ]; then
+  echo "Runtime workspace database credential is unavailable." >&2
+  exit 1
+fi
+
+printf 'BOLT_DATABASE_PASSWORD_B64=%s\\n' "$(printf '%s' "$DB_PASSWORD" | base64 | tr -d '\\n')"
+`;
+}
+
+function runRuntimeNodeSshScript(script, config) {
+  const invocation = buildRuntimeNodeSshInvocation(config, [], 'bash -s');
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, {
+      env: invocation.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      reject(new Error((stderr || stdout || `Runtime node command failed with exit code ${code}`).trim()));
+    });
+
+    child.stdin.end(script);
+  });
+}
+
+export async function readRuntimeNodeDatabasePassword(workspace, config) {
+  const { stdout } = await runRuntimeNodeSshScript(buildRuntimeNodeDatabaseCredentialReadScript(workspace), config);
+  const match = stdout.match(/^BOLT_DATABASE_PASSWORD_B64=([A-Za-z0-9+/=]+)$/m);
+
+  if (!match) {
+    throw new Error('Runtime workspace database credential response was invalid.');
+  }
+
+  const password = Buffer.from(match[1], 'base64').toString('utf8');
+
+  if (!password) {
+    throw new Error('Runtime workspace database credential is empty.');
+  }
+
+  return password;
 }
 
 export function buildRuntimeNodeProvisionScript(workspace, secrets, config) {
@@ -405,53 +540,5 @@ echo "runtime-node workspace provisioned: $PROJECT_SLUG"
 
 export function runRuntimeNodeProvision(workspace, secrets, config) {
   const script = buildRuntimeNodeProvisionScript(workspace, secrets, config);
-  const args = [
-    '-o',
-    'StrictHostKeyChecking=accept-new',
-    '-o',
-    'BatchMode=no',
-    '-p',
-    String(config.port || 22),
-  ];
-
-  if (config.identityFile) {
-    args.push('-i', config.identityFile);
-  }
-
-  args.push(`${config.adminUser}@${config.host}`, 'bash -s');
-
-  const command = config.authMode === 'password' ? 'sshpass' : 'ssh';
-  const commandArgs = config.authMode === 'password' ? ['-e', 'ssh', ...args] : args;
-  const env = { ...process.env };
-
-  if (config.authMode === 'password') {
-    env.SSHPASS = config.sshPassword;
-  }
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, commandArgs, {
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({ stdout, stderr });
-        return;
-      }
-
-      reject(new Error((stderr || stdout || `Runtime node provision failed with exit code ${code}`).trim()));
-    });
-
-    child.stdin.end(script);
-  });
+  return runRuntimeNodeSshScript(script, config);
 }

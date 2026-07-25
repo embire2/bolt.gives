@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildRuntimeNodeDatabaseCredentialReadScript,
+  buildRuntimeNodeDatabaseTunnelInvocation,
   buildRuntimeNodeConfig,
   buildRuntimeNodeProvisionScript,
   createRuntimeNodeWorkspaceRecord,
@@ -108,5 +110,35 @@ describe('runtime-node workspace provisioning helpers', () => {
     expect(script).not.toContain('```');
     expect(script).not.toContain('`$WORKSPACE_DIR`');
     expect(script).toContain('/var/log/bolt-runtime/workspace-provision.log');
+  });
+
+  it('reads an existing project database password without exposing the complete env file', () => {
+    const script = buildRuntimeNodeDatabaseCredentialReadScript({
+      workspaceDir: "/srv/bolt-live-workspaces/ada's-calendar",
+    });
+
+    expect(script).toContain("WORKSPACE_ENV='/srv/bolt-live-workspaces/ada'\\''s-calendar/.env'");
+    expect(script).toContain('sudo cat "$WORKSPACE_ENV"');
+    expect(script).toContain('BOLT_DATABASE_PASSWORD_B64');
+    expect(script).not.toContain('DATABASE_URL=');
+  });
+
+  it('builds a server-only SSH tunnel to the runtime-node PostgreSQL listener', () => {
+    const config = buildRuntimeNodeConfig({
+      BOLT_RUNTIME_NODE_ENABLED: 'true',
+      BOLT_RUNTIME_NODE_HOST: 'runtime.internal',
+      BOLT_RUNTIME_NODE_PUBLIC_HOST: 'runtime.example.com',
+      BOLT_RUNTIME_NODE_PORT: '22',
+      BOLT_RUNTIME_NODE_ADMIN_USER: 'bolt-runtime-agent',
+      BOLT_RUNTIME_NODE_SSH_KEY_PATH: '/etc/bolt-gives/runtime-node-agent',
+    });
+    const invocation = buildRuntimeNodeDatabaseTunnelInvocation(config, 5107);
+    const serializedArgs = invocation.args.join(' ');
+
+    expect(invocation.command).toBe('ssh');
+    expect(serializedArgs).toContain('127.0.0.1:5107:127.0.0.1:5432');
+    expect(serializedArgs).toContain('ExitOnForwardFailure=yes');
+    expect(serializedArgs).toContain('bolt-runtime-agent@runtime.internal');
+    expect(serializedArgs).not.toContain('runtime.example.com');
   });
 });

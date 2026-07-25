@@ -46,6 +46,7 @@ export interface HostedRuntimePreviewStatus {
     updatedAt: string | null;
   } | null;
   runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  projectDatabase?: HostedProjectDatabase | null;
 }
 
 export interface HostedRuntimePreviewSummary {
@@ -57,6 +58,13 @@ export interface HostedRuntimePreviewSummary {
   alert: ActionAlert | null;
   recovery: HostedRuntimePreviewStatus['recovery'];
   runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  projectDatabase?: HostedProjectDatabase | null;
+}
+
+export interface HostedProjectDatabase {
+  status: 'provisioned' | 'connected';
+  databaseName: string;
+  databaseUser: string;
 }
 
 export interface HostedRuntimeNodeWorkspace {

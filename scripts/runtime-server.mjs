@@ -53,9 +53,12 @@ import {
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
 import {
+  buildRuntimeNodeDatabaseTunnelInvocation,
   buildRuntimeNodeConfig,
   createRuntimeNodeWorkspaceRecord,
+  hashRuntimeNodeSecret,
   normalizeRuntimeNodeWorkspaceRegistry,
+  readRuntimeNodeDatabasePassword,
   runRuntimeNodeProvision,
   sanitizeRuntimeNodeConfigForClient,
   sanitizeRuntimeNodeWorkspaceForClient,
@@ -107,6 +110,11 @@ const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAI
 const PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_PROXY_UPSTREAM_TIMEOUT_MS || '15000');
 const PREVIEW_PORT_RANGE_START = Number(process.env.RUNTIME_PREVIEW_PORT_START || '4100');
 const PREVIEW_PORT_RANGE_END = Number(process.env.RUNTIME_PREVIEW_PORT_END || '4999');
+const RUNTIME_NODE_DATABASE_PORT_RANGE_START = Number(process.env.RUNTIME_NODE_DATABASE_PORT_START || '5100');
+const RUNTIME_NODE_DATABASE_PORT_RANGE_END = Number(process.env.RUNTIME_NODE_DATABASE_PORT_END || '5499');
+const RUNTIME_NODE_DATABASE_TUNNEL_READY_TIMEOUT_MS = Number(
+  process.env.RUNTIME_NODE_DATABASE_TUNNEL_READY_TIMEOUT_MS || '15000',
+);
 const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
 const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
 const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_DELAY_MS || '1200');
@@ -237,6 +245,7 @@ function consumeBugReportRateLimit(key) {
 const sessions = new Map();
 const managedInstanceLocks = new Map();
 const reservedPreviewPorts = new Map();
+const reservedRuntimeNodeDatabasePorts = new Map();
 let managedInstanceSyncTimer = null;
 let managedInstanceRolloutPromise = null;
 let managedRolloutGuardState = {
@@ -1051,8 +1060,24 @@ function createStrongRuntimeNodePassword() {
   return `Bolt-${crypto.randomBytes(18).toString('base64url')}9a`;
 }
 
+function attachRuntimeNodeDatabaseToSession(session, workspace, databasePassword) {
+  const password = String(databasePassword || '');
+
+  if (!password || hashRuntimeNodeSecret(password) !== workspace.databasePasswordHash) {
+    throw new Error('Runtime workspace database credential did not match its registry record.');
+  }
+
+  session.runtimeNodeWorkspaceRecord = workspace;
+  session.runtimeNodeDatabase = {
+    workspaceId: workspace.id,
+    databaseName: workspace.databaseName,
+    databaseUser: workspace.databaseUser,
+    databasePassword: password,
+  };
+}
+
 async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
-  if (session.runtimeNodeWorkspace?.status === 'active' || session.runtimeNodeWorkspace?.status === 'provisioning') {
+  if (session.runtimeNodeWorkspace?.status === 'active' && session.runtimeNodeDatabase) {
     return session.runtimeNodeWorkspace;
   }
 
@@ -1088,6 +1113,9 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
 
       if (existing) {
         session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(existing);
+        const databasePassword = await readRuntimeNodeDatabasePassword(existing, config);
+        attachRuntimeNodeDatabaseToSession(session, existing, databasePassword);
+        broadcastPreviewState(session);
         return existing;
       }
 
@@ -1123,6 +1151,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
       record.provisionedAt = new Date().toISOString();
       record.updatedAt = record.provisionedAt;
       record.lastError = null;
+      attachRuntimeNodeDatabaseToSession(session, record, secrets.databasePassword);
       session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(record);
       appendRuntimeNodeWorkspaceEvent(registry, {
         actor: 'runtime-session',
@@ -1172,6 +1201,8 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
         };
       }
 
+      session.runtimeNodeWorkspaceRecord = null;
+      session.runtimeNodeDatabase = null;
       broadcastPreviewState(session);
       return null;
     } finally {
@@ -2269,7 +2300,29 @@ function setPreviewRepairingState(session, alert, message = '') {
   });
 }
 
+export function buildRuntimeNodeDatabaseStateForClient(session) {
+  const database = session?.runtimeNodeDatabase;
+
+  if (!database) {
+    return null;
+  }
+
+  const tunnel = session.runtimeNodeDatabaseTunnel;
+  const tunnelProcess = tunnel?.process;
+  const connected = Boolean(
+    tunnelProcess && tunnelProcess.exitCode === null && tunnelProcess.killed !== true && tunnel.localPort,
+  );
+
+  return {
+    status: connected ? 'connected' : 'provisioned',
+    databaseName: database.databaseName,
+    databaseUser: database.databaseUser,
+  };
+}
+
 export function buildPreviewStateSummary(session) {
+  const projectDatabase = buildRuntimeNodeDatabaseStateForClient(session);
+
   return {
     sessionId: session.id,
     preview: session.preview || null,
@@ -2279,6 +2332,7 @@ export function buildPreviewStateSummary(session) {
     alert: session.previewDiagnostics.alert,
     recovery: session.previewRecovery,
     runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
+    ...(projectDatabase ? { projectDatabase } : {}),
   };
 }
 
@@ -3023,8 +3077,11 @@ function getSession(sessionId) {
       lastAutoRestoreFingerprint: null,
       lastPreparedDependencyFingerprint: null,
       runtimeNodeWorkspace: null,
+      runtimeNodeWorkspaceRecord: null,
       runtimeNodeWorkspaceSecretHandoff: null,
       runtimeNodeProvisionPromise: null,
+      runtimeNodeDatabase: null,
+      runtimeNodeDatabaseTunnel: null,
       publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
@@ -5344,6 +5401,22 @@ function isPortAvailable(port) {
   });
 }
 
+function isTcpPortListening(port) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    const finish = (listening) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(listening);
+    };
+
+    socket.setTimeout(500);
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
+}
+
 export async function allocatePreviewPort(sessionId, options = {}) {
   const ownerSessionId = String(sessionId || '').trim();
   const isPortAvailableFn = options.isPortAvailableFn || isPortAvailable;
@@ -5379,6 +5452,206 @@ export async function allocatePreviewPort(sessionId, options = {}) {
   }
 
   throw new Error('No preview port available');
+}
+
+export async function allocateRuntimeNodeDatabasePort(sessionId, options = {}) {
+  const ownerSessionId = String(sessionId || '').trim();
+  const isPortAvailableFn = options.isPortAvailableFn || isPortAvailable;
+
+  if (!ownerSessionId) {
+    throw new Error('A runtime session is required to allocate a database tunnel port');
+  }
+
+  for (let port = RUNTIME_NODE_DATABASE_PORT_RANGE_START; port <= RUNTIME_NODE_DATABASE_PORT_RANGE_END; port++) {
+    if (reservedRuntimeNodeDatabasePorts.has(port)) {
+      continue;
+    }
+
+    reservedRuntimeNodeDatabasePorts.set(port, ownerSessionId);
+
+    let available = false;
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      available = await isPortAvailableFn(port);
+    } catch {
+      available = false;
+    }
+
+    if (available) {
+      return port;
+    }
+
+    if (reservedRuntimeNodeDatabasePorts.get(port) === ownerSessionId) {
+      reservedRuntimeNodeDatabasePorts.delete(port);
+    }
+  }
+
+  throw new Error('No runtime-node database tunnel port available');
+}
+
+export function releaseRuntimeNodeDatabasePorts(session) {
+  for (const [port, ownerSessionId] of reservedRuntimeNodeDatabasePorts.entries()) {
+    if (ownerSessionId === session.id) {
+      reservedRuntimeNodeDatabasePorts.delete(port);
+    }
+  }
+}
+
+export function isRuntimeNodeDatabasePortReserved(port, sessionId) {
+  const ownerSessionId = reservedRuntimeNodeDatabasePorts.get(Number(port));
+
+  if (!ownerSessionId) {
+    return false;
+  }
+
+  return sessionId ? ownerSessionId === sessionId : true;
+}
+
+export function buildRuntimeNodeDatabaseEnvironment(database, localPort) {
+  if (!database?.databaseName || !database?.databaseUser || !database?.databasePassword) {
+    throw new Error('Runtime-node database credentials are unavailable.');
+  }
+
+  const port = Number(localPort);
+
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('Runtime-node database tunnel is unavailable.');
+  }
+
+  const databaseUrl = `postgresql://${encodeURIComponent(database.databaseUser)}:${encodeURIComponent(
+    database.databasePassword,
+  )}@127.0.0.1:${port}/${encodeURIComponent(database.databaseName)}`;
+
+  return {
+    DATABASE_URL: databaseUrl,
+    PGHOST: '127.0.0.1',
+    PGPORT: String(port),
+    PGDATABASE: database.databaseName,
+    PGUSER: database.databaseUser,
+    PGPASSWORD: database.databasePassword,
+  };
+}
+
+function terminateSessionRuntimeNodeDatabaseTunnel(session) {
+  const tunnel = session.runtimeNodeDatabaseTunnel;
+  session.runtimeNodeDatabaseTunnel = null;
+  releaseRuntimeNodeDatabasePorts(session);
+
+  if (!tunnel?.process) {
+    return;
+  }
+
+  try {
+    tunnel.process.kill('SIGTERM');
+  } catch {
+    // The SSH tunnel may already have exited.
+  }
+}
+
+async function waitForRuntimeNodeDatabaseTunnel(child, localPort, getError) {
+  const deadline = Date.now() + RUNTIME_NODE_DATABASE_TUNNEL_READY_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.killed) {
+      throw getError() || new Error('Runtime-node database tunnel exited before it became ready.');
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    if (await isTcpPortListening(localPort)) {
+      return;
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
+  throw getError() || new Error('Runtime-node database tunnel did not become ready in time.');
+}
+
+async function ensureRuntimeNodeDatabaseTunnel(session, config) {
+  const existingTunnel = session.runtimeNodeDatabaseTunnel;
+  const existingProcess = existingTunnel?.process;
+
+  if (
+    existingTunnel?.workspaceId === session.runtimeNodeDatabase?.workspaceId &&
+    existingProcess &&
+    existingProcess.exitCode === null &&
+    existingProcess.killed !== true &&
+    (await isTcpPortListening(existingTunnel.localPort))
+  ) {
+    return existingTunnel;
+  }
+
+  terminateSessionRuntimeNodeDatabaseTunnel(session);
+
+  const localPort = await allocateRuntimeNodeDatabasePort(session.id);
+  const invocation = buildRuntimeNodeDatabaseTunnelInvocation(config, localPort);
+  const child = spawn(invocation.command, invocation.args, {
+    env: invocation.env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  let spawnError = null;
+  const tunnel = {
+    process: child,
+    localPort,
+    workspaceId: session.runtimeNodeDatabase.workspaceId,
+  };
+  session.runtimeNodeDatabaseTunnel = tunnel;
+
+  child.stderr.on('data', (chunk) => {
+    stderr = `${stderr}${chunk.toString()}`.slice(-4000);
+  });
+  child.on('error', (error) => {
+    spawnError = error;
+  });
+  child.once('close', () => {
+    if (session.runtimeNodeDatabaseTunnel?.process === child) {
+      session.runtimeNodeDatabaseTunnel = null;
+      releaseRuntimeNodeDatabasePorts(session);
+    }
+  });
+
+  try {
+    await waitForRuntimeNodeDatabaseTunnel(child, localPort, () => {
+      if (spawnError) {
+        return spawnError;
+      }
+
+      const message = stderr.trim();
+      return message ? new Error(message) : null;
+    });
+    return tunnel;
+  } catch (error) {
+    terminateSessionRuntimeNodeDatabaseTunnel(session);
+    throw error;
+  }
+}
+
+async function ensureRuntimeNodeDatabaseEnvironmentForSession(session) {
+  const config = buildRuntimeNodeConfig();
+
+  if (!config.supported) {
+    return {};
+  }
+
+  await ensureRuntimeNodeWorkspaceForSession(session);
+
+  if (session.runtimeNodeProvisionPromise) {
+    await session.runtimeNodeProvisionPromise;
+  }
+
+  if (!session.runtimeNodeDatabase) {
+    throw new Error(
+      session.runtimeNodeWorkspace?.reason ||
+        session.runtimeNodeWorkspace?.lastError ||
+        'The dedicated project database could not be provisioned.',
+    );
+  }
+
+  const tunnel = await ensureRuntimeNodeDatabaseTunnel(session, config);
+  return buildRuntimeNodeDatabaseEnvironment(session.runtimeNodeDatabase, tunnel.localPort);
 }
 
 async function waitForPreview(port) {
@@ -5419,6 +5692,10 @@ async function terminateSessionProcesses(session, options = {}) {
   session.preview = undefined;
   session.previewStartCommand = null;
   session.previewStartMutationId = null;
+
+  if (options.terminateDatabaseTunnel) {
+    terminateSessionRuntimeNodeDatabaseTunnel(session);
+  }
 
   if (Number.isFinite(preservePreviewPort) && preservePreviewPort > 0) {
     reservedPreviewPorts.set(preservePreviewPort, session.id);
@@ -5613,9 +5890,40 @@ async function handleRunCommand(req, res, session, body) {
     }
   }
 
+  let runtimeNodeDatabaseEnv = {};
+
+  try {
+    const runtimeNodeConfig = buildRuntimeNodeConfig();
+
+    if (runtimeNodeConfig.supported) {
+      writeEvent({
+        type: 'status',
+        message: 'Connecting this project to its dedicated PostgreSQL database',
+      });
+      runtimeNodeDatabaseEnv = await ensureRuntimeNodeDatabaseEnvironmentForSession(session);
+      writeEvent({
+        type: 'status',
+        message: 'Dedicated PostgreSQL database connected to the hosted runtime',
+      });
+    }
+  } catch (error) {
+    const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error), {
+      databasePassword: session.runtimeNodeDatabase?.databasePassword,
+    });
+    writeEvent({
+      type: 'stderr',
+      chunk: `${message || 'The dedicated project database could not be connected.'}\n`,
+    });
+    writeEvent({ type: 'exit', exitCode: 1 });
+    releaseNewPreviewPortReservation();
+    res.end();
+    return;
+  }
+
   markSessionMutationStart(session);
   const env = {
     ...process.env,
+    ...runtimeNodeDatabaseEnv,
     CI: '1',
     FORCE_COLOR: '0',
     NODE_OPTIONS,
@@ -7552,6 +7860,9 @@ export function createRuntimeServer() {
           alert: session.previewDiagnostics.alert,
           recovery: session.previewRecovery,
           runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
+          ...(buildRuntimeNodeDatabaseStateForClient(session)
+            ? { projectDatabase: buildRuntimeNodeDatabaseStateForClient(session) }
+            : {}),
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect preview status');
@@ -7725,6 +8036,9 @@ export function createRuntimeServer() {
           ok: true,
           deployment: sanitizeProjectDeploymentForClient(deployment, { serverIp: PROJECT_PUBLIC_IP }),
           runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
+          ...(buildRuntimeNodeDatabaseStateForClient(session)
+            ? { projectDatabase: buildRuntimeNodeDatabaseStateForClient(session) }
+            : {}),
           dns,
           caddy,
         });
@@ -7891,7 +8205,11 @@ export function createRuntimeServer() {
     if (req.method === 'DELETE' && commandMatch) {
       try {
         const session = getSession(normalizeSessionId(commandMatch[1]));
-        await runSessionOperation(session, () => terminateSessionProcesses(session));
+        await runSessionOperation(session, () =>
+          terminateSessionProcesses(session, {
+            terminateDatabaseTunnel: true,
+          }),
+        );
         sendJson(res, 200, { ok: true });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to terminate session');
@@ -7954,5 +8272,31 @@ function startServer() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_PATH) {
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+
+    if (managedInstanceSyncTimer) {
+      clearInterval(managedInstanceSyncTimer);
+      managedInstanceSyncTimer = null;
+    }
+
+    await Promise.all(
+      Array.from(sessions.values()).map((session) =>
+        terminateSessionProcesses(session, {
+          terminateDatabaseTunnel: true,
+        }),
+      ),
+    );
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
+
+  process.once('SIGINT', () => void shutdown());
+  process.once('SIGTERM', () => void shutdown());
   startServer();
 }

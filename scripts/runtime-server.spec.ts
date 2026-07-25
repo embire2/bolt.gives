@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   allocatePreviewPort,
+  allocateRuntimeNodeDatabasePort,
   applyPreviewResponseHeaders,
   applyHostedVitePreviewDefaults,
   applyUnavailablePackageVersionRepair,
@@ -19,6 +20,8 @@ import {
   buildManagedInstanceDeployArtifactDecision,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
+  buildRuntimeNodeDatabaseStateForClient,
+  buildRuntimeNodeDatabaseEnvironment,
   buildWorkspaceFileMapFromDisk,
   buildPreviewStateSummary,
   commandNeedsProjectManifest,
@@ -31,6 +34,7 @@ import {
   inferHostedWorkspaceStartCommand,
   isPreviewPortReserved,
   isPreviewPortOwnedBySession,
+  isRuntimeNodeDatabasePortReserved,
   mergeWorkspaceFileMap,
   markSessionMutationStart,
   normalizeSessionId,
@@ -46,6 +50,7 @@ import {
   resolveStalePreviewRedirectPath,
   recordPreviewResponse,
   releaseReservedPreviewPorts,
+  releaseRuntimeNodeDatabasePorts,
   resolveManagedInstanceProcessCwd,
   resolveRuntimeWorkspaceRoot,
   resolvePublishedProjectUpgradeTarget,
@@ -691,6 +696,44 @@ describe('runtime server workspace isolation', () => {
     releaseReservedPreviewPorts(secondSession);
   });
 
+  it('isolates runtime-node database tunnel ports and builds server-process database env', async () => {
+    const firstSession = { id: 'database-session-a' };
+    const secondSession = { id: 'database-session-b' };
+    const firstPort = await allocateRuntimeNodeDatabasePort(firstSession.id, {
+      isPortAvailableFn: async () => true,
+    });
+    const secondPort = await allocateRuntimeNodeDatabasePort(secondSession.id, {
+      isPortAvailableFn: async () => true,
+    });
+
+    expect(firstPort).not.toBe(secondPort);
+    expect(isRuntimeNodeDatabasePortReserved(firstPort, firstSession.id)).toBe(true);
+    expect(isRuntimeNodeDatabasePortReserved(firstPort, secondSession.id)).toBe(false);
+
+    const env = buildRuntimeNodeDatabaseEnvironment(
+      {
+        databaseName: 'bolt_calendar',
+        databaseUser: 'calendar_user',
+        databasePassword: 'secret:/?#[]@',
+      },
+      firstPort,
+    );
+
+    expect(env).toMatchObject({
+      PGHOST: '127.0.0.1',
+      PGPORT: String(firstPort),
+      PGDATABASE: 'bolt_calendar',
+      PGUSER: 'calendar_user',
+      PGPASSWORD: 'secret:/?#[]@',
+    });
+    expect(env.DATABASE_URL).toContain('secret%3A%2F%3F%23%5B%5D%40');
+
+    releaseRuntimeNodeDatabasePorts(firstSession);
+    releaseRuntimeNodeDatabasePorts(secondSession);
+    expect(isRuntimeNodeDatabasePortReserved(firstPort)).toBe(false);
+    expect(isRuntimeNodeDatabasePortReserved(secondPort)).toBe(false);
+  });
+
   it('requires both preview metadata and reservation ownership before proxying a session port', () => {
     const ownerSession = {
       id: 'session-port-owner',
@@ -862,6 +905,32 @@ describe('runtime server workspace isolation', () => {
         status: 'active',
       },
     });
+  });
+
+  it('reports project database readiness without exposing its password or tunnel port', () => {
+    const state = buildRuntimeNodeDatabaseStateForClient({
+      runtimeNodeDatabase: {
+        workspaceId: 'workspace-calendar',
+        databaseName: 'bolt_calendar',
+        databaseUser: 'calendar_user',
+        databasePassword: 'private-database-password',
+      },
+      runtimeNodeDatabaseTunnel: {
+        localPort: 5100,
+        process: {
+          exitCode: null,
+          killed: false,
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      status: 'connected',
+      databaseName: 'bolt_calendar',
+      databaseUser: 'calendar_user',
+    });
+    expect(JSON.stringify(state)).not.toContain('private-database-password');
+    expect(JSON.stringify(state)).not.toContain('5100');
   });
 
   it('treats repeated hosted workspace snapshots as no-op mutations', () => {
