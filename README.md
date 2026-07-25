@@ -87,6 +87,12 @@ Production Pages releases also wait for Cloudflare's immutable deployment URL to
 
 Wrangler runtime-home coverage supplies its own XDG directories rather than inheriting machine-specific runner defaults, so the same isolation contract is tested locally and in GitHub Actions.
 
+Saved projects now preserve one coherent identity across chat history, source snapshots, hosted runtime files, Preview, and the project database. Selecting a project in sidebar history restores the complete visible conversation and source snapshot, then reconnects the original hosted runtime session so follow-up prompts continue against the same app instead of a blank chat or a new workspace.
+
+Every hosted chat-created project also receives its own PostgreSQL role and database on the configured runtime node. The runtime server opens an isolated SSH tunnel and injects `DATABASE_URL` plus standard `PG*` variables only into that project's server-side shell/build/preview processes. Database passwords remain in private runtime service memory and runtime-node `.env` files; they are not written into generated browser source, IndexedDB, API responses, screenshots, or managed Pages payloads.
+
+The header Shout Out Box has been removed. `Report Bug` now opens the public [bolt.gives GitHub Issues page](https://github.com/embire2/bolt.gives/issues), keeping bug discussion and contributor feedback in the open-source project workflow.
+
 ### v3.1.0 highlights
 
 - Protected `FREE` coding now offers ChatGPT-5.6 SOL through MagnetAPI.org's OpenAI-compatible Responses API and Opus 4.8, Sonnet 5, and Fable 5 through its Claude-compatible Messages API, without exposing the operator token to browsers or managed Pages projects.
@@ -94,7 +100,7 @@ Wrangler runtime-home coverage supplies its own XDG directories rather than inhe
 - Magnet Claude follow-ups send compact exact replacements for existing files; bolt.gives reconstructs and validates the complete file server-side before applying it, preventing large source files from exhausting the model response limit and entering avoidable repair loops.
 - Initial `/chat` assets fell from 2,754,764 bytes across 136 files to 1,658,074 bytes across 73 files, about 40% fewer bytes and 46% fewer initial requests.
 - Settings integrations, plugins, PDF export, Git cloning, and terminal assets load only when requested; `Chat.client` fell from about 678 KB to 293 KB.
-- Health, notification, Shout Out Box, and locked-file state perform less idle work, use event-driven updates where possible, and persist acknowledged connection states.
+- Health, notification, and locked-file state perform less idle work, use event-driven updates where possible, and persist acknowledged connection states.
 - `pnpm run build` now enforces a 1 MB per-asset and 2 MB initial-route budget under a 3 GB heap ceiling.
 - Live release smoke targets the real `/chat` surface, requires generated and follow-up tokens in the same hosted runtime snapshot, and fails on fatal browser transport errors.
 - Static requests use the Pages `ASSETS` binding before Remix SSR; real files keep their asset-server response while missing generated-preview assets receive lightweight `404` responses. The local Pages app worker defaults to a 1.5 GB heap with quiet Wrangler diagnostics.
@@ -177,7 +183,7 @@ Google Calendar-style prompts now use a deterministic first-party Calendar Plann
 
 ### Dedicated runtime-node Live Workspaces
 
-`/workspace-setup` creates real project workspaces on an operator-configured Ubuntu runtime node. The runtime server connects to the node over SSH from the server side only, provisions PostgreSQL if needed, creates one Linux user per project, locks the workspace directory to that user, creates a project-specific PostgreSQL role/database, and returns one-time client credentials.
+`/workspace-setup` creates real project workspaces on an operator-configured Ubuntu runtime node. The runtime server connects to the node over SSH from the server side only, provisions PostgreSQL if needed, creates one Linux user per project, locks the workspace directory to that user, creates a project-specific PostgreSQL role/database, and returns one-time client credentials. Normal hosted chat projects use the same isolation automatically and receive their database through a server-only SSH tunnel whenever project commands or Preview run.
 
 Configure it with ignored env/runtime service variables:
 
@@ -278,7 +284,7 @@ The hosted `FREE` path is restricted to the four approved MagnetAPI.org coding m
 
 The browser startup path keeps preview/deploy controls out of the initial header chunk until chat starts. This preserves deploy access once a preview exists without reintroducing workbench initialization cycles during landing-page hydration.
 
-Follow-up prompts are history-aware. They use a stable project-context id, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory. If preview recovery rolls back a broken follow-up, verification treats that as unfinished unless the latest generated files still persist in the runtime snapshot.
+Follow-up prompts are history-aware. They use a stable project-context id, the complete saved conversation, deterministic current-workspace snapshots, hosted runtime snapshots as canonical file state, and a dedicated runtime shell so later prompts can improve the existing project instead of restarting from stale global memory. The persisted runtime session ID reconnects Preview and the same per-project PostgreSQL database after a reload. If preview recovery rolls back a broken follow-up, verification treats that as unfinished unless the latest generated files still persist in the runtime snapshot.
 
 After a hosted preview is verified healthy, the active chat stream is allowed to finish instead of staying open for inspection-only recovery loops, so users can immediately send follow-up improvements against the current project.
 
@@ -358,11 +364,11 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - `Chat` and `Workspace` are separate top-level tabs, with a compact `Workspace Activity` area for commentary and execution state that does not crowd out generated files and preview.
 - Managed Cloudflare instances are registration-first, one-client / one-instance environments with preferred-subdomain support and private client profile capture.
 - `admin.bolt.gives` provides the private operator panel for client profiles, managed-instance assignments, filtered profile export, audience-based operator email sends, and admin email activity.
-- The live console now includes an in-app `Report Bug` control that captures the reporter’s full name, reply email, and issue summary, stores the report privately in PostgreSQL, and routes a formatted operator notification without exposing server-side credentials.
+- The live console includes a `Report Bug` control that opens the public [GitHub Issues](https://github.com/embire2/bolt.gives/issues) page for transparent issue reporting and contributor follow-up.
 - `admin.bolt.gives` now also includes a real SMTP configuration form, so operators can save or clear the outgoing mail transport from the admin panel without editing server env files by hand. Stored credentials remain server-side only and the browser only ever sees masked transport metadata.
 - The admin surface is now structured as an operator dashboard with sticky sidebar navigation, section anchors, grouped KPI cards, and clearly separated panels for tenants, client profiles, managed instances, and outreach.
 - The operator dashboard uses stable UTC timestamp rendering, so the authenticated admin panel stays intact after hydration instead of collapsing on locale mismatches.
-- Header-level `Shout Out Box` messaging lets users on the same deployment broadcast short updates to other active users, with an unread badge and a per-user settings toggle.
+- The former header Shout Out Box has been retired so project, Preview, and prompt controls remain the primary workspace surfaces.
 - Managed-instance rollout now refuses to start when the live runtime checkout is behind `origin/main`, which prevents silent stale-fleet refreshes from the wrong git SHA.
 - Self-hosting supports custom app/admin/create domains, local PostgreSQL, and Caddy-managed HTTPS.
 
@@ -559,9 +565,9 @@ Hosted-instance note:
 - Managed Cloudflare instances do not receive the MagnetAPI token itself. They receive a server-only relay secret on the Pages project, and the live app relays hosted FREE requests back to the operator runtime without exposing the upstream token.
 - Operators can run `pnpm run cloudflare:sync-free-provider -- --include-managed` after a Cloudflare deploy to refresh the canonical Pages project plus active managed Pages projects with the hosted FREE relay and quota config. Follow with `pnpm run smoke:free-provider` to verify `alpha1.bolt.gives`, `bolt.gives`, and `bolt-gives.pages.dev` do not ask for user API keys.
 - Hosted FREE relay authorization falls back to the local runtime service on the operator host, so all four built-in MagnetAPI.org choices work on Pages-hosted managed trials without asking users for their own API key.
-- Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage.
+- Chat history persistence is browser-only and initializes only when IndexedDB exists, so Cloudflare/SSR rendering does not try to open client storage. Each record stores the full conversation, source snapshot, and non-secret runtime session ID required to reopen the same project workspace and database from that browser.
 - Hosted preview autostart waits for the managed runtime `ready` event before reporting success, which keeps live follow-up prompts attached to a verified current project instead of a preview stuck in `starting`.
-- Live browser E2E checks now require generated and follow-up tokens to persist in the hosted runtime snapshot, with bounded snapshot/status fetch timeouts so release validation cannot hang silently.
+- Live browser E2E checks can require generated and follow-up tokens to persist in the hosted runtime snapshot, reopen the project through sidebar history under the same runtime session, and verify that the dedicated PostgreSQL tunnel reports connected, with bounded snapshot/status fetch timeouts so release validation cannot hang silently.
 
 ### 3. Verify the install
 

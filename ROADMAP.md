@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 Status legend:
 
@@ -39,6 +39,10 @@ Release theme: finish account lifecycle hardening, expand first-pass template co
 - [x] Preserve preview isolation headers on repair/handoff documents so runtime transitions cannot be blocked by the browser.
 - [x] Strengthen hosted browser acceptance so visible repair errors, fatal console diagnostics, a busy final composer, or an unhealthy runtime fail the E2E.
 - [x] Verify the actual FREE provider and model in initial and follow-up E2E request payloads.
+- [x] Restore saved projects with their complete conversation, source snapshot, and stable hosted runtime session when selected from sidebar history.
+- [x] Connect each hosted project process to its dedicated runtime-node PostgreSQL database through a server-only, per-session SSH tunnel.
+- [x] Extend Calendar browser acceptance to revisit a saved sidebar project and verify the same healthy Preview/runtime/database connection.
+- [x] Retire the header Shout Out Box and route `Report Bug` directly to the public GitHub Issues workflow.
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
@@ -485,7 +489,7 @@ Release theme: make bolt.gives reliable enough for daily hosted use by hardening
 - [x] New managed instances are provisioned from the current live build and protected hosted FREE relay secret.
 - [x] Managed instance registry writes use collision-proof atomic temp files, so overlapping startup/interval rollout writes cannot reuse the same temp path.
 - [x] `admin.bolt.gives` includes the private operator dashboard, client profile filtering/export, instance assignment state, SMTP configuration, and audience-based outbound email.
-- [x] Header-level `Shout Out Box` messaging is available with unread tracking and a user-side settings toggle.
+- [x] Header-level `Shout Out Box` messaging shipped in v3.1.0 and was retired from the v3.2.0 UI to keep project controls focused.
 - [x] Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, and Caddy-managed HTTPS.
 
 ## v3.1.0 - Delivery Record
@@ -530,11 +534,11 @@ Release theme: turn the current hosted reliability baseline into a more observab
 - [~] Improve automatic repair for apt, dependency, build, Caddy, and service-start failures.
 - [ ] Keep interactive install prompts recoverable and clear when a VPS is partially configured.
 
-6. Transparency and moderation
+6. Transparency and issue reporting
 
 - [~] Eliminate remaining generic keep-alive commentary and keep progress derived from concrete runtime/file/command events.
 - [x] Keep the same status model visible in both `Chat` and `Workspace`.
-- [~] Add broadcast communication moderation and abuse/reporting controls for the Shout Out Box.
+- [x] Replace the retired Shout Out Box/private bug modal with direct public GitHub Issues reporting.
 
 ### P1 Improvements
 

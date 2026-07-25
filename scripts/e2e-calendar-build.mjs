@@ -11,6 +11,8 @@ const providerName = process.env.E2E_PROVIDER || 'FREE';
 const modelName = process.env.E2E_MODEL || 'gpt-5.6-sol';
 const appToken = `CAL_${Date.now().toString(36)}`.toUpperCase();
 const requireFollowUp = process.env.E2E_REQUIRE_FOLLOWUP === '1';
+const requireHistoryRestore = process.env.E2E_REQUIRE_HISTORY_RESTORE === '1';
+const requireProjectDatabase = process.env.E2E_REQUIRE_PROJECT_DATABASE === '1';
 const followUpModelName = requireFollowUp ? process.env.E2E_FOLLOWUP_MODEL || 'claude-sonnet-5' : null;
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toUpperCase() : null;
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
@@ -286,6 +288,144 @@ async function waitForChatIdle(page, timeout = 180000) {
   log('chat stream idle');
 }
 
+async function inspectPersistedProject(page, projectPath, expectedTokens) {
+  const urlId = decodeURIComponent(String(projectPath || '').replace(/^\/chat\//, ''));
+
+  return page.evaluate(
+    async ({ requestedUrlId, tokens }) => {
+      const database = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('boltHistory', 2);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const chat = await new Promise((resolve, reject) => {
+        const transaction = database.transaction('chats', 'readonly');
+        const request = transaction.objectStore('chats').index('urlId').get(requestedUrlId);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+
+      if (!chat) {
+        database.close();
+        return null;
+      }
+
+      const snapshotRecord = await new Promise((resolve, reject) => {
+        const transaction = database.transaction('snapshots', 'readonly');
+        const request = transaction.objectStore('snapshots').get(chat.id);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+      database.close();
+
+      const serializedMessages = JSON.stringify(chat.messages || []);
+      const snapshot = snapshotRecord?.snapshot || null;
+
+      return {
+        id: chat.id,
+        urlId: chat.urlId,
+        messageCount: Array.isArray(chat.messages) ? chat.messages.length : 0,
+        messagesContainTokens: tokens.every((token) => serializedMessages.includes(token)),
+        snapshotFileCount: snapshot?.files ? Object.keys(snapshot.files).length : 0,
+        snapshotChatIndex: snapshot?.chatIndex || null,
+        runtimeSessionId: snapshot?.runtimeSessionId || null,
+      };
+    },
+    {
+      requestedUrlId: urlId,
+      tokens: expectedTokens,
+    },
+  );
+}
+
+async function verifyPersistedProjectRestore(page, options) {
+  const { projectPath, originalRuntimeSessionId, expectedTokens } = options;
+  const persisted = await inspectPersistedProject(page, projectPath, expectedTokens);
+
+  if (
+    !persisted ||
+    persisted.messageCount < 2 ||
+    !persisted.messagesContainTokens ||
+    persisted.snapshotFileCount === 0 ||
+    persisted.runtimeSessionId !== originalRuntimeSessionId
+  ) {
+    return {
+      ok: false,
+      persisted,
+      reason: 'The saved chat record, source snapshot, or runtime binding was incomplete.',
+    };
+  }
+
+  const origin = new URL(baseUrl).origin;
+  await page.goto(`${origin}/chat`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await ensureChatComposerVisible(page);
+  await page.getByRole('button', { name: 'Open sidebar' }).click();
+
+  const escapedProjectPath = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const historyLink = page.locator(`a[href="${escapedProjectPath}"]`).first();
+  await historyLink.waitFor({ state: 'visible', timeout: 30000 });
+  await Promise.all([page.waitForURL((url) => url.pathname === projectPath, { timeout: 90000 }), historyLink.click()]);
+  await ensureChatComposerVisible(page);
+  await page.waitForFunction(
+    (tokens) => tokens.every((token) => document.body.innerText.includes(token)),
+    expectedTokens,
+    { timeout: 90000 },
+  );
+  await keepPreviewSurfaceVisible(page);
+
+  const deadline = Date.now() + 180000;
+  let restoredRuntimeSessionId = null;
+  let restoredPreviewContainsTokens = false;
+  let restoredStatus = null;
+
+  while (Date.now() < deadline) {
+    const preview = page.locator('iframe[title="preview"]').first();
+    const previewSrc = await preview.getAttribute('src').catch(() => null);
+
+    if (previewSrc) {
+      restoredRuntimeSessionId = extractRuntimeSessionId(previewSrc);
+    }
+
+    if (await preview.isVisible().catch(() => false)) {
+      const previewText = await page
+        .frameLocator('iframe[title="preview"]')
+        .first()
+        .locator('body')
+        .innerText({ timeout: 1500 })
+        .catch(() => '');
+      restoredPreviewContainsTokens = expectedTokens.every((token) => previewText.includes(token));
+    }
+
+    if (restoredRuntimeSessionId) {
+      const statusResult = await fetchRuntimeJson(page, restoredRuntimeSessionId, 'preview-status');
+      restoredStatus = statusResult.payload;
+    }
+
+    if (
+      restoredRuntimeSessionId === originalRuntimeSessionId &&
+      restoredPreviewContainsTokens &&
+      restoredStatus?.status === 'ready' &&
+      restoredStatus?.healthy === true
+    ) {
+      break;
+    }
+
+    await delay(1500);
+  }
+
+  return {
+    ok:
+      restoredRuntimeSessionId === originalRuntimeSessionId &&
+      restoredPreviewContainsTokens &&
+      restoredStatus?.status === 'ready' &&
+      restoredStatus?.healthy === true,
+    persisted,
+    restoredRuntimeSessionId,
+    restoredPreviewContainsTokens,
+    restoredStatus,
+  };
+}
+
 async function main() {
   await fs.mkdir(outDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -407,6 +547,9 @@ async function main() {
   let followUpSnapshotContainsTokens = false;
   let chatBecameIdle = false;
   let finalRuntimeStatus = null;
+  let historyRestore = null;
+  let historyRestoreVerified = !requireHistoryRestore;
+  let projectDatabaseVerified = !requireProjectDatabase;
   let bodyTextLast = '';
   let lastPreviewText = '';
   let lastPreviewSrc = '';
@@ -674,6 +817,37 @@ async function main() {
   if (hostedRuntimeSessionId) {
     const finalStatusResult = await fetchRuntimeJson(page, hostedRuntimeSessionId, 'preview-status');
     finalRuntimeStatus = finalStatusResult.payload;
+    projectDatabaseVerified = !requireProjectDatabase || finalRuntimeStatus?.projectDatabase?.status === 'connected';
+  }
+
+  if (requireHistoryRestore && hostedRuntimeSessionId) {
+    const projectUrl = new URL(page.url());
+    const restoreTokens = followUpToken ? [appToken, followUpToken] : expectedInitialTokens;
+
+    if (projectUrl.pathname.startsWith('/chat/') && projectUrl.pathname.length > '/chat/'.length) {
+      log('verify saved project restore', projectUrl.pathname);
+      historyRestore = await verifyPersistedProjectRestore(page, {
+        projectPath: projectUrl.pathname,
+        originalRuntimeSessionId: hostedRuntimeSessionId,
+        expectedTokens: restoreTokens,
+      });
+      historyRestoreVerified = historyRestore.ok;
+
+      if (historyRestore.restoredStatus) {
+        finalRuntimeStatus = historyRestore.restoredStatus;
+        projectDatabaseVerified =
+          !requireProjectDatabase || finalRuntimeStatus?.projectDatabase?.status === 'connected';
+      }
+
+      log('saved project restore result', JSON.stringify(historyRestore));
+      await page.screenshot({ path: path.join(outDir, '04-history-restored.png'), fullPage: true });
+    } else {
+      historyRestore = {
+        ok: false,
+        reason: `Project did not navigate to a saved /chat/:id route: ${projectUrl.pathname}`,
+      };
+      historyRestoreVerified = false;
+    }
   }
 
   await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
@@ -717,6 +891,8 @@ async function main() {
       consoleErrors.every((entry) => !isFatalConsoleError(entry)) &&
       networkErrors.every(isBenignNetworkFailure) &&
       (!hostedRuntimeSessionId || (finalRuntimeStatus?.status === 'ready' && finalRuntimeStatus?.healthy === true)) &&
+      historyRestoreVerified &&
+      projectDatabaseVerified &&
       initialSelectionOk &&
       followUpSelectionOk &&
       runtimeCleanup.ok,
@@ -726,6 +902,8 @@ async function main() {
     followUpModelName,
     appToken,
     requireFollowUp,
+    requireHistoryRestore,
+    requireProjectDatabase,
     followUpToken,
     elapsedSec: Number(elapsed()),
     sawAssistantContent,
@@ -742,6 +920,9 @@ async function main() {
     chatBecameIdle,
     hostedRuntimeSessionId,
     finalRuntimeStatus,
+    historyRestore,
+    historyRestoreVerified,
+    projectDatabaseVerified,
     runtimeCleanup,
     chatRequestInputs,
     chatRequests,
@@ -771,6 +952,8 @@ async function main() {
         followUpSubmitted,
         followUpPreviewContainsTokens,
         followUpSnapshotContainsTokens,
+        historyRestoreVerified,
+        projectDatabaseVerified,
         initialSelectionOk,
         followUpSelectionOk,
         chatBecameIdle,

@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Saved projects now reopen with their complete visible conversation, source snapshot, and original hosted runtime session. Snapshot reads use the chat record's internal ID, first saves allocate that ID before writing files, writes finish before navigation, and delayed samplers cannot leak messages into a different project.
+- Project history entries no longer disappear when an agent omits an artifact title or URL slug; the sidebar keeps the saved record under an `Untitled project` fallback route.
+- Hosted chat-created projects now connect their dedicated runtime-node PostgreSQL database to shell, build, and preview processes through an isolated server-side SSH tunnel. Existing database credentials are read from the private runtime-node workspace, verified against the registry hash, and never placed in browser state or generated source files.
 - The Wrangler runtime-home regression test now controls all XDG directory inputs instead of inheriting runner-specific paths, keeping the same production override behavior while making local and GitHub results deterministic.
 - The production Cloudflare Pages workflow now polls a fresh immutable deployment URL until the edge serves the expected application shell, so normal propagation delay cannot fail an otherwise successful release with an immediate transient `404`.
 - Web-only GitHub jobs now skip the unused Electron binary download, and CodeQL runs one current v4 JavaScript/TypeScript analysis instead of duplicate language jobs, preventing transient Electron CDN failures and avoidable hosted-runner pressure from failing a release.
@@ -26,13 +29,15 @@
 
 ### Changed
 
+- The header Shout Out Box and its user setting have been retired. `Report Bug` now opens the public [`embire2/bolt.gives` GitHub Issues](https://github.com/embire2/bolt.gives/issues) page directly instead of collecting a second private in-app report.
 - Plain-English agent commentary heartbeats now run every 10 seconds. Heartbeats are explicitly marked and do not count as meaningful model progress, so transparency cannot suppress stalled-stream recovery.
 - The hosted Calendar E2E now rejects visible server/network/timeout/repair errors, fatal chat console diagnostics, a non-idle composer, or an unhealthy final runtime even when the iframe happened to render.
 - The hosted Calendar E2E now pins provider/model selection through both cookies and per-instance storage and verifies the actual `/api/chat` payload for the initial request and follow-up, preventing a silent fallback from being mistaken for a FREE model test.
+- The hosted Calendar E2E can now require a persisted chat and snapshot, leave the project, reopen it through sidebar history, verify that the same runtime/preview returns, and require the project PostgreSQL connection to report `connected`.
 
 ### Tests
 
-- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation and settlement, server-owned Preview revisions, server-confirmed iframe refreshes, isolation-safe handoff pages, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, and isolated stale-port redirects.
+- Added regression coverage for completed historical commands, latest-event progress selection, stable repair presentation and settlement, server-owned Preview revisions, server-confirmed iframe refreshes, isolation-safe handoff pages, idempotent hosted workspace/start delivery, post-preview stream finalization, heartbeat classification and cadence, isolated stale-port redirects, complete chat restoration, sampler cancellation, runtime-session continuity, database tunnel isolation, and direct GitHub bug reporting.
 
 ## v3.1.0 (2026-07-22)
 

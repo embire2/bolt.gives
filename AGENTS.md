@@ -52,10 +52,10 @@ The current hosted product baseline is:
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`
-- Header-level `Shout Out Box` broadcast messaging with user-side settings toggle
+- Header-level `Report Bug` action that opens the public `embire2/bolt.gives` GitHub Issues page; the former Shout Out Box is retired
 - Interactive self-host installer with local PostgreSQL and Caddy HTTPS support
 - Dedicated runtime-node Live Workspaces at `/workspace-setup` for per-project Ubuntu CLI users, private workspace directories, and per-project PostgreSQL databases
-- Hosted chat-created projects auto-provision dedicated runtime-node CLI/database workspaces.
+- Hosted chat-created projects auto-provision dedicated runtime-node CLI/database workspaces and inject the project database into server-side commands/Preview through an isolated SSH tunnel.
 - Preview can publish projects to `https://{subdomain}.bolt.gives` and start server-side Stripe Checkout for `$10/month` custom-domain hosting.
 
 Do not regress any of the above without an explicit user request.
@@ -97,6 +97,7 @@ When changing hosted runtime behavior, validate both the app service and the run
 These are the current release priorities:
 
 - Prompt-to-preview reliability
+- Saved-project continuity across full chat history, source snapshots, hosted runtime identity, Preview, and the project database
 - Clear execution state in both `Chat` and `Workspace`
 - Commentary derived from actual runtime events, not filler
 - Remaining browser-weight reduction on editor/PDF/git/terminal surfaces
@@ -189,6 +190,7 @@ If deployment fails:
 - Provisioning is server-side only through runtime-control endpoints.
 - One project gets one Unix user, one private workspace directory, one PostgreSQL database, and one PostgreSQL role.
 - Normal hosted chat-created projects must auto-provision the same per-project runtime-node CLI/database workspace in the background.
+- Hosted project commands and Preview must receive that project's `DATABASE_URL`/`PG*` values server-side through an isolated tunnel; never persist those credentials in browser history or generated source.
 - Client-selected CLI usernames must be validated as safe Linux usernames and must not collide with system users.
 - Client passwords and generated database passwords are shown once, then stored only as hashes/metadata.
 - Prefer SSH keys and the non-root `bolt-runtime-agent` after bootstrap. Root/password access is acceptable only for initial setup or explicitly approved emergency repair, and must be removed from service runtime env once the key path is verified.

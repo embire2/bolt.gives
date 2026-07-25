@@ -41,6 +41,7 @@
     "gate:release": "node scripts/release-gate.mjs",
     "gate:release:live": "RELEASE_GATE_DOMAINS=https://alpha1.bolt.gives,https://ahmad.bolt.gives node scripts/release-gate.mjs",
     "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
+    "e2e:calendar": "node scripts/e2e-calendar-build.mjs",
     "e2e:free-startup": "node scripts/e2e-free-startup-label.mjs",
     "smoke:live": "node scripts/live-release-smoke.mjs",
     "smoke:free-provider": "node scripts/free-provider-live-smoke.mjs",
