@@ -571,7 +571,7 @@ export class ActionRunner {
     }
   }
 
-  addAction(data: ActionCallbackData) {
+  addAction(data: ActionCallbackData, options: { restored?: boolean } = {}) {
     const { actionId } = data;
 
     const actions = this.actions.get();
@@ -583,17 +583,22 @@ export class ActionRunner {
     }
 
     const abortController = new AbortController();
+    const restored = options.restored === true;
 
     this.actions.setKey(actionId, {
       ...data.action,
-      status: 'pending',
-      executed: false,
+      status: restored ? 'complete' : 'pending',
+      executed: restored,
       abort: () => {
         abortController.abort();
         this.#updateAction(actionId, { status: 'aborted' });
       },
       abortSignal: abortController.signal,
     });
+
+    if (restored) {
+      return;
+    }
 
     this.#currentExecutionPromise.then(() => {
       this.#updateAction(actionId, { status: 'running' });

@@ -482,10 +482,14 @@ export function Chat() {
 
   const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
   const title = useStore(description);
+  const reloadedMessageSignature = initialMessages.map((message) => message.id).join(':');
+  const reloadPreparationKey = `${chatKey}:${reloadedMessageSignature}`;
+  const [preparedReloadKey, setPreparedReloadKey] = useState<string | null>(null);
 
   useEffect(() => {
-    workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
-  }, [initialMessages]);
+    workbenchStore.setReloadedMessages(initialMessages.map((message) => message.id));
+    setPreparedReloadKey(reloadPreparationKey);
+  }, [reloadPreparationKey]);
 
   useEffect(() => {
     if (!ready) {
@@ -500,7 +504,7 @@ export function Chat() {
 
   return (
     <>
-      {ready && (
+      {ready && preparedReloadKey === reloadPreparationKey && (
         <ChatImpl
           key={chatKey}
           description={title}

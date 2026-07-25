@@ -1586,7 +1586,9 @@ export class WorkbenchStore {
       return;
     }
 
-    await artifact.runner.addAction(data);
+    await artifact.runner.addAction(data, {
+      restored: this.#reloadedMessages.has(data.messageId),
+    });
   }
 
   runAction(data: ActionCallbackData, isStreaming: boolean = false) {

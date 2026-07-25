@@ -409,6 +409,7 @@ async function verifyPersistedProjectRestore(page, options) {
   const escapedProjectPath = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const historyLink = page.locator(`a[href="${escapedProjectPath}"]`).first();
   await historyLink.waitFor({ state: 'visible', timeout: 30000 });
+  const runtimeMutationBaseline = runtimeMutationRequests.length;
   await Promise.all([page.waitForURL((url) => url.pathname === projectPath, { timeout: 90000 }), historyLink.click()]);
   await ensureChatComposerVisible(page);
   try {
@@ -467,11 +468,13 @@ async function verifyPersistedProjectRestore(page, options) {
       restoredRuntimeSessionId === originalRuntimeSessionId &&
       restoredPreviewContainsTokens &&
       restoredStatus?.status === 'ready' &&
-      restoredStatus?.healthy === true,
+      restoredStatus?.healthy === true &&
+      runtimeMutationRequests.length === runtimeMutationBaseline,
     persisted,
     restoredRuntimeSessionId,
     restoredPreviewContainsTokens,
     restoredStatus,
+    runtimeMutationCount: runtimeMutationRequests.length - runtimeMutationBaseline,
   };
 }
 

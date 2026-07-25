@@ -72,6 +72,28 @@ describe('ActionRunner start actions', () => {
     hostedRuntimeMocks.runHostedRuntimeCommand.mockResolvedValue({ exitCode: 0, output: 'ok' });
   });
 
+  it('keeps restored actions visible and complete without executing them again', async () => {
+    const { runner, executeCommand } = createRunnerHarness();
+    const actionData: ActionCallbackData = {
+      artifactId: 'artifact-restored',
+      messageId: 'message-restored',
+      actionId: 'action-restored',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    runner.addAction(actionData, { restored: true });
+    await runner.runAction(actionData);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(runner.actions.get()['action-restored']).toMatchObject({
+      status: 'complete',
+      executed: true,
+    });
+  });
+
   it('normalizes prefixed start commands before execution', async () => {
     const { runner, executeCommand } = createRunnerHarness();
     const actionData: ActionCallbackData = {

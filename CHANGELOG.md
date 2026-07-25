@@ -8,7 +8,7 @@ No unreleased changes.
 
 ### Fixed
 
-- Saved projects now reopen with their complete visible conversation, source snapshot, and original hosted runtime session. History hydration uses the authoritative `/chat/:id` route parameter even when shared loader context is empty; snapshot reads use the chat record's internal ID, first saves allocate that ID before writing files, writes finish before navigation, delayed samplers cannot leak messages into a different project, and restored historical execution events no longer force the visible surface away from Chat.
+- Saved projects now reopen with their complete visible conversation, source snapshot, and original hosted runtime session. History hydration uses the authoritative `/chat/:id` route parameter even when shared loader context is empty; snapshot reads use the chat record's internal ID, first saves allocate that ID before writing files, writes finish before navigation, and delayed samplers cannot leak messages into a different project. Historical actions remain visible as completed transcript entries but no longer rerun file writes, installs, or preview starts, and restored execution events no longer force the visible surface away from Chat.
 - Restoring saved MCP settings now sends the required CSRF credential and coalesces concurrent initializers, preventing duplicate `403` requests and console errors when a saved project is reopened.
 - Hosted Vite repair now reconstructs missing React plugin and TypeScript configuration before preview start, preventing otherwise valid generated TSX from rendering a blank page with `React is not defined` and keeping `tsc -b` builds deployable.
 - Successful automatic preview starts now remain `ready` and `healthy` instead of being overwritten with a stale `starting` state after strict verification completes.
@@ -41,7 +41,7 @@ No unreleased changes.
 - Plain-English agent commentary heartbeats now run every 10 seconds. Heartbeats are explicitly marked and do not count as meaningful model progress, so transparency cannot suppress stalled-stream recovery.
 - The hosted Calendar E2E now rejects visible server/network/timeout/repair errors, fatal chat console diagnostics, a non-idle composer, or an unhealthy final runtime even when the iframe happened to render.
 - The hosted Calendar E2E now pins provider/model selection through both cookies and per-instance storage and verifies the actual `/api/chat` payload for the initial request and follow-up, preventing a silent fallback from being mistaken for a FREE model test.
-- The hosted Calendar E2E can now require a persisted chat and snapshot, leave the project, reopen it through sidebar history, verify that the same runtime/preview returns, and require the project PostgreSQL connection to report `connected`.
+- The hosted Calendar E2E can now require a persisted chat and snapshot, leave the project, reopen it through sidebar history without any runtime mutation, verify that the same runtime/preview returns, and require the project PostgreSQL connection to report `connected`.
 
 ### Tests
 

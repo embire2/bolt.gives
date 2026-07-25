@@ -63,6 +63,7 @@ describe('workbenchStore file actions', () => {
     workbenchStore.currentView.set('preview');
     workbenchStore.unsavedFiles.set(new Set());
     workbenchStore.clearStepRunnerEvents();
+    workbenchStore.setReloadedMessages([]);
   });
 
   afterEach(() => {
@@ -73,6 +74,36 @@ describe('workbenchStore file actions', () => {
     workbenchStore.currentView.set('code');
     workbenchStore.unsavedFiles.set(new Set());
     workbenchStore.clearStepRunnerEvents();
+    workbenchStore.setReloadedMessages([]);
+  });
+
+  it('registers historical actions as restored before the message parser can execute them', async () => {
+    const addAction = vi.fn();
+    const data: ActionCallbackData = {
+      artifactId: 'artifact-restored',
+      messageId: 'message-restored',
+      actionId: 'action-restored',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    workbenchStore.setReloadedMessages([data.messageId]);
+    workbenchStore.artifacts.set({
+      [data.artifactId]: {
+        id: data.artifactId,
+        title: 'Restored project',
+        closed: false,
+        runner: {
+          addAction,
+        } as any,
+      },
+    });
+
+    await workbenchStore._addAction(data);
+
+    expect(addAction).toHaveBeenCalledWith(data, { restored: true });
   });
 
   it('persists unopened file actions through the workspace store before syncing the runner', async () => {
