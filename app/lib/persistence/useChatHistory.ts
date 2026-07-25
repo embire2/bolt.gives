@@ -19,6 +19,7 @@ import {
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { detectProjectCommands } from '~/utils/projectCommands';
+import { isHostedRuntimeEnabled } from '~/lib/runtime/hosted-runtime-client';
 import {
   hasRestorableSnapshotFiles,
   resolvePersistedChatRouteId,
@@ -26,6 +27,7 @@ import {
   shouldNavigateAfterPersistedMessage,
   shouldPersistSnapshot,
 } from './chat-history-utils';
+import { rebindHealthyHostedRuntimePreview } from './chat-history-runtime';
 
 export interface ChatHistoryItem {
   id: string;
@@ -92,83 +94,116 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
     [db],
   );
 
-  const restoreSnapshot = useCallback(
-    async (
-      snapshot?: Snapshot,
-      projectCommands?: Awaited<ReturnType<typeof detectProjectCommands>>,
-      shouldContinue: () => boolean = () => true,
-    ) => {
-      const validSnapshot = snapshot || { chatIndex: '', files: {} };
+  const restoreSnapshot = useCallback(async (snapshot?: Snapshot, shouldContinue: () => boolean = () => true) => {
+    const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
-      if (!hasRestorableSnapshotFiles(validSnapshot) || !shouldContinue()) {
-        return;
-      }
+    if (!hasRestorableSnapshotFiles(validSnapshot) || !shouldContinue()) {
+      return;
+    }
 
-      const workbenchStore = await getWorkbenchStore();
+    const workbenchStore = await getWorkbenchStore();
 
-      if (!shouldContinue()) {
-        return;
-      }
+    if (!shouldContinue()) {
+      return;
+    }
 
-      if (validSnapshot.runtimeSessionId) {
-        workbenchStore.setHostedRuntimeSessionId(validSnapshot.runtimeSessionId);
-      }
+    if (validSnapshot.runtimeSessionId) {
+      workbenchStore.setHostedRuntimeSessionId(validSnapshot.runtimeSessionId);
+    }
 
-      await workbenchStore.restoreSnapshot(validSnapshot.files);
+    await workbenchStore.restoreSnapshot(validSnapshot.files);
 
-      if (!shouldContinue()) {
-        return;
-      }
+    if (!shouldContinue()) {
+      return;
+    }
 
-      const runtimeArtifactId = 'restored-project-setup';
-      const runtimeMessageId = `snapshot-runtime-${validSnapshot.chatIndex || Date.now()}`;
-
-      workbenchStore.addArtifact({
-        id: runtimeArtifactId,
-        messageId: runtimeMessageId,
-        title: 'Restored Project Runtime',
-        type: 'bundled',
-      });
-
-      const runtimeActions = [
-        projectCommands?.setupCommand
-          ? {
-              artifactId: runtimeArtifactId,
-              messageId: runtimeMessageId,
-              actionId: `${runtimeArtifactId}-setup`,
-              action: {
-                type: 'shell' as const,
-                content: projectCommands.setupCommand,
-              },
+    if (validSnapshot.runtimeSessionId && isHostedRuntimeEnabled()) {
+      try {
+        const rebound = await rebindHealthyHostedRuntimePreview({
+          sessionId: validSnapshot.runtimeSessionId,
+          applyPreview: (preview) => {
+            if (shouldContinue()) {
+              workbenchStore.syncHostedPreview(preview);
             }
-          : null,
-        projectCommands?.startCommand
-          ? {
-              artifactId: runtimeArtifactId,
-              messageId: runtimeMessageId,
-              actionId: `${runtimeArtifactId}-start`,
-              action: {
-                type: 'start' as const,
-                content: projectCommands.startCommand,
-              },
-            }
-          : null,
-      ].filter((action): action is NonNullable<typeof action> => action !== null);
+          },
+        });
 
-      for (const action of runtimeActions) {
-        const existingArtifact = workbenchStore.artifacts.get()[runtimeArtifactId];
-        const existingAction = existingArtifact?.runner.actions.get()[action.actionId];
+        if (!shouldContinue() || rebound) {
+          return;
+        }
+      } catch (error) {
+        logStore.logWarning('Saved hosted Preview was unavailable; runtime recovery will run', {
+          sessionId: validSnapshot.runtimeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
-        if (existingAction) {
-          continue;
+    const files = Object.entries(validSnapshot.files)
+      .map(([filePath, value]) => {
+        if (value?.type !== 'file') {
+          return null;
         }
 
-        workbenchStore.addAction(action);
-        workbenchStore.runAction(action);
+        return {
+          content: value.content,
+          path: filePath,
+        };
+      })
+      .filter((file): file is { content: string; path: string } => Boolean(file));
+    const projectCommands = await detectProjectCommands(files);
+
+    if (!shouldContinue()) {
+      return;
+    }
+
+    const runtimeArtifactId = 'restored-project-setup';
+    const runtimeMessageId = `snapshot-runtime-${validSnapshot.chatIndex || Date.now()}`;
+
+    workbenchStore.addArtifact({
+      id: runtimeArtifactId,
+      messageId: runtimeMessageId,
+      title: 'Restored Project Runtime',
+      type: 'bundled',
+    });
+
+    const runtimeActions = [
+      projectCommands?.setupCommand
+        ? {
+            artifactId: runtimeArtifactId,
+            messageId: runtimeMessageId,
+            actionId: `${runtimeArtifactId}-setup`,
+            action: {
+              type: 'shell' as const,
+              content: projectCommands.setupCommand,
+            },
+          }
+        : null,
+      projectCommands?.startCommand
+        ? {
+            artifactId: runtimeArtifactId,
+            messageId: runtimeMessageId,
+            actionId: `${runtimeArtifactId}-start`,
+            action: {
+              type: 'start' as const,
+              content: projectCommands.startCommand,
+            },
+          }
+        : null,
+    ].filter((action): action is NonNullable<typeof action> => action !== null);
+
+    for (const action of runtimeActions) {
+      const existingArtifact = workbenchStore.artifacts.get()[runtimeArtifactId];
+      const existingAction = existingArtifact?.runner.actions.get()[action.actionId];
+
+      if (existingAction) {
+        continue;
       }
-    },
-    [],
-  );
+
+      workbenchStore.addAction(action);
+      workbenchStore.runAction(action);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,25 +267,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
         }
 
         if (restored.shouldRestoreSnapshot && snapshot) {
-          const files = Object.entries(snapshot.files || {})
-            .map(([filePath, value]) => {
-              if (value?.type !== 'file') {
-                return null;
-              }
-
-              return {
-                content: value.content,
-                path: filePath,
-              };
-            })
-            .filter((file): file is { content: string; path: string } => Boolean(file));
-          const projectCommands = await detectProjectCommands(files);
-
-          if (cancelled) {
-            return;
-          }
-
-          await restoreSnapshot(snapshot, projectCommands, () => !cancelled);
+          await restoreSnapshot(snapshot, () => !cancelled);
         }
 
         if (cancelled) {
