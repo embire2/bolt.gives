@@ -649,7 +649,7 @@ describe('ActionRunner start actions', () => {
     );
   });
 
-  it('syncs a sanitized full hosted snapshot after a completed file action', async () => {
+  it('syncs a completed hosted file action without pruning other workspace files', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const writeFile = vi.fn().mockResolvedValue(undefined);
@@ -700,8 +700,41 @@ describe('ActionRunner start actions', () => {
 
     runner.addAction(actionData);
     await runner.runAction(actionData);
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'shared-session-file-1',
+        prune: false,
+        files: {
+          '/home/project/src/App.jsx': {
+            type: 'file',
+            content: 'export default function App() { return <main>hosted</main>; }',
+            isBinary: false,
+          },
+        },
+      }),
+    );
+
+    const shellAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'shell-after-hosted-file-batch',
+      action: {
+        type: 'shell',
+        content: 'pnpm install',
+      } as any,
+    };
+
+    runner.addAction(shellAction);
+
+    const shellRun = runner.runAction(shellAction);
+    await vi.advanceTimersByTimeAsync(2200);
+    await shellRun;
+
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(2);
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
         sessionId: 'shared-session-file-1',
         prune: true,
@@ -719,6 +752,76 @@ describe('ActionRunner start actions', () => {
         }),
       }),
     );
+  });
+
+  it('batches multiple completed hosted files without pruning between actions', async () => {
+    hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
+
+    const runner = new ActionRunner(
+      Promise.resolve({
+        workdir: '/home/project',
+        fs: {
+          readFile: vi.fn().mockResolvedValue('{}'),
+          readdir: vi.fn().mockResolvedValue([]),
+          mkdir: vi.fn().mockResolvedValue(undefined),
+          writeFile: vi.fn().mockResolvedValue(undefined),
+        },
+      }) as any,
+      () =>
+        ({
+          ready: vi.fn().mockResolvedValue(undefined),
+          terminal: {},
+          process: {},
+          executeCommand: vi.fn(),
+        }) as any,
+      () => ({}),
+      undefined,
+      'shared-session-multi-file-batch',
+    );
+    const appAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-hosted-batch-app',
+      action: {
+        type: 'file',
+        filePath: '/home/project/src/App.jsx',
+        content: 'export default function App() { return <main>batched</main>; }',
+      } as any,
+    };
+    const indexAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'file-hosted-batch-index',
+      action: {
+        type: 'file',
+        filePath: '/home/project/index.html',
+        content: '<div id="root"></div>',
+      } as any,
+    };
+
+    runner.addAction(appAction);
+    await runner.runAction(appAction);
+    runner.addAction(indexAction);
+    await runner.runAction(indexAction);
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
+
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
+      sessionId: 'shared-session-multi-file-batch',
+      prune: false,
+      files: {
+        '/home/project/src/App.jsx': {
+          type: 'file',
+          content: 'export default function App() { return <main>batched</main>; }',
+          isBinary: false,
+        },
+        '/home/project/index.html': {
+          type: 'file',
+          content: '<div id="root"></div>',
+          isBinary: false,
+        },
+      },
+    });
   });
 
   it('still syncs hosted file content when only the browser snapshot has the latest content', async () => {
@@ -767,6 +870,7 @@ describe('ActionRunner start actions', () => {
 
     runner.addAction(actionData);
     await runner.runAction(actionData);
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
 
     expect(writeFile).toHaveBeenCalledWith(
       'src/App.jsx',
@@ -775,14 +879,14 @@ describe('ActionRunner start actions', () => {
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'shared-session-file-browser-only',
-        prune: true,
-        files: expect.objectContaining({
+        prune: false,
+        files: {
           '/home/project/src/App.jsx': {
             type: 'file',
             content: 'export default function App() { return <main>same</main>; }',
             isBinary: false,
           },
-        }),
+        },
       }),
     );
   });
@@ -924,19 +1028,20 @@ describe('ActionRunner start actions', () => {
       },
       false,
     );
+    await vi.advanceTimersByTimeAsync(ActionRunner.HOSTED_FILE_FLUSH_DEBOUNCE_MS + 25);
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'shared-session-stream-batch',
-        prune: true,
-        files: expect.objectContaining({
+        prune: false,
+        files: {
           '/home/project/src/App.jsx': {
             type: 'file',
             content: 'export default function App() { return <main>latest</main>; }',
             isBinary: false,
           },
-        }),
+        },
       }),
     );
     expect(writeFile).toHaveBeenCalledWith(
@@ -1006,6 +1111,19 @@ describe('ActionRunner start actions', () => {
 
     runner.addAction(actionData);
     await runner.runAction(actionData);
+
+    const startAction: ActionCallbackData = {
+      artifactId: 'artifact-1',
+      messageId: 'message-1',
+      actionId: 'start-hosted-vite-repair',
+      action: {
+        type: 'start',
+        content: 'pnpm run dev',
+      } as any,
+    };
+
+    runner.addAction(startAction);
+    await runner.runAction(startAction);
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith({
       sessionId: 'shared-session-vite-repair',
@@ -1165,7 +1283,7 @@ describe('ActionRunner start actions', () => {
     expect(nonCleanupHostedCommands).toHaveLength(2);
   });
 
-  it('flushes pending hosted file changes before executing a shell command', async () => {
+  it('reconciles pending hosted file changes before executing a shell command', async () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     const runner = new ActionRunner(
@@ -1229,9 +1347,16 @@ describe('ActionRunner start actions', () => {
     runner.addAction(fileAction);
     await runner.runAction(fileAction);
 
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).not.toHaveBeenCalled();
+
+    runner.addAction(shellAction);
+
+    const shellRun = runner.runAction(shellAction);
+    await vi.advanceTimersByTimeAsync(2200);
+    await shellRun;
+
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenNthCalledWith(
-      1,
+    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'shared-session-command-flush',
         prune: true,
@@ -1249,14 +1374,6 @@ describe('ActionRunner start actions', () => {
         }),
       }),
     );
-
-    runner.addAction(shellAction);
-
-    const shellRun = runner.runAction(shellAction);
-    await vi.advanceTimersByTimeAsync(2200);
-    await shellRun;
-
-    expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
     expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'shared-session-command-flush',

@@ -189,6 +189,7 @@ export class ActionRunner {
   #hostedRuntimeFullSyncPending = true;
   #lastHostedRuntimeFileContents = new Map<string, string>();
   #pendingHostedRuntimeFiles = new Map<string, string>();
+  #hostedRuntimeFilesAwaitingFullSync = new Map<string, string>();
   #hostedRuntimeFlushTimer: ReturnType<typeof setTimeout> | null = null;
   #hostedRuntimeFlushPromise: Promise<void> = Promise.resolve();
   #lastHostedRuntimePreview?: HostedRuntimePreviewInfo;
@@ -296,6 +297,15 @@ export class ActionRunner {
     }
 
     const files = sanitizeHostedRuntimeFileMap(this.#getFilesSnapshot());
+    const filesIncludedFromActions = new Map(this.#hostedRuntimeFilesAwaitingFullSync);
+
+    for (const [filePath, content] of filesIncludedFromActions) {
+      files[filePath] = {
+        type: 'file',
+        content,
+        isBinary: false,
+      };
+    }
 
     await syncHostedRuntimeWorkspace({
       sessionId: this.#getHostedRuntimeSessionId(),
@@ -303,7 +313,6 @@ export class ActionRunner {
       prune: true,
     });
 
-    this.#hostedRuntimeFullSyncPending = false;
     this.#lastHostedRuntimeFileContents.clear();
 
     for (const [filePath, dirent] of Object.entries(files)) {
@@ -312,45 +321,31 @@ export class ActionRunner {
       }
     }
 
-    for (const [filePath, content] of [...this.#pendingHostedRuntimeFiles.entries()]) {
-      if (this.#lastHostedRuntimeFileContents.get(filePath) === content) {
+    for (const [filePath, content] of filesIncludedFromActions) {
+      if (this.#hostedRuntimeFilesAwaitingFullSync.get(filePath) === content) {
+        this.#hostedRuntimeFilesAwaitingFullSync.delete(filePath);
+      }
+
+      if (this.#pendingHostedRuntimeFiles.get(filePath) === content) {
         this.#pendingHostedRuntimeFiles.delete(filePath);
       }
     }
-  }
 
-  async #syncHostedRuntimeSnapshotFromFiles(files: FileMap) {
-    if (!isHostedRuntimeEnabled()) {
-      return;
-    }
-
-    const sanitizedFiles = sanitizeHostedRuntimeFileMap(files);
-
-    await syncHostedRuntimeWorkspace({
-      sessionId: this.#getHostedRuntimeSessionId(),
-      files: sanitizedFiles,
-      prune: true,
-    });
-
-    this.#hostedRuntimeFullSyncPending = false;
-    this.#lastHostedRuntimeFileContents.clear();
-    this.#pendingHostedRuntimeFiles.clear();
-
-    for (const [filePath, dirent] of Object.entries(sanitizedFiles)) {
-      if (dirent?.type === 'file' && !dirent.isBinary) {
-        this.#lastHostedRuntimeFileContents.set(filePath, dirent.content);
-      }
-    }
+    this.#hostedRuntimeFullSyncPending = this.#hostedRuntimeFilesAwaitingFullSync.size > 0;
   }
 
   async #flushHostedRuntimePendingFiles() {
-    if (!isHostedRuntimeEnabled() || this.#pendingHostedRuntimeFiles.size === 0) {
+    if (!isHostedRuntimeEnabled()) {
       return;
     }
 
     if (this.#hostedRuntimeFlushTimer) {
       clearTimeout(this.#hostedRuntimeFlushTimer);
       this.#hostedRuntimeFlushTimer = null;
+    }
+
+    if (this.#pendingHostedRuntimeFiles.size === 0) {
+      return;
     }
 
     const files = Object.fromEntries(
@@ -371,8 +366,6 @@ export class ActionRunner {
       prune: false,
       files,
     });
-
-    this.#hostedRuntimeFullSyncPending = false;
 
     for (const [filePath, dirent] of Object.entries(files)) {
       if (dirent?.type === 'file' && !dirent.isBinary) {
@@ -476,28 +469,40 @@ export class ActionRunner {
 
     const webcontainer = await this.#webcontainer;
     const normalizedFilePath = normalizeArtifactFilePath(filePath, webcontainer.workdir);
+    const pendingContent = this.#pendingHostedRuntimeFiles.get(normalizedFilePath);
 
-    if (
-      this.#lastHostedRuntimeFileContents.get(normalizedFilePath) === content &&
-      this.#pendingHostedRuntimeFiles.get(normalizedFilePath) !== content
-    ) {
-      this.#hostedRuntimeFullSyncPending = false;
+    if (pendingContent === content) {
       return;
     }
 
-    if (this.#pendingHostedRuntimeFiles.get(normalizedFilePath) === content) {
+    if (pendingContent === undefined && this.#lastHostedRuntimeFileContents.get(normalizedFilePath) === content) {
       return;
     }
 
     this.#pendingHostedRuntimeFiles.set(normalizedFilePath, content);
+    this.#hostedRuntimeFilesAwaitingFullSync.set(normalizedFilePath, content);
+    this.#hostedRuntimeFullSyncPending = true;
     this.#scheduleHostedRuntimeFileFlush();
+  }
+
+  async #reconcileHostedRuntimeWorkspace() {
+    if (this.#hostedRuntimeFlushTimer) {
+      clearTimeout(this.#hostedRuntimeFlushTimer);
+      this.#hostedRuntimeFlushTimer = null;
+    }
+
+    await this.#hostedRuntimeFlushPromise;
+
+    if (this.#getFilesSnapshot) {
+      await this.#syncHostedRuntimeSnapshot();
+    } else {
+      await this.#flushHostedRuntimePendingFiles();
+    }
   }
 
   async #runHostedShellLikeCommand(options: { action: ActionState; description: string; kind: 'shell' | 'start' }) {
     const { action, description, kind } = options;
-    await this.#syncHostedRuntimeSnapshot();
-    await this.#hostedRuntimeFlushPromise;
-    await this.#flushHostedRuntimePendingFiles();
+    await this.#reconcileHostedRuntimeWorkspace();
 
     let finalOutput = '';
     let finalExitCode = 0;
@@ -1112,7 +1117,7 @@ export class ActionRunner {
     try {
       if (isHostedRuntimeEnabled()) {
         const cleanupCommand = 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true';
-        await this.#syncHostedRuntimeSnapshot();
+        await this.#reconcileHostedRuntimeWorkspace();
         await runHostedRuntimeCommand({
           sessionId: this.#getHostedRuntimeSessionId(),
           command: cleanupCommand,
@@ -1208,20 +1213,7 @@ export class ActionRunner {
       logger.debug(`File written ${relativePath}`);
 
       if (hostedRuntimeEnabled) {
-        const snapshot = this.#getFilesSnapshot?.() || {};
-        const nextSnapshot: FileMap = {
-          ...snapshot,
-          [normalizedFilePath]: {
-            type: 'file',
-            content: action.content,
-            isBinary: false,
-          },
-        };
-
-        await this.#syncHostedRuntimeSnapshotFromFiles(nextSnapshot);
-      } else {
         await this.#syncHostedRuntimeFile(normalizedFilePath, action.content);
-        await this.#hostedRuntimeFlushPromise;
       }
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
