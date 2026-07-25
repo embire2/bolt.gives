@@ -1848,6 +1848,69 @@ describe('runtime server workspace isolation', () => {
     expect(generatedFileMap['/home/project/vite.config.ts'].content).toContain('hmr: false');
   });
 
+  it('reconstructs missing React Vite and TypeScript configs before preview start', async () => {
+    const workspace = await makeTempDir('bolt-runtime-react-vite-config-repair-');
+    await fs.mkdir(path.join(workspace, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        name: 'vite-react-app',
+        private: true,
+        type: 'module',
+        scripts: {
+          dev: 'vite --host 0.0.0.0 --port 5173',
+          build: 'tsc -b && vite build',
+        },
+        dependencies: {
+          react: '^18.3.1',
+          'react-dom': '^18.3.1',
+        },
+        devDependencies: {
+          vite: '^5.4.19',
+          typescript: '^5.8.3',
+          '@vitejs/plugin-react': '^4.7.0',
+        },
+      }),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'App.tsx'),
+      "import { useState } from 'react';\nexport default function App() { const [ready] = useState(true); return <h1>{String(ready)}</h1>; }\n",
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workspace, 'src', 'main.tsx'),
+      "import ReactDOM from 'react-dom/client';\nimport App from './App';\nReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n",
+      'utf8',
+    );
+
+    const repair = await repairHostedWorkspaceSupportFilesAfterSync({
+      dir: workspace,
+    } as {
+      dir: string;
+    });
+    const generatedFileMap = repair.fileMap as Record<
+      string,
+      {
+        type: string;
+        isBinary: boolean;
+        content: string;
+      }
+    >;
+
+    expect(repair.generatedFiles).toEqual(['vite.config.js', 'tsconfig.json']);
+    expect(repair.previewConfigFiles).toEqual([]);
+    expect(generatedFileMap['/home/project/vite.config.js']?.content).toContain(
+      "import react from '@vitejs/plugin-react';",
+    );
+    expect(generatedFileMap['/home/project/vite.config.js']?.content).toContain('hmr: false');
+    expect(generatedFileMap['/home/project/tsconfig.json']?.content).toContain('"jsx": "react-jsx"');
+    await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain(
+      'plugins: [react()]',
+    );
+    await expect(fs.readFile(path.join(workspace, 'tsconfig.json'), 'utf8')).resolves.toContain('"include": [');
+  });
+
   it('disables Vite HMR in hosted preview configs after a workspace sync', async () => {
     const workspace = await makeTempDir('bolt-runtime-vite-hmr-sync-');
     await fs.mkdir(path.join(workspace, 'src'), { recursive: true });

@@ -3188,6 +3188,32 @@ export default defineConfig({
 `;
 }
 
+function buildHostedWorkspaceRootTsconfig({ usesReact, usesJsSources }) {
+  return `${JSON.stringify(
+    {
+      compilerOptions: {
+        target: 'ES2020',
+        useDefineForClassFields: true,
+        lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+        module: 'ESNext',
+        skipLibCheck: true,
+        moduleResolution: 'Bundler',
+        allowImportingTsExtensions: true,
+        resolveJsonModule: true,
+        isolatedModules: true,
+        moduleDetection: 'force',
+        noEmit: true,
+        jsx: usesReact ? 'react-jsx' : 'preserve',
+        strict: true,
+        ...(usesJsSources ? { allowJs: true, checkJs: false } : {}),
+      },
+      include: ['src'],
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 async function readWorkspaceLockfile(session) {
   const lockfilePath = path.join(session.dir, 'pnpm-lock.yaml');
 
@@ -3559,10 +3585,55 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
     return [];
   }
 
+  const generatedFiles = [];
+  const usesReact = Boolean(
+    packageJsonRecord.json.dependencies?.react ||
+    packageJsonRecord.json.devDependencies?.react ||
+    packageJsonRecord.json.dependencies?.['react-dom'] ||
+    packageJsonRecord.json.devDependencies?.['react-dom'],
+  );
+  const hasReactVitePlugin = Boolean(
+    packageJsonRecord.json.dependencies?.['@vitejs/plugin-react'] ||
+    packageJsonRecord.json.devDependencies?.['@vitejs/plugin-react'],
+  );
+  const sourceEntries = await walkWorkspaceFiles(session.dir);
+  const usesJsSources = sourceEntries.some((entry) => entry.path.startsWith('src/') && /\.jsx?$/.test(entry.path));
+  const usesTsSources = sourceEntries.some((entry) => entry.path.startsWith('src/') && /\.tsx?$/.test(entry.path));
+  const viteConfigPaths = [
+    'vite.config.js',
+    'vite.config.mjs',
+    'vite.config.cjs',
+    'vite.config.ts',
+    'vite.config.mts',
+    'vite.config.cts',
+  ];
+  const hasViteConfig = (
+    await Promise.all(viteConfigPaths.map((relativePath) => exists(path.join(session.dir, relativePath))))
+  ).some(Boolean);
+
+  if (usesReact && hasReactVitePlugin && !hasViteConfig) {
+    await writeWorkspaceFileAtomic(
+      path.join(session.dir, 'vite.config.js'),
+      buildHostedWorkspaceBootstrapViteConfig(),
+    );
+    generatedFiles.push('vite.config.js');
+  }
+
   const tsconfigPath = path.join(session.dir, 'tsconfig.json');
 
   if (!(await exists(tsconfigPath))) {
-    return [];
+    if (usesTsSources) {
+      await writeWorkspaceFileAtomic(
+        tsconfigPath,
+        buildHostedWorkspaceRootTsconfig({
+          usesReact,
+          usesJsSources,
+        }),
+      );
+      generatedFiles.push('tsconfig.json');
+    }
+
+    return generatedFiles;
   }
 
   let tsconfig;
@@ -3570,7 +3641,7 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
   try {
     tsconfig = JSON.parse(await fs.readFile(tsconfigPath, 'utf8'));
   } catch {
-    return [];
+    return generatedFiles;
   }
 
   const referencedPaths = Array.isArray(tsconfig?.references)
@@ -3583,20 +3654,11 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
     : new Set();
 
   if (referencedPaths.size === 0) {
-    return [];
+    return generatedFiles;
   }
 
-  const generatedFiles = [];
   const needsTsconfigApp = referencedPaths.has('tsconfig.app.json');
   const needsTsconfigNode = referencedPaths.has('tsconfig.node.json');
-  const usesReact = Boolean(
-    packageJsonRecord.json.dependencies?.react ||
-    packageJsonRecord.json.devDependencies?.react ||
-    packageJsonRecord.json.dependencies?.['react-dom'] ||
-    packageJsonRecord.json.devDependencies?.['react-dom'],
-  );
-  const sourceEntries = await walkWorkspaceFiles(session.dir);
-  const usesJsSources = sourceEntries.some((entry) => entry.path.startsWith('src/') && /\.jsx?$/.test(entry.path));
   const tsconfigAppPath = path.join(session.dir, 'tsconfig.app.json');
   const tsconfigNodePath = path.join(session.dir, 'tsconfig.node.json');
 
