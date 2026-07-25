@@ -51,6 +51,7 @@ import {
   recordPreviewResponse,
   releaseReservedPreviewPorts,
   releaseRuntimeNodeDatabasePorts,
+  retainSessionPreviewPortForRecovery,
   resolveManagedInstanceProcessCwd,
   resolveRuntimeWorkspaceRoot,
   resolvePublishedProjectUpgradeTarget,
@@ -65,6 +66,7 @@ import {
   shouldServePreviewHandoffPage,
   shouldRetryPreviewProxyResponse,
   shouldReuseHealthyPreviewStart,
+  shouldSkipHostedPreviewStart,
   settleHealthyQueuedPreviewRepair,
   settleSuccessfulHostedAutostart,
   startReservedPreviewProbe,
@@ -220,6 +222,30 @@ describe('runtime server workspace isolation', () => {
       status: 'starting',
       healthy: false,
     });
+  });
+
+  it('restarts a stopped preview even while its same-session metadata is retained', () => {
+    expect(
+      shouldSkipHostedPreviewStart({
+        preview: { port: 6100 },
+        autoRestoreInFlight: false,
+        processes: new Map(),
+      }),
+    ).toBe(false);
+    expect(
+      shouldSkipHostedPreviewStart({
+        preview: { port: 6100 },
+        autoRestoreInFlight: false,
+        processes: new Map([['preview', { process: {} }]]),
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipHostedPreviewStart({
+        preview: { port: 6100 },
+        autoRestoreInFlight: true,
+        processes: new Map(),
+      }),
+    ).toBe(true);
   });
 
   it('captures autostart stderr when the runtime stream exits before ready', async () => {
@@ -789,6 +815,36 @@ describe('runtime server workspace isolation', () => {
       false,
     );
     expect(isPreviewPortOwnedBySession(ownerSession, 4121)).toBe(false);
+
+    releaseReservedPreviewPorts(ownerSession);
+  });
+
+  it('keeps only the owning session port reserved while its preview recovers', () => {
+    const ownerSession = {
+      id: 'session-recovery-owner',
+      preview: undefined as { port: number; baseUrl: string } | undefined,
+    };
+
+    updateSessionPreview(
+      ownerSession,
+      {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'alpha1.bolt.gives',
+        },
+      } as { headers: Record<string, string> },
+      4122,
+    );
+
+    expect(retainSessionPreviewPortForRecovery(ownerSession)).toBe(true);
+    expect(isPreviewPortOwnedBySession(ownerSession, 4122)).toBe(true);
+    expect(
+      retainSessionPreviewPortForRecovery({
+        id: 'session-recovery-intruder',
+        preview: ownerSession.preview,
+      }),
+    ).toBe(false);
+    expect(isPreviewPortReserved(4122, ownerSession.id)).toBe(true);
 
     releaseReservedPreviewPorts(ownerSession);
   });

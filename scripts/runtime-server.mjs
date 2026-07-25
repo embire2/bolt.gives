@@ -4360,7 +4360,7 @@ async function inferWorkspaceStartCommand(session) {
 }
 
 export async function startHostedPreviewForSession(session) {
-  if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
+  if (shouldSkipHostedPreviewStart(session)) {
     return false;
   }
 
@@ -4418,6 +4418,10 @@ export async function startHostedPreviewForSession(session) {
   }
 
   return true;
+}
+
+export function shouldSkipHostedPreviewStart(session) {
+  return Boolean(session?.autoRestoreInFlight || session?.processes?.has('preview'));
 }
 
 export async function consumeRuntimeCommandStreamForReady(response) {
@@ -4504,7 +4508,7 @@ export function settleSuccessfulHostedAutostart(session, mutationId) {
 }
 
 function scheduleHostedAutoStartAfterSync(session) {
-  if (session.preview || session.autoRestoreInFlight || session.processes.has('preview')) {
+  if (shouldSkipHostedPreviewStart(session)) {
     return;
   }
 
@@ -4515,7 +4519,7 @@ function scheduleHostedAutoStartAfterSync(session) {
     session.previewAutostartTimer = null;
 
     void (async () => {
-      if (session.workspaceMutationId !== mutationId || session.preview || session.autoRestoreInFlight) {
+      if (session.workspaceMutationId !== mutationId || shouldSkipHostedPreviewStart(session)) {
         return;
       }
 
@@ -4934,6 +4938,24 @@ export function releaseReservedPreviewPorts(session) {
       reservedPreviewPorts.delete(port);
     }
   }
+}
+
+export function retainSessionPreviewPortForRecovery(session) {
+  const port = Number(session?.preview?.port || 0);
+
+  if (!Number.isInteger(port) || port <= 0) {
+    return false;
+  }
+
+  const ownerSessionId = reservedPreviewPorts.get(port);
+
+  if (ownerSessionId && ownerSessionId !== session.id) {
+    return false;
+  }
+
+  reservedPreviewPorts.set(port, session.id);
+
+  return true;
 }
 
 export function isPreviewPortReserved(port, sessionId) {
@@ -6074,8 +6096,12 @@ async function handleRunCommand(req, res, session, body) {
       }
 
       session.processes.delete(processKey);
-      releaseReservedPreviewPorts(session);
-      session.preview = undefined;
+
+      if (!retainSessionPreviewPortForRecovery(session)) {
+        releaseReservedPreviewPorts(session);
+        session.preview = undefined;
+      }
+
       session.previewStartCommand = null;
       session.previewStartMutationId = null;
 
