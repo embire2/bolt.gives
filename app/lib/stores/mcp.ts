@@ -1,8 +1,10 @@
 import { create } from 'zustand';
+import { securedFetch } from '~/lib/hooks/useCsrf';
 import type { MCPConfig, MCPServerTools } from '~/lib/services/mcpService';
 
 const MCP_SETTINGS_KEY = 'mcp_settings';
 const isBrowser = typeof window !== 'undefined';
+let initializationPromise: Promise<void> | null = null;
 
 type MCPSettings = {
   mcpConfig: MCPConfig;
@@ -41,26 +43,36 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
       return;
     }
 
-    if (isBrowser) {
-      const savedConfig = localStorage.getItem(MCP_SETTINGS_KEY);
+    if (!initializationPromise) {
+      initializationPromise = (async () => {
+        if (isBrowser) {
+          const savedConfig = localStorage.getItem(MCP_SETTINGS_KEY);
 
-      if (savedConfig) {
-        try {
-          const settings = JSON.parse(savedConfig) as MCPSettings;
-          const serverTools = await updateServerConfig(settings.mcpConfig);
-          set(() => ({ settings, serverTools }));
-        } catch (error) {
-          console.error('Error parsing saved mcp config:', error);
-          set(() => ({
-            error: `Error parsing saved mcp config: ${error instanceof Error ? error.message : String(error)}`,
-          }));
+          if (savedConfig) {
+            try {
+              const settings = JSON.parse(savedConfig) as MCPSettings;
+              const serverTools = await updateServerConfig(settings.mcpConfig);
+              set(() => ({ settings, serverTools }));
+            } catch (error) {
+              console.error('Error parsing saved mcp config:', error);
+              set(() => ({
+                error: `Error parsing saved mcp config: ${error instanceof Error ? error.message : String(error)}`,
+              }));
+            }
+          } else {
+            localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(defaultSettings));
+          }
         }
-      } else {
-        localStorage.setItem(MCP_SETTINGS_KEY, JSON.stringify(defaultSettings));
-      }
+
+        set(() => ({ isInitialized: true }));
+      })();
     }
 
-    set(() => ({ isInitialized: true }));
+    try {
+      await initializationPromise;
+    } finally {
+      initializationPromise = null;
+    }
   },
   updateSettings: async (newSettings: MCPSettings) => {
     if (get().isUpdatingConfig) {
@@ -99,7 +111,7 @@ export const useMCPStore = create<Store & Actions>((set, get) => ({
 }));
 
 async function updateServerConfig(config: MCPConfig) {
-  const response = await fetch('/api/mcp-update-config', {
+  const response = await securedFetch('/api/mcp-update-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),

@@ -401,7 +401,7 @@ async function verifyPersistedProjectRestore(page, options) {
   const origin = new URL(baseUrl).origin;
   await page.goto(`${origin}/chat`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await ensureChatComposerVisible(page);
-  await page.getByRole('button', { name: 'Open sidebar' }).click();
+  await page.getByRole('button', { name: 'Open sidebar' }).first().click();
 
   const escapedProjectPath = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const historyLink = page.locator(`a[href="${escapedProjectPath}"]`).first();
