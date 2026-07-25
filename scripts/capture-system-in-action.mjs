@@ -32,19 +32,18 @@ async function openWorkspaceTabIfAvailable() {
 }
 
 try {
-  // Force a stable provider/model pair to avoid failing screenshot captures due to
-  // stale provider defaults (for example invalid Bedrock credentials).
+  // Keep release captures aligned with the managed FREE default.
   await context.addCookies([
     {
       name: 'selectedProvider',
-      value: 'OpenAI',
+      value: 'FREE',
       url: baseUrl,
       sameSite: 'Lax',
       secure: baseUrl.startsWith('https://'),
     },
     {
       name: 'selectedModel',
-      value: 'gpt-4o',
+      value: 'gpt-5.6-sol',
       url: baseUrl,
       sameSite: 'Lax',
       secure: baseUrl.startsWith('https://'),

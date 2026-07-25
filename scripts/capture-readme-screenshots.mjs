@@ -28,14 +28,14 @@ async function forceProviderDefaults() {
   await context.addCookies([
     {
       name: 'selectedProvider',
-      value: 'OpenAI',
+      value: 'FREE',
       url: baseUrl,
       sameSite: 'Lax',
       secure,
     },
     {
       name: 'selectedModel',
-      value: 'gpt-4o',
+      value: 'gpt-5.6-sol',
       url: baseUrl,
       sameSite: 'Lax',
       secure,

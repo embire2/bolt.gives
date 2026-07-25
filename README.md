@@ -378,6 +378,9 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 ## Screenshots
 
+Real v3.2.0 Calendar E2E on `alpha1.bolt.gives` after first-pass generation, a follow-up change, saved-history restoration, and isolated PostgreSQL verification:
+![bolt.gives v3.2.0 Calendar project E2E](docs/screenshots/calendar-e2e-v3.2.0.png)
+
 Home:
 ![bolt.gives home](docs/screenshots/home.png)
 
