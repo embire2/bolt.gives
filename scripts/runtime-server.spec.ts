@@ -74,6 +74,7 @@ import {
   syncWorkspaceSnapshot,
   updateSessionPreview,
   waitForProjectManifest,
+  waitForSessionPreviewHealth,
   workspaceSnapshotHasChanges,
   writeJsonAtomically,
   workspaceHasOwnProjectManifest,
@@ -1720,6 +1721,41 @@ describe('runtime server workspace isolation', () => {
 
     await fs.writeFile(path.join(workspace, 'package.json'), '{"name":"workspace-app"}', 'utf8');
     await expect(workspaceHasOwnProjectManifest(workspace)).resolves.toBe(true);
+  });
+
+  it('waits through a transient Vite compile response before accepting preview health', async () => {
+    const probe = vi
+      .fn()
+      .mockResolvedValueOnce({
+        healthy: false,
+        statusCode: 500,
+        alert: {
+          type: 'error',
+          title: 'Preview Error',
+          description: 'Vite is recompiling the entry module.',
+        },
+      })
+      .mockResolvedValueOnce({
+        healthy: true,
+        statusCode: 200,
+        alert: null,
+      });
+
+    await expect(
+      waitForSessionPreviewHealth(
+        {},
+        {
+          timeoutMs: 100,
+          intervalMs: 0,
+          probe,
+        },
+      ),
+    ).resolves.toEqual({
+      healthy: true,
+      statusCode: 200,
+      alert: null,
+    });
+    expect(probe).toHaveBeenCalledTimes(2);
   });
 
   it('normalizes bare package import specifiers from source imports', () => {

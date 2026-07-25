@@ -2784,6 +2784,30 @@ export async function probeSessionPreviewHealth(session, requestPath = '/') {
   }
 }
 
+export async function waitForSessionPreviewHealth(session, options = {}) {
+  const timeoutMs = Math.max(0, Number(options.timeoutMs ?? POST_SYNC_PREVIEW_PROBE_WINDOW_MS));
+  const intervalMs = Math.max(0, Number(options.intervalMs ?? POST_SYNC_PREVIEW_PROBE_INTERVAL_MS));
+  const probe = typeof options.probe === 'function' ? options.probe : probeSessionPreviewHealth;
+  const deadline = Date.now() + timeoutMs;
+  let result;
+
+  do {
+    result = await probe(session);
+
+    if (result.healthy && !result.alert) {
+      return result;
+    }
+
+    if (Date.now() >= deadline) {
+      return result;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  } while (Date.now() <= deadline);
+
+  return result;
+}
+
 export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'preview-error') {
   if (!session.restorePointFileMap || session.autoRestoreInFlight) {
     return false;
@@ -6173,7 +6197,12 @@ async function handleRunCommand(req, res, session, body) {
       ]);
       const resolvedPort = (await previewProbePromise).port;
       updateSessionPreview(session, req, resolvedPort);
-      const initialProbe = await probeSessionPreviewHealth(session);
+      const initialProbe = await Promise.race([
+        waitForSessionPreviewHealth(session),
+        exitPromise.then((exitCode) => {
+          throw new Error(`Preview process exited during boot verification (exit ${exitCode})`);
+        }),
+      ]);
 
       if (initialProbe.alert || !initialProbe.healthy) {
         throw new Error(initialProbe.alert?.description || 'Preview did not pass the initial boot verification.');

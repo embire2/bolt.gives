@@ -44,6 +44,8 @@ const networkErrors = [];
 const consoleErrors = [];
 const chatRequests = [];
 const chatRequestInputs = [];
+const runtimeMutationRequests = [];
+const runtimeMutationRequestByRequest = new WeakMap();
 const previewStatusEvents = [];
 const previewTextHistory = [];
 const runtimeSnapshotChecks = [];
@@ -500,9 +502,48 @@ async function main() {
       return;
     }
 
+    const runtimeMutation = runtimeMutationRequestByRequest.get(req);
+
+    if (runtimeMutation) {
+      runtimeMutation.failure = req.failure()?.errorText || 'request failed';
+      runtimeMutation.completedElapsedSec = Number(elapsed());
+      log(
+        'runtime mutation failed',
+        `${runtimeMutation.endpoint} kind=${runtimeMutation.kind || 'n/a'} ${runtimeMutation.failure}`,
+      );
+    }
+
     networkErrors.push(`REQFAIL ${req.method()} ${req.url()} :: ${req.failure()?.errorText}`);
   });
   page.on('request', (req) => {
+    const runtimeMutationMatch = new URL(req.url()).pathname.match(
+      /^\/runtime\/sessions\/([^/]+)\/(sync|command)$/,
+    );
+
+    if (runtimeMutationMatch && req.method() === 'POST') {
+      let kind = runtimeMutationMatch[2];
+
+      if (kind === 'command') {
+        try {
+          kind = req.postDataJSON()?.kind || kind;
+        } catch {}
+      }
+
+      const runtimeMutation = {
+        sequence: runtimeMutationRequests.length + 1,
+        sessionId: runtimeMutationMatch[1],
+        endpoint: runtimeMutationMatch[2],
+        kind,
+        startedElapsedSec: Number(elapsed()),
+        status: null,
+        completedElapsedSec: null,
+        failure: null,
+      };
+      runtimeMutationRequests.push(runtimeMutation);
+      runtimeMutationRequestByRequest.set(req, runtimeMutation);
+      log('runtime mutation request', `${runtimeMutation.endpoint} kind=${runtimeMutation.kind}`);
+    }
+
     if (!req.url().includes('/api/chat') || req.method() !== 'POST') {
       return;
     }
@@ -532,6 +573,17 @@ async function main() {
   });
   page.on('response', async (res) => {
     const url = res.url();
+    const runtimeMutation = runtimeMutationRequestByRequest.get(res.request());
+
+    if (runtimeMutation) {
+      runtimeMutation.status = res.status();
+      runtimeMutation.completedElapsedSec = Number(elapsed());
+      log(
+        'runtime mutation response',
+        `${runtimeMutation.endpoint} kind=${runtimeMutation.kind} status=${runtimeMutation.status}`,
+      );
+    }
+
     if (url.includes('/api/chat')) {
       const headers = res.headers();
       log(
@@ -962,6 +1014,7 @@ async function main() {
     projectDatabaseVerified,
     runtimeCleanup,
     chatRequestInputs,
+    runtimeMutationRequests,
     chatRequests,
     consoleErrors: consoleErrors.slice(0, 60),
     fatalConsoleErrors: consoleErrors.filter(isFatalConsoleError).slice(0, 60),
