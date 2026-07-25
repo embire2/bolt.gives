@@ -237,7 +237,7 @@ Pinned Linux install:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.2.0/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-./install-bolt-gives.sh
+sudo env BRANCH=v3.2.0 ./install-bolt-gives.sh
 ```
 
 The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
