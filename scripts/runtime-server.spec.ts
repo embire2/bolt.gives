@@ -61,6 +61,7 @@ import {
   sanitizeLegacyTailwindCss,
   shouldPauseManagedInstanceRolloutForSessions,
   shouldRefreshManagedInstanceForRollout,
+  shouldRetryPreviewOwnershipMismatch,
   shouldServePreviewHandoffPage,
   shouldRetryPreviewProxyResponse,
   shouldReuseHealthyPreviewStart,
@@ -1582,6 +1583,49 @@ describe('runtime server workspace isolation', () => {
     expect(shouldRetryPreviewProxyResponse({ method: 'POST', statusCode: 504, attempt: 0 })).toBe(false);
     expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 404, attempt: 0 })).toBe(false);
     expect(shouldRetryPreviewProxyResponse({ method: 'GET', statusCode: 504, attempt: 99 })).toBe(false);
+  });
+
+  it('retries a preview ownership handoff only for the assigned session port', () => {
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: 6102,
+        attempt: 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'HEAD',
+        requestedPort: 6102,
+        sessionPreviewPort: 6102,
+        attempt: 4,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: 6103,
+        attempt: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'POST',
+        requestedPort: 6102,
+        sessionPreviewPort: 6102,
+        attempt: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: 6102,
+        attempt: 5,
+      }),
+    ).toBe(false);
   });
 
   it('detects whether the isolated workspace owns its own project manifest', async () => {

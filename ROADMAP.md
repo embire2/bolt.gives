@@ -10,13 +10,24 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.1.0`
+- [x] `v3.2.0`
 
 Next release target:
 
-- [~] `v3.2.0`
+- [~] `v3.3.0`
 
-## v3.2.0 - In Progress
+## v3.3.0 - In Progress
+
+Release theme: finish account and publishing lifecycle hardening, broaden first-party template acceptance, and improve operator-visible resource controls.
+
+- [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
+- [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
+- [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
+- [ ] Harden Stripe webhook activation and custom-domain ownership verification.
+- [ ] Continue server-side reconciliation and CSS/editor splitting while preserving the v3.2.0 initial-route budget.
+- [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.2.0 - Shipped
 
 Release theme: finish account lifecycle hardening, expand first-pass template coverage, and make fleet/runtime operations more auditable with lower steady-state resource use.
 
@@ -43,12 +54,8 @@ Release theme: finish account lifecycle hardening, expand first-pass template co
 - [x] Connect each hosted project process to its dedicated runtime-node PostgreSQL database through a server-only, per-session SSH tunnel.
 - [x] Extend Calendar browser acceptance to revisit a saved sidebar project and verify the same healthy Preview/runtime/database connection.
 - [x] Retire the header Shout Out Box and route `Report Bug` directly to the public GitHub Issues workflow.
-- [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
-- [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
-- [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- [ ] Harden Stripe webhook activation and custom-domain ownership verification.
-- [ ] Continue server-side reconciliation and CSS/editor splitting while preserving the v3.1.0 initial-route budget.
-- [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+- [x] Reconstruct missing Vite React and TypeScript support files before starting generated previews.
+- [x] Retry same-session asset requests through bounded preview-port ownership handoffs and recover one healthy blank iframe per revision.
 
 ## v3.1.0 - Shipped
 

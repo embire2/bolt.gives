@@ -239,17 +239,22 @@ export function extractHostedRuntimeSessionIdFromPreviewBaseUrl(baseUrl: string 
 export function shouldReloadHostedPreviewIframe(options: {
   frameLocation: string | null | undefined;
   frameSource: string | null | undefined;
+  frameRenderedContent?: boolean | null;
   targetUrl: string;
   status: Pick<HostedRuntimePreviewStatus, 'healthy' | 'updatedAt'>;
   lastReloadKey?: string | null;
 }): HostedPreviewReloadDecision {
   const frameLocation = String(options.frameLocation || '').trim();
   const frameSource = String(options.frameSource || '').trim();
-  const reloadKey = `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
   const hasTargetSource = frameSource === options.targetUrl;
   const isExplicitlyBlocked = frameLocation.startsWith('chrome-error://') || frameLocation.startsWith('edge-error://');
   const isUnassignedFrame = !hasTargetSource && (!frameLocation || frameLocation === 'about:blank');
-  const isBlockedFrame = isExplicitlyBlocked || isUnassignedFrame;
+  const isBlankTargetFrame =
+    hasTargetSource && frameLocation === options.targetUrl && options.frameRenderedContent === false;
+  const isBlockedFrame = isExplicitlyBlocked || isUnassignedFrame || isBlankTargetFrame;
+  const reloadKey = isBlankTargetFrame
+    ? `${options.targetUrl}::blank`
+    : `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
 
   if (!options.status.healthy || !isBlockedFrame) {
     return {

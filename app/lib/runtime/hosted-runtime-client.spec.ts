@@ -281,6 +281,45 @@ describe('hosted runtime client', () => {
     });
   });
 
+  it('reloads a healthy same-origin blank app root only once per preview revision', () => {
+    const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/?revision=7';
+    const reloadKey = `${targetUrl}::blank`;
+
+    expect(
+      shouldReloadHostedPreviewIframe({
+        frameLocation: targetUrl,
+        frameSource: targetUrl,
+        frameRenderedContent: false,
+        targetUrl,
+        status: {
+          healthy: true,
+          updatedAt: '2026-03-29T12:00:00.000Z',
+        },
+        lastReloadKey: null,
+      }),
+    ).toEqual({
+      shouldReload: true,
+      reloadKey,
+    });
+
+    expect(
+      shouldReloadHostedPreviewIframe({
+        frameLocation: targetUrl,
+        frameSource: targetUrl,
+        frameRenderedContent: false,
+        targetUrl,
+        status: {
+          healthy: true,
+          updatedAt: '2026-03-29T12:00:05.000Z',
+        },
+        lastReloadKey: reloadKey,
+      }),
+    ).toEqual({
+      shouldReload: false,
+      reloadKey,
+    });
+  });
+
   it('does not reload a healthy cross-origin preview whose assigned source is already current', () => {
     const targetUrl = 'https://alpha1.bolt.gives/runtime/preview/session-abc123/4100/';
 

@@ -53,13 +53,13 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.1.0`)
+## Current Release (`v3.2.0`)
 
-`v3.1.0` is the current stable hosted and self-hosted release. It preserves the first-pass preview, history-aware follow-up, runtime-node, publishing, updater, and fleet-observability work from the v3.0.9 line while making the coding path substantially lighter and adding four protected MagnetAPI.org FREE coding models.
+`v3.2.0` is the current stable hosted and self-hosted release. It keeps the lighter four-model MagnetAPI.org FREE coding path from v3.1.0 and closes the project-continuity gaps between saved chat history, generated files, the hosted runtime, Preview, follow-up prompts, and each project's isolated PostgreSQL database.
 
-### v3.2.0 reliability work in progress
+### v3.2.0 project continuity and preview reliability
 
-The current v3.2.0 work closes a false repair loop found by exercising the hosted FREE ChatGPT-5.6 SOL path in a real browser. A healthy, request-scoped preview now finalizes successfully when the absolute FREE deadline closes a late provider stream after the app is ready; that expected closure no longer appears as `Network error`, `BOLT_STREAM_TIMEOUT`, an error event, or a new hidden repair attempt.
+The v3.2.0 release closes a false repair loop found by exercising the hosted FREE ChatGPT-5.6 SOL path in a real browser. A healthy, request-scoped preview now finalizes successfully when the absolute FREE deadline closes a late provider stream after the app is ready; that expected closure no longer appears as `Network error`, `BOLT_STREAM_TIMEOUT`, an error event, or a new hidden repair attempt.
 
 Execution state is derived from ordered command starts and completions rather than the existence of any historical start event. Workspace therefore settles on `Preview ready` when the runtime is healthy instead of remaining stuck on `Working`, and an active repair stays a calm `Working` state until it finishes rather than flashing between states.
 
@@ -215,23 +215,23 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.1.0`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.2.0`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v3.1.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.2.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.1.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.1.0)
+- Release: [`v3.2.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.2.0)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh)
-- Release commit: see the `v3.1.0` GitHub tag once published.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.2.0/install.sh)
+- Release commit: see the `v3.2.0` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.2.0/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
@@ -292,9 +292,9 @@ Managed Cloudflare instances are registration-first, one-client / one-instance e
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, fleet summary cards, deployment history, last-good SHA, healthcheck and rollback outcome visibility, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, Caddy-managed HTTPS, and a committed installer smoke command.
 
-## Roadmap to v3.2.0
+## Roadmap to v3.3.0
 
-`v3.2.0` is the next platform-hardening release. The focus is completing account lifecycle/RBAC work, broader template smoke coverage, auditable collaboration/runtime quotas, publishing verification, installer resilience, and continued server-side runtime offload.
+`v3.3.0` is the next platform-hardening release. The focus is completing account lifecycle/RBAC work, broader template smoke coverage, auditable collaboration/runtime quotas, publishing verification, installer resilience, and continued server-side runtime offload.
 
 ### Launch blockers
 
@@ -313,7 +313,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.1.0`)
+## Current Platform Baseline (`v3.2.0`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

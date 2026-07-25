@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.2.0',
+    name: 'v3.2.0 durable projects and reliable previews',
+    description:
+      'Saved chats now restore their complete conversation, files, runtime, preview, and isolated PostgreSQL database. Preview handoffs recover without blank frames, follow-up prompts retain project history, and Report Bug opens the public GitHub Issues workflow.',
+    releaseDate: '2026-07-25',
+  },
+  {
     id: 'release-v3.1.0',
     name: 'v3.1.0 faster startup and four FREE coding models',
     description:

@@ -56,7 +56,7 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.1.0 release with a lighter startup path and four protected MagnetAPI.org FREE coding models.',
+  'Stable v3.2.0 release with durable project history, isolated PostgreSQL, and health-verified Preview recovery.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
@@ -410,7 +410,7 @@ export default function Index() {
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">stable</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
-                  <div className="text-2xl font-black">v3.2.0</div>
+                  <div className="text-2xl font-black">v3.3.0</div>
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">roadmap</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">

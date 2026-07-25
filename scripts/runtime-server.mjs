@@ -120,7 +120,7 @@ const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DE
 const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_DELAY_MS || '1200');
 const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_WINDOW_MS || '12000');
 const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
-const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500];
+const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500, 3000];
 const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
 const VITE_MAIN_ENTRY_SRC_RE =
   /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
@@ -2114,6 +2114,28 @@ export function shouldRetryPreviewProxyResponse({ method = 'GET', statusCode = 0
   }
 
   if (![502, 503, 504].includes(Number(statusCode))) {
+    return false;
+  }
+
+  return attempt >= 0 && attempt < PREVIEW_PROXY_RETRY_DELAYS_MS.length;
+}
+
+export function shouldRetryPreviewOwnershipMismatch({
+  method = 'GET',
+  requestedPort = 0,
+  sessionPreviewPort = 0,
+  attempt = 0,
+} = {}) {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const requested = Number(requestedPort);
+  const assigned = Number(sessionPreviewPort);
+
+  if (
+    !['GET', 'HEAD'].includes(normalizedMethod) ||
+    !Number.isInteger(requested) ||
+    requested <= 0 ||
+    requested !== assigned
+  ) {
     return false;
   }
 
@@ -6229,6 +6251,17 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   }
 
   const hasPreviewOwnership = isPreviewPortOwnedBySession(session, port);
+  const scheduleRetry = () => {
+    if (res.writableEnded || res.destroyed) {
+      return;
+    }
+
+    const delay = PREVIEW_PROXY_RETRY_DELAYS_MS[attempt] || 0;
+
+    setTimeout(() => {
+      proxyPreviewRequest(req, res, pathname, attempt + 1);
+    }, delay);
+  };
 
   if (
     shouldServePreviewHandoffPage({
@@ -6243,21 +6276,21 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   }
 
   if (!hasPreviewOwnership) {
-    sendText(res, 409, 'Preview port ownership mismatch');
-    return;
-  }
-
-  const scheduleRetry = () => {
-    if (res.writableEnded || res.destroyed) {
+    if (
+      shouldRetryPreviewOwnershipMismatch({
+        method,
+        requestedPort: port,
+        sessionPreviewPort: session.preview?.port,
+        attempt,
+      })
+    ) {
+      scheduleRetry();
       return;
     }
 
-    const delay = PREVIEW_PROXY_RETRY_DELAYS_MS[attempt] || 0;
-
-    setTimeout(() => {
-      proxyPreviewRequest(req, res, pathname, attempt + 1);
-    }, delay);
-  };
+    sendText(res, 409, 'Preview port ownership mismatch');
+    return;
+  }
   const upstreamReq = http.request(
     {
       host: HOST,

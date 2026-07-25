@@ -341,17 +341,33 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       }
 
       let frameLocation = '';
+      let frameRenderedContent: boolean | null = null;
 
       try {
-        frameLocation =
-          iframeRef.current?.contentWindow?.location?.href || iframeRef.current?.contentDocument?.location?.href || '';
+        const frameDocument = iframeRef.current?.contentDocument;
+        frameLocation = iframeRef.current?.contentWindow?.location?.href || frameDocument?.location?.href || '';
+
+        if (frameDocument?.readyState === 'complete' && frameDocument.body) {
+          const meaningfulElements = Array.from(frameDocument.body.children).filter(
+            (element) => !['SCRIPT', 'STYLE', 'LINK', 'NOSCRIPT'].includes(element.tagName),
+          );
+          frameRenderedContent = meaningfulElements.some((element) => {
+            if (['root', 'app', '__next'].includes(element.id)) {
+              return element.childElementCount > 0 || Boolean(element.textContent?.trim());
+            }
+
+            return true;
+          });
+        }
       } catch {
         frameLocation = '';
+        frameRenderedContent = null;
       }
 
       const reloadDecision = shouldReloadHostedPreviewIframe({
         frameLocation,
         frameSource: iframeRef.current?.getAttribute('src'),
+        frameRenderedContent,
         targetUrl,
         status,
         lastReloadKey: lastHostedPreviewReloadKeyRef.current,
