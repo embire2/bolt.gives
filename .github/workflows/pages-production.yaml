@@ -63,14 +63,27 @@ jobs:
       - name: Deploy to Cloudflare Pages
         if: steps.check-secrets.outputs.configured == 'true'
         id: deploy
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: bolt-gives
-          directory: build/client
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NO_COLOR: '1'
+        run: |
+          set -o pipefail
+          deploy_log="$(mktemp)"
+          pnpm exec wrangler pages deploy build/client \
+            --project-name bolt-gives \
+            --branch main \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "release: $GITHUB_SHA" \
+            --commit-dirty=false | tee "$deploy_log"
+
+          deployment_url="$(grep -Eo 'https://[a-z0-9-]+\.bolt-gives\.pages\.dev' "$deploy_log" | tail -n 1)"
+          if [[ -z "$deployment_url" ]]; then
+            echo "Wrangler completed without reporting a deployment URL." >&2
+            exit 1
+          fi
+
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
 
       - name: Smoke test deployed site
         if: steps.check-secrets.outputs.configured == 'true'
@@ -78,14 +91,14 @@ jobs:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           echo "Production URL: $DEPLOYMENT_URL"
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 24); do
             if curl --connect-timeout 10 --max-time 20 -fLsS "$DEPLOYMENT_URL" -o /tmp/pages.html &&
               grep -q "bolt.gives" /tmp/pages.html; then
               echo "Production deployment is ready."
               exit 0
             fi
 
-            echo "Deployment is not ready (attempt $attempt/12); retrying in 5 seconds."
+            echo "Deployment is not ready (attempt $attempt/24); retrying in 5 seconds."
             sleep 5
           done
 

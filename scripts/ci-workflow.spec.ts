@@ -33,12 +33,16 @@ describe('GitHub workflow dependency setup', () => {
     expect(workflow).not.toMatch(/github\/codeql-action\/(?:init|autobuild|analyze)@v3/);
   });
 
-  it('waits for Cloudflare edge propagation before failing production smoke', () => {
+  it('smokes the exact immutable URL emitted by the current Wrangler deployment', () => {
     const workflow = readRepoFile('.github/workflows/pages-production.yaml');
 
+    expect(workflow).toContain('pnpm exec wrangler pages deploy build/client');
+    expect(workflow).toContain("deployment_url=\"$(grep -Eo 'https://[a-z0-9-]+\\.bolt-gives\\.pages\\.dev'");
+    expect(workflow).toContain('echo "url=$deployment_url" >> "$GITHUB_OUTPUT"');
     expect(workflow).toContain('DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}');
-    expect(workflow).toContain('for attempt in $(seq 1 12); do');
-    expect(workflow).toContain('Deployment is not ready (attempt $attempt/12); retrying in 5 seconds.');
+    expect(workflow).toContain('for attempt in $(seq 1 24); do');
+    expect(workflow).toContain('Deployment is not ready (attempt $attempt/24); retrying in 5 seconds.');
     expect(workflow).toContain('Production deployment did not become ready: $DEPLOYMENT_URL');
+    expect(workflow).not.toContain('cloudflare/pages-action');
   });
 });

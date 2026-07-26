@@ -24,6 +24,7 @@ No unreleased changes.
 
 ### Fixed
 
+- Replaced the deprecated Cloudflare Pages GitHub Action with the repository-pinned Wrangler CLI. Production smoke now follows the exact immutable deployment URL Wrangler creates instead of an incorrect action output that returned `404`.
 - Made the compiled package version authoritative in health responses, so stale Cloudflare `APP_VERSION` metadata cannot make a freshly deployed release report an older version.
 - Made deterministic hosted starters continue through the selected FREE model after Preview becomes healthy. Starter-only history is no longer allowed to navigate and remount Chat before continuation; interrupted pending requests reconstruct from saved history. Successful bootstrap schedules continuation directly, verified Preview readiness overrides stale gates, and the Calendar release E2E requires the real model request before accepting an artifact.
 - Preserved debug-log capture without a `core` to `surfaces` import cycle by registering the optional browser capture adapter at application startup.

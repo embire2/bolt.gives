@@ -42,6 +42,7 @@ Release theme: split the codebase into focused ownership modules so contributors
 - [x] Restore lint as a passing release gate and run the complete regression suite against the unified build.
 - [x] Document ownership, dependency direction, focused commands, and contribution rules.
 - [x] Preserve hosted starter continuation across history navigation/remount, runtime bootstrap, healthy Preview, and stale client alert state; require a successful selected-model request in Calendar release acceptance.
+- [x] Replace deprecated Pages deployment automation and verify the exact immutable Cloudflare URL emitted by the current Wrangler CLI.
 
 ## v3.2.0 - Shipped
 

@@ -69,6 +69,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - The migration is behavior-preserving: the full 1,029-test suite and the production bundle gate validate the unified build output.
 - Health checks report the compiled release version, preventing stale Cloudflare environment metadata from mislabeling a newly deployed build.
 - Deterministic first-party starters always continue through the selected hosted FREE model once Preview is healthy. Starter-only history defers route navigation so Chat cannot remount and lose its pending request; interrupted sessions reconstruct that request from persisted messages. Successful runtime bootstrap schedules continuation directly, and verified Preview readiness overrides stale client state. The strict Calendar E2E requires both the rendered app and a successful model request.
+- Production Pages deployment uses the repository-pinned Wrangler CLI and smoke-tests the exact immutable URL returned by Cloudflare, avoiding false release failures from the deprecated Pages Action reporting a different `404` hostname.
 
 See [Module Architecture](docs/architecture/modules.md) for ownership, dependency rules, and focused development commands.
 
