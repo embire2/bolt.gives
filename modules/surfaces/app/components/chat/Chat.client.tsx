@@ -1766,7 +1766,6 @@ Requirements:
       }
 
       let cancelled = false;
-
       const evaluateStarterContinuation = async () => {
         const { decideStarterContinuationPrecedence, diagnoseArchitectIssue } = await loadArchitectModule();
         const previewDiagnosis = actionAlert ? diagnoseArchitectIssue(actionAlert) : null;
@@ -1793,8 +1792,9 @@ Requirements:
           recoveryTriggered: starterStartRecoveryTriggeredRef.current,
         });
         const starterRuntimeBootstrapInFlight =
-          starterBootstrapObservationPending ||
-          Boolean(bootstrapCommands && shouldWaitForStarterContinuation({ installStatus, startStatus }));
+          !previews.some((preview) => preview.ready && preview.baseUrl) &&
+          (starterBootstrapObservationPending ||
+            Boolean(bootstrapCommands && shouldWaitForStarterContinuation({ installStatus, startStatus })));
 
         if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
           return;
@@ -1810,7 +1810,6 @@ Requirements:
 
         dispatchStarterContinuation('stream-finished');
       };
-
       void evaluateStarterContinuation();
 
       return () => {
@@ -1823,6 +1822,7 @@ Requirements:
       files,
       hostedRuntimeEnabled,
       isLoading,
+      previews,
       stepRunnerEvents,
     ]);
 

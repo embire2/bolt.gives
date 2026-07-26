@@ -673,6 +673,7 @@ async function main() {
   let hostedRuntimeSessionId = null;
   let lastPreviewStatusKey = '';
   let loggedInitialSnapshotWait = false;
+  let loggedInitialModelWait = false;
   let loggedFollowUpSnapshotWait = false;
 
   while (Date.now() < checkDeadline) {
@@ -738,22 +739,45 @@ async function main() {
         if (expectedInitialTokens.every((token) => inner.includes(token))) {
           previewContainsToken = true;
 
+          const initialModelSelectionObserved = chatRequestInputs.some(
+            (input) =>
+              input.selectedProvider === providerName &&
+              input.selectedModel === modelName &&
+              String(input.latestUserContent || '').includes(appToken),
+          );
+          const initialModelRequestSucceeded = chatRequests.some((request) => request.status === 200);
+
           if (!hostedRuntimeSessionId) {
-            log('SUCCESS: preview contains expected tokens');
-            break;
+            if (initialModelSelectionObserved && initialModelRequestSucceeded) {
+              log('SUCCESS: preview and model continuation contain expected request');
+              break;
+            }
+
+            if (!loggedInitialModelWait) {
+              loggedInitialModelWait = true;
+              log('model continuation pending after starter preview');
+            }
           }
 
-          const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, expectedInitialTokens);
+          if (hostedRuntimeSessionId) {
+            const snapshotCheck = await checkRuntimeSnapshotTokens(page, hostedRuntimeSessionId, expectedInitialTokens);
 
-          if (snapshotCheck.ok) {
-            snapshotContainsToken = true;
-            log('SUCCESS: runtime snapshot contains token');
-            break;
-          }
+            if (snapshotCheck.ok) {
+              snapshotContainsToken = true;
 
-          if (!loggedInitialSnapshotWait) {
-            loggedInitialSnapshotWait = true;
-            log('runtime snapshot pending token', JSON.stringify(snapshotCheck.result));
+              if (initialModelSelectionObserved && initialModelRequestSucceeded) {
+                log('SUCCESS: runtime snapshot and model continuation contain expected request');
+                break;
+              }
+
+              if (!loggedInitialModelWait) {
+                loggedInitialModelWait = true;
+                log('model continuation pending after starter preview');
+              }
+            } else if (!loggedInitialSnapshotWait) {
+              loggedInitialSnapshotWait = true;
+              log('runtime snapshot pending token', JSON.stringify(snapshotCheck.result));
+            }
           }
         }
       } catch {
