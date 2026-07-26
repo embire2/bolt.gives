@@ -11,7 +11,13 @@ describe('Chat starter continuation scheduling', () => {
 
     expect(effectStart).toBeGreaterThan(-1);
     expect(effectEnd).toBeGreaterThan(effectStart);
-    expect(effectSource).toContain('!previews.some((preview) => preview.ready && preview.baseUrl)');
+    expect(effectSource).toContain(
+      'const hasReadyPreview = previews.some((preview) => preview.ready && preview.baseUrl)',
+    );
+    expect(effectSource).toContain('shouldDeferStarterForPreview');
     expect(effectSource).toMatch(/isLoading,\s+previews,\s+stepRunnerEvents/);
+    expect(source).toMatch(
+      /\.then\(\(runtimePrepared\) => runtimePrepared && dispatchStarterContinuation\('stream-finished'\)\)/,
+    );
   });
 });

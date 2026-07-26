@@ -3,6 +3,7 @@ import {
   STARTER_BOOTSTRAP_OBSERVATION_TIMEOUT_MS,
   getStarterBootstrapRuntimeActionStatus,
   selectMissingStarterBootstrapRuntimeActions,
+  shouldDeferStarterForPreview,
   shouldWaitForStarterBootstrapObservation,
   shouldWaitForStarterContinuation,
   shouldRunImmediateStarterBootstrapRuntime,
@@ -246,5 +247,10 @@ describe('selectMissingStarterBootstrapRuntimeActions', () => {
         starterContinuationAlreadyTriggered: true,
       }),
     ).toBe(false);
+  });
+
+  it('lets a healthy Preview override a stale non-starter Preview alert', () => {
+    expect(shouldDeferStarterForPreview('preview', true, 'no-starter-placeholder')).toBe(false);
+    expect(shouldDeferStarterForPreview('preview', false, 'no-starter-placeholder')).toBe(true);
   });
 });

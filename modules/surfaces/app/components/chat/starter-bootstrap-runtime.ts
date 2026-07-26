@@ -93,6 +93,14 @@ export function shouldUseClientStarterContinuation(options: StarterContinuationD
   return true;
 }
 
+export function shouldDeferStarterForPreview(
+  alertSource: unknown,
+  hasReadyPreview: boolean,
+  starterContinuationReason: string,
+): boolean {
+  return alertSource === 'preview' && !hasReadyPreview && starterContinuationReason !== 'starter-placeholder';
+}
+
 export function shouldWaitForStarterBootstrapObservation(options: {
   commands: StarterTemplateBootstrapCommands | undefined;
   installStatus: StarterBootstrapRuntimeActionStatus;

@@ -25,7 +25,7 @@ No unreleased changes.
 ### Fixed
 
 - Made the compiled package version authoritative in health responses, so stale Cloudflare `APP_VERSION` metadata cannot make a freshly deployed release report an older version.
-- Made deterministic hosted starters continue through the selected FREE model after Preview becomes healthy. Preview readiness now clears stale bootstrap-in-flight gating, and the Calendar release E2E requires the real model request to succeed before accepting a first-pass artifact.
+- Made deterministic hosted starters continue through the selected FREE model after Preview becomes healthy. Successful starter bootstrap schedules continuation directly, while verified Preview readiness overrides stale bootstrap and Preview-alert gates; the Calendar release E2E requires the real model request to succeed before accepting a first-pass artifact.
 - Preserved debug-log capture without a `core` to `surfaces` import cycle by registering the optional browser capture adapter at application startup.
 - Restored isolated Vitest mocks after runtime and control-plane service moves, preventing tests from accidentally invoking real hosted runtime or SMTP behavior.
 - Kept existing self-host service commands working after source relocation through stable root facades and explicit repository-root resolution.
@@ -34,7 +34,7 @@ No unreleased changes.
 
 - `pnpm run lint`
 - `pnpm run typecheck`
-- `pnpm test` (`179` files passed, `1,026` tests passed, `3` skipped)
+- `pnpm test` (`179` files passed, `1,027` tests passed, `3` skipped)
 - `pnpm check:boundaries:strict`
 - `pnpm run build`
 

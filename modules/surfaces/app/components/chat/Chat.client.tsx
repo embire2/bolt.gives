@@ -96,6 +96,7 @@ import { buildStarterBootstrapMessages } from './starter-bootstrap-messages';
 import {
   getStarterBootstrapRuntimeActionStatus,
   selectMissingStarterBootstrapRuntimeActions,
+  shouldDeferStarterForPreview,
   shouldWaitForStarterBootstrapObservation,
   shouldWaitForStarterContinuation,
   shouldRunImmediateStarterBootstrapRuntime,
@@ -1753,15 +1754,12 @@ Requirements:
     ]);
 
     useEffect(() => {
-      if (isLoading || fakeLoading) {
-        return undefined;
-      }
-
-      if (!pendingStarterContinuationRef.current) {
-        return undefined;
-      }
-
-      if (starterContinuationTriggeredRef.current) {
+      if (
+        isLoading ||
+        fakeLoading ||
+        !pendingStarterContinuationRef.current ||
+        starterContinuationTriggeredRef.current
+      ) {
         return undefined;
       }
 
@@ -1774,8 +1772,9 @@ Requirements:
           hasPendingStarterRequest: Boolean(pendingStarterContinuationRef.current),
           starterContinuationAlreadyTriggered: starterContinuationTriggeredRef.current,
         });
+        const hasReadyPreview = previews.some((preview) => preview.ready && preview.baseUrl);
 
-        if (actionAlert?.source === 'preview' && !starterContinuationDecision.shouldDispatchStarterContinuation) {
+        if (shouldDeferStarterForPreview(actionAlert?.source, hasReadyPreview, starterContinuationDecision.reason)) {
           return;
         }
 
@@ -1792,7 +1791,7 @@ Requirements:
           recoveryTriggered: starterStartRecoveryTriggeredRef.current,
         });
         const starterRuntimeBootstrapInFlight =
-          !previews.some((preview) => preview.ready && preview.baseUrl) &&
+          !hasReadyPreview &&
           (starterBootstrapObservationPending ||
             Boolean(bootstrapCommands && shouldWaitForStarterContinuation({ installStatus, startStatus })));
 
@@ -3231,9 +3230,9 @@ CONTINUE IMMEDIATELY:
                   messageId: `${timestamp}-starter-runtime`,
                   title: 'Starter Runtime Bootstrap',
                   commands: bootstrapCommands,
-                }).catch((runtimeBootstrapError) => {
-                  void handleError(runtimeBootstrapError, 'chat');
-                });
+                })
+                  .then((runtimePrepared) => runtimePrepared && dispatchStarterContinuation('stream-finished'))
+                  .catch((runtimeBootstrapError) => void handleError(runtimeBootstrapError, 'chat'));
               }
 
               setInput('');
