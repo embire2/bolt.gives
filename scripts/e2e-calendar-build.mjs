@@ -571,6 +571,12 @@ async function main() {
         typeof latestUserMessage?.content === 'string'
           ? latestUserMessage.content
           : JSON.stringify(latestUserMessage?.content || '');
+      const userContent = requestMessages
+        .filter((message) => message?.role === 'user')
+        .map((message) =>
+          typeof message?.content === 'string' ? message.content : JSON.stringify(message?.content || ''),
+        )
+        .join('\n');
 
       chatRequestInputs.push({
         selectedProvider: payload?.selectedProvider || null,
@@ -578,6 +584,7 @@ async function main() {
         messageCount: requestMessages.length,
         messageRoles: requestMessages.map((message) => message?.role || 'unknown'),
         latestUserContent: normalizeText(latestUserContent).slice(0, 500),
+        userContent: normalizeText(userContent).slice(0, 4000),
         fileCount: payload?.files && typeof payload.files === 'object' ? Object.keys(payload.files).length : 0,
         hostedRuntimeSessionId: payload?.hostedRuntimeSessionId || null,
         chatMode: payload?.chatMode || null,
@@ -743,7 +750,7 @@ async function main() {
             (input) =>
               input.selectedProvider === providerName &&
               input.selectedModel === modelName &&
-              String(input.latestUserContent || '').includes(appToken),
+              String(input.userContent || '').includes(appToken),
           );
           const initialModelRequestSucceeded = chatRequests.some((request) => request.status === 200);
 
@@ -1011,7 +1018,7 @@ async function main() {
     (input) =>
       input.selectedProvider === providerName &&
       input.selectedModel === modelName &&
-      String(input.latestUserContent || '').includes(appToken),
+      String(input.userContent || '').includes(appToken),
   );
   const followUpSelectionOk =
     !requireFollowUp ||
@@ -1019,7 +1026,7 @@ async function main() {
       (input) =>
         input.selectedProvider === providerName &&
         input.selectedModel === followUpModelName &&
-        String(input.latestUserContent || '').includes(followUpToken),
+        String(input.userContent || '').includes(followUpToken),
     );
   const summary = {
     ok:
