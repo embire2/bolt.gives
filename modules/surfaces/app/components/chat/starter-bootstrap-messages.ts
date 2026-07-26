@@ -1,5 +1,6 @@
 import type { Attachment } from '@ai-sdk/ui-utils';
 import type { Message } from 'ai';
+import { DEFER_CHAT_NAVIGATION_ANNOTATION } from '@bolt/project/lib/persistence/chat-history-utils';
 
 type BuildStarterBootstrapMessagesOptions = {
   userMessageId: string;
@@ -35,6 +36,7 @@ export function buildStarterBootstrapMessages(options: BuildStarterBootstrapMess
       id: assistantMessageId,
       role: 'assistant',
       content: starterAssistantMessage,
+      annotations: [DEFER_CHAT_NAVIGATION_ANNOTATION],
     },
   ];
 
@@ -50,4 +52,23 @@ export function buildStarterBootstrapMessages(options: BuildStarterBootstrapMess
   }
 
   return messages;
+}
+
+export function findPendingStarterRequest(messages: Message[]): string | null {
+  const latestAssistantIndex = messages.findLastIndex((message) => message.role === 'assistant');
+  const latestAssistant = messages[latestAssistantIndex];
+
+  if (!latestAssistant?.annotations?.includes(DEFER_CHAT_NAVIGATION_ANNOTATION)) {
+    return null;
+  }
+
+  for (let index = latestAssistantIndex - 1; index >= 0; index--) {
+    const candidate = messages[index];
+
+    if (candidate.role === 'user' && typeof candidate.content === 'string' && candidate.content.trim()) {
+      return candidate.content.trim();
+    }
+  }
+
+  return null;
 }

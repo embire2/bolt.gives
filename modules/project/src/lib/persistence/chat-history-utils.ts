@@ -2,6 +2,8 @@ import type { Message } from 'ai';
 import type { FileMap } from '@bolt/core/types/files';
 import type { Snapshot } from './types';
 
+export const DEFER_CHAT_NAVIGATION_ANNOTATION = 'defer-chat-navigation';
+
 export function resolvePersistedChatRouteId(routeParamId?: string, loaderId?: string): string | undefined {
   return routeParamId?.trim() || loaderId?.trim() || undefined;
 }
@@ -32,6 +34,12 @@ export function shouldNavigateAfterPersistedMessage(
   hasWorkbenchArtifact: boolean,
 ): boolean {
   if (isStreaming) {
+    return false;
+  }
+
+  const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+
+  if (latestAssistant?.annotations?.includes(DEFER_CHAT_NAVIGATION_ANNOTATION)) {
     return false;
   }
 

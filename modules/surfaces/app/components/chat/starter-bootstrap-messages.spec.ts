@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStarterBootstrapMessages } from './starter-bootstrap-messages';
+import { buildStarterBootstrapMessages, findPendingStarterRequest } from './starter-bootstrap-messages';
 
 describe('buildStarterBootstrapMessages', () => {
   it('includes the continuation prompt after the starter assistant message', () => {
@@ -21,6 +21,7 @@ describe('buildStarterBootstrapMessages', () => {
       id: 'assistant-1',
       role: 'assistant',
       content: '<boltArtifact id="starter" />',
+      annotations: ['defer-chat-navigation'],
     });
     expect(messages[2]).toMatchObject({
       id: 'assistant-1-continue',
@@ -57,5 +58,24 @@ describe('buildStarterBootstrapMessages', () => {
     });
 
     expect(messages).toHaveLength(2);
+  });
+
+  it('restores the original request when a starter bootstrap remounts before model continuation', () => {
+    const messages = buildStarterBootstrapMessages({
+      userMessageId: 'user-1',
+      assistantMessageId: 'assistant-1',
+      userMessageText: 'Build a calendar app',
+      starterAssistantMessage: '<boltArtifact id="starter" />',
+      continuationMessageText: 'Hidden continuation',
+      hideContinuationMessage: true,
+    });
+
+    expect(findPendingStarterRequest(messages)).toBe('Build a calendar app');
+    expect(
+      findPendingStarterRequest([
+        ...messages,
+        { id: 'assistant-2', role: 'assistant', content: 'Implemented the requested calendar.' },
+      ]),
+    ).toBeNull();
   });
 });

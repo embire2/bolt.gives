@@ -92,7 +92,7 @@ import {
   shouldIgnoreDisconnectAfterCompletedRun,
 } from '@bolt/agent/lib/runtime/recovery-errors';
 import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
-import { buildStarterBootstrapMessages } from './starter-bootstrap-messages';
+import { buildStarterBootstrapMessages, findPendingStarterRequest } from './starter-bootstrap-messages';
 import {
   getStarterBootstrapRuntimeActionStatus,
   selectMissingStarterBootstrapRuntimeActions,
@@ -868,7 +868,7 @@ export const ChatImpl = memo(
     const userObjectiveStartedAtRef = useRef(requestLifecycleStartedAtRef.current);
     const lastRunCompletedAtRef = useRef<number | null>(null);
     const lastPreviewReadyAtRef = useRef<number | null>(null);
-    const pendingStarterContinuationRef = useRef<string | null>(null);
+    const pendingStarterContinuationRef = useRef<string | null>(findPendingStarterRequest(initialMessages));
     const starterContinuationTriggeredRef = useRef(false);
     const starterBootstrapCommandsRef = useRef<StarterTemplateBootstrapCommands | null>(null);
     const starterBootstrapQueuedAtRef = useRef<number | null>(null);
@@ -1790,10 +1790,10 @@ Requirements:
           queuedAt: starterBootstrapQueuedAtRef.current,
           recoveryTriggered: starterStartRecoveryTriggeredRef.current,
         });
-        const starterRuntimeBootstrapInFlight =
-          !hasReadyPreview &&
-          (starterBootstrapObservationPending ||
-            Boolean(bootstrapCommands && shouldWaitForStarterContinuation({ installStatus, startStatus })));
+        const bootstrapStillBusy = bootstrapCommands
+          ? starterBootstrapObservationPending || shouldWaitForStarterContinuation({ installStatus, startStatus })
+          : hostedRuntimeEnabled;
+        const starterRuntimeBootstrapInFlight = !hasReadyPreview && bootstrapStillBusy;
 
         if (!starterWorkspaceReady && autoContinuationCountRef.current === 0) {
           return;

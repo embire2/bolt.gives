@@ -41,7 +41,7 @@ Release theme: split the codebase into focused ownership modules so contributors
 - [x] Add a 1,000-line limit for new source files and frozen ceilings for known legacy hotspots so decomposition debt can shrink but not grow.
 - [x] Restore lint as a passing release gate and run the complete regression suite against the unified build.
 - [x] Document ownership, dependency direction, focused commands, and contribution rules.
-- [x] Unblock hosted starter model continuation after runtime bootstrap or healthy Preview despite stale client alert state, and require a successful selected-model request in Calendar release acceptance.
+- [x] Preserve hosted starter continuation across history navigation/remount, runtime bootstrap, healthy Preview, and stale client alert state; require a successful selected-model request in Calendar release acceptance.
 
 ## v3.2.0 - Shipped
 

@@ -66,9 +66,9 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Runtime-node/Preview helpers, collaboration, web browsing, admin mail/data, publishing, and managed-instance services now live beside their owning module. Stable `scripts/*` facades preserve existing systemd and self-host commands.
 - Every module has an independent TypeScript, lint, and Vitest task. Turborepo coordinates the graph, and `pnpm module:affected` checks a changed module plus all transitive consumers.
 - `pnpm check:boundaries:strict` rejects undeclared module dependencies, new source files above 1,000 lines, and growth in explicitly tracked legacy hotspots.
-- The migration is behavior-preserving: the full 1,027-test suite and the production bundle gate validate the unified build output.
+- The migration is behavior-preserving: the full 1,029-test suite and the production bundle gate validate the unified build output.
 - Health checks report the compiled release version, preventing stale Cloudflare environment metadata from mislabeling a newly deployed build.
-- Deterministic first-party starters always continue through the selected hosted FREE model once Preview is healthy. Successful runtime bootstrap schedules continuation directly, and verified Preview readiness overrides stale client alert/bootstrap state. The strict Calendar E2E requires both the rendered app and a successful model request, so a starter-only preview cannot be reported as a completed agentic build.
+- Deterministic first-party starters always continue through the selected hosted FREE model once Preview is healthy. Starter-only history defers route navigation so Chat cannot remount and lose its pending request; interrupted sessions reconstruct that request from persisted messages. Successful runtime bootstrap schedules continuation directly, and verified Preview readiness overrides stale client state. The strict Calendar E2E requires both the rendered app and a successful model request.
 
 See [Module Architecture](docs/architecture/modules.md) for ownership, dependency rules, and focused development commands.
 

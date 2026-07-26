@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from 'ai';
 import type { Snapshot } from './types';
 import {
+  DEFER_CHAT_NAVIGATION_ANNOTATION,
   hasRestorableSnapshotFiles,
   resolvePersistedChatRouteId,
   resolvePersistedChatMessages,
@@ -75,6 +76,27 @@ describe('chat-history-utils', () => {
     expect(shouldNavigateAfterPersistedMessage(userOnlyMessages, true, false)).toBe(false);
     expect(shouldNavigateAfterPersistedMessage(withAssistant, false, false)).toBe(true);
     expect(shouldNavigateAfterPersistedMessage(userOnlyMessages, false, true)).toBe(true);
+  });
+
+  it('keeps starter bootstrap state mounted until a real model response exists', () => {
+    const starterMessages: Message[] = [
+      { id: 'u1', role: 'user', content: 'Build a calendar app' },
+      {
+        id: 'starter',
+        role: 'assistant',
+        content: '<boltArtifact id="calendar-starter" />',
+        annotations: [DEFER_CHAT_NAVIGATION_ANNOTATION],
+      },
+    ];
+
+    expect(shouldNavigateAfterPersistedMessage(starterMessages, false, true)).toBe(false);
+    expect(
+      shouldNavigateAfterPersistedMessage(
+        [...starterMessages, { id: 'model', role: 'assistant', content: 'Calendar implementation complete.' }],
+        false,
+        true,
+      ),
+    ).toBe(true);
   });
 
   it('keeps the complete visible conversation when restoring the latest workspace snapshot', () => {
