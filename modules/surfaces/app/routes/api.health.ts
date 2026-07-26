@@ -49,10 +49,9 @@ async function timedCheck(name: string, run: () => Promise<void>, timeoutMs: num
   }
 }
 
-export const loader = async ({ request, context }: LoaderFunctionArgs) => {
+export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const wantsReadiness = url.searchParams.has('ready') || url.searchParams.has('readiness');
-  const version = ((context as any)?.cloudflare?.env ?? (context as any)?.env)?.APP_VERSION ?? APP_VERSION;
 
   // Liveness: cheap + dependency-free.
   if (!wantsReadiness) {
@@ -61,7 +60,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
         status: 'alive',
         uptimeMs: Date.now() - START_TIME,
         timestamp: new Date().toISOString(),
-        version,
+        version: APP_VERSION,
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );
@@ -90,7 +89,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
       status: ok ? 'ready' : 'degraded',
       uptimeMs: Date.now() - START_TIME,
       timestamp: new Date().toISOString(),
-      version,
+      version: APP_VERSION,
       checks,
     },
     {

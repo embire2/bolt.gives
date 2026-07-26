@@ -24,6 +24,7 @@ No unreleased changes.
 
 ### Fixed
 
+- Made the compiled package version authoritative in health responses, so stale Cloudflare `APP_VERSION` metadata cannot make a freshly deployed release report an older version.
 - Preserved debug-log capture without a `core` to `surfaces` import cycle by registering the optional browser capture adapter at application startup.
 - Restored isolated Vitest mocks after runtime and control-plane service moves, preventing tests from accidentally invoking real hosted runtime or SMTP behavior.
 - Kept existing self-host service commands working after source relocation through stable root facades and explicit repository-root resolution.

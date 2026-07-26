@@ -67,6 +67,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Every module has an independent TypeScript, lint, and Vitest task. Turborepo coordinates the graph, and `pnpm module:affected` checks a changed module plus all transitive consumers.
 - `pnpm check:boundaries:strict` rejects undeclared module dependencies, new source files above 1,000 lines, and growth in explicitly tracked legacy hotspots.
 - The migration is behavior-preserving: the full 1,025-test suite and the production bundle gate validate the unified build output.
+- Health checks report the compiled release version, preventing stale Cloudflare environment metadata from mislabeling a newly deployed build.
 
 See [Module Architecture](docs/architecture/modules.md) for ownership, dependency rules, and focused development commands.
 

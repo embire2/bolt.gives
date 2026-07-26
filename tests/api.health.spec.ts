@@ -15,12 +15,12 @@ describe('/api/health loader', () => {
     expect(payload.version).toBe(APP_VERSION);
   });
 
-  it('allows deployment APP_VERSION env to override the checked-in version', async () => {
+  it('ignores stale deployment APP_VERSION metadata', async () => {
     const response = (await loader({
       context: {
         cloudflare: {
           env: {
-            APP_VERSION: 'deployment-version',
+            APP_VERSION: '3.2.0',
           },
         },
       },
@@ -30,6 +30,6 @@ describe('/api/health loader', () => {
 
     const payload = (await response.json()) as { version: string };
 
-    expect(payload.version).toBe('deployment-version');
+    expect(payload.version).toBe(APP_VERSION);
   });
 });
