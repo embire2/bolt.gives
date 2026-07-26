@@ -58,9 +58,7 @@ describe('resolveCodingAppUrl', () => {
   });
 
   it('preserves an explicit coding route', () => {
-    expect(resolveCodingAppUrl('https://alpha1.bolt.gives/chat/demo')).toBe(
-      'https://alpha1.bolt.gives/chat/demo',
-    );
+    expect(resolveCodingAppUrl('https://alpha1.bolt.gives/chat/demo')).toBe('https://alpha1.bolt.gives/chat/demo');
   });
 });
 

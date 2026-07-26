@@ -27,7 +27,7 @@ vi.mock('~/components/ui/BackgroundRays', () => ({
   default: () => <div data-testid="background-rays" />,
 }));
 
-let ManagedInstancesPage: (typeof import('../../app/routes/managed-instances'))['default'];
+let ManagedInstancesPage: (typeof import('~/routes/managed-instances'))['default'];
 
 describe('ManagedInstancesPage', () => {
   beforeEach(async () => {
@@ -65,7 +65,7 @@ describe('ManagedInstancesPage', () => {
       sessionEmail: 'owner@example.com',
       sessionProjectName: 'clinic-trial',
     });
-    ManagedInstancesPage = (await import('../../app/routes/managed-instances')).default;
+    ManagedInstancesPage = (await import('~/routes/managed-instances')).default;
   });
 
   afterEach(() => {

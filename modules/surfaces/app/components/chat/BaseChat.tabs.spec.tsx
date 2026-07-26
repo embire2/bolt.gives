@@ -1,0 +1,405 @@
+// @vitest-environment jsdom
+
+import React from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { PROVIDER_CATALOG } from '@bolt/agent/lib/modules/llm/provider-catalog';
+
+const localStorageState = new Map<string, string>();
+
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageState.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageState.set(key, value);
+  }),
+  removeItem: vi.fn((key: string) => {
+    localStorageState.delete(key);
+  }),
+  clear: vi.fn(() => {
+    localStorageState.clear();
+  }),
+};
+
+vi.mock('remix-utils/client-only', () => {
+  return {
+    ClientOnly: ({ children }: { children: any }) => <>{typeof children === 'function' ? children() : children}</>,
+  };
+});
+
+vi.mock('@bolt/project/lib/hooks', () => {
+  const StickToBottom = ({ children }: { children: any }) => <div>{children}</div>;
+  (StickToBottom as any).Content = ({ children }: { children: any }) => <div>{children}</div>;
+
+  return {
+    StickToBottom,
+    useStickToBottomContext() {
+      return { isAtBottom: true, scrollToBottom: () => undefined };
+    },
+  };
+});
+
+vi.mock('~/components/sidebar/Menu.client', () => ({ Menu: () => null }));
+vi.mock('@bolt/project/components/workbench/Workbench.client', () => ({
+  Workbench: ({ onRequestClose }: { onRequestClose?: () => void }) => (
+    <div>
+      <div data-testid="workbench-panel">Workbench Panel</div>
+      <button type="button" onClick={onRequestClose}>
+        Close Workspace Panel
+      </button>
+    </div>
+  ),
+}));
+vi.mock('./Messages.client', () => ({ Messages: () => <div>Messages</div> }));
+vi.mock('~/components/chat/chatExportAndImport/ImportButtons', () => ({ ImportButtons: () => null }));
+vi.mock('~/components/chat/ExamplePrompts', () => ({ ExamplePrompts: () => null }));
+vi.mock('./StarterTemplates', () => ({ default: () => null }));
+vi.mock('./GitCloneButton', () => ({ default: () => null }));
+vi.mock('@bolt/project/components/deploy/DeployAlert', () => ({ default: () => null }));
+vi.mock('./ChatAlert', () => ({ default: () => null }));
+vi.mock('~/components/chat/SupabaseAlert', () => ({ SupabaseChatAlert: () => null }));
+vi.mock('./LLMApiAlert', () => ({ default: () => null }));
+vi.mock('./ProgressCompilation', () => ({ default: () => null }));
+vi.mock('./StepRunnerFeed', () => ({ StepRunnerFeed: () => <div>Technical Timeline</div> }));
+vi.mock('./ExecutionTransparencyPanel', () => ({
+  ExecutionTransparencyPanel: () => <div>Execution Transparency</div>,
+}));
+vi.mock('./ExecutionStickyFooter', () => ({ ExecutionStickyFooter: () => <div>Execution Footer</div> }));
+vi.mock('./UpdateBanner', () => ({ UpdateBanner: () => <div>Update Banner</div> }));
+vi.mock('./CommentaryFeed', () => ({ CommentaryFeed: () => <div>Live Commentary</div> }));
+vi.mock('./ChatBox', () => ({ ChatBox: () => <div>Chat Box</div> }));
+
+let BaseChat: (typeof import('./BaseChat'))['BaseChat'];
+
+function hasClassToken(element: Element | null, className: string) {
+  return (element?.className ?? '').toString().split(/\s+/).includes(className);
+}
+
+describe('BaseChat surface tabs', () => {
+  beforeAll(async () => {
+    (window as any).__vite_plugin_react_preamble_installed__ = true;
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+      writable: true,
+    });
+
+    BaseChat = (await import('./BaseChat')).BaseChat;
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorageMock.clear();
+    workbenchStore.showWorkbench.set(false);
+    workbenchStore.stepRunnerEvents.set([]);
+    vi.unstubAllGlobals();
+  });
+
+  it('lets users switch, close, and reopen the workspace tab', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    const chatTab = screen.getByRole('tab', { name: 'Chat' });
+    const workspaceTab = screen.getByRole('tab', { name: 'Workspace' });
+
+    expect(chatTab.className).toContain('text-bolt-elements-textPrimary');
+    expect(workspaceTab.className).toContain('text-bolt-elements-textSecondary');
+
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
+
+    fireEvent.click(workspaceTab);
+    expect(workspaceTab.className).toContain('text-bolt-elements-textPrimary');
+    expect(chatTab.className).toContain('text-bolt-elements-textSecondary');
+    expect(
+      hasClassToken((await screen.findByTestId('workbench-panel')).closest('#workspace-surface-panel'), 'hidden'),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close Workspace tab' }));
+    expect(screen.queryByTestId('workbench-panel')).toBeNull();
+    expect(screen.getByRole('tab', { name: /Open Workspace/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Open Workspace/i }));
+    expect(
+      hasClassToken((await screen.findByTestId('workbench-panel')).closest('#workspace-surface-panel'), 'hidden'),
+    ).toBe(false);
+  });
+
+  it('keeps chat active when the workspace becomes available automatically', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+    });
+
+    workbenchStore.showWorkbench.set(true);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
+  });
+
+  it('renders a visible queued follow-up status below the prompt box', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(
+      <BaseChat
+        chatStarted
+        queuedVisibleFollowUp={{
+          content: 'Add an agenda sidebar with the exact text CAL_FUP_123.',
+          queuedAt: Date.now(),
+        }}
+      />,
+    );
+
+    expect(await screen.findByText(/Follow-up queued:/)).toBeTruthy();
+    expect(screen.getByText(/CAL_FUP_123/)).toBeTruthy();
+  });
+
+  it('auto-switches to the workspace when execution activity starts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted isStreaming />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+    });
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: new Date().toISOString(),
+        description: 'Run shell command: pnpm install',
+        stepIndex: 1,
+      },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      false,
+    );
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(
+      screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('workspace-compact-prompt')),
+    ).toBe(true);
+    expect(screen.queryByTestId('chat-input-region')).toBeNull();
+  });
+
+  it('returns to chat after an auto-opened workspace run settles', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    const { rerender } = render(<BaseChat chatStarted isStreaming />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+    });
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: new Date().toISOString(),
+        description: 'Run shell command: pnpm install',
+        stepIndex: 1,
+      },
+    ]);
+
+    await waitFor(() => {
+      expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+        false,
+      );
+    });
+
+    rerender(<BaseChat chatStarted isStreaming={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    });
+
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
+    expect(screen.getByTestId('persistent-chat-composer')).toBeTruthy();
+    expect(screen.getByTestId('chat-input-region').closest('#chat-surface-panel')).toBeNull();
+  });
+
+  it('keeps restored chat visible when historical execution events hydrate', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    workbenchStore.stepRunnerEvents.set([
+      {
+        type: 'step-start',
+        timestamp: new Date().toISOString(),
+        description: 'Historical command: pnpm install',
+        stepIndex: 1,
+      },
+      {
+        type: 'step-end',
+        timestamp: new Date().toISOString(),
+        description: 'Historical command completed',
+        stepIndex: 1,
+      },
+    ]);
+
+    render(<BaseChat chatStarted isStreaming={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    });
+
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
+  });
+
+  it('boots into chat even if workspace was the last persisted active surface', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    vi.stubGlobal('localStorage', localStorageMock);
+
+    localStorageMock.setItem(
+      'bolt_surface_layout',
+      JSON.stringify({
+        openTabs: ['chat', 'workspace'],
+        activeTab: 'workspace',
+      }),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+      true,
+    );
+    expect(screen.getByRole('tab', { name: 'Chat' }).className).toContain('text-bolt-elements-textPrimary');
+    expect(screen.getByRole('tab', { name: 'Workspace' }).className).toContain('text-bolt-elements-textSecondary');
+  });
+
+  it('keeps the follow-up prompt visible when the workspace tab is active', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    render(<BaseChat chatStarted />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy();
+    });
+
+    const chatInputRegion = screen.getByTestId('chat-input-region');
+    expect(screen.getByTestId('persistent-chat-composer').contains(chatInputRegion)).toBe(true);
+    expect(chatInputRegion.closest('#chat-surface-panel')).toBeNull();
+    expect(screen.queryByTestId('workspace-compact-prompt')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Workspace' }));
+
+    await waitFor(() => {
+      expect(hasClassToken(screen.getByTestId('workbench-panel').closest('#workspace-surface-panel'), 'hidden')).toBe(
+        false,
+      );
+    });
+
+    const compactPrompt = screen.getByTestId('workspace-compact-prompt');
+    expect(screen.getByTestId('persistent-chat-composer').contains(compactPrompt)).toBe(true);
+    expect(screen.queryByTestId('chat-input-region')).toBeNull();
+    expect(screen.getByPlaceholderText('Ask Cody to change this project...')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+
+    expect(screen.getByTestId('persistent-chat-composer').contains(screen.getByTestId('chat-input-region'))).toBe(true);
+    expect(screen.queryByTestId('workspace-compact-prompt')).toBeNull();
+  });
+
+  it('lets users switch the FREE model from the compact workspace prompt', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ modelList: [] }),
+      })),
+    );
+
+    const setModel = vi.fn();
+    const freeProvider = PROVIDER_CATALOG.find((entry) => entry.name === 'FREE');
+
+    render(<BaseChat chatStarted provider={freeProvider} model="gpt-5.6-sol" setModel={setModel} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Workspace' }));
+
+    const modelSelect = await screen.findByRole('combobox', { name: 'FREE workspace coding model' });
+    fireEvent.change(modelSelect, { target: { value: 'claude-sonnet-5' } });
+
+    expect(setModel).toHaveBeenCalledWith('claude-sonnet-5');
+    expect(screen.getByPlaceholderText('Ask Cody to change this project...')).toBeTruthy();
+  });
+});

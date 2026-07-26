@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { links, loader, meta } from '../../app/routes/_index';
+import { links, loader, meta } from '~/routes/_index';
 
 describe('index route loader', () => {
   it('redirects the admin host to the admin panel route', () => {

@@ -7,6 +7,7 @@ export function parseRemixManifestSource(source) {
   }
 
   const jsonSource = raw.slice(assignmentIndex + 1).replace(/;\s*$/, '');
+
   return JSON.parse(jsonSource);
 }
 
@@ -27,5 +28,6 @@ export function collectInitialAssetPaths(manifest, routeId) {
   addRouteAssets(assets, manifest?.entry);
   addRouteAssets(assets, manifest?.routes?.root);
   addRouteAssets(assets, manifest?.routes?.[routeId]);
+
   return [...assets].sort();
 }

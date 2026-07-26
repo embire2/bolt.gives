@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.2.0`
-- In progress: `v3.3.0`
+- Stable: `v3.3.0`
+- In progress: `v3.4.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
 
@@ -92,7 +92,7 @@ When changing hosted runtime behavior, validate both the app service and the run
 - Keep behavior changes explicit in commit messages and docs.
 - If you encounter unexpected unrelated file modifications while editing, stop and assess before overwriting them.
 
-## v3.3.0 Priorities
+## v3.4.0 Priorities
 
 These are the current release priorities:
 

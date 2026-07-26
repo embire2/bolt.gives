@@ -54,11 +54,13 @@ let isTearingDown = false;
 function elapsed() {
   return ((Date.now() - started) / 1000).toFixed(1);
 }
+
 function log(stage, details = '') {
   const line = `[+${elapsed()}s] ${stage}${details ? ' | ' + details : ''}`;
   console.log(line);
   events.push(line);
 }
+
 function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -137,6 +139,7 @@ function extractRuntimeSessionId(previewUrl) {
   try {
     const parsed = new URL(previewUrl, baseUrl);
     const match = parsed.pathname.match(/\/runtime\/preview\/([^/]+)\/\d+(?:\/|$)/);
+
     return match?.[1] || null;
   } catch {
     return null;
@@ -300,6 +303,7 @@ async function ensureChatComposerVisible(page) {
         }
 
         const style = window.getComputedStyle(element);
+
         return style.display !== 'none' && style.visibility !== 'hidden' && !element.disabled;
       });
     },
@@ -320,10 +324,12 @@ async function waitForChatIdle(page, timeout = 180000) {
         }
 
         const style = window.getComputedStyle(element);
+
         return style.display !== 'none' && style.visibility !== 'hidden';
       };
       const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop generation"]'));
       const textareas = Array.from(document.querySelectorAll('textarea'));
+
       return !stopButtons.some(visible) && textareas.some((element) => visible(element) && !element.disabled);
     },
     undefined,
@@ -409,9 +415,11 @@ async function verifyPersistedProjectRestore(page, options) {
   const escapedProjectPath = projectPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const historyLink = page.locator(`a[href="${escapedProjectPath}"]`).first();
   await historyLink.waitFor({ state: 'visible', timeout: 30000 });
+
   const runtimeMutationBaseline = runtimeMutationRequests.length;
   await Promise.all([page.waitForURL((url) => url.pathname === projectPath, { timeout: 90000 }), historyLink.click()]);
   await ensureChatComposerVisible(page);
+
   try {
     await page.waitForFunction(
       (tokens) => tokens.every((token) => document.body.innerText.includes(token)),
@@ -423,7 +431,12 @@ async function verifyPersistedProjectRestore(page, options) {
       ok: false,
       persisted,
       reason: 'The saved route opened, but its complete visible conversation did not hydrate.',
-      restoredBodyExcerpt: (await page.locator('body').innerText().catch(() => '')).slice(0, 2000),
+      restoredBodyExcerpt: (
+        await page
+          .locator('body')
+          .innerText()
+          .catch(() => '')
+      ).slice(0, 2000),
     };
   }
   await keepPreviewSurfaceVisible(page);
@@ -480,6 +493,7 @@ async function verifyPersistedProjectRestore(page, options) {
 
 async function main() {
   await fs.mkdir(outDir, { recursive: true });
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await context.newPage();
@@ -519,9 +533,7 @@ async function main() {
     networkErrors.push(`REQFAIL ${req.method()} ${req.url()} :: ${req.failure()?.errorText}`);
   });
   page.on('request', (req) => {
-    const runtimeMutationMatch = new URL(req.url()).pathname.match(
-      /^\/runtime\/sessions\/([^/]+)\/(sync|command)$/,
-    );
+    const runtimeMutationMatch = new URL(req.url()).pathname.match(/^\/runtime\/sessions\/([^/]+)\/(sync|command)$/);
 
     if (runtimeMutationMatch && req.method() === 'POST') {
       let kind = runtimeMutationMatch[2];
@@ -593,6 +605,7 @@ async function main() {
         'api/chat response',
         `status=${res.status()} deadlineMs=${headers['x-bolt-stream-deadline-ms'] || 'missing'}`,
       );
+
       let bodyPreview = '';
 
       if (captureChatBody) {
@@ -603,6 +616,7 @@ async function main() {
 
       chatRequests.push({ status: res.status(), url, headers, bodyPreview });
     }
+
     if (res.status() >= 400 && !url.includes('/api/chat')) {
       const entry = `HTTP ${res.status()} ${url}`;
       networkErrors.push(entry);
@@ -627,6 +641,7 @@ async function main() {
 
   log('goto', baseUrl);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
   const textarea = await ensureChatComposerVisible(page);
   log('prompt surface ready');
   await page.screenshot({ path: path.join(outDir, '01-loaded.png'), fullPage: true });
@@ -662,6 +677,7 @@ async function main() {
 
   while (Date.now() < checkDeadline) {
     await keepPreviewSurfaceVisible(page);
+
     const bodyText =
       (await page
         .locator('body')
@@ -677,10 +693,12 @@ async function main() {
       sawAssistantContent = true;
       log('assistant activity detected');
     }
+
     if (!sawFiles && /package\.json|src\/App|App\.jsx|App\.tsx/.test(bodyText)) {
       sawFiles = true;
       log('file actions detected in UI');
     }
+
     const iframe = await page
       .locator('iframe[title="preview"]')
       .first()
@@ -766,6 +784,7 @@ async function main() {
 
         if (statusKey !== lastPreviewStatusKey) {
           lastPreviewStatusKey = statusKey;
+
           const statusSummary = {
             elapsedSec: Number(elapsed()),
             status: runtimeStatus.status,
@@ -783,6 +802,7 @@ async function main() {
     const errMatch = bodyText.match(
       /(Something went wrong|Request failed|403|Forbidden|CSRF|Unable to start|preview verification failed|cannot read properties of undefined|Unexpected token|ReferenceError|TypeError|Application Error)/i,
     );
+
     if (errMatch && !sawError) {
       sawError = true;
       log('UI error text', errMatch[0]);
@@ -797,6 +817,7 @@ async function main() {
     followUpSubmitted = true;
     log('submit follow-up prompt', `token=${followUpToken}`);
     await selectVisibleFreeModel(page, followUpModelName);
+
     const followUpTextarea = await ensureChatComposerVisible(page);
     await followUpTextarea.fill(followUpPrompt);
     await followUpTextarea.press('Enter');
@@ -805,6 +826,7 @@ async function main() {
 
     while (Date.now() < checkDeadline) {
       await keepPreviewSurfaceVisible(page);
+
       const bodyText =
         (await page
           .locator('body')
@@ -876,6 +898,7 @@ async function main() {
       const errMatch = bodyText.match(
         /(Something went wrong|Request failed|403|Forbidden|CSRF|Unable to start|preview verification failed|cannot read properties of undefined|Unexpected token|ReferenceError|TypeError|Application Error)/i,
       );
+
       if (errMatch && !sawError) {
         sawError = true;
         log('UI error text', errMatch[0]);
@@ -897,6 +920,7 @@ async function main() {
       .locator('body')
       .innerText()
       .catch(() => bodyTextLast)) || bodyTextLast;
+
   const finalUiError = bodyTextLast.match(
     /(Server Error|Network error|BOLT_STREAM_TIMEOUT|Needs repair|Something went wrong|Application Error)/i,
   );
@@ -945,9 +969,11 @@ async function main() {
   await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
     log('final screenshot failed', error instanceof Error ? error.message : String(error));
   });
+
   const finalBody = bodyTextLast.replace(/\s+/g, ' ').slice(0, 4000);
   await fs.writeFile(path.join(outDir, 'final-body.txt'), bodyTextLast);
   isTearingDown = true;
+
   const runtimeCleanup = await closePageThenCleanupSession(
     () => page.close(),
     () => terminateRuntimeSession(context.request, hostedRuntimeSessionId),
@@ -1064,7 +1090,10 @@ async function main() {
 
   await context.close();
   await browser.close();
-  if (!summary.ok) process.exit(2);
+
+  if (!summary.ok) {
+    process.exit(2);
+  }
 }
 
 main().catch(async (err) => {

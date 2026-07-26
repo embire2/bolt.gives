@@ -4,11 +4,11 @@ const runtimeControlMocks = vi.hoisted(() => ({
   fetchRuntimeControlJson: vi.fn(),
 }));
 
-vi.mock('~/lib/.server/runtime-control', () => ({
+vi.mock('@bolt/runtime/lib/.server/runtime-control', () => ({
   fetchRuntimeControlJson: runtimeControlMocks.fetchRuntimeControlJson,
 }));
 
-const route = await import('../../app/routes/managed-instances');
+const route = await import('~/routes/managed-instances');
 
 describe('managed instances route', () => {
   beforeEach(() => {

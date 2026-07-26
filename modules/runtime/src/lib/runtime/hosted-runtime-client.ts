@@ -1,0 +1,559 @@
+import type { FileMap } from '@bolt/core/types/files';
+import type { ActionAlert } from '@bolt/core/types/actions';
+import { boundedFetch } from '@bolt/core/lib/utils/reliability';
+
+/*
+ * Timeouts for the hosted runtime calls.
+ *
+ * `command` can legitimately take a long time (installs, builds), so it gets
+ * a generous 5-minute ceiling. Everything else should be quick: previews,
+ * snapshots, and sync are sub-second in the normal case. Unbounded fetches
+ * were the top stability risk here — a stalled edge connection would
+ * silently park a Remix request forever.
+ */
+const HOSTED_SYNC_TIMEOUT_MS = 30_000;
+const HOSTED_COMMAND_TIMEOUT_MS = 5 * 60_000;
+const HOSTED_STATUS_TIMEOUT_MS = 10_000;
+const HOSTED_SNAPSHOT_TIMEOUT_MS = 30_000;
+const HOSTED_ALERT_TIMEOUT_MS = 10_000;
+
+const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
+
+export interface HostedRuntimePreviewInfo {
+  port: number;
+  baseUrl: string;
+  revision?: number;
+}
+
+export interface HostedRuntimeCommandResult {
+  output: string;
+  exitCode: number;
+  preview?: HostedRuntimePreviewInfo;
+}
+
+export interface HostedRuntimePreviewStatus {
+  sessionId: string;
+  preview: HostedRuntimePreviewInfo | null;
+  status: 'idle' | 'starting' | 'ready' | 'repairing' | 'error';
+  healthy: boolean;
+  updatedAt: string | null;
+  recentLogs: string[];
+  alert: ActionAlert | null;
+  recovery: {
+    state: 'idle' | 'running' | 'restored';
+    token: number;
+    message: string | null;
+    updatedAt: string | null;
+  } | null;
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  projectDatabase?: HostedProjectDatabase | null;
+}
+
+export interface HostedRuntimePreviewSummary {
+  sessionId: string;
+  preview: HostedRuntimePreviewInfo | null;
+  status: HostedRuntimePreviewStatus['status'];
+  healthy: boolean;
+  updatedAt: string | null;
+  alert: ActionAlert | null;
+  recovery: HostedRuntimePreviewStatus['recovery'];
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  projectDatabase?: HostedProjectDatabase | null;
+}
+
+export interface HostedProjectDatabase {
+  status: 'provisioned' | 'connected';
+  databaseName: string;
+  databaseUser: string;
+}
+
+export interface HostedRuntimeNodeWorkspace {
+  id?: string;
+  projectName?: string;
+  projectSlug?: string;
+  cliUsername?: string;
+  workspaceDir?: string;
+  sshHost?: string | null;
+  sshPort?: number;
+  sshCommand?: string | null;
+  status?: string;
+  oneTimeCliPassword?: string | null;
+  databaseName?: string;
+  databaseUser?: string;
+  databaseUrl?: string | null;
+  oneTimeDatabasePassword?: string | null;
+  reason?: string | null;
+}
+
+export interface HostedProjectDeployment {
+  id: string;
+  sessionId: string;
+  subdomain: string;
+  hostname: string;
+  url: string | null;
+  status: string;
+  dnsStatus: string;
+  caddyStatus: string;
+  customDomains: Array<{
+    domain: string;
+    status: string;
+    dnsInstructions: HostedProjectDnsInstructions | null;
+  }>;
+  dnsInstructions: HostedProjectDnsInstructions | null;
+  lastError: string | null;
+}
+
+export interface HostedProjectDnsInstructions {
+  type: 'A';
+  name: string;
+  value: string;
+  ttl: string;
+  note: string;
+}
+
+export interface HostedPreviewReloadDecision {
+  shouldReload: boolean;
+  reloadKey: string | null;
+}
+
+export type HostedRuntimeEvent =
+  | { type: 'stdout'; chunk: string }
+  | { type: 'stderr'; chunk: string }
+  | { type: 'status'; message: string }
+  | { type: 'ready'; preview: HostedRuntimePreviewInfo }
+  | { type: 'exit'; exitCode: number }
+  | { type: 'error'; error: string };
+
+export type HostedRuntimeCommandKind = 'shell' | 'start';
+
+function isLocalHost(host: string) {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function isPagesHost(host: string) {
+  return host === 'bolt-gives.pages.dev' || host.endsWith('.bolt-gives.pages.dev');
+}
+
+export function resolveHostedRuntimeBaseUrl(options: { host: string; protocol: string; originHost?: string }) {
+  const { host, protocol, originHost = host } = options;
+  const httpProto = protocol === 'https:' ? 'https:' : 'http:';
+
+  if (isLocalHost(host)) {
+    return LOCAL_RUNTIME_BASE_URL;
+  }
+
+  if (isPagesHost(host)) {
+    return `${httpProto}//${originHost}/runtime`;
+  }
+
+  return `${httpProto}//${originHost}/runtime`;
+}
+
+export function getHostedRuntimeBaseUrl() {
+  if (typeof window === 'undefined') {
+    return LOCAL_RUNTIME_BASE_URL;
+  }
+
+  return resolveHostedRuntimeBaseUrl({
+    host: window.location.hostname,
+    protocol: window.location.protocol,
+    originHost: window.location.host,
+  });
+}
+
+export function normalizeHostedRuntimePreviewBaseUrlForBrowser(baseUrl: string | null | undefined): string {
+  const rawBaseUrl = String(baseUrl || '').trim();
+
+  if (!rawBaseUrl || typeof window === 'undefined') {
+    return rawBaseUrl;
+  }
+
+  try {
+    const browserOrigin = window.location.origin || `${window.location.protocol}//${window.location.host}`;
+    const browserHost = window.location.hostname;
+    const previewUrl = new URL(rawBaseUrl, browserOrigin);
+
+    if (isLocalHost(browserHost) || !previewUrl.pathname.startsWith('/runtime/preview/')) {
+      return rawBaseUrl;
+    }
+
+    if (previewUrl.origin === browserOrigin) {
+      return previewUrl.toString();
+    }
+
+    return `${browserOrigin}${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`;
+  } catch {
+    return rawBaseUrl;
+  }
+}
+
+function normalizeHostedRuntimePreviewInfoForBrowser<T extends HostedRuntimePreviewInfo | null | undefined>(
+  preview: T,
+): T {
+  if (!preview) {
+    return preview;
+  }
+
+  const baseUrl = normalizeHostedRuntimePreviewBaseUrlForBrowser(preview.baseUrl);
+
+  if (baseUrl === preview.baseUrl) {
+    return preview;
+  }
+
+  return {
+    ...preview,
+    baseUrl,
+  };
+}
+
+function normalizeHostedRuntimePreviewPayloadForBrowser<
+  T extends HostedRuntimePreviewStatus | HostedRuntimePreviewSummary,
+>(payload: T): T {
+  const preview = normalizeHostedRuntimePreviewInfoForBrowser(payload.preview);
+
+  if (preview === payload.preview) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    preview,
+  };
+}
+
+export function extractHostedRuntimeSessionIdFromPreviewBaseUrl(baseUrl: string | null | undefined): string | null {
+  if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+    return null;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    const match = url.pathname.match(/\/runtime\/preview\/([^/]+)\/\d+(?:\/|$)/);
+
+    return match?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function shouldReloadHostedPreviewIframe(options: {
+  frameLocation: string | null | undefined;
+  frameSource: string | null | undefined;
+  frameRenderedContent?: boolean | null;
+  targetUrl: string;
+  status: Pick<HostedRuntimePreviewStatus, 'healthy' | 'updatedAt'>;
+  lastReloadKey?: string | null;
+}): HostedPreviewReloadDecision {
+  const frameLocation = String(options.frameLocation || '').trim();
+  const frameSource = String(options.frameSource || '').trim();
+  const hasTargetSource = frameSource === options.targetUrl;
+  const isExplicitlyBlocked = frameLocation.startsWith('chrome-error://') || frameLocation.startsWith('edge-error://');
+  const isUnassignedFrame = !hasTargetSource && (!frameLocation || frameLocation === 'about:blank');
+  const isBlankTargetFrame =
+    hasTargetSource && frameLocation === options.targetUrl && options.frameRenderedContent === false;
+  const isBlockedFrame = isExplicitlyBlocked || isUnassignedFrame || isBlankTargetFrame;
+  const reloadKey = isBlankTargetFrame
+    ? `${options.targetUrl}::blank`
+    : `${options.targetUrl}::${options.status.updatedAt || 'pending'}`;
+
+  if (!options.status.healthy || !isBlockedFrame) {
+    return {
+      shouldReload: false,
+      reloadKey: null,
+    };
+  }
+
+  if (options.lastReloadKey === reloadKey) {
+    return {
+      shouldReload: false,
+      reloadKey,
+    };
+  }
+
+  return {
+    shouldReload: true,
+    reloadKey,
+  };
+}
+
+export function isHostedRuntimeEnabled() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return !isLocalHost(window.location.hostname);
+}
+
+export async function syncHostedRuntimeWorkspace(options: { sessionId: string; files: FileMap; prune?: boolean }) {
+  const { sessionId, files, prune = false } = options;
+  const response = await boundedFetch(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ files, prune }),
+    timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+    label: 'hosted-runtime/sync',
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime sync failed with status ${response.status}`);
+  }
+}
+
+export async function runHostedRuntimeCommand(options: {
+  sessionId: string;
+  command: string;
+  kind: HostedRuntimeCommandKind;
+  onEvent?: (event: HostedRuntimeEvent) => void;
+}): Promise<HostedRuntimeCommandResult> {
+  const { sessionId, command, kind, onEvent } = options;
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ command, kind }),
+      timeoutMs: HOSTED_COMMAND_TIMEOUT_MS,
+      label: 'hosted-runtime/command',
+    },
+  );
+
+  if (!response.ok || !response.body) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime command failed with status ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let output = '';
+  let exitCode = 1;
+  let preview: HostedRuntimePreviewInfo | undefined;
+
+  while (true) {
+    const { value, done } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        continue;
+      }
+
+      let event: HostedRuntimeEvent;
+
+      try {
+        event = JSON.parse(trimmed) as HostedRuntimeEvent;
+      } catch {
+        continue;
+      }
+
+      onEvent?.(event);
+
+      if (event.type === 'stdout' || event.type === 'stderr') {
+        output += event.chunk;
+      } else if (event.type === 'ready') {
+        preview = normalizeHostedRuntimePreviewInfoForBrowser(event.preview);
+      } else if (event.type === 'exit') {
+        exitCode = event.exitCode;
+      } else if (event.type === 'error') {
+        throw new Error(event.error);
+      }
+    }
+  }
+
+  return {
+    output,
+    exitCode,
+    preview,
+  };
+}
+
+export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promise<HostedRuntimePreviewStatus> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-status`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeoutMs: HOSTED_STATUS_TIMEOUT_MS,
+      label: 'hosted-runtime/preview-status',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime preview status failed with status ${response.status}`);
+  }
+
+  return normalizeHostedRuntimePreviewPayloadForBrowser((await response.json()) as HostedRuntimePreviewStatus);
+}
+
+export function subscribeHostedRuntimePreview(
+  sessionId: string,
+  callbacks: {
+    onMessage: (summary: HostedRuntimePreviewSummary) => void;
+    onError?: (error: Event | Error) => void;
+  },
+) {
+  if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+    return () => undefined;
+  }
+
+  const url = `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-events`;
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    if (!event.data) {
+      return;
+    }
+
+    try {
+      callbacks.onMessage(
+        normalizeHostedRuntimePreviewPayloadForBrowser(JSON.parse(event.data) as HostedRuntimePreviewSummary),
+      );
+    } catch (error) {
+      callbacks.onError?.(error instanceof Error ? error : new Error('Invalid preview event payload'));
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    callbacks.onError?.(error);
+  };
+
+  return () => {
+    eventSource.close();
+  };
+}
+
+export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeoutMs: HOSTED_SNAPSHOT_TIMEOUT_MS,
+      label: 'hosted-runtime/snapshot',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime snapshot failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { files?: FileMap };
+
+  return payload.files || {};
+}
+
+export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: ActionAlert) {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-alert`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ alert }),
+      timeoutMs: HOSTED_ALERT_TIMEOUT_MS,
+      label: 'hosted-runtime/preview-alert',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime preview alert failed with status ${response.status}`);
+  }
+}
+
+export async function publishHostedRuntimeProject(options: { sessionId: string; subdomain: string }): Promise<{
+  ok: true;
+  deployment: HostedProjectDeployment;
+  runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  dns?: { status: string; message: string };
+  caddy?: { status: string; message: string };
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(options.sessionId)}/publish`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ subdomain: options.subdomain }),
+      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      label: 'hosted-runtime/project-publish',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Project publish failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    deployment: HostedProjectDeployment;
+    runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+    dns?: { status: string; message: string };
+    caddy?: { status: string; message: string };
+  };
+}
+
+export async function createHostedRuntimeCustomDomainCheckout(options: {
+  sessionId: string;
+  customDomain: string;
+  customerEmail?: string;
+}): Promise<{
+  ok: true;
+  checkoutUrl: string;
+  publishableKey: string | null;
+  dnsInstructions: HostedProjectDnsInstructions;
+  deployment: HostedProjectDeployment;
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(options.sessionId)}/custom-domain/checkout`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        customDomain: options.customDomain,
+        customerEmail: options.customerEmail,
+      }),
+      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      label: 'hosted-runtime/custom-domain-checkout',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Custom-domain checkout failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    checkoutUrl: string;
+    publishableKey: string | null;
+    dnsInstructions: HostedProjectDnsInstructions;
+    deployment: HostedProjectDeployment;
+  };
+}

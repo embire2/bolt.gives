@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 Status legend:
 
@@ -10,13 +10,13 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.2.0`
+- [x] `v3.3.0`
 
 Next release target:
 
-- [~] `v3.3.0`
+- [~] `v3.4.0`
 
-## v3.3.0 - In Progress
+## v3.4.0 - In Progress
 
 Release theme: finish account and publishing lifecycle hardening, broaden first-party template acceptance, and improve operator-visible resource controls.
 
@@ -24,8 +24,23 @@ Release theme: finish account and publishing lifecycle hardening, broaden first-
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - [ ] Harden Stripe webhook activation and custom-domain ownership verification.
-- [ ] Continue server-side reconciliation and CSS/editor splitting while preserving the v3.2.0 initial-route budget.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.0 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.3.0 - Shipped
+
+Release theme: split the codebase into focused ownership modules so contributors can work and validate without loading the complete platform.
+
+- [x] Create six production workspaces for core contracts, agent behavior, hosted runtime, project state, control-plane operations, and application surfaces.
+- [x] Add explicit package dependency rules and reject undeclared cross-module imports.
+- [x] Move browser/server-neutral file contracts, workspace paths, diffing, path normalization, and project command detection into the dependency-free core module.
+- [x] Move runtime-node, Preview, collaboration, web-browse, admin mail/data, publishing, and managed-instance helpers beside their owning modules.
+- [x] Preserve existing self-host and systemd commands through stable `scripts/*` compatibility facades.
+- [x] Add independent lint, typecheck, and test tasks for every module with a Turborepo dependency graph.
+- [x] Add affected-module validation that includes transitive consumers and fans repository-wide configuration changes out safely.
+- [x] Add a 1,000-line limit for new source files and frozen ceilings for known legacy hotspots so decomposition debt can shrink but not grow.
+- [x] Restore lint as a passing release gate and run the complete regression suite against the unified build.
+- [x] Document ownership, dependency direction, focused commands, and contribution rules.
 
 ## v3.2.0 - Shipped
 

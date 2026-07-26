@@ -2,10 +2,7 @@
 
 import { chromium } from 'playwright';
 import { isStaticAssetRequestUrl } from './live-release-smoke-utils.mjs';
-import {
-  inferExpectedSurface,
-  waitForExpectedSurface,
-} from './post-deploy-health-check-utils.mjs';
+import { inferExpectedSurface, waitForExpectedSurface } from './post-deploy-health-check-utils.mjs';
 
 const baseUrls = (process.env.BASE_URLS || process.argv.slice(2).join(',') || 'https://alpha1.bolt.gives')
   .split(',')

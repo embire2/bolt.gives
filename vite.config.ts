@@ -76,6 +76,7 @@ export default defineConfig((config) => {
       },
       shouldEnableCloudflareDevProxy(config) && remixCloudflareDevProxy(),
       remixVitePlugin({
+        appDirectory: 'modules/surfaces/app',
         future: {
           v3_fetcherPersist: true,
           v3_relativeSplatPath: true,

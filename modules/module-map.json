@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "maxNewFileLines": 1000,
+  "legacyFileLineBudgets": {
+    "modules/agent/src/lib/runtime/shell-command-utils.ts": 1126,
+    "modules/project/src/components/deploy/GitHubDeploymentDialog.tsx": 1040,
+    "modules/project/src/components/workbench/Preview.tsx": 1683,
+    "modules/project/src/lib/hooks/useDataOperations.ts": 1241,
+    "modules/project/src/lib/runtime/action-runner.spec.ts": 1621,
+    "modules/project/src/lib/runtime/action-runner.ts": 1765,
+    "modules/project/src/lib/stores/files.ts": 1067,
+    "modules/project/src/lib/stores/workbench.ts": 1874,
+    "modules/surfaces/app/components/@settings/tabs/event-logs/EventLogsTab.tsx": 1015,
+    "modules/surfaces/app/components/@settings/tabs/netlify/NetlifyTab.tsx": 1398,
+    "modules/surfaces/app/components/@settings/tabs/supabase/SupabaseTab.tsx": 1090,
+    "modules/surfaces/app/components/chat/BaseChat.tsx": 1318,
+    "modules/surfaces/app/components/chat/Chat.client.tsx": 3884,
+    "modules/surfaces/app/routes/api.chat.ts": 3419,
+    "modules/surfaces/app/routes/tenant-admin.tsx": 1950,
+    "modules/surfaces/app/utils/debugLogger.ts": 1285
+  },
+  "modules": {
+    "core": {
+      "package": "@bolt/core",
+      "root": "modules/core",
+      "dependsOn": []
+    },
+    "agent": {
+      "package": "@bolt/agent",
+      "root": "modules/agent",
+      "dependsOn": ["core"]
+    },
+    "runtime": {
+      "package": "@bolt/runtime",
+      "root": "modules/runtime",
+      "dependsOn": ["core"]
+    },
+    "project": {
+      "package": "@bolt/project",
+      "root": "modules/project",
+      "dependsOn": ["core", "agent", "runtime"]
+    },
+    "control-plane": {
+      "package": "@bolt/control-plane",
+      "root": "modules/control-plane",
+      "dependsOn": ["core", "runtime"]
+    },
+    "surfaces": {
+      "package": "@bolt/surfaces",
+      "root": "modules/surfaces",
+      "dependsOn": ["core", "agent", "project", "runtime", "control-plane"]
+    }
+  }
+}

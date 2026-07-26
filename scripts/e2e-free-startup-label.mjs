@@ -27,6 +27,7 @@ const page = await context.newPage();
 
 try {
   await fs.mkdir(outDir, { recursive: true });
+
   const chatUrl = getChatUrl(baseUrl);
 
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });

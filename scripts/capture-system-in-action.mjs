@@ -51,6 +51,7 @@ try {
   ]);
 
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
   const promptInput = getPromptLocator();
 
   await promptInput.waitFor({ state: 'visible', timeout: 90000 });
@@ -69,6 +70,7 @@ try {
         const hasAssistantToken = tokenCount >= 2;
         const hasAssistantHeading = headingCount >= 2;
         const hasError = /server error|error details/i.test(text);
+
         return hasAssistantToken && hasAssistantHeading && !hasError;
       },
       responseToken,

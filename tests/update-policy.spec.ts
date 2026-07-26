@@ -3,7 +3,7 @@ import {
   buildDismissedUpdateStorageKey,
   extractReleaseFeatures,
   parseUpdatePolicyFromReleaseBody,
-} from '../app/lib/api/update-policy';
+} from '@bolt/control-plane/lib/api/update-policy';
 
 describe('update policy parsing', () => {
   it('defaults releases to optional updates', () => {
@@ -27,9 +27,10 @@ describe('update policy parsing', () => {
   });
 
   it('stops feature extraction at validation sections', () => {
-    expect(
-      extractReleaseFeatures('Changed:\n- New updater\n- Live progress\n\nValidation:\n- pnpm test'),
-    ).toEqual(['New updater', 'Live progress']);
+    expect(extractReleaseFeatures('Changed:\n- New updater\n- Live progress\n\nValidation:\n- pnpm test')).toEqual([
+      'New updater',
+      'Live progress',
+    ]);
   });
 
   it('builds stable localStorage keys for dismissed optional versions', () => {

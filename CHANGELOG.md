@@ -4,6 +4,38 @@
 
 No unreleased changes.
 
+## v3.3.0 (2026-07-26)
+
+### Changed
+
+- Split the production source into six pnpm workspace packages: `@bolt/core`, `@bolt/agent`, `@bolt/runtime`, `@bolt/project`, `@bolt/control-plane`, and `@bolt/surfaces`. Each package now has explicit ownership, dependency rules, TypeScript configuration, and focused lint/test/typecheck tasks.
+- Added a Turborepo task graph plus `pnpm module:list`, `pnpm module:check <module>`, and `pnpm module:affected`. Changed-module checks include transitive consumers while root build/configuration changes safely fan out to the complete workspace.
+- Moved shared file contracts, workspace constants, diffing, artifact path normalization, and project command detection into `@bolt/core`, removing low-level agent/runtime dependencies on project implementation state.
+- Moved admin database/mail, managed-instance, publishing, runtime env, runtime-node, Preview, collaboration, and web-browse server helpers into their owning modules. Existing `scripts/*` entry points remain as compatibility facades for systemd, self-host installers, tests, and operator commands.
+- Moved Remix, Electron, mobile, and Tauri composition into `@bolt/surfaces` while preserving route IDs, public URLs, build output paths, and application behavior.
+- Normalized the repository against the configured ESLint/Prettier rules so lint is a usable release gate for the modular tree.
+
+### Added
+
+- Added `modules/module-map.json` and a boundary checker that rejects undeclared `@bolt/*` dependencies.
+- Added a ratcheting source-size gate: new files may not exceed 1,000 lines, and tracked legacy hotspots cannot grow beyond their recorded ceiling.
+- Added module-local `AGENTS.md` guidance and [module architecture documentation](docs/architecture/modules.md) for contributors.
+- Added regression coverage for the module graph, dependency enforcement, line-budget ratchet, affected-module selection, and stable relocated service entry points.
+
+### Fixed
+
+- Preserved debug-log capture without a `core` to `surfaces` import cycle by registering the optional browser capture adapter at application startup.
+- Restored isolated Vitest mocks after runtime and control-plane service moves, preventing tests from accidentally invoking real hosted runtime or SMTP behavior.
+- Kept existing self-host service commands working after source relocation through stable root facades and explicit repository-root resolution.
+
+### Validation
+
+- `pnpm run lint`
+- `pnpm run typecheck`
+- `pnpm test` (`178` files passed, `1,025` tests passed, `3` skipped)
+- `pnpm check:boundaries:strict`
+- `pnpm run build`
+
 ## v3.2.0 (2026-07-25)
 
 ### Fixed

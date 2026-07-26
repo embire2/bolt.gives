@@ -1,0 +1,176 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ProviderInfo } from '@bolt/agent/types/model';
+import { getTemplates, inferTemplateFromPrompt, selectStarterTemplate } from './selectStarterTemplate';
+
+const openAIProvider: ProviderInfo = {
+  name: 'OpenAI',
+  staticModels: [],
+};
+
+describe('getTemplates', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses built-in local fallback files when remote template fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'failed' }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ) as unknown as typeof fetch,
+    );
+
+    const result = await getTemplates('Vite React', 'Fallback Test', 'Build a todo app with Google Calendar sync');
+
+    expect(result).not.toBeNull();
+    expect(result?.assistantMessage).toContain('<boltAction type="shell">');
+    expect(result?.assistantMessage).toContain('Using built-in Vite React starter files');
+    expect(result?.assistantMessage).toContain('pnpm install');
+    expect(result?.assistantMessage).toContain('<boltAction type="start">');
+    expect(result?.assistantMessage).toContain('pnpm run dev');
+    expect(result?.assistantMessage).toContain('filePath="README.md"');
+    expect(result?.assistantMessage).toContain('filePath="package.json"');
+    expect(result?.usingLocalFallback).toBe(true);
+    expect(result?.bootstrapCommands).toEqual({
+      installCommand: 'pnpm install --reporter=append-only',
+      startCommand: 'pnpm run dev',
+    });
+
+    const packageIndex = result?.assistantMessage.indexOf('filePath="package.json"') ?? -1;
+    const installIndex = result?.assistantMessage.indexOf('pnpm install') ?? -1;
+    expect(packageIndex).toBeGreaterThanOrEqual(0);
+    expect(installIndex).toBeGreaterThanOrEqual(0);
+    expect(packageIndex).toBeLessThan(installIndex);
+    expect(result?.userMessage).toContain('Fallback starter note');
+    expect(result?.userMessage).toContain('queued automatically');
+    expect(result?.userMessage).toContain('Do not stop after scaffold/install/start');
+    expect(result?.userMessage).toContain('continue feature implementation');
+    expect(result?.userMessage).toContain('Original request:');
+    expect(result?.userMessage).toContain('Build a todo app with Google Calendar sync');
+  });
+
+  it('adds first-party template pack acceptance criteria for common app requests', async () => {
+    vi.stubGlobal('fetch', vi.fn() as unknown as typeof fetch);
+
+    const result = await getTemplates(
+      'Vite React',
+      'Clinic Scheduler',
+      'Build a doctor appointment scheduling website with calendar slots and patient intake. Include visible heading "LUMA_TEST_TOKEN".',
+    );
+
+    expect(result?.userMessage).toContain('FIRST-PARTY TEMPLATE PACK: Appointment Scheduler');
+    expect(result?.userMessage).toContain('calendar or day-slot view');
+    expect(result?.userMessage).toContain('patient');
+    expect(result?.userMessage).toContain('Do not finish until the Preview shows these signals');
+    expect(result?.assistantMessage).toContain('filePath="src/App.tsx"');
+    expect(result?.assistantMessage).toContain('LUMA_TEST_TOKEN');
+    expect(result?.assistantMessage).toContain('SMTP reminder settings');
+    expect(result?.assistantMessage).not.toContain('Your fallback starter is ready.');
+  });
+
+  it('uses a deterministic first-party calendar planner for Google Calendar style apps', async () => {
+    vi.stubGlobal('fetch', vi.fn() as unknown as typeof fetch);
+
+    const token = 'CAL_VISIBLE_TOKEN';
+    const result = await getTemplates(
+      'Vite React',
+      'Calendar App',
+      `Build a Google Calendar style app where users can create event cards and review their agenda. Render a visible heading that contains the exact text "${token}".`,
+    );
+
+    expect(result?.userMessage).toContain('FIRST-PARTY TEMPLATE PACK: Calendar Planner');
+    expect(result?.userMessage).toContain('week calendar grid');
+    expect(result?.userMessage).toContain('create event');
+    expect(result?.assistantMessage).toContain('filePath="src/App.tsx"');
+    expect(result?.assistantMessage).toContain(token);
+    expect(result?.assistantMessage).toContain('+ Create event');
+    expect(result?.assistantMessage).toContain('Agenda');
+    expect(result?.assistantMessage).not.toContain('Your fallback starter is ready.');
+  });
+
+  it('prefers local starter files for templates that have a bundled fallback', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            name: 'package.json',
+            path: 'package.json',
+            content: '{"name":"remote-demo"}',
+          },
+        ]),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    const result = await getTemplates('Vite React', 'Remote Test');
+
+    expect(result).not.toBeNull();
+    expect(result?.assistantMessage).toContain('filePath="package.json"');
+    expect(result?.userMessage).toContain('Fallback starter note');
+    expect(result?.usingLocalFallback).toBe(true);
+    expect(result?.bootstrapCommands?.startCommand).toBe('pnpm run dev');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('selectStarterTemplate heuristics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('infers a React website template without waiting for LLM selection', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    const result = await selectStarterTemplate({
+      message: 'Build me a React website with a landing page and contact form',
+      model: 'gpt-4o',
+      provider: openAIProvider,
+    });
+
+    expect(result.template).toBe('Vite React');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('infers a Node Express API template for backend prompts', () => {
+    const inferred = inferTemplateFromPrompt('Create a Node Express API with a health endpoint');
+
+    expect(inferred).toEqual({
+      template: 'Node Express API',
+      title: 'Node Express API starter',
+    });
+  });
+
+  it('falls back to prompt heuristics when LLM output is invalid', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ text: 'this is not valid xml' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ) as unknown as typeof fetch,
+    );
+
+    const result = await selectStarterTemplate({
+      message: 'Create a small React dashboard app',
+      model: 'gpt-4o',
+      provider: openAIProvider,
+    });
+
+    expect(result.template).toBe('Vite React');
+  });
+});

@@ -9,11 +9,13 @@ import { z } from 'zod';
 
 // Load `.env.local` if present (do not print secrets).
 const envLocalPath = path.resolve(process.cwd(), '.env.local');
+
 if (fs.existsSync(envLocalPath)) {
   dotenv.config({ path: envLocalPath });
 }
 
 const apiKey = process.env.OPENAI_API_KEY;
+
 if (!apiKey) {
   console.log('[smoke-multistep] OPENAI_API_KEY not set; skipping.');
   process.exit(0);
@@ -44,9 +46,11 @@ const result = await streamText({
   messages: [{ role: 'user', content: 'Compute 2 + 3. After using the tool, answer with the sum.' }],
   onStepFinish: ({ toolCalls, toolResults }) => {
     stepCount += 1;
+
     if (toolCalls?.length) {
       sawToolCall = true;
     }
+
     if (toolResults?.length) {
       sawToolResult = true;
     }
@@ -65,4 +69,3 @@ if (stepCount < 2 || !sawToolCall || !sawToolResult) {
 
 console.log('[smoke-multistep] ok');
 console.log(output.trim().slice(0, 200));
-

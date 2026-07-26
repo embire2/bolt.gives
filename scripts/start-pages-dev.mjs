@@ -204,6 +204,7 @@ export function waitForExit(child, label, { isHealthRestartRequested = () => fal
         }
 
         resolve();
+
         return;
       }
 

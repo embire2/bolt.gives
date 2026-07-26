@@ -16,6 +16,7 @@ describe('api.github-template loader', () => {
     } as any)) as Response;
 
     expect(response.status).toBe(400);
+
     const payload = (await response.json()) as { error?: string };
     expect(payload.error).toContain('Repository name is required');
   });

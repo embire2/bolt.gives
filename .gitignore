@@ -7,10 +7,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.turbo/
 dist
 dist-ssr
 dist-neutralino
-src-tauri/target
+modules/surfaces/tauri/target
 *.local
 
 .vscode/*
@@ -45,7 +46,7 @@ modelfiles
 site
 
 # commit file ignore
-app/commit.json
+modules/surfaces/app/commit.json
 changelogUI.md
 docs/instructions/Roadmap.md
 .cursorrules

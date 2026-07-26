@@ -35,6 +35,7 @@ async function fetchText(url) {
   });
 
   assert(response.ok, `HTTP ${response.status} for ${url}`);
+
   return response.text();
 }
 
@@ -148,6 +149,7 @@ async function checkScreenshots(baseUrl) {
 }
 
 const domainResults = [];
+
 for (const domain of domains) {
   domainResults.push(await checkDomain(domain));
 }

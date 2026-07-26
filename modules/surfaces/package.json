@@ -1,0 +1,29 @@
+{
+  "name": "@bolt/surfaces",
+  "version": "3.3.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": true,
+  "exports": {
+    "./*": "./app/*"
+  },
+  "dependencies": {
+    "@bolt/agent": "workspace:*",
+    "@bolt/control-plane": "workspace:*",
+    "@bolt/core": "workspace:*",
+    "@bolt/project": "workspace:*",
+    "@bolt/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "eslint": "9.39.4",
+    "pnpm": "9.14.4",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9"
+  },
+  "scripts": {
+    "build": "pnpm run typecheck",
+    "lint": "eslint --cache --cache-location .cache/eslint app",
+    "test": "vitest --run --root ../.. modules/surfaces/app",
+    "typecheck": "tsc -p tsconfig.json --incremental --tsBuildInfoFile .cache/typecheck.tsbuildinfo"
+  }
+}

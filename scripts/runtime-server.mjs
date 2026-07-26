@@ -85,6 +85,7 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const HOST = process.env.RUNTIME_HOST || '127.0.0.1';
 const PORT = Number(process.env.RUNTIME_PORT || '4321');
 const WORK_DIR = process.env.RUNTIME_WORK_DIR || '/home/project';
+
 export function resolveRuntimeWorkspaceRoot(
   env = /** @type {Record<string, string | undefined>} */ (process.env),
   repoRoot = REPO_ROOT,
@@ -218,6 +219,7 @@ function deriveBugReporterKey(req, reporterEmail = '') {
     ?.trim();
   const connectingIp = String(req.headers['cf-connecting-ip'] || '').trim();
   const remote = String(req.socket?.remoteAddress || '').trim();
+
   return reporterEmail || connectingIp || forwardedFor || remote || 'unknown';
 }
 
@@ -239,6 +241,7 @@ function consumeBugReportRateLimit(key) {
 
   current.count += 1;
   BUG_REPORTS_RATE_LIMIT.set(key, current);
+
   return true;
 }
 
@@ -451,6 +454,7 @@ export async function checkFreeUsageQuota({ subjectHash, limitUsd, now = new Dat
   const dayKey = getFreeUsageQuotaDayKey(now);
   const ledger = await readFreeUsageQuotaLedger();
   pruneFreeUsageQuotaLedger(ledger, dayKey);
+
   const entry = ledger.days[dayKey]?.[normalizedSubjectHash] || {};
 
   return buildFreeUsageQuotaDecision(entry, { limitUsd, now });
@@ -461,6 +465,7 @@ export async function recordFreeUsageQuota({ subjectHash, costUsd, usage, limitU
   const dayKey = getFreeUsageQuotaDayKey(now);
   const ledger = await readFreeUsageQuotaLedger();
   pruneFreeUsageQuotaLedger(ledger, dayKey);
+
   const day = ledger.days[dayKey] || {};
   const entry = day[normalizedSubjectHash] || {
     costUsd: 0,
@@ -684,14 +689,17 @@ async function ensureTenantRegistry() {
     const raw = await fs.readFile(TENANT_REGISTRY_PATH, 'utf8');
     const registry = normalizeTenantRegistry(JSON.parse(raw));
     await writeTenantRegistry(registry);
+
     return registry;
   } catch {
     await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
+
     const registry = normalizeTenantRegistry({
       admin: createDefaultTenantAdmin(),
       tenants: [],
     });
     await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+
     return registry;
   }
 }
@@ -943,9 +951,11 @@ async function ensureManagedInstanceRegistry() {
     }
 
     await writeManagedInstanceRegistry(registry);
+
     return registry;
   } catch {
     await fs.mkdir(path.dirname(MANAGED_INSTANCE_REGISTRY_PATH), { recursive: true });
+
     const registry =
       (await buildManagedInstanceRegistryFromAdminAssignments()) ||
       normalizeManagedInstanceRegistry(
@@ -957,12 +967,14 @@ async function ensureManagedInstanceRegistry() {
         { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN, defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS },
       );
     await writeManagedInstanceRegistry(registry);
+
     return registry;
   }
 }
 
 export async function writeJsonAtomically(filePath, payload) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
+
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
   await fs.writeFile(tempPath, payload, 'utf8');
   await fs.rename(tempPath, filePath);
@@ -977,10 +989,12 @@ async function ensureRuntimeNodeWorkspaceRegistry() {
     const raw = await fs.readFile(RUNTIME_NODE_WORKSPACE_REGISTRY_PATH, 'utf8');
     const registry = normalizeRuntimeNodeWorkspaceRegistry(JSON.parse(raw));
     await writeRuntimeNodeWorkspaceRegistry(registry);
+
     return registry;
   } catch {
     const registry = normalizeRuntimeNodeWorkspaceRegistry({ workspaces: [], events: [] });
     await writeRuntimeNodeWorkspaceRegistry(registry);
+
     return registry;
   }
 }
@@ -1026,10 +1040,12 @@ async function ensureProjectDeploymentRegistry() {
     const raw = await fs.readFile(PROJECT_DEPLOYMENT_REGISTRY_PATH, 'utf8');
     const registry = normalizeProjectDeploymentRegistry(JSON.parse(raw));
     await writeProjectDeploymentRegistry(registry);
+
     return registry;
   } catch {
     const registry = normalizeProjectDeploymentRegistry({ deployments: [], events: [] });
     await writeProjectDeploymentRegistry(registry);
+
     return registry;
   }
 }
@@ -1113,9 +1129,11 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
 
       if (existing) {
         session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(existing);
+
         const databasePassword = await readRuntimeNodeDatabasePassword(existing, config);
         attachRuntimeNodeDatabaseToSession(session, existing, databasePassword);
         broadcastPreviewState(session);
+
         return existing;
       }
 
@@ -1166,6 +1184,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
       });
       await writeRuntimeNodeWorkspaceRegistry(registry);
       broadcastPreviewState(session);
+
       return record;
     } catch (error) {
       const registry = await ensureRuntimeNodeWorkspaceRegistry();
@@ -1204,6 +1223,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
       session.runtimeNodeWorkspaceRecord = null;
       session.runtimeNodeDatabase = null;
       broadcastPreviewState(session);
+
       return null;
     } finally {
       session.runtimeNodeProvisionPromise = null;
@@ -1211,6 +1231,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
   })();
 
   void session.runtimeNodeProvisionPromise;
+
   return session.runtimeNodeWorkspace;
 }
 
@@ -1437,7 +1458,7 @@ async function upsertManagedInstanceProjectSecret(instance, secretName, secretVa
 
 async function configureManagedInstanceProject(instance) {
   if (!MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN && !MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL) {
-    return;
+    return null;
   }
 
   const config = getManagedInstanceCloudflareConfig();
@@ -1794,6 +1815,7 @@ async function refreshManagedInstanceFromCurrentBuild(
       });
       await writeManagedInstanceRegistry(registry);
       await syncManagedInstanceToAdminDatabase(instance);
+
       return instance;
     } catch (error) {
       instance.status = 'failed';
@@ -1862,6 +1884,7 @@ async function suspendManagedInstanceRecord(
 
   await writeManagedInstanceRegistry(registry);
   await syncManagedInstanceToAdminDatabase(instance);
+
   return instance;
 }
 
@@ -1897,6 +1920,7 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
 
   const registry = await ensureManagedInstanceRegistry();
   await maybeExpireManagedInstances(registry, { actor });
+
   const gitSha = await resolveCurrentGitSha();
 
   for (const instance of registry.instances) {
@@ -1977,6 +2001,7 @@ async function ensureShoutboxStore() {
   } catch {
     const initialStore = { messages: [], reports: [] };
     await writeJsonAtomically(SHOUTBOX_MESSAGES_PATH, JSON.stringify(initialStore, null, 2));
+
     return initialStore;
   }
 }
@@ -2027,6 +2052,7 @@ async function appendShoutboxMessage({ author, content }) {
   });
   store.messages.push(message);
   await writeShoutboxStore(store);
+
   return message;
 }
 
@@ -2839,6 +2865,7 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
   try {
     await syncWorkspaceSnapshot(session, session.restorePointFileMap, { prune: false });
     session.currentFileMap = cloneFileMap(session.restorePointFileMap);
+
     let previewRecovered = false;
 
     if (Number.isFinite(Number(session.preview?.port)) && Number(session.preview?.port) > 0) {
@@ -2934,6 +2961,7 @@ function schedulePreviewAutoRestore(session, alert) {
     alert,
     'Preview repair is queued. The current preview will stay open while recovery runs.',
   );
+
   const mutationId = session.workspaceMutationId;
   session.autoRestoreTimer = setTimeout(() => {
     session.autoRestoreTimer = null;
@@ -2972,6 +3000,7 @@ function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace
   }
 
   cancelPendingPreviewVerification(session);
+
   const mutationId = session.workspaceMutationId;
 
   session.previewVerificationTimer = setTimeout(() => {
@@ -2998,6 +3027,7 @@ function schedulePreviewVerificationAfterMutation(session, reason = 'a workspace
             `Detected preview failure after ${reason}: ${probe.alert.description}`,
           );
           schedulePreviewAutoRestore(session, probe.alert);
+
           return;
         }
 
@@ -3160,6 +3190,7 @@ async function readWorkspacePackageJson(session) {
   }
 
   const raw = await fs.readFile(packageJsonPath, 'utf8');
+
   return {
     path: packageJsonPath,
     raw,
@@ -3270,6 +3301,7 @@ async function readWorkspaceLockfile(session) {
   }
 
   const raw = await fs.readFile(lockfilePath, 'utf8');
+
   return {
     path: lockfilePath,
     raw,
@@ -3362,6 +3394,7 @@ async function resolveLatestPackageVersion(packageName, options = {}) {
         }
 
         resolve(null);
+
         return;
       }
 
@@ -3660,10 +3693,7 @@ async function ensureHostedWorkspaceViteSupportFiles(session) {
   ).some(Boolean);
 
   if (usesReact && hasReactVitePlugin && !hasViteConfig) {
-    await writeWorkspaceFileAtomic(
-      path.join(session.dir, 'vite.config.js'),
-      buildHostedWorkspaceBootstrapViteConfig(),
-    );
+    await writeWorkspaceFileAtomic(path.join(session.dir, 'vite.config.js'), buildHostedWorkspaceBootstrapViteConfig());
     generatedFiles.push('vite.config.js');
   }
 
@@ -4236,6 +4266,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     }
 
     await clearHostedWorkspaceDependencyCaches(session);
+
     const refreshedPackageJsonRecord = await readWorkspacePackageJson(session);
     const refreshedLockfileRecord = await readWorkspaceLockfile(session);
     packageJson = refreshedPackageJsonRecord?.json || packageJson;
@@ -4348,7 +4379,6 @@ export function commandNeedsProjectManifest(command = '') {
 
 export async function workspaceHasOwnProjectManifest(workspaceDir) {
   for (const fileName of PROJECT_MANIFEST_FILES) {
-    // eslint-disable-next-line no-await-in-loop
     if (await exists(path.join(workspaceDir, fileName))) {
       return true;
     }
@@ -4361,12 +4391,10 @@ export async function waitForProjectManifest(workspaceDir, timeoutMs = PROJECT_M
   const deadline = Date.now() + Math.max(0, timeoutMs);
 
   while (Date.now() <= deadline) {
-    // eslint-disable-next-line no-await-in-loop
     if (await workspaceHasOwnProjectManifest(workspaceDir)) {
       return true;
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
@@ -4398,6 +4426,7 @@ export async function startHostedPreviewForSession(session) {
       healthy: false,
       alert: bootstrapAlert,
     });
+
     return false;
   }
 
@@ -4491,7 +4520,6 @@ export async function consumeRuntimeCommandStreamForReady(response) {
   };
 
   while (true) {
-    // eslint-disable-next-line no-await-in-loop
     const { done, value } = await reader.read();
 
     if (done) {
@@ -4499,6 +4527,7 @@ export async function consumeRuntimeCommandStreamForReady(response) {
     }
 
     pending += decoder.decode(value, { stream: true });
+
     const lines = pending.split('\n');
     pending = lines.pop() || '';
 
@@ -4537,6 +4566,7 @@ function scheduleHostedAutoStartAfterSync(session) {
   }
 
   cancelPendingPreviewAutostart(session);
+
   const mutationId = session.workspaceMutationId;
 
   session.previewAutostartTimer = setTimeout(() => {
@@ -4891,6 +4921,7 @@ function getRequestOrigin(req) {
 
   const proto = req.headers['x-forwarded-proto'] || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || `${HOST}:${PORT}`;
+
   return `${proto}://${host}`;
 }
 
@@ -5304,9 +5335,11 @@ async function waitForProjectHttpsReady(hostname) {
   let lastError = null;
 
   while (Date.now() <= deadline) {
-    // This intentionally performs the first TLS handshake so Caddy can complete
-    // ACME before the browser receives the newly published URL.
-    // eslint-disable-next-line no-await-in-loop
+    /*
+     * This intentionally performs the first TLS handshake so Caddy can complete
+     * ACME before the browser receives the newly published URL.
+     */
+
     const result = await probeProjectHttpsHandshake(hostname);
 
     if (result.ok) {
@@ -5314,7 +5347,7 @@ async function waitForProjectHttpsReady(hostname) {
     }
 
     lastError = result.error;
-    // eslint-disable-next-line no-await-in-loop
+
     await delay(PROJECT_HTTPS_READY_INTERVAL_MS);
   }
 
@@ -5331,6 +5364,7 @@ async function ensureProjectCaddyHost(hostname) {
 
   try {
     await fs.mkdir(PROJECT_CADDY_SNIPPET_DIR, { recursive: true });
+
     const safeName = hostname.replace(/[^a-z0-9.-]/g, '-');
     const snippetPath = path.join(PROJECT_CADDY_SNIPPET_DIR, `${safeName}.caddy`);
     await fs.writeFile(snippetPath, caddySnippetForProjectHost(hostname), 'utf8');
@@ -5345,6 +5379,7 @@ async function ensureProjectCaddyHost(hostname) {
 
     await runShellCommand('caddy', ['fmt', '--overwrite', PROJECT_CADDYFILE_PATH]).catch(() => undefined);
     await runShellCommand('caddy', ['reload', '--config', PROJECT_CADDYFILE_PATH]);
+
     const httpsReady = await waitForProjectHttpsReady(hostname);
 
     if (!httpsReady.ok) {
@@ -5440,6 +5475,7 @@ async function proxyPublishedProjectRequest(req, res, deployment) {
       session,
       'The published project preview is starting in its isolated runtime. This page will be available shortly.',
     );
+
     return;
   }
 
@@ -5492,6 +5528,7 @@ async function maybeHandlePublishedProjectRequest(req, res) {
   }
 
   await proxyPublishedProjectRequest(req, res, deployment);
+
   return true;
 }
 
@@ -5581,7 +5618,6 @@ export async function allocatePreviewPort(sessionId, options = {}) {
     let available = false;
 
     try {
-      // eslint-disable-next-line no-await-in-loop
       available = await isPortAvailableFn(port);
     } catch {
       available = false;
@@ -5617,7 +5653,6 @@ export async function allocateRuntimeNodeDatabasePort(sessionId, options = {}) {
     let available = false;
 
     try {
-      // eslint-disable-next-line no-await-in-loop
       available = await isPortAvailableFn(port);
     } catch {
       available = false;
@@ -5702,12 +5737,10 @@ async function waitForRuntimeNodeDatabaseTunnel(child, localPort, getError) {
       throw getError() || new Error('Runtime-node database tunnel exited before it became ready.');
     }
 
-    // eslint-disable-next-line no-await-in-loop
     if (await isTcpPortListening(localPort)) {
       return;
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
@@ -5765,6 +5798,7 @@ async function ensureRuntimeNodeDatabaseTunnel(session, config) {
       }
 
       const message = stderr.trim();
+
       return message ? new Error(message) : null;
     });
     return tunnel;
@@ -5796,6 +5830,7 @@ async function ensureRuntimeNodeDatabaseEnvironmentForSession(session) {
   }
 
   const tunnel = await ensureRuntimeNodeDatabaseTunnel(session, config);
+
   return buildRuntimeNodeDatabaseEnvironment(session.runtimeNodeDatabase, tunnel.localPort);
 }
 
@@ -5816,7 +5851,6 @@ async function waitForPreview(port) {
       // keep polling
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
@@ -5954,6 +5988,7 @@ async function handleRunCommand(req, res, session, body) {
     writeEvent({ type: 'exit', exitCode: 1 });
     releaseNewPreviewPortReservation();
     res.end();
+
     return;
   }
 
@@ -5981,6 +6016,7 @@ async function handleRunCommand(req, res, session, body) {
       });
       writeEvent({ type: 'exit', exitCode: 0 });
       res.end();
+
       return;
     }
   }
@@ -6031,6 +6067,7 @@ async function handleRunCommand(req, res, session, body) {
       writeEvent({ type: 'exit', exitCode: 1 });
       releaseNewPreviewPortReservation();
       res.end();
+
       return;
     }
   }
@@ -6062,10 +6099,12 @@ async function handleRunCommand(req, res, session, body) {
     writeEvent({ type: 'exit', exitCode: 1 });
     releaseNewPreviewPortReservation();
     res.end();
+
     return;
   }
 
   markSessionMutationStart(session);
+
   const env = {
     ...process.env,
     ...runtimeNodeDatabaseEnv,
@@ -6082,6 +6121,7 @@ async function handleRunCommand(req, res, session, body) {
   }
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
+
   const child = spawn('bash', ['-lc', effectiveCommand], {
     cwd: session.dir,
     env,
@@ -6107,6 +6147,7 @@ async function handleRunCommand(req, res, session, body) {
   });
   const previewCoordinator = createPreviewProbeCoordinator(waitForPreview);
   previewProbePromise = previewCoordinator.readyPromise;
+
   const attachPreviewProcessLivenessMonitor = () => {
     if (kind !== 'start') {
       return;
@@ -6171,9 +6212,11 @@ async function handleRunCommand(req, res, session, body) {
     const text = chunk.toString();
     output += text;
     detectPreviewPort(text);
+
     if (kind === 'start') {
       recordPreviewLog(session, 'stdout', text);
     }
+
     writeEvent({ type: 'stdout', chunk: text });
   });
 
@@ -6181,9 +6224,11 @@ async function handleRunCommand(req, res, session, body) {
     const text = chunk.toString();
     output += text;
     detectPreviewPort(text);
+
     if (kind === 'start') {
       recordPreviewLog(session, 'stderr', text);
     }
+
     writeEvent({ type: 'stderr', chunk: text });
   });
 
@@ -6195,8 +6240,10 @@ async function handleRunCommand(req, res, session, body) {
           throw new Error(`Preview process exited before becoming ready (exit ${exitCode})`);
         }),
       ]);
+
       const resolvedPort = (await previewProbePromise).port;
       updateSessionPreview(session, req, resolvedPort);
+
       const initialProbe = await Promise.race([
         waitForSessionPreviewHealth(session),
         exitPromise.then((exitCode) => {
@@ -6224,6 +6271,7 @@ async function handleRunCommand(req, res, session, body) {
       clearTimeout(timeout);
       settled = true;
       res.end();
+
       return;
     } catch (error) {
       touchPreviewDiagnostics(session, {
@@ -6239,6 +6287,7 @@ async function handleRunCommand(req, res, session, body) {
       });
       writeEvent({ type: 'stderr', chunk: `${error instanceof Error ? error.message : String(error)}\n` });
       terminateSessionProcessHandle({ process: child, port: previewPort, detached: kind === 'start' });
+
       const exitCode = await exitPromise.catch(() => 1);
       session.processes.delete(processKey);
       releaseReservedPreviewPorts(session);
@@ -6249,6 +6298,7 @@ async function handleRunCommand(req, res, session, body) {
       clearTimeout(timeout);
       settled = true;
       res.end();
+
       return;
     }
   }
@@ -6304,6 +6354,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   if (nextPreviewPath) {
     res.writeHead(307, buildPreviewRedirectHeaders(nextPreviewPath));
     res.end();
+
     return;
   }
 
@@ -6347,8 +6398,10 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
     }
 
     sendText(res, 409, 'Preview port ownership mismatch');
+
     return;
   }
+
   const upstreamReq = http.request(
     {
       host: HOST,
@@ -6366,6 +6419,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       if (shouldRetryPreviewProxyResponse({ method, statusCode, attempt })) {
         upstreamRes.resume();
         upstreamRes.on('end', scheduleRetry);
+
         return;
       }
 
@@ -6387,6 +6441,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
 
         res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
         upstreamRes.pipe(res);
+
         return;
       }
 
@@ -6569,6 +6624,7 @@ async function maybeHandlePublishedProjectUpgrade(req, socket, head) {
   }
 
   proxyPublishedProjectUpgrade(req, socket, head, deployment);
+
   return true;
 }
 
@@ -6595,6 +6651,7 @@ export function createRuntimeServer() {
         'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
       });
       res.end();
+
       return;
     }
 
@@ -6842,6 +6899,7 @@ export function createRuntimeServer() {
 
         sendText(res, 500, message || 'Failed to provision the live runtime workspace.');
       }
+
       return;
     }
 
@@ -6860,6 +6918,7 @@ export function createRuntimeServer() {
         const sessionToken = String(searchParams.get('sessionToken') || '').trim();
         const registry = await ensureManagedInstanceRegistry();
         await maybeExpireManagedInstances(registry, { actor: 'system' });
+
         const instance = getManagedInstanceBySessionSecret(registry, sessionToken);
 
         if (!instance) {
@@ -6960,10 +7019,12 @@ export function createRuntimeServer() {
             409,
             'This client already has a managed trial instance. Reuse the original browser session to manage it.',
           );
+
           return;
         }
 
         await writeManagedInstanceRegistry(registry);
+
         const instance = await refreshManagedInstanceFromCurrentBuild(registry, claim.instance, {
           actor: email,
           reason: claim.kind === 'created' ? 'initial-trial-spawn' : 'resume-existing-trial',
@@ -6998,6 +7059,7 @@ export function createRuntimeServer() {
         const sessionToken = String(body.sessionToken || '').trim();
         const registry = await ensureManagedInstanceRegistry();
         await maybeExpireManagedInstances(registry, { actor: 'system' });
+
         const instance = findManagedInstanceBySlug(registry, slug);
 
         if (!instance) {
@@ -7146,6 +7208,7 @@ export function createRuntimeServer() {
         const slug = decodeURIComponent(tenantManagedInstanceRefreshMatch[1] || '');
         const registry = await ensureManagedInstanceRegistry();
         await maybeExpireManagedInstances(registry, { actor: 'admin' });
+
         const instance = findManagedInstanceBySlug(registry, slug);
 
         if (!instance) {
@@ -7159,6 +7222,7 @@ export function createRuntimeServer() {
         }
 
         instance.suspendedAt = null;
+
         const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
           actor: 'admin',
           reason: 'tenant-admin-refresh',
@@ -7224,6 +7288,7 @@ export function createRuntimeServer() {
             cleared: true,
             mailSupport: buildAdminMailSupport(),
           });
+
           return;
         }
 
@@ -8079,6 +8144,7 @@ export function createRuntimeServer() {
         const requestedSessionId = normalizeSessionId(snapshotMatch[1]);
         const session = getSession(requestedSessionId);
         void ensureRuntimeNodeWorkspaceForSession(session);
+
         const files = await resolveSessionSnapshotFiles(session);
         sendJson(res, 200, {
           sessionId: requestedSessionId,
@@ -8300,6 +8366,7 @@ export function createRuntimeServer() {
         void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, async () => {
           session.publicOrigin = getRequestOrigin(req);
+
           let currentFiles = session.currentFileMap || {};
 
           if (prune) {
@@ -8309,13 +8376,16 @@ export function createRuntimeServer() {
           if (!workspaceSnapshotHasChanges(currentFiles, incomingFiles, { prune })) {
             session.currentFileMap = cloneFileMap(currentFiles);
             scheduleHostedAutoStartAfterSync(session);
+
             return;
           }
 
           workspaceChanged = true;
           markSessionMutationStart(session);
           await syncWorkspaceSnapshot(session, incomingFiles, { prune });
+
           const supportRepair = await repairHostedWorkspaceSupportFilesAfterSync(session);
+
           if (supportRepair.generatedFiles.length > 0) {
             appendPreviewDiagnosticEntries(
               session,
@@ -8323,6 +8393,7 @@ export function createRuntimeServer() {
               `Architect generated missing runtime support files after sync: ${supportRepair.generatedFiles.join(', ')}`,
             );
           }
+
           if (supportRepair.repairedFiles.length > 0) {
             appendPreviewDiagnosticEntries(
               session,
@@ -8330,6 +8401,7 @@ export function createRuntimeServer() {
               `Architect repaired unsafe JSX text entities after sync: ${supportRepair.repairedFiles.join(', ')}`,
             );
           }
+
           if (supportRepair.previewConfigFiles.length > 0) {
             appendPreviewDiagnosticEntries(
               session,
@@ -8337,6 +8409,7 @@ export function createRuntimeServer() {
               `Architect disabled Vite HMR for hosted preview configs after sync: ${supportRepair.previewConfigFiles.join(', ')}`,
             );
           }
+
           await refreshSessionCurrentFileMapFromDisk(session);
           bumpSessionPreviewRevision(session);
           scheduleHostedAutoStartAfterSync(session);

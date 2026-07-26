@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "baseUrl": ".",
+    "customConditions": ["browser"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "~/*": ["modules/surfaces/app/*"],
+      "@bolt/core/*": ["modules/core/src/*"],
+      "@bolt/agent/*": ["modules/agent/src/*"],
+      "@bolt/project/*": ["modules/project/src/*"],
+      "@bolt/runtime/*": ["modules/runtime/src/*"],
+      "@bolt/control-plane/*": ["modules/control-plane/src/*"],
+      "@bolt/surfaces/*": ["modules/surfaces/app/*"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "types": [
+      "@remix-run/cloudflare",
+      "vite/client",
+      "@cloudflare/workers-types",
+      "@types/dom-speech-recognition",
+      "electron"
+    ],
+    "verbatimModuleSyntax": true
+  }
+}

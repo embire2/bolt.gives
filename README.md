@@ -16,6 +16,7 @@
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="https://create.bolt.gives">create a managed instance</a> ·
   <a href="https://github.com/embire2/bolt.gives">contribute on GitHub</a> ·
+  <a href="docs/architecture/modules.md">architecture</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
   <a href="ROADMAP.md">roadmap</a> ·
   <a href="#installation-ubuntu-1804-only-verbose-tested">install</a>
@@ -26,6 +27,7 @@
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
 - [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
+- [Understand the six-module architecture](docs/architecture/modules.md)
 - [Open the live alpha environment](https://alpha1.bolt.gives)
 - [Review the roadmap](ROADMAP.md)
 - [Read the changelog](CHANGELOG.md)
@@ -53,9 +55,20 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.2.0`)
+## Current Release (`v3.3.0`)
 
-`v3.2.0` is the current stable hosted and self-hosted release. It keeps the lighter four-model MagnetAPI.org FREE coding path from v3.1.0 and closes the project-continuity gaps between saved chat history, generated files, the hosted runtime, Preview, follow-up prompts, and each project's isolated PostgreSQL database.
+`v3.3.0` is the current stable hosted and self-hosted release. It keeps the durable project, hosted FREE model, runtime, Preview, and PostgreSQL behavior from v3.2.0 while splitting the codebase into six focused workspace modules so contributors and operators can validate only the domains affected by a change.
+
+### v3.3.0 modular workspace architecture
+
+- Production ownership is explicit across `core`, `agent`, `runtime`, `project`, `control-plane`, and `surfaces`.
+- Shared file contracts, workspace paths, diffing, project command detection, and artifact path normalization live in `@bolt/core`, removing circular feature dependencies.
+- Runtime-node/Preview helpers, collaboration, web browsing, admin mail/data, publishing, and managed-instance services now live beside their owning module. Stable `scripts/*` facades preserve existing systemd and self-host commands.
+- Every module has an independent TypeScript, lint, and Vitest task. Turborepo coordinates the graph, and `pnpm module:affected` checks a changed module plus all transitive consumers.
+- `pnpm check:boundaries:strict` rejects undeclared module dependencies, new source files above 1,000 lines, and growth in explicitly tracked legacy hotspots.
+- The migration is behavior-preserving: the full 1,025-test suite and the production bundle gate validate the unified build output.
+
+See [Module Architecture](docs/architecture/modules.md) for ownership, dependency rules, and focused development commands.
 
 ### v3.2.0 project continuity and preview reliability
 
@@ -219,25 +232,25 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.2.0`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.3.0`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v3.2.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.3.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.2.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.2.0)
+- Release: [`v3.3.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.3.0)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.2.0/install.sh)
-- Release commit: see the `v3.2.0` GitHub tag.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh)
+- Release commit: see the `v3.3.0` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.2.0/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-sudo env BRANCH=v3.2.0 ./install-bolt-gives.sh
+sudo env BRANCH=v3.3.0 ./install-bolt-gives.sh
 ```
 
 The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
@@ -296,28 +309,28 @@ Managed Cloudflare instances are registration-first, one-client / one-instance e
 
 The operator surface at `admin.bolt.gives` includes client profile filtering/export, managed instance assignment state, fleet summary cards, deployment history, last-good SHA, healthcheck and rollback outcome visibility, SMTP configuration, audience-based email sends, bug reports, and rollout guard visibility. Self-hosting supports custom app/admin/create domains, local PostgreSQL, `psql`, operator credential seeding, Caddy-managed HTTPS, and a committed installer smoke command.
 
-## Roadmap to v3.3.0
+## Roadmap to v3.4.0
 
-`v3.3.0` is the next platform-hardening release. The focus is completing account lifecycle/RBAC work, broader template smoke coverage, auditable collaboration/runtime quotas, publishing verification, installer resilience, and continued server-side runtime offload.
+`v3.4.0` is the next platform-hardening release. The focus is completing account and publishing lifecycle hardening, broader first-party template acceptance, stronger operator-visible resource controls, installer resilience, and continued server-side runtime offload.
 
 ### Launch blockers
 
-- Add deployment history, last good SHA, health-verified refreshes, and rollback outcomes to the managed-instance/operator surfaces. Initial implementation is now in progress.
-- Harden tenant/account lifecycle with production-safe auth, approval history, invite/reset flows, and RBAC. Privileged operator actions now refuse to run while the default admin password must still be changed.
-- Ship first-party template packs plus CI smoke coverage so common app requests start from a reliable baseline. Initial pack criteria now cover appointment schedulers, dashboards, marketing sites, commerce catalogs, and portfolios; appointment scheduler prompts also receive a real first-pass React implementation before model continuation.
-- Keep commentary task-specific in both `Chat` and `Workspace`, driven from real runtime/file/command events instead of generic filler.
-- Reduce the remaining browser-heavy editor/PDF/git/terminal paths so long sessions stay responsive. The Preview workspace now gets a larger usable pane and a client bundle budget script is available.
-- Keep the self-host installer resilient enough to recover from common package, dependency, build, and service-start failures without forcing the user to start over. `pnpm run smoke:self-host-installer` now validates the committed installer entry path.
+- Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
+- Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
+- Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
+- Harden Stripe webhook activation and custom-domain ownership verification.
+- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.0 initial-route budget.
+- Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
 
 ### Key improvements planned
 
-- Tighten Cloudflare managed-instance lifecycle around health-verified updates and rollback.
-- Expand operator visibility inside `admin.bolt.gives` with trial capacity, deployment state, and outbound communication history.
+- Keep managed Cloudflare rollout state, tenant/account lifecycle, and custom-domain activation auditable from the operator surface.
 - Keep all four built-in `FREE` MagnetAPI.org coding choices reliable across hosted, Pages, and managed instances.
-- Continue moving heavy execution and reconciliation work off the browser and onto the server runtime.
+- Reduce remaining browser-heavy reconciliation and continue decomposing legacy source hotspots without growing them.
+- Make runtime quotas, collaboration audit data, and installer recovery visible and repeatable.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.2.0`)
+## Current Platform Baseline (`v3.3.0`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

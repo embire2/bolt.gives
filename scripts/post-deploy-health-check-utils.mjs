@@ -63,11 +63,7 @@ export function matchesExpectedSurface(expectedSurface, { title = '', bodyText =
   return false;
 }
 
-export async function waitForExpectedSurface(
-  page,
-  expectedSurface,
-  { timeoutMs = 90000, pollIntervalMs = 500 } = {},
-) {
+export async function waitForExpectedSurface(page, expectedSurface, { timeoutMs = 90000, pollIntervalMs = 500 } = {}) {
   const deadline = Date.now() + timeoutMs;
   let observation = {
     promptVisible: false,

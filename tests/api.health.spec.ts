@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { APP_VERSION } from '../app/lib/version';
-import { loader } from '../app/routes/api.health';
+import { APP_VERSION } from '@bolt/core/lib/version';
+import { loader } from '~/routes/api.health';
 
 describe('/api/health loader', () => {
   it('reports the checked-in release version when APP_VERSION is not configured', async () => {

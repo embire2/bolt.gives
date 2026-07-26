@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { action, loader } from '../app/routes/api.sessions';
-import { normalizeSessionPayload, restoreConversationFromPayload } from '../app/lib/services/session-payload';
+import { action, loader } from '~/routes/api.sessions';
+import { normalizeSessionPayload, restoreConversationFromPayload } from '@bolt/project/lib/services/session-payload';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -12,6 +12,7 @@ function isPlaceholderValue(value: unknown) {
   }
 
   const trimmed = value.trim();
+
   if (trimmed.length === 0) {
     return true;
   }
@@ -25,7 +26,6 @@ function isValidUrl(value: unknown) {
   }
 
   try {
-    // eslint-disable-next-line no-new
     new URL(value);
     return true;
   } catch {
@@ -49,9 +49,7 @@ async function canResolveSupabaseUrl(value: unknown) {
 }
 
 const hasSupabase =
-  isValidUrl(supabaseUrl) &&
-  !isPlaceholderValue(supabaseKey) &&
-  (await canResolveSupabaseUrl(supabaseUrl));
+  isValidUrl(supabaseUrl) && !isPlaceholderValue(supabaseKey) && (await canResolveSupabaseUrl(supabaseUrl));
 
 function getHeaders(key: string) {
   return {
@@ -138,8 +136,10 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     } as any);
 
     expect(saveResponse.status).toBe(200);
+
     const savedJson = (await saveResponse.json()) as any;
     expect(savedJson.session?.id).toBeTruthy();
+
     const sessionId = String(savedJson.session.id);
     createdSessionIds.push(sessionId);
 
@@ -150,6 +150,7 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     } as any);
 
     expect(listResponse.status).toBe(200);
+
     const listJson = (await listResponse.json()) as any;
     expect(Array.isArray(listJson.sessions)).toBe(true);
     expect(listJson.sessions.some((s: any) => s.id === sessionId)).toBe(true);
@@ -161,6 +162,7 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     } as any);
 
     expect(loadResponse.status).toBe(200);
+
     const loadJson = (await loadResponse.json()) as any;
     expect(loadJson.session?.id).toBe(sessionId);
 
@@ -214,6 +216,7 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     } as any);
 
     expect(shareResponse.status).toBe(200);
+
     const shareJson = (await shareResponse.json()) as any;
     expect(typeof shareJson.shareSlug).toBe('string');
     expect(shareJson.shareSlug.length).toBeGreaterThan(0);
@@ -225,6 +228,7 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     } as any);
 
     expect(loadResponse.status).toBe(200);
+
     const loadJson = (await loadResponse.json()) as any;
     expect(loadJson.session?.id).toBe(sessionId);
 
@@ -236,6 +240,7 @@ describe.runIf(hasSupabase)('sessions api (supabase)', () => {
     const title = `__vitest__ bolt.gives partial payload (${new Date().toISOString()})`;
     const payload = {
       title,
+
       // intentionally missing: prompts, responses, diffs
       conversation: [
         { role: 'user', content: 'partial' },

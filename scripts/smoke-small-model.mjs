@@ -8,11 +8,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 
 // Load `.env.local` if present (do not print secrets).
 const envLocalPath = path.resolve(process.cwd(), '.env.local');
+
 if (fs.existsSync(envLocalPath)) {
   dotenv.config({ path: envLocalPath });
 }
 
 const apiKey = process.env.OPENAI_API_KEY;
+
 if (!apiKey) {
   console.log('[smoke-small-model] OPENAI_API_KEY not set; skipping.');
   process.exit(0);
@@ -29,10 +31,10 @@ CRITICAL OUTPUT CONTRACT (build requests):
 - NEVER output code changes outside of <boltAction type="file"> blocks.
 - For <boltAction type="file">: include COMPLETE file contents (no diffs).
 `.trim();
-const prompt =
-  'Create a <boltArtifact> that adds a new file /tmp/bolt-small-model-smoke.txt containing the text "ok".';
+const prompt = 'Create a <boltArtifact> that adds a new file /tmp/bolt-small-model-smoke.txt containing the text "ok".';
 
 console.log(`[smoke-small-model] calling OpenAI model: ${modelName}`);
+
 const res = await generateText({
   model: openai(modelName),
   system,

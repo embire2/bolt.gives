@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { loader } from '../app/routes/api.export-api-keys';
+import { loader } from '~/routes/api.export-api-keys';
 
 const { getApiKeysFromCookieMock } = vi.hoisted(() => ({
   getApiKeysFromCookieMock: vi.fn(),

@@ -11,9 +11,7 @@ describe('getManualChunkName', () => {
 
   it('groups editor and terminal dependencies separately', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/view/dist/index.js')).toBe('editor-view');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/state/dist/index.js')).toBe(
-      'editor-state',
-    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/state/dist/index.js')).toBe('editor-state');
     expect(getManualChunkName('/root/bolt.gives/node_modules/@codemirror/commands/dist/index.js')).toBe(
       'editor-commands',
     );
@@ -37,9 +35,7 @@ describe('getManualChunkName', () => {
 
   it('isolates collaboration and export tooling', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/yjs/dist/yjs.mjs')).toBe('collaboration-yjs');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@octokit/rest/dist/index.js')).toBe(
-      'git-export-octokit',
-    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@octokit/rest/dist/index.js')).toBe('git-export-octokit');
     expect(getManualChunkName('/root/bolt.gives/node_modules/isomorphic-git/index.js')).toBe('git-export-core');
     expect(getManualChunkName('/root/bolt.gives/node_modules/jszip/lib/index.js')).toBe('archive-export');
     expect(getManualChunkName('/root/bolt.gives/node_modules/file-saver/dist/FileSaver.min.js')).toBe(
@@ -53,15 +49,9 @@ describe('getManualChunkName', () => {
     expect(getManualChunkName('/root/bolt.gives/node_modules/react-router/dist/index.js')).toBe('router-runtime');
     expect(getManualChunkName('/root/bolt.gives/node_modules/react-toastify/dist/index.js')).toBe('ui-toast');
     expect(getManualChunkName('/root/bolt.gives/node_modules/framer-motion/dist/es/index.mjs')).toBe('ui-motion');
-    expect(getManualChunkName('/root/bolt.gives/node_modules/@radix-ui/react-dialog/dist/index.mjs')).toBe(
-      'ui-radix',
-    );
-    expect(getManualChunkName('/root/bolt.gives/node_modules/lucide-react/dist/esm/lucide-react.js')).toBe(
-      'ui-lucide',
-    );
-    expect(getManualChunkName('/root/bolt.gives/node_modules/mermaid/dist/mermaid.core.mjs')).toBe(
-      'diagram-vendor',
-    );
+    expect(getManualChunkName('/root/bolt.gives/node_modules/@radix-ui/react-dialog/dist/index.mjs')).toBe('ui-radix');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/lucide-react/dist/esm/lucide-react.js')).toBe('ui-lucide');
+    expect(getManualChunkName('/root/bolt.gives/node_modules/mermaid/dist/mermaid.core.mjs')).toBe('diagram-vendor');
   });
 
   it('returns undefined for application files', () => {

@@ -77,7 +77,14 @@ async function waitForPromptSurface(page) {
       return;
     }
 
-    const bodyText = ((await page.locator('body').innerText().catch(() => '')) || '').slice(0, 300).replace(/\s+/g, ' ');
+    const bodyText = (
+      (await page
+        .locator('body')
+        .innerText()
+        .catch(() => '')) || ''
+    )
+      .slice(0, 300)
+      .replace(/\s+/g, ' ');
     logProgress('Waiting for prompt surface', `attempt=${attempt} body="${bodyText}"`);
     await delay(3000);
   }
@@ -99,7 +106,10 @@ async function waitForPreviewToRender(page) {
   const iframeDeadline = Date.now() + 180000;
 
   while (Date.now() < iframeDeadline) {
-    const iframeVisible = await page.locator('iframe[title="preview"]').isVisible().catch(() => false);
+    const iframeVisible = await page
+      .locator('iframe[title="preview"]')
+      .isVisible()
+      .catch(() => false);
 
     if (iframeVisible) {
       logProgress('Preview iframe mounted');
@@ -115,6 +125,7 @@ async function waitForPreviewToRender(page) {
 
   while (Date.now() < previewDeadline) {
     attempt += 1;
+
     const previewText = await readPreviewText(page);
 
     if (
@@ -127,7 +138,10 @@ async function waitForPreviewToRender(page) {
       return;
     }
 
-    logProgress('Waiting for preview content', `attempt=${attempt} previewExcerpt="${previewText.slice(0, 160).replace(/\s+/g, ' ')}"`);
+    logProgress(
+      'Waiting for preview content',
+      `attempt=${attempt} previewExcerpt="${previewText.slice(0, 160).replace(/\s+/g, ' ')}"`,
+    );
     await delay(5000);
   }
 
@@ -185,10 +199,7 @@ try {
   });
 
   await fs.mkdir(outDir, { recursive: true });
-  await context.addCookies([
-    buildCookie('selectedProvider', providerName),
-    buildCookie('selectedModel', modelName),
-  ]);
+  await context.addCookies([buildCookie('selectedProvider', providerName), buildCookie('selectedModel', modelName)]);
 
   await page.addInitScript(
     ({ provider, model }) => {
@@ -212,12 +223,15 @@ try {
   logProgress('Opening application', `baseUrl=${baseUrl} provider=${providerName} model=${modelName}`);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitForPromptSurface(page);
+
   if (asset404s.length > 0) {
     throw new Error(`Asset 404s detected during startup: ${asset404s.join(', ')}`);
   }
+
   await page.screenshot({ path: path.join(outDir, 'live-smoke-before-submit.png'), fullPage: true });
 
   logProgress('Submitting prompt');
+
   const promptTextarea = page.locator('textarea').first();
   await promptTextarea.fill(
     `Build a React doctor appointment scheduling website for a clinic with calendar slots, patient booking form, doctor selection, SMTP reminder settings, and a visible heading "${appToken}". Implement it and run it.`,
@@ -225,9 +239,11 @@ try {
   await promptTextarea.press('Enter');
 
   await waitForPreviewToRender(page);
+
   if (asset404s.length > 0) {
     throw new Error(`Asset 404s detected before preview became ready: ${asset404s.join(', ')}`);
   }
+
   await page.screenshot({ path: path.join(outDir, 'live-smoke-preview-ready.png'), fullPage: true });
 
   const previewSrc = await page.locator('iframe[title="preview"]').first().getAttribute('src');
@@ -263,6 +279,7 @@ try {
   if (!syncResponse.ok) {
     throw new Error(`Failed to corrupt generated app for recovery smoke: ${syncResponse.status}`);
   }
+
   logProgress('Injected intentional preview break', `targetPath=${targetPath}`);
 
   const breakDeadline = Date.now() + 30000;
@@ -284,7 +301,9 @@ try {
   }
 
   const deadline = Date.now() + 180000;
-  const initialRecoveryToken = Number(syncResponse.payload?.recovery?.token || snapshotResponse.payload?.recovery?.token || 0);
+  const initialRecoveryToken = Number(
+    syncResponse.payload?.recovery?.token || snapshotResponse.payload?.recovery?.token || 0,
+  );
   let sawError = false;
   let sawRunningRecovery = false;
   let sawRestoredRecovery = false;
@@ -367,9 +386,11 @@ try {
   }
 
   await page.screenshot({ path: path.join(outDir, 'live-smoke-after-restore.png'), fullPage: true });
+
   if (asset404s.length > 0) {
     throw new Error(`Asset 404s detected during smoke: ${asset404s.join(', ')}`);
   }
+
   console.log(
     JSON.stringify(
       {

@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 const rootDir = path.resolve(new URL('..', import.meta.url).pathname);
 const outputMarkdownPath = path.join(rootDir, 'commentary.md');
-const outputTsPath = path.join(rootDir, 'app/lib/runtime/commentary-pool.generated.ts');
+const outputTsPath = path.join(rootDir, 'modules/agent/src/lib/runtime/commentary-pool.generated.ts');
 const phaseSize = 60;
 
 /** @type {Array<{phase: 'plan'|'action'|'verification'|'next-step'|'recovery', title: string, starts: string[], actions: string[], intents: string[]}>} */
@@ -290,7 +290,7 @@ const markdown = [
 
 const tsObject = JSON.stringify(poolByPhase, null, 2);
 
-const tsFile = `import type { AgentCommentaryPhase } from '~/types/context';
+const tsFile = `import type { AgentCommentaryPhase } from '@bolt/core/types/context';
 
 export const COMMENTARY_POOL_BY_PHASE: Record<AgentCommentaryPhase, readonly string[]> = ${tsObject} as const;
 

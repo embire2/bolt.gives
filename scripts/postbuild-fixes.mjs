@@ -12,10 +12,12 @@ async function walk(dir) {
 
   for (const entry of entries) {
     const abs = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       files.push(...(await walk(abs)));
       continue;
     }
+
     if (entry.isFile() && /\.(?:js|mjs|cjs|map)$/.test(entry.name)) {
       files.push(abs);
     }
@@ -25,10 +27,15 @@ async function walk(dir) {
 }
 
 let changed = 0;
+
 for (const target of targets) {
   for (const file of await walk(target)) {
     const source = await fs.readFile(file, 'utf8');
-    if (!source.includes(from)) continue;
+
+    if (!source.includes(from)) {
+      continue;
+    }
+
     await fs.writeFile(file, source.split(from).join(to), 'utf8');
     changed += 1;
   }

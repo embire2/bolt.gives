@@ -11,10 +11,10 @@ function assertResponse(value: unknown): asserts value is Response {
   expect(value).toBeInstanceOf(Response);
 }
 
-vi.mock('~/lib/.server/admin-auth', () => ({
+vi.mock('@bolt/runtime/lib/.server/admin-auth', () => ({
   isTenantAdminAuthorized: adminAuthMocks.isTenantAdminAuthorized,
 }));
-vi.mock('~/lib/.server/runtime-control', () => ({
+vi.mock('@bolt/runtime/lib/.server/runtime-control', () => ({
   fetchRuntimeControlJson: runtimeControlMocks.fetchRuntimeControlJson,
 }));
 
@@ -26,7 +26,8 @@ describe('route-local auth guards', () => {
 
   it('blocks managed instance spawn passthrough when caller is not admin-authenticated', async () => {
     adminAuthMocks.isTenantAdminAuthorized.mockResolvedValue(false);
-    const route = await import('../../app/routes/api.managed-instances.spawn');
+
+    const route = await import('~/routes/api.managed-instances.spawn');
 
     const response = await route.action({
       request: new Request('https://alpha1.bolt.gives/api/managed-instances/spawn', {
@@ -45,7 +46,8 @@ describe('route-local auth guards', () => {
 
   it('blocks shout send passthrough when caller is not admin-authenticated', async () => {
     adminAuthMocks.isTenantAdminAuthorized.mockResolvedValue(false);
-    const route = await import('../../app/routes/api.shout.send');
+
+    const route = await import('~/routes/api.shout.send');
 
     const response = await route.action({
       request: new Request('https://alpha1.bolt.gives/api/shout/send', {
@@ -64,7 +66,8 @@ describe('route-local auth guards', () => {
 
   it('returns minimal diagnostics to unauthenticated callers', async () => {
     adminAuthMocks.isTenantAdminAuthorized.mockResolvedValue(false);
-    const route = await import('../../app/routes/api.system.diagnostics');
+
+    const route = await import('~/routes/api.system.diagnostics');
 
     const response = await route.loader({
       request: new Request('https://alpha1.bolt.gives/api/system/diagnostics'),
@@ -72,6 +75,7 @@ describe('route-local auth guards', () => {
       params: {},
     } as any);
     assertResponse(response);
+
     const payload = (await response.json()) as any;
 
     expect(payload.authenticated).toBe(false);
@@ -80,7 +84,8 @@ describe('route-local auth guards', () => {
 
   it('blocks privileged git-info actions when caller is not admin-authenticated', async () => {
     adminAuthMocks.isTenantAdminAuthorized.mockResolvedValue(false);
-    const route = await import('../../app/routes/api.system.git-info');
+
+    const route = await import('~/routes/api.system.git-info');
 
     const response = await route.loader({
       request: new Request('https://alpha1.bolt.gives/api/system/git-info?action=getUser'),
@@ -94,7 +99,8 @@ describe('route-local auth guards', () => {
 
   it('keeps non-privileged local git metadata endpoint available', async () => {
     adminAuthMocks.isTenantAdminAuthorized.mockResolvedValue(false);
-    const route = await import('../../app/routes/api.system.git-info');
+
+    const route = await import('~/routes/api.system.git-info');
 
     const response = await route.loader({
       request: new Request('https://alpha1.bolt.gives/api/system/git-info'),
@@ -102,6 +108,7 @@ describe('route-local auth guards', () => {
       params: {},
     } as any);
     assertResponse(response);
+
     const payload = (await response.json()) as any;
 
     expect(response.status).toBe(200);

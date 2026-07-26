@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loader } from '~/routes/api.system.agent-metrics';
-import { recordAgentRunMetrics, resetAgentRunMetricsForTests } from '~/lib/.server/llm/run-metrics';
+import { recordAgentRunMetrics, resetAgentRunMetricsForTests } from '@bolt/agent/lib/.server/llm/run-metrics';
 
 describe('api.system.agent-metrics loader', () => {
   beforeEach(() => {

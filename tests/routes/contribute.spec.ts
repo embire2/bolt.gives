@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { action } = await import('../../app/routes/contribute');
+const { action } = await import('~/routes/contribute');
 
 describe('/contribute action', () => {
   beforeEach(() => {

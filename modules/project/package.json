@@ -1,0 +1,28 @@
+{
+  "name": "@bolt/project",
+  "version": "3.3.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@bolt/agent": "workspace:*",
+    "@bolt/core": "workspace:*",
+    "@bolt/runtime": "workspace:*",
+    "istextorbinary": "^9.5.0"
+  },
+  "devDependencies": {
+    "eslint": "9.39.4",
+    "pnpm": "9.14.4",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9"
+  },
+  "scripts": {
+    "build": "pnpm run typecheck",
+    "lint": "eslint --cache --cache-location .cache/eslint src",
+    "test": "vitest --run --root ../.. modules/project/src",
+    "typecheck": "tsc -p tsconfig.json --incremental --tsBuildInfoFile .cache/typecheck.tsbuildinfo"
+  }
+}

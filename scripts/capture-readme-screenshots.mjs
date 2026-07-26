@@ -57,6 +57,7 @@ function getPromptLocator() {
 
 async function captureHome() {
   await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
   const requiredMarkers = getReleaseHomeReadinessMarkers(versionLabel);
 
   try {
@@ -88,6 +89,7 @@ async function captureHome() {
 async function runPromptCapture({ prompt, token, outputName }) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
+
   const promptInput = getPromptLocator();
   await promptInput.fill(`${prompt}\n\nInclude token: ${token}`);
   await promptInput.press('Enter');
@@ -97,6 +99,7 @@ async function runPromptCapture({ prompt, token, outputName }) {
       const text = document.body.innerText || '';
       const tokenCount = text.split(tok).length - 1;
       const hasError = /server error|error details|custom error/i.test(text);
+
       return tokenCount >= 2 && !hasError;
     },
     token,
@@ -109,6 +112,7 @@ async function runPromptCapture({ prompt, token, outputName }) {
 async function capturePromptShell(outputName) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await waitReady();
+
   const text = await page.evaluate(() => document.body.innerText || '');
 
   if (/server error|error details|custom error/i.test(text)) {
@@ -146,6 +150,7 @@ async function captureChangelog() {
     const title = document.title || '';
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const versionRegex = new RegExp(`Current\\s+version\\s*:\\s*${escaped}|changelog\\s*\\(${escaped}\\)`, 'i');
+
     return (
       versionRegex.test(`${title}\n${text}`) && !/server error|error details|custom error/i.test(`${title}\n${text}`)
     );

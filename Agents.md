@@ -4,17 +4,17 @@
 
 Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is visible, understandable, and verifiable while it happens. Users must be able to start a project, see files and Preview, send follow-up prompts, and understand what changed.
 
-Secondary objective: continue the `v3.2.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
+Secondary objective: continue the `v3.4.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v3.1.0`
+- Stable: `v3.3.0`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.1.0`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.1.0/install.sh`
-- In progress: `v3.2.0`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.3.0`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh`
+- In progress: `v3.4.0`
 
-`v3.1.0` is the current stable hosted and Linux self-host release. It moves the protected FREE provider to MagnetAPI.org ChatGPT-5.6 through the Responses API, preserves the prompt-to-preview and follow-up recovery baseline, and cuts initial Chat assets by about 40% by deferring optional settings, PDF, Git, terminal, and plugin code.
+`v3.3.0` is the current stable hosted and Linux self-host release. It preserves the durable prompt-to-preview, saved-project, hosted FREE model, runtime, and PostgreSQL baseline while dividing the codebase into six focused workspace modules with independent validation and enforced dependency direction.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -25,6 +25,17 @@ The runtime-node path provisions per-project Ubuntu CLI users, private workspace
 - Follow-up prompts must build on the current project context, not restart from stale memory.
 - Keep fixes minimal, explicit, test-backed, and documented.
 - Prefer clear runtime contracts over clever UI or protocol shortcuts.
+
+## Module Ownership
+
+- `@bolt/core`: shared contracts, workspace paths, security, logging, URLs, versioning, and low-level utilities. It must not import another product module.
+- `@bolt/agent`: providers, prompts, project memory, context selection, streaming, tools, commentary, continuation, recovery, and web browsing.
+- `@bolt/runtime`: hosted workspace synchronization, commands, Preview lifecycle, runtime-node provisioning, and execution support.
+- `@bolt/project`: generated-project files, persistence, history, Workbench, editor, terminal, actions, collaboration, and integrations.
+- `@bolt/control-plane`: tenant/admin policy, managed instances, updates, publishing, domains, billing, mail, and audit state.
+- `@bolt/surfaces`: Remix routes, application chrome, Cloudflare integration, desktop/mobile composition, and cross-domain adapters.
+
+Use `@bolt/<module>/*` imports and keep the graph in `modules/module-map.json` acyclic. Put reusable browser/server-neutral contracts in `core`. Do not bypass a boundary with long relative paths.
 
 ## Branching and Deployment
 
@@ -55,7 +66,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Live commentary feed plus technical execution transparency.
 - Server-first hosted runtime for install, build, test, preview, and file sync.
 - Preview auto-recovery via server-side health checks.
-- Managed `FREE` provider locked to MagnetAPI.org model `gpt-5.6` through the server-side Responses API.
+- Managed `FREE` provider restricted to server-side MagnetAPI.org models `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`.
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
 - Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
@@ -63,7 +74,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 
-## v3.2.0 Priorities
+## v3.4.0 Priorities
 
 - Prompt-to-preview reliability for first generation and follow-up prompts.
 - History-aware project continuation using runtime snapshots and current workspace state.
@@ -83,6 +94,8 @@ Preserve these behaviors unless the user explicitly asks to change them:
 3. Implement the smallest safe fix.
 4. Add regression coverage close to the changed code.
 5. Run local validation:
+   - `pnpm module:check <module>` while iterating
+   - `pnpm check:boundaries:strict`
    - `pnpm run typecheck`
    - `pnpm run lint`
    - `pnpm test`

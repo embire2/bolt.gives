@@ -46,11 +46,7 @@ Notes:
 function isSensitiveKey(key) {
   const k = key.toUpperCase();
   return (
-    k.includes('KEY') ||
-    k.includes('TOKEN') ||
-    k.includes('SECRET') ||
-    k.includes('PASSWORD') ||
-    k.includes('AUTH')
+    k.includes('KEY') || k.includes('TOKEN') || k.includes('SECRET') || k.includes('PASSWORD') || k.includes('AUTH')
   );
 }
 
@@ -62,6 +58,7 @@ function quoteEnvValue(value) {
 
   // Escape backslashes and double-quotes.
   const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
   return `"${escaped}"`;
 }
 
@@ -101,7 +98,10 @@ function parseEnvLines(contents) {
 
   lines.forEach((line, i) => {
     const match = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!match) return;
+
+    if (!match) {
+      return;
+    }
 
     const key = match[1];
     let value = match[2] ?? '';
@@ -124,6 +124,7 @@ async function readEnvFile(filePath) {
   }
 
   const contents = await fs.readFile(filePath, 'utf8');
+
   return parseEnvLines(contents);
 }
 
@@ -145,6 +146,7 @@ function setEnvKey(parsed, key, value) {
     } else {
       parsed.lines.push(formatted);
     }
+
     parsed.indexByKey.set(key, parsed.lines.length - 1);
   }
 
@@ -181,22 +183,28 @@ function question(rl, prompt) {
 }
 
 function questionHidden(rl, prompt) {
-  // Minimal masking approach without external deps.
-  // Uses readline's private _writeToOutput hook; if that ever breaks, fall back to normal prompts.
+  /*
+   * Minimal masking approach without external deps.
+   * Uses readline's private _writeToOutput hook; if that ever breaks, fall back to normal prompts.
+   */
   return new Promise((resolve) => {
     const rlAny = rl;
     const original = rlAny._writeToOutput;
+
     rlAny._writeToOutput = function maskedWrite(stringToWrite) {
       // Hide typed characters but keep backspaces/line breaks functional.
       if (rlAny.stdoutMuted) {
         // Most keypresses are echoed as a single character. Don't print them.
         return;
       }
-      return original.call(this, stringToWrite);
+
+      original.call(this, stringToWrite);
     };
 
-    // Print the prompt ourselves while output is not muted, then ask with an empty query.
-    // This avoids hiding the prompt while still hiding user input.
+    /*
+     * Print the prompt ourselves while output is not muted, then ask with an empty query.
+     * This avoids hiding the prompt while still hiding user input.
+     */
     rl.output.write(prompt);
     rlAny.stdoutMuted = true;
 
@@ -215,12 +223,14 @@ async function ensureEnvLocal({ force }) {
   }
 
   const hasLocal = await fileExists(ENV_LOCAL);
+
   if (hasLocal && !force) {
     return { created: false };
   }
 
   const example = await fs.readFile(ENV_EXAMPLE, 'utf8');
   await fs.writeFile(ENV_LOCAL, example, 'utf8');
+
   return { created: true };
 }
 
@@ -248,23 +258,41 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
 
-    if (a === '--help' || a === '-h') args.help = true;
-    else if (a === '--init') args.init = true;
-    else if (a === '--sync') args.sync = true;
-    else if (a === '--force') args.force = true;
-    else if (a === '--list') args.list = true;
-    else if (a === '--interactive') args.interactive = true;
-    else if (a === '--set') {
+    if (a === '--help' || a === '-h') {
+      args.help = true;
+    } else if (a === '--init') {
+      args.init = true;
+    } else if (a === '--sync') {
+      args.sync = true;
+    } else if (a === '--force') {
+      args.force = true;
+    } else if (a === '--list') {
+      args.list = true;
+    } else if (a === '--interactive') {
+      args.interactive = true;
+    } else if (a === '--set') {
       const next = argv[++i];
-      if (!next || !next.includes('=')) throw new Error('--set expects KEY=VALUE');
+
+      if (!next || !next.includes('=')) {
+        throw new Error('--set expects KEY=VALUE');
+      }
+
       args.set.push(next);
     } else if (a.startsWith('--set=')) {
       const v = a.slice('--set='.length);
-      if (!v.includes('=')) throw new Error('--set expects KEY=VALUE');
+
+      if (!v.includes('=')) {
+        throw new Error('--set expects KEY=VALUE');
+      }
+
       args.set.push(v);
     } else if (a === '--unset') {
       const next = argv[++i];
-      if (!next) throw new Error('--unset expects KEY');
+
+      if (!next) {
+        throw new Error('--unset expects KEY');
+      }
+
       args.unset.push(next);
     } else if (a.startsWith('--unset=')) {
       args.unset.push(a.slice('--unset='.length));
@@ -297,7 +325,11 @@ async function applySetUnset({ setPairs, unsetKeys }) {
     const idx = pair.indexOf('=');
     const key = pair.slice(0, idx);
     const value = pair.slice(idx + 1);
-    if (!key) throw new Error(`Invalid --set: ${pair}`);
+
+    if (!key) {
+      throw new Error(`Invalid --set: ${pair}`);
+    }
+
     setEnvKey(parsed, key, value);
     changed.add(key);
   }
@@ -321,6 +353,7 @@ async function interactiveWizard() {
   try {
     if (!(await fileExists(ENV_LOCAL))) {
       const ans = (await question(rl, 'Create .env.local from .env.example? (y/N) ')).trim().toLowerCase();
+
       if (ans === 'y' || ans === 'yes') {
         await ensureEnvLocal({ force: false });
         process.stdout.write('Created .env.local\n');
@@ -330,9 +363,8 @@ async function interactiveWizard() {
       }
     }
 
-    const syncAns = (await question(rl, 'Sync .env (for Docker Compose) from .env.local? (y/N) '))
-      .trim()
-      .toLowerCase();
+    const syncAns = (await question(rl, 'Sync .env (for Docker Compose) from .env.local? (y/N) ')).trim().toLowerCase();
+
     if (syncAns === 'y' || syncAns === 'yes') {
       await syncEnv();
       process.stdout.write('Synced .env from .env.local\n');
@@ -342,14 +374,13 @@ async function interactiveWizard() {
     const updatedKeys = [];
 
     while (true) {
-      const pick = (await question(
-        rl,
-        'Enter comma-separated env keys to set (blank to finish, "list" to show all): ',
-      ))
+      const pick = (await question(rl, 'Enter comma-separated env keys to set (blank to finish, "list" to show all): '))
         .trim()
         .toLowerCase();
 
-      if (!pick) break;
+      if (!pick) {
+        break;
+      }
 
       if (pick === 'list') {
         const sorted = [...knownKeys].sort((a, b) => a.localeCompare(b));
@@ -368,7 +399,10 @@ async function interactiveWizard() {
           const cont = (await question(rl, `Key "${key}" is not in .env.example. Set anyway? (y/N) `))
             .trim()
             .toLowerCase();
-          if (!(cont === 'y' || cont === 'yes')) continue;
+
+          if (!(cont === 'y' || cont === 'yes')) {
+            continue;
+          }
         }
 
         const hasValue = parsed.valueByKey.has(key) && String(parsed.valueByKey.get(key) ?? '').trim() !== '';
@@ -381,7 +415,9 @@ async function interactiveWizard() {
         const valueRaw = isSensitiveKey(key) ? await questionHidden(rl, prompt) : await question(rl, prompt);
         const value = String(valueRaw ?? '').trim();
 
-        if (!value) continue;
+        if (!value) {
+          continue;
+        }
 
         setEnvKey(parsed, key, value);
         updatedKeys.push(key);
@@ -419,7 +455,9 @@ async function main() {
 
   if (args.init) {
     const result = await ensureEnvLocal({ force: args.force });
-    process.stdout.write(result.created ? 'Created .env.local\n' : '.env.local already exists (use --force to overwrite)\n');
+    process.stdout.write(
+      result.created ? 'Created .env.local\n' : '.env.local already exists (use --force to overwrite)\n',
+    );
   }
 
   if (args.set.length > 0 || args.unset.length > 0) {
@@ -428,6 +466,7 @@ async function main() {
     }
 
     const { changed } = await applySetUnset({ setPairs: args.set, unsetKeys: args.unset });
+
     if (changed.length > 0) {
       process.stdout.write(`Updated keys in .env.local: ${changed.join(', ')}\n`);
     }

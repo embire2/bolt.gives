@@ -39,7 +39,7 @@ export default [
   },
   {
     files: [...tsFileExtensions, ...jsFileExtensions, '**/*.tsx'],
-    ignores: ['functions/*', 'electron/**/*'],
+    ignores: ['functions/*', 'electron/**/*', 'modules/surfaces/electron/**/*'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -52,6 +52,12 @@ export default [
           ],
         },
       ],
+    },
+  },
+  {
+    files: ['scripts/**/*', 'tests/**/*'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
 ];

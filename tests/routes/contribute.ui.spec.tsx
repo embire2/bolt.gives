@@ -20,12 +20,12 @@ vi.mock('~/components/ui/BackgroundRays', () => ({
   default: () => <div data-testid="background-rays" />,
 }));
 
-let ContributePage: (typeof import('../../app/routes/contribute'))['default'];
+let ContributePage: (typeof import('~/routes/contribute'))['default'];
 
 describe('ContributePage', () => {
   beforeEach(async () => {
     (window as any).__vite_plugin_react_preamble_installed__ = true;
-    ContributePage = (await import('../../app/routes/contribute')).default;
+    ContributePage = (await import('~/routes/contribute')).default;
   });
 
   afterEach(() => {

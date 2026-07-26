@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { action } from '../app/routes/api.deployment.rollback';
+import { action } from '~/routes/api.deployment.rollback';
 
 describe('deployment rollback api', () => {
   it('returns 405 for non-POST requests', async () => {
@@ -34,6 +34,7 @@ describe('deployment rollback api', () => {
     } as any);
 
     expect(response.status).toBe(200);
+
     const json = (await response.json()) as any;
     expect(json.result?.ok).toBe(true);
 
@@ -64,9 +65,9 @@ describe('deployment rollback api', () => {
     } as any);
 
     expect(response.status).toBe(500);
+
     const json = (await response.json()) as any;
     expect(String(json.error)).toContain('bad');
     vi.unstubAllGlobals();
   });
 });
-

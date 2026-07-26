@@ -7,7 +7,7 @@ import {
   shouldContinuePendingHostedPreviewVerification,
   shouldTrackCommentaryRunActivity,
   shouldTrackModelStreamChunkActivity,
-} from '../../app/routes/api.chat';
+} from '~/routes/api.chat';
 
 describe('api.chat hosted preview continuation policy', () => {
   it('does not attempt hosted preview verification without a hosted runtime session', () => {

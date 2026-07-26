@@ -49,7 +49,9 @@ function selectBreakTarget(files) {
 
   for (const pattern of preferredPatterns) {
     const match = Object.entries(files).find(([filePath, dirent]) => {
-      return dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath);
+      return (
+        dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath)
+      );
     });
 
     if (match) {
@@ -78,6 +80,7 @@ async function waitForPreviewToRender(page, expectedText) {
     (text) => {
       const frame = document.querySelector('iframe[title="preview"]');
       const previewText = frame?.contentDocument?.body?.innerText || '';
+
       return previewText.includes(text);
     },
     expectedText,
@@ -129,10 +132,7 @@ const page = await context.newPage();
 
 try {
   await fs.mkdir(outDir, { recursive: true });
-  await context.addCookies([
-    buildCookie('selectedProvider', providerName),
-    buildCookie('selectedModel', modelName),
-  ]);
+  await context.addCookies([buildCookie('selectedProvider', providerName), buildCookie('selectedModel', modelName)]);
 
   await page.addInitScript(
     ({ provider, model }) => {
@@ -218,7 +218,9 @@ try {
   }
 
   const deadline = Date.now() + 180000;
-  const initialRecoveryToken = Number(syncResponse.payload?.recovery?.token || snapshotResponse.payload?.recovery?.token || 0);
+  const initialRecoveryToken = Number(
+    syncResponse.payload?.recovery?.token || snapshotResponse.payload?.recovery?.token || 0,
+  );
   let sawError = false;
   let sawRunningRecovery = false;
   let sawRestoredRecovery = false;
@@ -297,6 +299,7 @@ try {
     ({ text, expectedSubtitle }) => {
       const frame = document.querySelector('iframe[title="preview"]');
       const previewText = frame?.contentDocument?.body?.innerText || '';
+
       return previewText.includes(text) && previewText.includes(expectedSubtitle);
     },
     { text: token, expectedSubtitle: subtitle },

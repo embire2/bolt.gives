@@ -230,5 +230,6 @@ export function getManualChunkName(id: string): string | undefined {
     .replace(/^@/, '')
     .replace(/[\/]/g, '-')
     .replace(/[^a-zA-Z0-9-_]/g, '');
+
   return `vendor-${sanitized}`;
 }

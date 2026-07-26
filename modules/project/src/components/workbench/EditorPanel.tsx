@@ -1,0 +1,220 @@
+import { useStore } from '@nanostores/react';
+import { lazy, memo, Suspense, useMemo } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import * as Tabs from '@radix-ui/react-tabs';
+import {
+  type EditorDocument,
+  type EditorSettings,
+  type OnChangeCallback as OnEditorChange,
+  type OnSaveCallback as OnEditorSave,
+  type OnScrollCallback as OnEditorScroll,
+} from '@bolt/project/components/editor/codemirror/CodeMirrorEditor';
+import { PanelHeader } from '~/components/ui/PanelHeader';
+import { PanelHeaderButton } from '~/components/ui/PanelHeaderButton';
+import type { FileMap } from '@bolt/core/types/files';
+import type { FileHistory } from '@bolt/core/types/actions';
+import { themeStore } from '@bolt/project/lib/stores/theme';
+import { WORK_DIR } from '@bolt/agent/utils/constants';
+import { renderLogger } from '@bolt/core/utils/logger';
+import { isMobile } from '~/utils/mobile';
+import { FileBreadcrumb } from './FileBreadcrumb';
+import { FileTree } from './FileTree';
+import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { Search } from './Search'; // <-- Ensure Search is imported
+import { classNames } from '@bolt/core/utils/classNames'; // <-- Import classNames if not already present
+import { LockManager } from './LockManager'; // <-- Import LockManager
+
+const LazyCodeMirrorEditor = lazy(() =>
+  import('@bolt/project/components/editor/codemirror/CodeMirrorEditor').then((module) => ({
+    default: module.CodeMirrorEditor,
+  })),
+);
+const LazyTerminalTabs = lazy(() =>
+  import('./terminal/TerminalTabs').then((module) => ({ default: module.TerminalTabs })),
+);
+
+const DEFAULT_TERMINAL_SIZE = 25;
+
+interface EditorPanelProps {
+  files?: FileMap;
+  unsavedFiles?: Set<string>;
+  editorDocument?: EditorDocument;
+  selectedFile?: string | undefined;
+  isStreaming?: boolean;
+  fileHistory?: Record<string, FileHistory>;
+  onEditorChange?: OnEditorChange;
+  onEditorScroll?: OnEditorScroll;
+  onFileSelect?: (value?: string) => void;
+  onFileSave?: OnEditorSave;
+  onFileReset?: () => void;
+}
+
+const DEFAULT_EDITOR_SIZE = 100 - DEFAULT_TERMINAL_SIZE;
+
+const editorSettings: EditorSettings = { tabSize: 2 };
+
+export const EditorPanel = memo(
+  ({
+    files,
+    unsavedFiles,
+    editorDocument,
+    selectedFile,
+    isStreaming,
+    fileHistory,
+    onFileSelect,
+    onEditorChange,
+    onEditorScroll,
+    onFileSave,
+    onFileReset,
+  }: EditorPanelProps) => {
+    renderLogger.trace('EditorPanel');
+
+    const theme = useStore(themeStore);
+    const showTerminal = useStore(workbenchStore.showTerminal);
+
+    const activeFileSegments = useMemo(() => {
+      if (!editorDocument) {
+        return undefined;
+      }
+
+      return editorDocument.filePath.split('/');
+    }, [editorDocument]);
+
+    const activeFileUnsaved = useMemo(() => {
+      if (!editorDocument || !unsavedFiles) {
+        return false;
+      }
+
+      // Make sure unsavedFiles is a Set before calling has()
+      return unsavedFiles instanceof Set && unsavedFiles.has(editorDocument.filePath);
+    }, [editorDocument, unsavedFiles]);
+
+    return (
+      <PanelGroup direction="vertical" className="h-full min-h-0">
+        <Panel defaultSize={showTerminal ? DEFAULT_EDITOR_SIZE : 100} minSize={20} className="min-h-0">
+          <PanelGroup direction="horizontal" className="h-full min-h-0">
+            <Panel
+              defaultSize={20}
+              minSize={15}
+              collapsible
+              className="min-h-0 border-r border-bolt-elements-borderColor"
+            >
+              <div className="h-full min-h-0">
+                <Tabs.Root defaultValue="files" className="flex flex-col h-full">
+                  <PanelHeader className="w-full text-sm font-medium text-bolt-elements-textSecondary px-1">
+                    <div className="h-full flex-shrink-0 flex items-center justify-between w-full">
+                      <Tabs.List className="h-full flex-shrink-0 flex items-center">
+                        <Tabs.Trigger
+                          value="files"
+                          className={classNames(
+                            'h-full bg-transparent hover:bg-bolt-elements-background-depth-3 py-0.5 px-2 rounded-lg text-sm font-medium text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary data-[state=active]:text-bolt-elements-textPrimary',
+                          )}
+                        >
+                          Files
+                        </Tabs.Trigger>
+                        <Tabs.Trigger
+                          value="search"
+                          className={classNames(
+                            'h-full bg-transparent hover:bg-bolt-elements-background-depth-3 py-0.5 px-2 rounded-lg text-sm font-medium text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary data-[state=active]:text-bolt-elements-textPrimary',
+                          )}
+                        >
+                          Search
+                        </Tabs.Trigger>
+                        <Tabs.Trigger
+                          value="locks"
+                          className={classNames(
+                            'h-full bg-transparent hover:bg-bolt-elements-background-depth-3 py-0.5 px-2 rounded-lg text-sm font-medium text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary data-[state=active]:text-bolt-elements-textPrimary',
+                          )}
+                        >
+                          Locks
+                        </Tabs.Trigger>
+                      </Tabs.List>
+                    </div>
+                  </PanelHeader>
+
+                  <Tabs.Content value="files" className="flex-grow overflow-auto focus-visible:outline-none">
+                    <FileTree
+                      className="h-full"
+                      files={files}
+                      hideRoot
+                      unsavedFiles={unsavedFiles}
+                      fileHistory={fileHistory}
+                      rootFolder={WORK_DIR}
+                      selectedFile={selectedFile}
+                      onFileSelect={onFileSelect}
+                    />
+                  </Tabs.Content>
+
+                  <Tabs.Content value="search" className="flex-grow overflow-auto focus-visible:outline-none">
+                    <Search />
+                  </Tabs.Content>
+
+                  <Tabs.Content value="locks" className="flex-grow overflow-auto focus-visible:outline-none">
+                    <LockManager />
+                  </Tabs.Content>
+                </Tabs.Root>
+              </div>
+            </Panel>
+
+            <PanelResizeHandle />
+            <Panel className="flex min-h-0 flex-col" defaultSize={80} minSize={20}>
+              <PanelHeader className="overflow-x-auto">
+                {activeFileSegments?.length && (
+                  <div className="flex items-center flex-1 text-sm">
+                    <FileBreadcrumb pathSegments={activeFileSegments} files={files} onFileSelect={onFileSelect} />
+                    {activeFileUnsaved && (
+                      <div className="flex gap-1 ml-auto -mr-1.5">
+                        <PanelHeaderButton onClick={onFileSave}>
+                          <div className="i-ph:floppy-disk-duotone" />
+                          Save
+                        </PanelHeaderButton>
+                        <PanelHeaderButton onClick={onFileReset}>
+                          <div className="i-ph:clock-counter-clockwise-duotone" />
+                          Reset
+                        </PanelHeaderButton>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </PanelHeader>
+              <div className="mx-2 mb-2 flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 shadow-sm">
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-sm text-bolt-elements-textSecondary">
+                      Loading editor…
+                    </div>
+                  }
+                >
+                  <LazyCodeMirrorEditor
+                    theme={theme}
+                    editable={!isStreaming && editorDocument !== undefined}
+                    settings={editorSettings}
+                    doc={editorDocument}
+                    autoFocusOnDocumentChange={!isMobile()}
+                    onScroll={onEditorScroll}
+                    onChange={onEditorChange}
+                    onSave={onFileSave}
+                  />
+                </Suspense>
+              </div>
+            </Panel>
+          </PanelGroup>
+        </Panel>
+        {showTerminal ? (
+          <>
+            <PanelResizeHandle />
+            <Suspense
+              fallback={
+                <div className="flex min-h-[160px] items-center justify-center border-t border-bolt-elements-borderColor bg-bolt-elements-terminals-background text-sm text-bolt-elements-textSecondary">
+                  Loading terminal…
+                </div>
+              }
+            >
+              <LazyTerminalTabs />
+            </Suspense>
+          </>
+        ) : null}
+      </PanelGroup>
+    );
+  },
+);

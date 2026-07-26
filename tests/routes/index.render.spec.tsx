@@ -28,7 +28,7 @@ describe('index route fallback shell', () => {
   });
 
   it('renders the public project website on the root route', async () => {
-    const { default: Index } = await import('../../app/routes/_index');
+    const { default: Index } = await import('~/routes/_index');
 
     render(<Index />);
 
@@ -47,7 +47,7 @@ describe('index route fallback shell', () => {
   });
 
   it('keeps the chat workspace loading shell available away from the homepage', async () => {
-    const { ChatWorkspace } = await import('../../app/routes/_index');
+    const { ChatWorkspace } = await import('~/routes/_index');
 
     render(<ChatWorkspace />);
 

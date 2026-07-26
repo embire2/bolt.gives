@@ -85,6 +85,7 @@ const tempDirs: string[] = [];
 async function makeTempDir(prefix: string) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   tempDirs.push(dir);
+
   return dir;
 }
 
@@ -745,6 +746,7 @@ describe('runtime server workspace isolation', () => {
       isPortAvailableFn: async () => true,
     });
     resolveFirstProbe(true);
+
     const firstPort = await firstAllocation;
 
     expect(firstPort).toBe(4100);
@@ -2102,9 +2104,7 @@ describe('runtime server workspace isolation', () => {
     );
     expect(generatedFileMap['/home/project/vite.config.js']?.content).toContain('hmr: false');
     expect(generatedFileMap['/home/project/tsconfig.json']?.content).toContain('"jsx": "react-jsx"');
-    await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain(
-      'plugins: [react()]',
-    );
+    await expect(fs.readFile(path.join(workspace, 'vite.config.js'), 'utf8')).resolves.toContain('plugins: [react()]');
     await expect(fs.readFile(path.join(workspace, 'tsconfig.json'), 'utf8')).resolves.toContain('"include": [');
   });
 
@@ -2606,6 +2606,7 @@ The latest release of react-calendar is "6.0.1".`),
       'export default function App() { return <h1>Healthy</h1>; }\n',
       'utf8',
     );
+
     const session: { dir: string; currentFileMap: Record<string, any> } = {
       dir: workspace,
       currentFileMap: {
@@ -2693,6 +2694,7 @@ The latest release of react-calendar is "6.0.1".`),
       }),
       'utf8',
     );
+
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 

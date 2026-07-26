@@ -23,7 +23,7 @@ vi.mock('~/components/ui/BackgroundRays', () => ({
   default: () => <div data-testid="background-rays" />,
 }));
 
-let TenantPortalPage: (typeof import('../../app/routes/tenant'))['default'];
+let TenantPortalPage: (typeof import('~/routes/tenant'))['default'];
 
 describe('TenantPortalPage', () => {
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe('TenantPortalPage', () => {
       tenant: null,
       invite: null,
     });
-    TenantPortalPage = (await import('../../app/routes/tenant')).default;
+    TenantPortalPage = (await import('~/routes/tenant')).default;
   });
 
   afterEach(() => {

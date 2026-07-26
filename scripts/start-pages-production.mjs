@@ -67,6 +67,7 @@ export function resolveAssetPath(assetRoot, pathname) {
 
   const relativePath = decodedPath.replace(/^\/+/, '');
   const resolvedPath = path.resolve(assetRoot, relativePath || 'index.html');
+
   return resolvedPath === assetRoot || resolvedPath.startsWith(`${assetRoot}${path.sep}`) ? resolvedPath : null;
 }
 
@@ -110,6 +111,7 @@ async function createAssetService(assetRoot) {
           'Cache-Control': url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
         });
         const body = request.method === 'HEAD' ? null : await fs.readFile(assetPath);
+
         return new Response(body, { status: 200, headers });
       } catch (error) {
         if (error?.code === 'ENOENT') {
@@ -142,6 +144,7 @@ function buildRequestUrl(request) {
     ?.trim();
   const protocol = forwardedProto || (request.socket.encrypted ? 'https' : 'http');
   const host = request.headers.host || '127.0.0.1';
+
   return `${protocol}://${host}${request.url || '/'}`;
 }
 
@@ -179,8 +182,10 @@ export async function writeWorkerResponse(response, serverResponse) {
       }
     }
   } finally {
-    // The compiled Pages bridge owns the upstream stream. Calling cancel() here
-    // can recursively cancel an already-locked stream and terminate Node.
+    /*
+     * The compiled Pages bridge owns the upstream stream. Calling cancel() here
+     * can recursively cancel an already-locked stream and terminate Node.
+     */
     reader.releaseLock();
   }
 
@@ -217,6 +222,7 @@ export async function startProductionServer(options = resolveProductionServerCon
           abortWorkerRequest();
         }
       });
+
       const body = await readRequestBody(request);
       const workerRequest = new Request(buildRequestUrl(request), {
         method: request.method,
@@ -269,6 +275,7 @@ export async function startProductionServer(options = resolveProductionServerCon
 
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
+
   return server;
 }
 

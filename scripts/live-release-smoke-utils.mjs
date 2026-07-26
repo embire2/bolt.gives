@@ -25,7 +25,11 @@ function resolveRelativeImport(fromPath, specifier, files, preferredExtensions =
     candidates.push(path.posix.join(rawTarget, `index${extension}`));
   }
 
-  return candidates.find((candidate, index) => candidates.indexOf(candidate) === index && files[candidate]?.type === 'file') || null;
+  return (
+    candidates.find(
+      (candidate, index) => candidates.indexOf(candidate) === index && files[candidate]?.type === 'file',
+    ) || null
+  );
 }
 
 function detectEntryFile(files) {
@@ -54,7 +58,9 @@ function detectEntryFile(files) {
 
   for (const pattern of entryCandidates) {
     const match = Object.entries(files).find(([filePath, dirent]) => {
-      return dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath);
+      return (
+        dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath)
+      );
     });
 
     if (match) {
@@ -66,11 +72,12 @@ function detectEntryFile(files) {
 }
 
 function resolvePrimaryAppImport(entryPath, entryContent, files) {
-  const importPattern =
-    /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
+  const importPattern = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
   const entryExt = path.posix.extname(entryPath).toLowerCase();
   const preferredExtensions =
-    entryExt === '.tsx' || entryExt === '.ts' ? ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts'] : SOURCE_EXTENSIONS;
+    entryExt === '.tsx' || entryExt === '.ts'
+      ? ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts']
+      : SOURCE_EXTENSIONS;
 
   for (const match of entryContent.matchAll(importPattern)) {
     const importedName = match[1] || '';
@@ -117,7 +124,9 @@ export function selectBreakTarget(files) {
 
   for (const pattern of preferredPatterns) {
     const match = Object.entries(normalizedFiles).find(([filePath, dirent]) => {
-      return dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath);
+      return (
+        dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath)
+      );
     });
 
     if (match) {

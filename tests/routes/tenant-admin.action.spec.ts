@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { action } = await import('../../app/routes/tenant-admin');
+const { action } = await import('~/routes/tenant-admin');
 
 describe('tenant-admin action auth flow', () => {
   beforeEach(() => {

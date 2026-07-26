@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toUserSafeUpdateError } from '../app/routes/api.update';
+import { toUserSafeUpdateError } from '~/routes/api.update';
 
 describe('toUserSafeUpdateError', () => {
   it('maps unenv fs errors to a user-safe message', () => {

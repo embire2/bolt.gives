@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SubAgentManager } from '~/lib/.server/llm/sub-agent';
-import { AgentBus } from '~/lib/.server/llm/sub-agent';
-import type { SubAgentConfig, SubAgentExecutionResult, SubAgentState } from '~/lib/.server/llm/sub-agent';
+import { SubAgentManager } from '@bolt/agent/lib/.server/llm/sub-agent';
+import { AgentBus } from '@bolt/agent/lib/.server/llm/sub-agent';
+import type { SubAgentConfig, SubAgentExecutionResult, SubAgentState } from '@bolt/agent/lib/.server/llm/sub-agent';
 
 describe('Sub-Agent Framework Integration', () => {
   let manager: SubAgentManager;

@@ -68,14 +68,11 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
           }),
       },
     });
-    const missingResponse = await fetchPagesStaticAsset(
-      new Request('https://alpha1.bolt.gives/assets/missing.js'),
-      {
-        ASSETS: {
-          fetch: async () => new Response('not found', { status: 404 }),
-        },
+    const missingResponse = await fetchPagesStaticAsset(new Request('https://alpha1.bolt.gives/assets/missing.js'), {
+      ASSETS: {
+        fetch: async () => new Response('not found', { status: 404 }),
       },
-    );
+    });
 
     expect(existingResponse?.status).toBe(200);
     expect(existingResponse?.headers.get('content-type')).toContain('application/javascript');

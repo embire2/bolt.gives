@@ -9,11 +9,13 @@ import mime from 'mime';
 
 // Load `.env.local` if present (do not print secrets).
 const envLocalPath = path.resolve(process.cwd(), '.env.local');
+
 if (fs.existsSync(envLocalPath)) {
   dotenv.config({ path: envLocalPath });
 }
 
 const apiKey = process.env.OPENAI_API_KEY;
+
 if (!apiKey) {
   console.log('[smoke-vision] OPENAI_API_KEY not set; skipping.');
   process.exit(0);
@@ -22,6 +24,7 @@ if (!apiKey) {
 const modelName = process.env.VISION_MODEL || 'gpt-4o-mini';
 
 const imagePath = process.env.VISION_IMAGE_PATH || path.resolve(process.cwd(), 'public', 'boltlogo2.png');
+
 if (!fs.existsSync(imagePath)) {
   console.error(`[smoke-vision] image not found: ${imagePath}`);
   process.exit(1);

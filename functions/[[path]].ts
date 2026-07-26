@@ -6,7 +6,7 @@ import {
   checkRateLimit,
   enforceCsrf,
   setRateLimitStore,
-} from '../app/lib/security';
+} from '@bolt/core/lib/security';
 
 /*
  * Cloudflare Pages entry.
@@ -38,7 +38,8 @@ interface PagesEnv {
 
 const WEBCONTAINER_PREFIXES = ['/webcontainer.connect', '/webcontainer.preview'];
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
-const STATIC_ASSET_EXTENSION_RE = /\.(?:avif|css|eot|gif|ico|jpe?g|js|map|mjs|mp3|mp4|ogg|otf|pdf|png|svg|ttf|wasm|webm|webp|woff2?)$/i;
+const STATIC_ASSET_EXTENSION_RE =
+  /\.(?:avif|css|eot|gif|ico|jpe?g|js|map|mjs|mp3|mp4|ogg|otf|pdf|png|svg|ttf|wasm|webm|webp|woff2?)$/i;
 
 export function shouldProxyRuntimeRequest(pathname: string) {
   return pathname === '/runtime' || pathname.startsWith('/runtime/');
@@ -136,9 +137,11 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
     return proxyRuntimeRequest(request, env);
   }
 
-  // Pages serves existing files before Functions. A static-looking request
-  // reaching this catch-all is therefore missing and should not invoke Remix
-  // SSR, which otherwise emits a full route-error stack for every asset 404.
+  /*
+   * Pages serves existing files before Functions. A static-looking request
+   * reaching this catch-all is therefore missing and should not invoke Remix
+   * SSR, which otherwise emits a full route-error stack for every asset 404.
+   */
   if (isStaticAssetRequest(request)) {
     const assetResponse = await fetchPagesStaticAsset(request, env);
 
@@ -185,14 +188,18 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
 
   const response = await handler(context);
 
-  // 4. Merge security headers. Routes are allowed to override any individual
-  // header (e.g. api.chat.ts sets its own Content-Type for SSE).
+  /*
+   * 4. Merge security headers. Routes are allowed to override any individual
+   * header (e.g. api.chat.ts sets its own Content-Type for SSE).
+   */
   const headers = new Headers(response.headers);
   const security = createSecurityHeaders(env as Record<string, string | undefined>, request);
 
   for (const [key, value] of Object.entries(security)) {
-    // 5. The WebContainer preview/connect routes need relaxed COEP so the
-    // iframe can load cross-origin resources.
+    /*
+     * 5. The WebContainer preview/connect routes need relaxed COEP so the
+     * iframe can load cross-origin resources.
+     */
     if (
       (key === 'Cross-Origin-Embedder-Policy' || key === 'Cross-Origin-Opener-Policy') &&
       WEBCONTAINER_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))

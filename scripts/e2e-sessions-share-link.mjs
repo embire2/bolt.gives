@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
+
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,6 +32,7 @@ async function waitForHttpOk(url, timeoutMs = 90_000) {
   while (Date.now() - started < timeoutMs) {
     try {
       const resp = await fetch(url, { method: 'GET' });
+
       if (resp.ok) {
         return;
       }
@@ -103,6 +104,7 @@ async function createWebDriverSession(driverBaseUrl) {
   });
 
   const sessionId = create?.value?.sessionId || create?.sessionId;
+
   if (!sessionId) {
     throw new Error(`Failed to create WebDriver session: ${JSON.stringify(create).slice(0, 500)}`);
   }
@@ -166,6 +168,7 @@ async function run() {
     await waitForHttpOk(`${BASE_URL}/`);
 
     console.log('[e2e] creating session via /api/sessions...');
+
     const title = `__e2e__ share-link (${new Date().toISOString()})`;
     const save = await requestJson(`${BASE_URL}/api/sessions`, {
       method: 'POST',
@@ -189,11 +192,13 @@ async function run() {
     });
 
     const sessionId = save?.session?.id;
+
     if (!sessionId) {
       throw new Error(`Unexpected save response: ${JSON.stringify(save).slice(0, 500)}`);
     }
 
     console.log('[e2e] creating share slug...');
+
     const share = await requestJson(`${BASE_URL}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,11 +206,13 @@ async function run() {
     });
 
     const shareSlug = share?.shareSlug;
+
     if (!shareSlug) {
       throw new Error(`Unexpected share response: ${JSON.stringify(share).slice(0, 500)}`);
     }
 
     console.log('[e2e] starting geckodriver...');
+
     const driverPort = 4444;
     const driverBaseUrl = `http://127.0.0.1:${driverPort}`;
     const driver = startProcess('geckodriver', ['--port', String(driverPort)], {
@@ -214,6 +221,7 @@ async function run() {
     });
 
     let session;
+
     try {
       // Wait for geckodriver to start listening.
       await waitForHttpOk(`${driverBaseUrl}/status`, 15_000);
@@ -246,16 +254,22 @@ async function run() {
       }
 
       const screenshotB64 = await driverScreenshot(driverBaseUrl, session);
+
       if (typeof screenshotB64 === 'string' && screenshotB64.length > 0) {
         const outDir = path.resolve('docs/screenshots');
         fs.mkdirSync(outDir, { recursive: true });
+
         const outPath = path.join(outDir, 'share-session-e2e.png');
         fs.writeFileSync(outPath, Buffer.from(screenshotB64, 'base64'));
         console.log(`[e2e] wrote screenshot: ${outPath}`);
       }
 
       if (!found) {
-        const bodyText = await driverExecute(driverBaseUrl, session, 'return (document.body && document.body.innerText) || \"\";');
+        const bodyText = await driverExecute(
+          driverBaseUrl,
+          session,
+          'return (document.body && document.body.innerText) || \"\";',
+        );
         throw new Error(`Share link did not restore message in time. bodyText: ${String(bodyText).slice(0, 500)}`);
       }
 
@@ -269,6 +283,7 @@ async function run() {
     }
 
     console.log('[e2e] cleaning up created session row...');
+
     try {
       await fetch(`${supabaseUrl}/rest/v1/bolt_sessions?id=eq.${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',

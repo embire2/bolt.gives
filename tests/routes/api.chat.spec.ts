@@ -6,7 +6,7 @@ import {
   shouldAttemptHostedPreviewVerification,
   shouldUseSynthesizedRunHandoff,
 } from '~/routes/api.chat';
-import { extractLatestUserGoal } from '~/lib/runtime/user-goal';
+import { extractLatestUserGoal } from '@bolt/agent/lib/runtime/user-goal';
 
 describe('resolveContinuationFiles', () => {
   it('prefers the hosted runtime snapshot when it exists', () => {

@@ -17,7 +17,7 @@ describe('/api/bug-report action', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../app/routes/api.bug-report');
+    const { action } = await import('~/routes/api.bug-report');
 
     const request = new Request('https://alpha1.bolt.gives/api/bug-report', {
       method: 'POST',
@@ -77,7 +77,7 @@ describe('/api/bug-report action', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { action } = await import('../app/routes/api.bug-report');
+    const { action } = await import('~/routes/api.bug-report');
 
     const request = new Request('https://alpha1.bolt.gives/api/bug-report', {
       method: 'POST',
