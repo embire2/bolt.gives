@@ -11,7 +11,7 @@
 | Runtime | `@bolt/runtime` | Hosted runtime clients, workspace synchronization, Preview health/recovery, runtime-node provisioning, and command support |
 | Project | `@bolt/project` | Files, history, persistence, Workbench, editor, terminal, actions, collaboration, and project integrations |
 | Control plane | `@bolt/control-plane` | Tenant/admin policy, managed instances, updates, publishing, domains, billing, mail, and audit state |
-| Surfaces | `@bolt/surfaces` | Remix routes, application chrome, Cloudflare adapters, Electron, mobile, Tauri, and cross-domain composition |
+| Surfaces | `@bolt/surfaces` | Remix routes, application chrome, Cloudflare adapters, mobile, Tauri, and cross-domain composition |
 
 Each module has its own `package.json`, `tsconfig.json`, and `AGENTS.md`. Public imports use `@bolt/<module>/*`; the map in `modules/module-map.json` is the source of truth for permitted dependencies.
 

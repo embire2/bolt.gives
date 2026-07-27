@@ -4,7 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/cloudfla
  * Production security middleware.
  *
  * This module is runtime-agnostic: it works on Cloudflare Pages/Workers,
- * Node/Docker (Remix-Node), Electron's in-process Remix handler, and Tauri's
+ * Node/Docker (Remix-Node) and Tauri's
  * WebView. It exposes three primitives:
  *
  *   - createSecurityHeaders(env, request) -> Record<string, string>
@@ -311,7 +311,7 @@ function isProduction(env: EnvLike): boolean {
     return fromEnv === 'production';
   }
 
-  // Fall back to process.env when present (Node / Electron / Tauri / Docker).
+  // Fall back to process.env when present (Node / Tauri / Docker).
   if (typeof process !== 'undefined' && process?.env?.NODE_ENV) {
     return process.env.NODE_ENV === 'production';
   }

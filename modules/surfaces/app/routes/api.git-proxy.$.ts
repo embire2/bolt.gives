@@ -42,6 +42,10 @@ const EXPOSE_HEADERS = [
   'x-redirected-url',
 ];
 
+type StreamingRequestInit = RequestInit & {
+  duplex?: 'half';
+};
+
 // Handle all HTTP methods
 export async function action({ request, params }: ActionFunctionArgs) {
   return handleProxyRequest(request, params['*']);
@@ -108,7 +112,7 @@ async function handleProxyRequest(request: Request, path: string | undefined) {
     console.log('Request headers:', Object.fromEntries(headers.entries()));
 
     // Prepare fetch options
-    const fetchOptions: RequestInit = {
+    const fetchOptions: StreamingRequestInit = {
       method: request.method,
       headers,
       redirect: 'follow',
@@ -118,11 +122,6 @@ async function handleProxyRequest(request: Request, path: string | undefined) {
     if (!['GET', 'HEAD'].includes(request.method)) {
       fetchOptions.body = request.body;
       fetchOptions.duplex = 'half';
-
-      /*
-       * Note: duplex property is removed to ensure TypeScript compatibility
-       * across different environments and versions
-       */
     }
 
     // Forward the request to the target URL

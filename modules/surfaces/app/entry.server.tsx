@@ -23,7 +23,7 @@ export default async function handleRequest(
 
   /*
    * Apply the same CSRF + rate-limit gate we apply in the Cloudflare Pages
-   * entry, so non-CF runtimes (Node/Docker/Electron/Tauri) get identical
+   * entry, so non-CF runtimes (Node/Docker/Tauri) get identical
    * protection.
    */
   if (url.pathname.startsWith('/api/')) {

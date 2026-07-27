@@ -28,8 +28,7 @@
       "@remix-run/cloudflare",
       "vite/client",
       "@cloudflare/workers-types",
-      "@types/dom-speech-recognition",
-      "electron"
+      "@types/dom-speech-recognition"
     ],
     "verbatimModuleSyntax": true
   }

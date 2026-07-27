@@ -8,8 +8,7 @@
     "vitest",
     "vite",
     "typescript",
-    "wrangler",
-    "electron*"
+    "wrangler"
   ],
   "ignoreDirs": [
     "dist",

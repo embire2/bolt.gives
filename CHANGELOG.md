@@ -4,6 +4,32 @@
 
 No unreleased changes.
 
+## v3.3.1 (2026-07-27)
+
+### Changed
+
+- Retired the legacy Electron application and removed its main/preload source, development and packaging scripts, builder/updater/notarization configuration, macOS and Windows packaging assets, direct runtime/build dependencies, TypeScript types, and framework default.
+- Removed the Electron tag workflow so new GitHub releases cannot recreate `.dmg`, `.exe`, `.AppImage`, or other legacy desktop artifacts. Existing published releases contained no Electron assets, so no supported Linux installer was removed.
+- Removed obsolete Electron binary-download workarounds from web, Pages, release-gate, and security CI jobs.
+- Kept the independent experimental Tauri surface available for contributor research while documenting that it is not the planned Premium Windows product.
+- Announced a brand-new native Windows application for a future Premium offering, with a separate architecture, installer, update channel, security review, and release process.
+
+### Added
+
+- Added a regression test that prevents Electron scripts, direct dependencies, source, packaging configuration, or release workflow from being restored accidentally.
+
+### Fixed
+
+- Kept the streamed Git proxy request body compatible with Node's required `duplex: 'half'` option without violating Cloudflare's narrower `RequestInit` type.
+
+### Validation
+
+- `pnpm run lint`
+- `pnpm run typecheck`
+- `pnpm test`
+- `pnpm check:boundaries:strict`
+- `pnpm run build`
+
 ## v3.3.0 (2026-07-26)
 
 ### Changed

@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.3.1',
+    name: 'v3.3.1 focused web and Linux release',
+    description:
+      'The retired Electron app, packaging toolchain, and release workflow are gone. Hosted web and Linux self-host behavior stays unchanged while a separately engineered native Windows app is prepared for a future Premium offering.',
+    releaseDate: '2026-07-27',
+  },
+  {
     id: 'release-v3.3.0',
     name: 'v3.3.0 modular workspace architecture',
     description:

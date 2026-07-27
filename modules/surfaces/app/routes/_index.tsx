@@ -56,7 +56,7 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.3.0 release with six focused modules, faster validation, durable project history, and health-verified Preview recovery.',
+  'Stable v3.3.1 web and Linux release with the retired Electron toolchain removed, six focused modules, durable project history, and health-verified Preview recovery.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',

@@ -10,7 +10,7 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('GitHub workflow dependency setup', () => {
-  it('skips Electron downloads in web-only install jobs', () => {
+  it('does not restore the retired Electron build surface', () => {
     const webOnlyInstallFiles = [
       '.github/actions/setup-and-build/action.yaml',
       '.github/workflows/pages-production.yaml',
@@ -19,7 +19,31 @@ describe('GitHub workflow dependency setup', () => {
     ];
 
     for (const file of webOnlyInstallFiles) {
-      expect(readRepoFile(file), file).toContain("ELECTRON_SKIP_BINARY_DOWNLOAD: '1'");
+      expect(readRepoFile(file), file).not.toContain('ELECTRON_SKIP_BINARY_DOWNLOAD');
+    }
+
+    const packageJson = JSON.parse(readRepoFile('package.json')) as {
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const dependencyNames = [
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.devDependencies ?? {}),
+    ];
+
+    expect(Object.keys(packageJson.scripts ?? {}).some((name) => name.startsWith('electron:'))).toBe(false);
+    expect(dependencyNames.filter((name) => name === 'electron' || name.startsWith('electron-'))).toEqual([]);
+    expect(dependencyNames.filter((name) => name.startsWith('@electron/'))).toEqual([]);
+
+    for (const retiredPath of [
+      '.github/workflows/electron.yml',
+      'electron-builder.yml',
+      'electron-update.yml',
+      'vite-electron.config.ts',
+      'modules/surfaces/electron',
+    ]) {
+      expect(fs.existsSync(path.join(repoRoot, retiredPath)), retiredPath).toBe(false);
     }
   });
 

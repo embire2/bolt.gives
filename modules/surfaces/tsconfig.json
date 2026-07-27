@@ -7,7 +7,6 @@
   "include": [
     "app/**/*.ts",
     "app/**/*.tsx",
-    "electron/**/*.ts",
     "../core/src/globals.d.ts",
     "../core/src/types/global.d.ts",
     "../../worker-configuration.d.ts"

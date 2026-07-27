@@ -55,9 +55,18 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.3.0`)
+## Current Release (`v3.3.1`)
 
-`v3.3.0` is the current stable hosted and self-hosted release. It keeps the durable project, hosted FREE model, runtime, Preview, and PostgreSQL behavior from v3.2.0 while splitting the codebase into six focused workspace modules so contributors and operators can validate only the domains affected by a change.
+`v3.3.1` is the current stable hosted and Linux self-hosted release. It preserves the `v3.3.0` web/runtime behavior while completely retiring the old Electron application and its release pipeline.
+
+### v3.3.1 web and Linux release
+
+- Removed the legacy Electron main/preload implementation, build scripts, packaging assets, updater/notarization configuration, direct dependencies, TypeScript coupling, and GitHub release workflow.
+- Removed obsolete Electron download workarounds from web CI so normal install, quality, Pages, and release jobs use only the dependencies they need.
+- Added regression coverage that fails if Electron scripts, dependencies, source, packaging configuration, or tag workflow return.
+- GitHub releases continue to provide the supported Linux installer; `v3.3.1` does not include an Electron or Windows desktop binary.
+
+We are working on a brand-new native Windows application that will become part of the bolt.gives Premium offering in the near future. It will use a separate architecture, installer, update channel, security review, and release process rather than carrying forward the retired Electron code.
 
 ### v3.3.0 modular workspace architecture
 
@@ -101,7 +110,7 @@ Plain-English commentary is emitted at least every 10 seconds during active work
 
 The E2E also verifies the provider and model carried by the real `/api/chat` requests. A run cannot pass as a ChatGPT-5.6 SOL test if provider bootstrap silently selects another configured provider.
 
-Web-only GitHub build, release, quality, Pages, and security jobs skip the unused Electron runtime download. CodeQL uses one `javascript-typescript` v4 analysis, reducing CI bandwidth and hosted-runner pressure without weakening JavaScript or TypeScript coverage.
+CodeQL uses one `javascript-typescript` v4 analysis, reducing CI bandwidth and hosted-runner pressure without weakening JavaScript or TypeScript coverage. The later `v3.3.1` cleanup removes the unused Electron runtime and its CI download workaround entirely.
 
 Production Pages releases also wait for Cloudflare's immutable deployment URL to serve the expected application shell before the workflow passes. A short edge-propagation window can no longer turn a successful upload into a false release failure.
 
@@ -235,25 +244,25 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.3.0`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.3.1`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v3.3.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.3.1` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.3.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.3.0)
+- Release: [`v3.3.1`](https://github.com/embire2/bolt.gives/releases/tag/v3.3.1)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh)
-- Release commit: see the `v3.3.0` GitHub tag.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.1/install.sh)
+- Release commit: see the `v3.3.1` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.1/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-sudo env BRANCH=v3.3.0 ./install-bolt-gives.sh
+sudo env BRANCH=v3.3.1 ./install-bolt-gives.sh
 ```
 
 The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
@@ -322,7 +331,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - Harden Stripe webhook activation and custom-domain ownership verification.
-- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.0 initial-route budget.
+- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.1 initial-route budget.
 - Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
 
 ### Key improvements planned
@@ -333,7 +342,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Make runtime quotas, collaboration audit data, and installer recovery visible and repeatable.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.3.0`)
+## Current Platform Baseline (`v3.3.1`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.

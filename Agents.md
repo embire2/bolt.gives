@@ -8,13 +8,13 @@ Secondary objective: continue the `v3.4.0` platform-hardening track for managed 
 
 ## Active Release Line
 
-- Stable: `v3.3.0`
+- Stable: `v3.3.1`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.3.0`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.0/install.sh`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.3.1`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.1/install.sh`
 - In progress: `v3.4.0`
 
-`v3.3.0` is the current stable hosted and Linux self-host release. It preserves the durable prompt-to-preview, saved-project, hosted FREE model, runtime, and PostgreSQL baseline while dividing the codebase into six focused workspace modules with independent validation and enforced dependency direction.
+`v3.3.1` is the current stable hosted and Linux self-host release. It preserves the durable prompt-to-preview, saved-project, hosted FREE model, runtime, PostgreSQL, and six-module baseline while retiring the legacy Electron source, dependencies, packaging, and release workflow. A separate native Windows application is planned for a future Premium offering.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 

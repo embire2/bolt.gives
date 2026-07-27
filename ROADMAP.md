@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.3.0`
+- [x] `v3.3.1`
 
 Next release target:
 
@@ -24,8 +24,18 @@ Release theme: finish account and publishing lifecycle hardening, broaden first-
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - [ ] Harden Stripe webhook activation and custom-domain ownership verification.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.0 initial-route budget.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.1 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.3.1 - Shipped
+
+Release theme: retire the legacy Electron release surface without changing the hosted web or Linux self-host runtime.
+
+- [x] Remove all Electron main/preload source, scripts, configuration, packaging assets, direct dependencies, and TypeScript coupling.
+- [x] Remove the Electron tag workflow and obsolete web-CI download workarounds.
+- [x] Add regression coverage that prevents the retired build and release surface from returning.
+- [x] Keep the Linux installer and hosted deployment path unchanged.
+- [x] Announce a separately engineered native Windows application for a future Premium offering.
 
 ## v3.3.0 - Shipped
 
