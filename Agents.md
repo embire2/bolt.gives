@@ -4,17 +4,17 @@
 
 Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is visible, understandable, and verifiable while it happens. Users must be able to start a project, see files and Preview, send follow-up prompts, and understand what changed.
 
-Secondary objective: continue the `v3.4.0` platform-hardening track for managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
+Secondary objective: continue the `v3.5.0` platform-hardening track for Premium lifecycle, managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v3.3.1`
+- Stable: `v3.4.0`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.3.1`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.3.1/install.sh`
-- In progress: `v3.4.0`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.4.0`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.0/install.sh`
+- In progress: `v3.5.0`
 
-`v3.3.1` is the current stable hosted and Linux self-host release. It preserves the durable prompt-to-preview, saved-project, hosted FREE model, runtime, PostgreSQL, and six-module baseline while retiring the legacy Electron source, dependencies, packaging, and release workflow. A separate native Windows application is planned for a future Premium offering.
+`v3.4.0` is the current stable hosted and Linux self-host release. It adds reliable GitHub deployment, protected Cloudflare Pages Direct Upload, OpenWeb.Software FREE publishing, and payment-verified WebCoder.codes Premium projects while preserving the durable prompt-to-preview, saved-project, hosted FREE model, runtime, PostgreSQL, and six-module baseline.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -70,11 +70,11 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
 - Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
-- Project publishing to `https://{subdomain}.bolt.gives` and Stripe Checkout for `$10/month` custom-domain hosting.
+- OpenWeb.Software FREE publishing to `https://{subdomain}.bolt.gives`, direct Cloudflare Pages deployment, and WebCoder.codes Premium custom-domain hosting for `$5` every 28 days.
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 
-## v3.4.0 Priorities
+## v3.5.0 Priorities
 
 - Prompt-to-preview reliability for first generation and follow-up prompts.
 - History-aware project continuation using runtime snapshots and current workspace state.
@@ -138,7 +138,7 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 
 - Free publishing uses `https://{subdomain}.bolt.gives`.
 - Reserved operational subdomains such as `admin`, `create`, `alpha1`, and `ahmad` must not be assigned to users.
-- Custom-domain hosting is `$10/month` through server-side Stripe Checkout.
+- WebCoder.codes Premium custom-domain hosting is `$5` every 28 days through server-side Stripe Checkout and signed webhook fulfillment.
 - Users must receive clear DNS guidance: create an `A` record pointing to the configured bolt.gives server IP.
 
 ## Definition of Done

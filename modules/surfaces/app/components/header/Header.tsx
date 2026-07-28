@@ -7,6 +7,7 @@ import { classNames } from '@bolt/core/utils/classNames';
 import { ChatDescription } from '@bolt/project/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '@bolt/core/lib/version';
 import { BugReportLauncher } from './BugReportLauncher.client';
+import { PremiumStatusBadge } from './PremiumStatusBadge.client';
 
 const HeaderActionButtons = lazy(() =>
   import('./HeaderActionButtons.client').then((module) => ({
@@ -62,6 +63,7 @@ export function Header() {
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <ClientOnly>{() => <BugReportLauncher />}</ClientOnly>
+        <ClientOnly>{() => <PremiumStatusBadge />}</ClientOnly>
         <a
           href="/tenant"
           className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"

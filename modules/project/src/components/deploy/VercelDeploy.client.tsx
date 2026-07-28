@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { ActionCallbackData } from '@bolt/agent/lib/runtime/message-parser';
 import { chatId } from '@bolt/project/lib/persistence/useChatHistory';
 import { formatBuildFailureOutput } from './deployUtils';
+import { createDeploymentArtifact } from './deploymentArtifact';
 
 export function useVercelDeploy() {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -36,14 +37,12 @@ export function useVercelDeploy() {
 
       // Create a deployment artifact for visual feedback
       const deploymentId = `deploy-vercel-project`;
-      workbenchStore.addArtifact({
+      const deployArtifact = await createDeploymentArtifact(workbenchStore, {
         id: deploymentId,
         messageId: deploymentId,
         title: 'Vercel Deployment',
         type: 'standalone',
       });
-
-      const deployArtifact = workbenchStore.artifacts.get()[deploymentId];
 
       // Notify that build is starting
       deployArtifact.runner.handleDeployAction('building', 'running', { source: 'vercel' });

@@ -1,6 +1,6 @@
 {
   "name": "@bolt.gives/mobile",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "main": "index.js",
   "scripts": {
     "start": "expo start",

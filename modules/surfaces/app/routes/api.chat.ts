@@ -51,10 +51,7 @@ import {
 } from '@bolt/runtime/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '@bolt/agent/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '@bolt/agent/lib/.server/llm/api-key-utils';
-import {
-  ensureFreeProviderAvailability,
-  isHostedFreeCreditsExhausted,
-} from '@bolt/agent/lib/.server/llm/free-provider-preflight';
+import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
 import { hydrateWebsiteSourceContext } from '@bolt/agent/lib/.server/llm/web-context';
 import {
   isHostedFreeRelayRequest,
@@ -71,13 +68,13 @@ import {
 import {
   ensureLatestUserMessageSelectionEnvelope,
   resolvePreferredModelProvider,
-  sanitizeSelectionWithApiKeys,
 } from '@bolt/agent/lib/.server/llm/message-selection';
 import {
   fetchHostedRuntimeSnapshotForRequest,
   type HostedRuntimePreviewStatus,
   waitForHostedRuntimePreviewVerificationForRequest,
 } from '@bolt/runtime/lib/.server/hosted-runtime-snapshot';
+import { preparePremiumChatSelection } from '~/lib/.server/premium-chat-selection';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
@@ -1560,21 +1557,23 @@ Next: I will continue and can still use any URL details present in the prompt.`,
           );
         }
 
-        const preferredSelection = resolvePreferredModelProvider(processedMessages, selectedModel, selectedProvider);
-        const sanitizedSelection = sanitizeSelectionWithApiKeys({
-          selection: preferredSelection,
+        const chatSelection = await preparePremiumChatSelection({
+          messages: processedMessages,
+          selectedModel,
+          selectedProvider,
           apiKeys,
-          selectedProviderCookie: selectedProvider,
+          requestUrl: request.url,
+          sessionId: hostedRuntimeSessionId,
+          prompt: latestVisibleUserObjective || latestUserGoal,
+          chatMode: effectiveChatMode,
+          contextFileCount: Object.keys(files || {}).length,
+          env: envVars,
         });
-        resolvedSelectionForLogs = {
-          provider: sanitizedSelection.provider,
-          model: sanitizedSelection.model,
-        };
-        await ensureFreeProviderAvailability({
-          providerName: sanitizedSelection.provider,
-          modelName: sanitizedSelection.model,
-          apiKey: apiKeys[sanitizedSelection.provider],
-        });
+        const { selection: sanitizedSelection, charge: premiumTaskCharge } = chatSelection;
+        processedMessages = chatSelection.messages;
+        resolvedSelectionForLogs = sanitizedSelection;
+        chatSelection.report((event) => dataStream.writeData(event), writeCommentary);
+
         ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
 
         if (processedMessages.length > 3) {
@@ -1851,7 +1850,7 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
           supabaseConnection: supabase,
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
-          maxSteps: maxLLMSteps,
+          maxSteps: premiumTaskCharge ? Math.min(20, Math.max(maxLLMSteps, 12)) : maxLLMSteps,
           onChunk: ({ chunk }) => {
             if (shouldTrackModelStreamChunkActivity(chunk)) {
               markRunActivity();

@@ -8,6 +8,7 @@ import type { ActionCallbackData } from '@bolt/agent/lib/runtime/message-parser'
 import { chatId } from '@bolt/project/lib/persistence/useChatHistory';
 import { getLocalStorage } from '@bolt/project/lib/persistence/localStorage';
 import { formatBuildFailureOutput } from './deployUtils';
+import { createDeploymentArtifact } from './deploymentArtifact';
 
 export function useGitHubDeploy() {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -37,14 +38,12 @@ export function useGitHubDeploy() {
 
       // Create a deployment artifact for visual feedback
       const deploymentId = `deploy-github-project`;
-      workbenchStore.addArtifact({
+      const deployArtifact = await createDeploymentArtifact(workbenchStore, {
         id: deploymentId,
         messageId: deploymentId,
         title: 'GitHub Deployment',
         type: 'standalone',
       });
-
-      const deployArtifact = workbenchStore.artifacts.get()[deploymentId];
 
       // Notify that build is starting
       deployArtifact.runner.handleDeployAction('building', 'running', { source: 'github' });

@@ -78,6 +78,27 @@ import {
   sanitizeProjectDeploymentForClient,
   validateProjectSubdomain,
 } from './project-deployments.mjs';
+import {
+  appendCloudflareProjectDeploymentEvent,
+  buildCloudflareProjectName,
+  inferCloudflareBuildCommand,
+  normalizeCloudflareProjectDeploymentRegistry,
+  sanitizeCloudflareProjectDeployment,
+  selectCloudflareBuildOutput,
+} from './cloudflare-project-deployments.mjs';
+import {
+  DEFAULT_PREMIUM_CREDIT_ALLOWANCE,
+  activatePremiumEntitlement,
+  appendPremiumEntitlementEvent,
+  buildPremiumCheckoutPayload,
+  consumePremiumTaskCredits,
+  normalizePremiumEntitlementRegistry,
+  resolvePremiumStripeEventStatus,
+  sanitizePremiumEntitlement,
+  updatePremiumEntitlementStatus,
+  upsertPendingPremiumEntitlement,
+  verifyStripeWebhookSignature,
+} from './premium-entitlements.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -105,6 +126,8 @@ const MANAGED_INSTANCE_NODE_OPTIONS = process.env.RUNTIME_MANAGED_INSTANCE_NODE_
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
 const MANAGED_INSTANCE_WRANGLER_WORK_DIR =
   process.env.RUNTIME_MANAGED_INSTANCE_WRANGLER_WORK_DIR || '/tmp/bolt-gives-managed-cloudflare';
+const CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR =
+  process.env.RUNTIME_CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR || '/tmp/bolt-gives-project-cloudflare';
 const PREVIEW_READY_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_READY_TIMEOUT_MS || '60000');
 const COMMAND_TIMEOUT_MS = Number(process.env.RUNTIME_COMMAND_TIMEOUT_MS || '900000');
 const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAIT_MS || '12000');
@@ -150,6 +173,11 @@ const RUNTIME_NODE_WORKSPACE_REGISTRY_PATH =
   process.env.RUNTIME_NODE_WORKSPACE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'runtime-node-workspaces.json');
 const PROJECT_DEPLOYMENT_REGISTRY_PATH =
   process.env.RUNTIME_PROJECT_DEPLOYMENT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'project-deployments.json');
+const CLOUDFLARE_PROJECT_DEPLOYMENT_REGISTRY_PATH =
+  process.env.RUNTIME_CLOUDFLARE_PROJECT_DEPLOYMENT_REGISTRY_PATH ||
+  path.join(PERSIST_ROOT, 'cloudflare-project-deployments.json');
+const PREMIUM_ENTITLEMENT_REGISTRY_PATH =
+  process.env.RUNTIME_PREMIUM_ENTITLEMENT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'premium-entitlements.json');
 const PROJECT_DOMAIN_ROOT = process.env.BOLT_PROJECT_DOMAIN_ROOT || 'bolt.gives';
 const PROJECT_PUBLIC_IP =
   process.env.BOLT_PROJECT_PUBLIC_IP ||
@@ -163,7 +191,14 @@ const PROJECT_HTTPS_READY_TIMEOUT_MS = Number(process.env.BOLT_PROJECT_HTTPS_REA
 const PROJECT_HTTPS_READY_INTERVAL_MS = Number(process.env.BOLT_PROJECT_HTTPS_READY_INTERVAL_MS || '1000');
 const STRIPE_PUBLISHABLE_KEY = process.env.BOLT_STRIPE_PUBLISHABLE_KEY || '';
 const STRIPE_SECRET_KEY = process.env.BOLT_STRIPE_SECRET_KEY || '';
-const STRIPE_CUSTOM_DOMAIN_PRICE_USD = Number(process.env.BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD || '10');
+const STRIPE_CUSTOM_DOMAIN_PRICE_USD = Number(process.env.BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD || '5');
+const STRIPE_WEBHOOK_SECRET = process.env.BOLT_STRIPE_WEBHOOK_SECRET || '';
+const PREMIUM_CREDIT_ALLOWANCE = Math.max(
+  1,
+  Number(process.env.BOLT_PREMIUM_CREDIT_ALLOWANCE || DEFAULT_PREMIUM_CREDIT_ALLOWANCE),
+);
+const PREMIUM_INTERNAL_SECRET =
+  process.env.BOLT_PREMIUM_INTERNAL_SECRET || process.env.BOLT_HOSTED_FREE_RELAY_SECRET || '';
 const MANAGED_INSTANCE_REGISTRY_PATH =
   process.env.RUNTIME_MANAGED_INSTANCE_REGISTRY_PATH || path.join(PERSIST_ROOT, 'managed-instance-registry.json');
 const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '0');
@@ -210,6 +245,15 @@ function normalizeBooleanInput(value) {
     String(value || '')
       .trim()
       .toLowerCase(),
+  );
+}
+
+function secretsMatch(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''));
+  const rightBuffer = Buffer.from(String(right || ''));
+
+  return (
+    leftBuffer.length > 0 && leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer)
   );
 }
 
@@ -722,6 +766,18 @@ function getManagedInstanceCloudflareConfig() {
   };
 }
 
+function getCloudflareProjectDeploymentConfig() {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim() || '';
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || '';
+
+  return {
+    enabled: Boolean(apiToken && accountId),
+    apiToken,
+    accountId,
+    sourceBranch: MANAGED_INSTANCE_SOURCE_BRANCH,
+  };
+}
+
 export function buildManagedInstanceRolloutGuardDecision(input = {}) {
   const hasGitMetadata = input.hasGitMetadata !== false;
 
@@ -1054,6 +1110,44 @@ async function writeProjectDeploymentRegistry(registry) {
   await writeJsonAtomically(PROJECT_DEPLOYMENT_REGISTRY_PATH, JSON.stringify(registry, null, 2));
 }
 
+async function ensureCloudflareProjectDeploymentRegistry() {
+  try {
+    const raw = await fs.readFile(CLOUDFLARE_PROJECT_DEPLOYMENT_REGISTRY_PATH, 'utf8');
+    const registry = normalizeCloudflareProjectDeploymentRegistry(JSON.parse(raw));
+    await writeCloudflareProjectDeploymentRegistry(registry);
+
+    return registry;
+  } catch {
+    const registry = normalizeCloudflareProjectDeploymentRegistry({ deployments: [], events: [] });
+    await writeCloudflareProjectDeploymentRegistry(registry);
+
+    return registry;
+  }
+}
+
+async function writeCloudflareProjectDeploymentRegistry(registry) {
+  await writeJsonAtomically(CLOUDFLARE_PROJECT_DEPLOYMENT_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+async function ensurePremiumEntitlementRegistry() {
+  try {
+    const raw = await fs.readFile(PREMIUM_ENTITLEMENT_REGISTRY_PATH, 'utf8');
+    const registry = normalizePremiumEntitlementRegistry(JSON.parse(raw));
+    await writePremiumEntitlementRegistry(registry);
+
+    return registry;
+  } catch {
+    const registry = normalizePremiumEntitlementRegistry({});
+    await writePremiumEntitlementRegistry(registry);
+
+    return registry;
+  }
+}
+
+async function writePremiumEntitlementRegistry(registry) {
+  await writeJsonAtomically(PREMIUM_ENTITLEMENT_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
 function buildAutoRuntimeNodeProjectSlug(sessionId) {
   const hash = crypto
     .createHash('sha1')
@@ -1308,8 +1402,12 @@ async function ensureManagedInstanceWranglerWorkDir(workDir) {
   }
 }
 
-async function runManagedInstanceProcess(command, args, { cwd = REPO_ROOT, env = {}, input = '' } = {}) {
-  const processCwd = resolveManagedInstanceProcessCwd(command, args, cwd);
+async function runManagedInstanceProcess(
+  command,
+  args,
+  { cwd = REPO_ROOT, env = {}, input = '', wranglerWorkDir = MANAGED_INSTANCE_WRANGLER_WORK_DIR } = {},
+) {
+  const processCwd = resolveManagedInstanceProcessCwd(command, args, cwd, wranglerWorkDir);
 
   if (processCwd !== cwd) {
     await ensureManagedInstanceWranglerWorkDir(processCwd);
@@ -5160,6 +5258,389 @@ function runShellCommand(command, args, options = {}) {
   });
 }
 
+async function fetchCloudflareProjectDeploymentProject(projectName) {
+  const config = getCloudflareProjectDeploymentConfig();
+
+  if (!config.enabled) {
+    throw new Error('Cloudflare project deployment is not configured on this runtime.');
+  }
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/pages/projects/${encodeURIComponent(projectName)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${config.apiToken}`,
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload?.success === false) {
+    const apiError = Array.isArray(payload?.errors) && payload.errors[0]?.message ? payload.errors[0].message : null;
+    throw new Error(apiError || `Cloudflare project lookup failed with status ${response.status}.`);
+  }
+
+  return payload?.result || null;
+}
+
+async function ensureCloudflareProjectDeploymentProject(projectName) {
+  const existing = await fetchCloudflareProjectDeploymentProject(projectName);
+
+  if (existing) {
+    return existing;
+  }
+
+  const config = getCloudflareProjectDeploymentConfig();
+  const result = await runManagedInstanceProcess(
+    'pnpm',
+    ['exec', 'wrangler', 'pages', 'project', 'create', projectName, '--production-branch', config.sourceBranch],
+    {
+      env: {
+        CLOUDFLARE_API_TOKEN: config.apiToken,
+        CLOUDFLARE_ACCOUNT_ID: config.accountId,
+      },
+      wranglerWorkDir: CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR,
+    },
+  );
+
+  if (result.code !== 0 && !/already exists/i.test(`${result.stdout}\n${result.stderr}`)) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || 'Failed to create the Cloudflare Pages project.');
+  }
+
+  return await fetchCloudflareProjectDeploymentProject(projectName);
+}
+
+function runProjectBuildCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: {
+        ...process.env,
+        CI: '1',
+        FORCE_COLOR: '0',
+        NODE_OPTIONS,
+      },
+    });
+    const timeoutMs = Number(options.timeoutMs || COMMAND_TIMEOUT_MS);
+    const maxOutputChars = 120_000;
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateSessionProcessHandle({ process: child, detached: false });
+    }, timeoutMs);
+
+    child.stdout?.on('data', (chunk) => {
+      stdout = `${stdout}${chunk.toString()}`.slice(-maxOutputChars);
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr = `${stderr}${chunk.toString()}`.slice(-maxOutputChars);
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+
+      if (timedOut) {
+        reject(new Error(`Project build timed out after ${Math.round(timeoutMs / 1000)} seconds.`));
+        return;
+      }
+
+      if ((code ?? 1) !== 0) {
+        reject(new Error((stderr || stdout || `Build exited with ${code ?? 1}`).trim()));
+        return;
+      }
+
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function shouldSkipCloudflareDeploymentPath(relativePath) {
+  const segments = String(relativePath || '')
+    .split(path.sep)
+    .filter(Boolean);
+  const baseName = segments.at(-1) || '';
+
+  return (
+    segments.some((segment) => ['node_modules', '.git', '.cache', '.next', 'coverage'].includes(segment)) ||
+    baseName === '.DS_Store' ||
+    baseName === '.gitignore' ||
+    baseName.startsWith('.env') ||
+    /\.(?:log|pem|key|crt)$/i.test(baseName)
+  );
+}
+
+async function copyCloudflareDeploymentTree(sourceRoot, targetRoot) {
+  const state = { files: 0 };
+
+  async function copyEntry(sourcePath, targetPath) {
+    const relativePath = path.relative(sourceRoot, sourcePath);
+
+    if (relativePath && shouldSkipCloudflareDeploymentPath(relativePath)) {
+      return;
+    }
+
+    const stats = await fs.lstat(sourcePath);
+
+    if (stats.isSymbolicLink()) {
+      return;
+    }
+
+    if (stats.isDirectory()) {
+      await fs.mkdir(targetPath, { recursive: true });
+
+      const entries = await fs.readdir(sourcePath);
+
+      for (const entry of entries) {
+        await copyEntry(path.join(sourcePath, entry), path.join(targetPath, entry));
+      }
+
+      return;
+    }
+
+    if (!stats.isFile()) {
+      return;
+    }
+
+    if (stats.size > 25 * 1024 * 1024) {
+      throw new Error(`Cloudflare Pages cannot upload ${relativePath || path.basename(sourcePath)} above 25 MiB.`);
+    }
+
+    state.files += 1;
+
+    if (state.files > 20_000) {
+      throw new Error('Cloudflare Pages deployment exceeds the 20,000 file Direct Upload limit.');
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+  }
+
+  await copyEntry(sourceRoot, targetRoot);
+
+  return state;
+}
+
+function inferConfiguredBuildOutputDirectory(packageJson = {}) {
+  const configured =
+    packageJson?.bolt?.build?.outputDirectory ||
+    packageJson?.deploy?.outputDirectory ||
+    packageJson?.config?.outputDirectory ||
+    '';
+
+  if (configured) {
+    return String(configured);
+  }
+
+  const buildScript = String(packageJson?.scripts?.build || '');
+  const outDirMatch = buildScript.match(/--outDir(?:=|\s+)([^\s]+)/i);
+
+  return outDirMatch?.[1] || '';
+}
+
+async function prepareCloudflareProjectDeployment(session, projectName) {
+  const packageJsonRecord = await readWorkspacePackageJson(session);
+  const packageJson = packageJsonRecord?.json || {};
+  const buildCommand = inferCloudflareBuildCommand(packageJson, {
+    pnpm: await exists(path.join(session.dir, 'pnpm-lock.yaml')),
+    yarn: await exists(path.join(session.dir, 'yarn.lock')),
+    bun: await exists(path.join(session.dir, 'bun.lockb')),
+  });
+
+  if (buildCommand) {
+    await runProjectBuildCommand(buildCommand.command, buildCommand.args, { cwd: session.dir });
+  }
+
+  const directoryEntries = await fs.readdir(session.dir, { withFileTypes: true });
+  const outputDirectory = selectCloudflareBuildOutput({
+    configuredDirectory: inferConfiguredBuildOutputDirectory(packageJson),
+    directories: directoryEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
+    hasRootIndex: await exists(path.join(session.dir, 'index.html')),
+    hasBuildScript: Boolean(packageJson?.scripts?.build),
+  });
+
+  if (!outputDirectory) {
+    throw new Error(
+      'The project built successfully but no static output directory was found. Configure dist, build, out, output, or public before deploying to Cloudflare Pages.',
+    );
+  }
+
+  const sourceDirectory = outputDirectory === '.' ? session.dir : path.join(session.dir, outputDirectory);
+
+  if (!(await exists(path.join(sourceDirectory, 'index.html')))) {
+    throw new Error(
+      `Cloudflare Pages output "${outputDirectory}" has no index.html. Export the app as a static site before deploying.`,
+    );
+  }
+
+  const stagingDirectory = path.join(PERSIST_ROOT, 'cloudflare-deployments', projectName);
+  await fs.rm(stagingDirectory, { recursive: true, force: true });
+  await copyCloudflareDeploymentTree(sourceDirectory, stagingDirectory);
+
+  if (!(await exists(path.join(stagingDirectory, '_redirects')))) {
+    await fs.writeFile(path.join(stagingDirectory, '_redirects'), '/* /index.html 200\n', 'utf8');
+  }
+
+  return { outputDirectory, stagingDirectory };
+}
+
+async function waitForCloudflareDeploymentHealth(urls, timeoutMs = 45_000) {
+  const candidates = [...new Set((Array.isArray(urls) ? urls : [urls]).filter(Boolean))];
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = null;
+  let lastError = null;
+
+  while (Date.now() <= deadline) {
+    for (const url of candidates) {
+      try {
+        const response = await fetch(url, { redirect: 'manual' });
+        lastStatus = response.status;
+
+        if (response.status >= 200 && response.status < 400) {
+          return { ok: true, status: response.status, url };
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    await delay(1_500);
+  }
+
+  throw new Error(
+    `Cloudflare deployment did not become healthy: ${lastStatus || lastError?.message || 'no response received'}.`,
+  );
+}
+
+async function deploySessionProjectToCloudflare(session, requestedName) {
+  const config = getCloudflareProjectDeploymentConfig();
+
+  if (!config.enabled) {
+    throw new Error('Cloudflare deployment is unavailable because the server API connection is not configured.');
+  }
+
+  const projectName = buildCloudflareProjectName(session.id, requestedName);
+  const registry = await ensureCloudflareProjectDeploymentRegistry();
+  const now = new Date().toISOString();
+  let deployment = registry.deployments.find((entry) => entry.sessionId === session.id);
+
+  if (deployment && deployment.projectName !== projectName) {
+    throw new Error(
+      `This project already deploys to ${deployment.projectName}. Reuse its existing Cloudflare project name.`,
+    );
+  }
+
+  if (!deployment) {
+    deployment = {
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      requestedName: String(requestedName || ''),
+      projectName,
+      pagesUrl: `https://${projectName}.pages.dev`,
+      deploymentUrl: null,
+      status: 'building',
+      buildOutputDirectory: null,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    registry.deployments.unshift(deployment);
+  } else {
+    deployment.status = 'building';
+    deployment.lastError = null;
+    deployment.updatedAt = now;
+  }
+
+  appendCloudflareProjectDeploymentEvent(registry, {
+    actor: 'runtime-session',
+    action: 'cloudflare-project.deploy-started',
+    target: projectName,
+    details: { sessionId: session.id },
+  });
+  await writeCloudflareProjectDeploymentRegistry(registry);
+
+  try {
+    const prepared = await prepareCloudflareProjectDeployment(session, projectName);
+    await ensureCloudflareProjectDeploymentProject(projectName);
+
+    const result = await runManagedInstanceProcess(
+      'pnpm',
+      [
+        'exec',
+        'wrangler',
+        'pages',
+        'deploy',
+        prepared.stagingDirectory,
+        '--project-name',
+        projectName,
+        '--branch',
+        config.sourceBranch,
+        '--commit-dirty=true',
+      ],
+      {
+        env: {
+          CLOUDFLARE_API_TOKEN: config.apiToken,
+          CLOUDFLARE_ACCOUNT_ID: config.accountId,
+        },
+        wranglerWorkDir: CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR,
+      },
+    );
+
+    if (result.code !== 0) {
+      throw new Error(result.stderr.trim() || result.stdout.trim() || 'Cloudflare Pages deployment failed.');
+    }
+
+    const deploymentUrl =
+      String(result.stdout || result.stderr)
+        .match(/https:\/\/[a-z0-9.-]+\.pages\.dev/gi)
+        ?.at(-1) || `https://${projectName}.pages.dev`;
+    const pagesUrl = `https://${projectName}.pages.dev`;
+    const health = await waitForCloudflareDeploymentHealth([deploymentUrl, pagesUrl]);
+
+    deployment.pagesUrl = pagesUrl;
+    deployment.deploymentUrl = deploymentUrl;
+    deployment.status = 'active';
+    deployment.buildOutputDirectory = prepared.outputDirectory;
+    deployment.lastError = null;
+    deployment.updatedAt = new Date().toISOString();
+    appendCloudflareProjectDeploymentEvent(registry, {
+      actor: 'runtime-session',
+      action: 'cloudflare-project.deployed',
+      target: projectName,
+      details: {
+        sessionId: session.id,
+        deploymentUrl,
+        healthcheckUrl: health.url,
+        buildOutputDirectory: prepared.outputDirectory,
+      },
+    });
+    await writeCloudflareProjectDeploymentRegistry(registry);
+
+    return deployment;
+  } catch (error) {
+    deployment.status = 'failed';
+    deployment.lastError = error instanceof Error ? error.message : 'Cloudflare deployment failed.';
+    deployment.updatedAt = new Date().toISOString();
+    appendCloudflareProjectDeploymentEvent(registry, {
+      actor: 'runtime-session',
+      action: 'cloudflare-project.failed',
+      target: projectName,
+      details: { sessionId: session.id, error: deployment.lastError },
+    });
+    await writeCloudflareProjectDeploymentRegistry(registry);
+    throw error;
+  }
+}
+
 function getCloudflareApiConfig() {
   return {
     token: String(process.env.CLOUDFLARE_API_TOKEN || '').trim(),
@@ -5401,32 +5882,13 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
   }
 
   const origin = getRequestOrigin(req);
-  const unitAmount = Math.round(STRIPE_CUSTOM_DOMAIN_PRICE_USD * 100);
-  const payload = {
-    mode: 'subscription',
-    success_url: `${origin}/chat?custom_domain=success&domain=${encodeURIComponent(customDomain)}`,
-    cancel_url: `${origin}/chat?custom_domain=cancelled&domain=${encodeURIComponent(customDomain)}`,
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: 'usd',
-          unit_amount: unitAmount,
-          recurring: { interval: 'month' },
-          product_data: {
-            name: 'bolt.gives custom domain hosting',
-            description: `$${STRIPE_CUSTOM_DOMAIN_PRICE_USD}/month hosting for ${customDomain}`,
-          },
-        },
-      },
-    ],
-    metadata: {
-      sessionId: deployment.sessionId,
-      subdomain: deployment.subdomain,
-      boltHostname: deployment.hostname,
-      customDomain,
-    },
-  };
+  const payload = buildPremiumCheckoutPayload({
+    origin,
+    deployment,
+    customDomain,
+    priceUsd: STRIPE_CUSTOM_DOMAIN_PRICE_USD,
+    creditsAllowance: PREMIUM_CREDIT_ALLOWANCE,
+  });
 
   if (customerEmail && isLikelyValidEmail(customerEmail)) {
     payload.customer_email = customerEmail;
@@ -5452,6 +5914,183 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
     checkoutUrl: data.url,
     publishableKey: STRIPE_PUBLISHABLE_KEY || null,
   };
+}
+
+function stripeTimestampToIso(value) {
+  const seconds = Number(value);
+
+  return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
+}
+
+async function retrieveStripeSubscription(subscriptionId) {
+  if (!subscriptionId || !STRIPE_SECRET_KEY) {
+    return null;
+  }
+
+  const response = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `Stripe subscription lookup failed with status ${response.status}.`);
+  }
+
+  return payload;
+}
+
+function getStripeSubscriptionPeriod(subscription) {
+  const firstItem = subscription?.items?.data?.[0] || {};
+
+  return {
+    periodStart: stripeTimestampToIso(subscription?.current_period_start || firstItem.current_period_start),
+    periodEnd: stripeTimestampToIso(subscription?.current_period_end || firstItem.current_period_end),
+  };
+}
+
+async function markPremiumProjectDomainPaid(entitlement) {
+  const registry = await ensureProjectDeploymentRegistry();
+  const deployment = registry.deployments.find(
+    (entry) => entry.id === entitlement.deploymentId || entry.sessionId === entitlement.sessionId,
+  );
+
+  if (!deployment) {
+    return;
+  }
+
+  const customDomain = deployment.customDomains.find((entry) => entry.domain === entitlement.customDomain);
+
+  if (customDomain) {
+    customDomain.status = 'pending-dns';
+    customDomain.updatedAt = new Date().toISOString();
+  }
+
+  deployment.status = 'active';
+  deployment.updatedAt = new Date().toISOString();
+  appendProjectDeploymentEvent(registry, {
+    actor: 'stripe-webhook',
+    action: 'project.premium.activated',
+    target: entitlement.customDomain,
+    details: {
+      sessionId: entitlement.sessionId,
+      deploymentId: entitlement.deploymentId,
+    },
+  });
+  await writeProjectDeploymentRegistry(registry);
+}
+
+async function applyPremiumStripeEvent(event) {
+  const registry = await ensurePremiumEntitlementRegistry();
+
+  if (registry.processedStripeEventIds.includes(event.id)) {
+    return { duplicate: true, handled: true };
+  }
+
+  const object = event?.data?.object || {};
+  const eventType = String(event?.type || '');
+  let subscriptionId =
+    typeof object.subscription === 'string'
+      ? object.subscription
+      : typeof object?.parent?.subscription_details?.subscription === 'string'
+        ? object.parent.subscription_details.subscription
+        : typeof object.id === 'string' && object.object === 'subscription'
+          ? object.id
+          : null;
+  let metadata = {
+    ...(object?.parent?.subscription_details?.metadata || {}),
+    ...(object.metadata || {}),
+  };
+  let subscription = object.object === 'subscription' ? object : null;
+
+  if (subscriptionId && !subscription) {
+    subscription = await retrieveStripeSubscription(subscriptionId);
+    metadata = { ...(subscription?.metadata || {}), ...metadata };
+  }
+
+  const sessionId = String(metadata.sessionId || object.client_reference_id || '');
+  let entitlement =
+    registry.entitlements.find((entry) => entry.stripeCheckoutSessionId === object.id) ||
+    registry.entitlements.find((entry) => subscriptionId && entry.stripeSubscriptionId === subscriptionId) ||
+    registry.entitlements.find((entry) => sessionId && entry.sessionId === sessionId);
+  const isWebCoderEvent = metadata.kind === 'webcoder-premium' || Boolean(entitlement);
+
+  if (!isWebCoderEvent) {
+    registry.processedStripeEventIds = [...registry.processedStripeEventIds.slice(-999), event.id];
+    await writePremiumEntitlementRegistry(registry);
+
+    return { duplicate: false, handled: false };
+  }
+
+  if (!entitlement && sessionId && metadata.deploymentId) {
+    entitlement = upsertPendingPremiumEntitlement(registry, {
+      sessionId,
+      deploymentId: String(metadata.deploymentId),
+      customDomain: String(metadata.customDomain || ''),
+      stripeCheckoutSessionId: object.object === 'checkout.session' ? object.id : null,
+      creditsAllowance: Number(metadata.creditsAllowance || PREMIUM_CREDIT_ALLOWANCE),
+    });
+  }
+
+  if (!entitlement) {
+    throw new Error('Stripe Premium event could not be matched to a project entitlement.');
+  }
+
+  if (['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType)) {
+    if (eventType.startsWith('checkout.') && object.payment_status === 'unpaid') {
+      updatePremiumEntitlementStatus(entitlement, 'pending', event.id);
+    } else {
+      subscriptionId = subscriptionId || entitlement.stripeSubscriptionId;
+      subscription = subscription || (await retrieveStripeSubscription(subscriptionId));
+
+      const period = getStripeSubscriptionPeriod(subscription);
+      activatePremiumEntitlement(entitlement, {
+        eventId: event.id,
+        checkoutSessionId: eventType.startsWith('checkout.') ? object.id : entitlement.stripeCheckoutSessionId,
+        subscriptionId,
+        customerId:
+          typeof object.customer === 'string'
+            ? object.customer
+            : typeof subscription?.customer === 'string'
+              ? subscription.customer
+              : null,
+        ...period,
+      });
+      await markPremiumProjectDomainPaid(entitlement);
+    }
+  } else {
+    const status = resolvePremiumStripeEventStatus(eventType, object.status);
+
+    if (status) {
+      updatePremiumEntitlementStatus(entitlement, status, event.id);
+
+      if (status === 'active') {
+        const period = getStripeSubscriptionPeriod(object);
+        activatePremiumEntitlement(entitlement, {
+          eventId: event.id,
+          subscriptionId: object.id,
+          customerId: typeof object.customer === 'string' ? object.customer : null,
+          ...period,
+        });
+        await markPremiumProjectDomainPaid(entitlement);
+      }
+    }
+  }
+
+  appendPremiumEntitlementEvent(registry, {
+    actor: 'stripe-webhook',
+    action: `premium.stripe.${eventType}`,
+    target: entitlement.id,
+    details: {
+      sessionId: entitlement.sessionId,
+      status: entitlement.status,
+    },
+  });
+  registry.processedStripeEventIds = [...registry.processedStripeEventIds.slice(-999), event.id];
+  await writePremiumEntitlementRegistry(registry);
+
+  return { duplicate: false, handled: true };
 }
 
 async function proxyPublishedProjectRequest(req, res, deployment) {
@@ -6628,12 +7267,18 @@ async function maybeHandlePublishedProjectUpgrade(req, socket, head) {
   return true;
 }
 
-async function readJsonBody(req) {
+async function readRawBody(req) {
   let raw = '';
 
   for await (const chunk of req) {
     raw += chunk.toString();
   }
+
+  return raw;
+}
+
+async function readJsonBody(req) {
+  const raw = await readRawBody(req);
 
   if (!raw) {
     return {};
@@ -6658,6 +7303,30 @@ export function createRuntimeServer() {
     const url = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
     const pathname = url.pathname;
     const searchParams = url.searchParams;
+
+    if (req.method === 'POST' && pathname === '/runtime/billing/stripe/webhook') {
+      try {
+        if (!STRIPE_WEBHOOK_SECRET) {
+          sendText(res, 503, 'Stripe webhook verification is not configured.');
+          return;
+        }
+
+        const rawBody = await readRawBody(req);
+        const signature = String(req.headers['stripe-signature'] || '');
+
+        if (!verifyStripeWebhookSignature(rawBody, signature, STRIPE_WEBHOOK_SECRET)) {
+          sendText(res, 400, 'Invalid Stripe webhook signature.');
+          return;
+        }
+
+        const event = JSON.parse(rawBody);
+        const result = await applyPremiumStripeEvent(event);
+        sendJson(res, 200, { received: true, ...result });
+      } catch (error) {
+        sendText(res, 400, error instanceof Error ? error.message : 'Stripe webhook processing failed.');
+      }
+      return;
+    }
 
     if (!pathname.startsWith('/runtime/') && (await maybeHandlePublishedProjectRequest(req, res))) {
       return;
@@ -7132,7 +7801,11 @@ export function createRuntimeServer() {
     const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
     const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
     const publishMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/publish$/);
+    const cloudflareDeployMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/deploy\/cloudflare$/);
     const customDomainCheckoutMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/custom-domain\/checkout$/);
+    const premiumStatusMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium$/);
+    const premiumCreditsConsumeMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium\/credits\/consume$/);
+    const premiumDomainVerifyMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium\/domain\/verify$/);
 
     if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
       try {
@@ -8187,6 +8860,156 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'GET' && premiumStatusMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(premiumStatusMatch[1]);
+        const registry = await ensurePremiumEntitlementRegistry();
+        const entitlement = registry.entitlements.find((entry) => entry.sessionId === requestedSessionId);
+
+        sendJson(res, 200, {
+          ok: true,
+          premium: sanitizePremiumEntitlement(entitlement),
+          brand: 'WebCoder.codes',
+          billing: {
+            priceUsd: STRIPE_CUSTOM_DOMAIN_PRICE_USD,
+            intervalDays: 28,
+          },
+          features: [
+            'Deep Build orchestration',
+            'complexity-priced task credits',
+            'production preview verification',
+            'custom-domain hosting',
+            'priority recovery',
+            'deployment health checks',
+          ],
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect Premium status.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && premiumCreditsConsumeMatch) {
+      try {
+        if (!PREMIUM_INTERNAL_SECRET) {
+          sendText(res, 503, 'Premium credit metering is not configured.');
+          return;
+        }
+
+        if (!secretsMatch(req.headers['x-bolt-premium-internal'], PREMIUM_INTERNAL_SECRET)) {
+          sendText(res, 401, 'Premium credit metering authorization failed.');
+          return;
+        }
+
+        const requestedSessionId = normalizeSessionId(premiumCreditsConsumeMatch[1]);
+        const body = await readJsonBody(req);
+        const prompt = String(body.prompt || '').slice(0, 100_000);
+        const registry = await ensurePremiumEntitlementRegistry();
+        const result = consumePremiumTaskCredits(registry, {
+          sessionId: requestedSessionId,
+          prompt,
+          chatMode: body.chatMode === 'build' ? 'build' : 'discuss',
+          contextFileCount: Math.min(500, Math.max(0, Number(body.contextFileCount || 0))),
+        });
+
+        if (!result.ok) {
+          sendJson(res, result.reason === 'credits-exhausted' ? 402 : 403, {
+            ok: false,
+            reason: result.reason,
+            creditsRequired: result.credits,
+            creditsRemaining: result.remaining,
+          });
+          return;
+        }
+
+        appendPremiumEntitlementEvent(registry, {
+          actor: 'premium-agent',
+          action: 'premium.credits.consumed',
+          target: result.entitlement.id,
+          details: {
+            sessionId: requestedSessionId,
+            credits: result.credits,
+            remaining: result.remaining,
+            complexity: result.usage.complexity,
+          },
+        });
+        await writePremiumEntitlementRegistry(registry);
+        sendJson(res, 200, {
+          ok: true,
+          creditsCharged: result.credits,
+          creditsRemaining: result.remaining,
+          complexity: result.usage.complexity,
+          premium: sanitizePremiumEntitlement(result.entitlement),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record Premium task credits.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && premiumDomainVerifyMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(premiumDomainVerifyMatch[1]);
+        const premiumRegistry = await ensurePremiumEntitlementRegistry();
+        const entitlement = premiumRegistry.entitlements.find(
+          (entry) => entry.sessionId === requestedSessionId && entry.status === 'active',
+        );
+
+        if (!entitlement) {
+          sendText(res, 403, 'WebCoder Premium must be active before verifying a custom domain.');
+          return;
+        }
+
+        const deploymentRegistry = await ensureProjectDeploymentRegistry();
+        const deployment = deploymentRegistry.deployments.find(
+          (entry) => entry.id === entitlement.deploymentId || entry.sessionId === requestedSessionId,
+        );
+        const customDomain = deployment?.customDomains.find((entry) => entry.domain === entitlement.customDomain);
+
+        if (!deployment || !customDomain) {
+          sendText(res, 404, 'The Premium custom-domain assignment was not found.');
+          return;
+        }
+
+        const dnsStatus = await resolveExistingProjectDnsStatus(entitlement.customDomain);
+
+        if (!dnsStatus) {
+          sendJson(res, 200, {
+            ok: false,
+            status: 'pending-dns',
+            message: `Create an A record for ${entitlement.customDomain} pointing to ${PROJECT_PUBLIC_IP}, then retry verification.`,
+            dnsInstructions: buildCustomDomainDnsInstructions(entitlement.customDomain, PROJECT_PUBLIC_IP),
+          });
+          return;
+        }
+
+        const caddy = await ensureProjectCaddyHost(entitlement.customDomain);
+        customDomain.status = caddy.status === 'active' ? 'active' : 'pending-dns';
+        customDomain.updatedAt = new Date().toISOString();
+        deployment.updatedAt = customDomain.updatedAt;
+        appendProjectDeploymentEvent(deploymentRegistry, {
+          actor: 'premium-domain-verification',
+          action: `project.custom-domain.${customDomain.status}`,
+          target: entitlement.customDomain,
+          details: {
+            sessionId: requestedSessionId,
+            caddyStatus: caddy.status,
+          },
+        });
+        await writeProjectDeploymentRegistry(deploymentRegistry);
+        sendJson(res, 200, {
+          ok: customDomain.status === 'active',
+          status: customDomain.status,
+          message: caddy.message,
+          url: customDomain.status === 'active' ? `https://${entitlement.customDomain}` : null,
+          dnsInstructions: buildCustomDomainDnsInstructions(entitlement.customDomain, PROJECT_PUBLIC_IP),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Premium custom-domain verification failed.');
+      }
+      return;
+    }
+
     if (req.method === 'POST' && publishMatch) {
       try {
         const requestedSessionId = normalizeSessionId(publishMatch[1]);
@@ -8280,6 +9103,26 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && cloudflareDeployMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(cloudflareDeployMatch[1]);
+        const session = getSession(requestedSessionId);
+        const body = await readJsonBody(req);
+        const requestedName = String(body.projectName || body.name || requestedSessionId).trim();
+        const deployment = await runSessionOperation(session, () =>
+          deploySessionProjectToCloudflare(session, requestedName),
+        );
+
+        sendJson(res, 200, {
+          ok: true,
+          deployment: sanitizeCloudflareProjectDeployment(deployment),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to deploy the project to Cloudflare.');
+      }
+      return;
+    }
+
     if (req.method === 'POST' && customDomainCheckoutMatch) {
       try {
         const requestedSessionId = normalizeSessionId(customDomainCheckoutMatch[1]);
@@ -8342,12 +9185,33 @@ export function createRuntimeServer() {
         });
         await writeProjectDeploymentRegistry(registry);
 
+        const premiumRegistry = await ensurePremiumEntitlementRegistry();
+        const entitlement = upsertPendingPremiumEntitlement(premiumRegistry, {
+          sessionId: requestedSessionId,
+          deploymentId: deployment.id,
+          customDomain,
+          stripeCheckoutSessionId: checkout.checkoutSessionId,
+          creditsAllowance: PREMIUM_CREDIT_ALLOWANCE,
+        });
+        appendPremiumEntitlementEvent(premiumRegistry, {
+          actor: 'runtime-session',
+          action: 'premium.checkout-created',
+          target: entitlement.id,
+          details: {
+            sessionId: requestedSessionId,
+            deploymentId: deployment.id,
+            customDomain,
+          },
+        });
+        await writePremiumEntitlementRegistry(premiumRegistry);
+
         sendJson(res, 200, {
           ok: true,
           checkoutUrl: checkout.checkoutUrl,
           publishableKey: checkout.publishableKey,
           dnsInstructions: buildCustomDomainDnsInstructions(customDomain, PROJECT_PUBLIC_IP),
           deployment: sanitizeProjectDeploymentForClient(deployment, { serverIp: PROJECT_PUBLIC_IP }),
+          premium: sanitizePremiumEntitlement(entitlement),
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to start custom-domain checkout.');

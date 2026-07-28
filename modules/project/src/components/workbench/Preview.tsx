@@ -31,6 +31,7 @@ import {
   resolvePreviewTransitionRevision,
   shouldSyncHostedPreviewTransition,
 } from './preview-url';
+import { usePremiumDomainVerification } from './usePremiumDomainVerification';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -126,10 +127,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     windowWidth: window.innerWidth,
     pointerId: null as number | null,
   });
-
-  // Reduce scaling factor to make resizing less sensitive
   const SCALING_FACTOR = 1;
-
   const [isWindowSizeDropdownOpen, setIsWindowSizeDropdownOpen] = useState(false);
   const [selectedWindowSize, setSelectedWindowSize] = useState<WindowSize>(DEFAULT_WINDOW_SIZE);
   const [isLandscape, setIsLandscape] = useState(false);
@@ -143,6 +141,8 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const lastPreviewRevisionRef = useRef<number>(0);
   const lastHostedPreviewReloadKeyRef = useRef<string | null>(null);
   const lastAppliedHostedRecoveryTokenRef = useRef<number | null>(null);
+  usePremiumDomainVerification(activePreview?.baseUrl, setPublishStatus);
+
   const lastReloadedHostedRecoveryTokenRef = useRef<number | null>(null);
   const lastAppliedHostedSnapshotRevisionRef = useRef<number | null>(null);
   const lastHostedPreviewEventAtRef = useRef<number>(0);
@@ -1132,13 +1132,13 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       return;
     }
 
-    const customDomain = window.prompt('Enter the custom domain you want to host for $10/month:');
+    const customDomain = window.prompt('WebCoder.codes Premium custom domain ($5 every 28 days; 10,000 credits):');
 
     if (!customDomain) {
       return;
     }
 
-    setPublishStatus('Creating Stripe Checkout for custom-domain hosting...');
+    setPublishStatus('Creating secure Stripe Checkout for WebCoder.codes Premium...');
 
     try {
       const result = await createHostedRuntimeCustomDomainCheckout({
@@ -1319,18 +1319,18 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 onClick={publishProject}
                 disabled={!activePreview}
                 className="hidden rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 md:inline-flex dark:text-emerald-200"
-                title="Publish this project to a bolt.gives subdomain"
+                title="Deploy free to OpenWeb.Software with a shareable bolt.gives subdomain"
               >
-                Publish
+                OpenWeb FREE
               </button>
               <button
                 type="button"
                 onClick={startCustomDomainCheckout}
                 disabled={!activePreview}
                 className="hidden rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex dark:text-sky-200"
-                title="Host this project on a custom domain for $10/month"
+                title="Upgrade this project to WebCoder.codes Premium for $5 every 28 days"
               >
-                Custom domain
+                WebCoder Premium
               </button>
             </>
           )}

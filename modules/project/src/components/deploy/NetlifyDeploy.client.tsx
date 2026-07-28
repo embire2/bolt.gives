@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { ActionCallbackData } from '@bolt/agent/lib/runtime/message-parser';
 import { chatId } from '@bolt/project/lib/persistence/useChatHistory';
 import { formatBuildFailureOutput } from './deployUtils';
+import { createDeploymentArtifact } from './deploymentArtifact';
 
 export function useNetlifyDeploy() {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -36,14 +37,12 @@ export function useNetlifyDeploy() {
 
       // Create a deployment artifact for visual feedback
       const deploymentId = `deploy-artifact`;
-      workbenchStore.addArtifact({
+      const deployArtifact = await createDeploymentArtifact(workbenchStore, {
         id: deploymentId,
         messageId: deploymentId,
         title: 'Netlify Deployment',
         type: 'standalone',
       });
-
-      const deployArtifact = workbenchStore.artifacts.get()[deploymentId];
 
       // Notify that build is starting
       deployArtifact.runner.handleDeployAction('building', 'running', { source: 'netlify' });

@@ -13,6 +13,7 @@ import { useVercelDeploy } from '@bolt/project/components/deploy/VercelDeploy.cl
 import { useNetlifyDeploy } from '@bolt/project/components/deploy/NetlifyDeploy.client';
 import { useGitHubDeploy } from '@bolt/project/components/deploy/GitHubDeploy.client';
 import { useGitLabDeploy } from '@bolt/project/components/deploy/GitLabDeploy.client';
+import { useCloudflareDeploy, useOpenWebDeploy } from '@bolt/project/components/deploy/HostedDeploy.client';
 
 const LazyGitHubDeploymentDialog = lazy(() =>
   import('@bolt/project/components/deploy/GitHubDeploymentDialog').then((module) => ({
@@ -30,6 +31,8 @@ interface DeployButtonProps {
   onNetlifyDeploy?: () => Promise<void>;
   onGitHubDeploy?: () => Promise<void>;
   onGitLabDeploy?: () => Promise<void>;
+  onCloudflareDeploy?: () => Promise<void>;
+  onOpenWebDeploy?: () => Promise<void>;
 }
 
 export const DeployButton = ({
@@ -37,6 +40,8 @@ export const DeployButton = ({
   onNetlifyDeploy,
   onGitHubDeploy,
   onGitLabDeploy,
+  onCloudflareDeploy,
+  onOpenWebDeploy,
 }: DeployButtonProps) => {
   const netlifyConn = useStore(netlifyConnection);
   const vercelConn = useStore(vercelConnection);
@@ -45,12 +50,16 @@ export const DeployButton = ({
   const previews = useStore(workbenchStore.previews);
   const activePreview = previews[activePreviewIndex];
   const [isDeploying, setIsDeploying] = useState(false);
-  const [deployingTo, setDeployingTo] = useState<'netlify' | 'vercel' | 'github' | 'gitlab' | null>(null);
+  const [deployingTo, setDeployingTo] = useState<
+    'netlify' | 'vercel' | 'github' | 'gitlab' | 'cloudflare' | 'openweb' | null
+  >(null);
   const isStreaming = useStore(streamingState);
   const { handleVercelDeploy } = useVercelDeploy();
   const { handleNetlifyDeploy } = useNetlifyDeploy();
   const { handleGitHubDeploy } = useGitHubDeploy();
   const { handleGitLabDeploy } = useGitLabDeploy();
+  const { handleCloudflareDeploy } = useCloudflareDeploy();
+  const { handleOpenWebDeploy } = useOpenWebDeploy();
   const [showGitHubDeploymentDialog, setShowGitHubDeploymentDialog] = useState(false);
   const [showGitLabDeploymentDialog, setShowGitLabDeploymentDialog] = useState(false);
   const [githubDeploymentFiles, setGithubDeploymentFiles] = useState<Record<string, string> | null>(null);
@@ -134,6 +143,38 @@ export const DeployButton = ({
     }
   };
 
+  const handleCloudflareDeployClick = async () => {
+    setIsDeploying(true);
+    setDeployingTo('cloudflare');
+
+    try {
+      if (onCloudflareDeploy) {
+        await onCloudflareDeploy();
+      } else {
+        await handleCloudflareDeploy();
+      }
+    } finally {
+      setIsDeploying(false);
+      setDeployingTo(null);
+    }
+  };
+
+  const handleOpenWebDeployClick = async () => {
+    setIsDeploying(true);
+    setDeployingTo('openweb');
+
+    try {
+      if (onOpenWebDeploy) {
+        await onOpenWebDeploy();
+      } else {
+        await handleOpenWebDeploy();
+      }
+    } finally {
+      setIsDeploying(false);
+      setDeployingTo(null);
+    }
+  };
+
   return (
     <>
       <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden text-sm">
@@ -157,6 +198,41 @@ export const DeployButton = ({
             sideOffset={5}
             align="end"
           >
+            <DropdownMenu.Item
+              className={classNames(
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                {
+                  'opacity-60 cursor-not-allowed': isDeploying || !activePreview,
+                },
+              )}
+              disabled={isDeploying || !activePreview}
+              onClick={handleOpenWebDeployClick}
+            >
+              <span className="i-ph:globe-hemisphere-west h-5 w-5 text-emerald-500" aria-hidden="true" />
+              <span className="mx-auto">Deploy to OpenWeb.Software (FREE)</span>
+            </DropdownMenu.Item>
+
+            <DropdownMenu.Item
+              className={classNames(
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                {
+                  'opacity-60 cursor-not-allowed': isDeploying || !activePreview,
+                },
+              )}
+              disabled={isDeploying || !activePreview}
+              onClick={handleCloudflareDeployClick}
+            >
+              <img
+                className="w-5 h-5"
+                height="24"
+                width="24"
+                crossOrigin="anonymous"
+                src="https://cdn.simpleicons.org/cloudflare"
+                alt="cloudflare"
+              />
+              <span className="mx-auto">Deploy to Cloudflare</span>
+            </DropdownMenu.Item>
+
             <DropdownMenu.Item
               className={classNames(
                 'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
@@ -242,21 +318,6 @@ export const DeployButton = ({
                 alt="gitlab"
               />
               <span className="mx-auto">{!gitlabIsConnected ? 'No GitLab Account Connected' : 'Deploy to GitLab'}</span>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item
-              disabled
-              className="flex items-center w-full rounded-md px-4 py-2 text-sm text-bolt-elements-textTertiary gap-2 opacity-60 cursor-not-allowed"
-            >
-              <img
-                className="w-5 h-5"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/cloudflare"
-                alt="cloudflare"
-              />
-              <span className="mx-auto">Deploy to Cloudflare (Coming Soon)</span>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Root>

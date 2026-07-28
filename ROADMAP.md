@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 Status legend:
 
@@ -10,22 +10,34 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.3.1`
+- [x] `v3.4.0`
 
 Next release target:
 
-- [~] `v3.4.0`
+- [~] `v3.5.0`
 
-## v3.4.0 - In Progress
+## v3.5.0 - In Progress
 
-Release theme: finish account and publishing lifecycle hardening, broaden first-party template acceptance, and improve operator-visible resource controls.
+Release theme: complete Premium account lifecycle, broaden template acceptance, and deepen operator-visible resource controls.
 
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- [ ] Harden Stripe webhook activation and custom-domain ownership verification.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.3.1 initial-route budget.
+- [ ] Add a customer billing portal, subscription cancellation flow, invoices, and operator-visible Premium entitlement search.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.0 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.4.0 - Shipped
+
+Release theme: make deployment reliable and introduce payment-verified WebCoder.codes Premium projects.
+
+- [x] Fix asynchronous deployment-artifact initialization across GitHub, GitLab, Netlify, and Vercel.
+- [x] Add protected server-side Cloudflare Pages Direct Upload with build staging and live health verification.
+- [x] Make OpenWeb.Software FREE publishing an explicit deployment destination with a shareable bolt.gives subdomain.
+- [x] Add `$5` every-28-days WebCoder.codes Premium checkout with 10,000 complexity-priced credits per paid project period.
+- [x] Add raw-body Stripe signature verification, idempotent webhook fulfillment, renewal resets, and subscription-state handling.
+- [x] Add custom-domain DNS verification and server routing activation.
+- [x] Add Premium Deep Build orchestration, visible credit state, product page, and `premium.bolt.gives` entry point.
 
 ## v3.3.1 - Shipped
 

@@ -517,6 +517,110 @@ export async function publishHostedRuntimeProject(options: { sessionId: string; 
   };
 }
 
+export type HostedCloudflareProjectDeployment = {
+  id: string;
+  sessionId: string;
+  requestedName: string;
+  projectName: string;
+  pagesUrl: string | null;
+  deploymentUrl: string | null;
+  status: 'active' | 'building' | 'failed';
+  buildOutputDirectory: string | null;
+  lastError: string | null;
+  updatedAt: string;
+};
+
+export type HostedPremiumStatus = {
+  plan: 'free' | 'webcoder-premium';
+  status: 'inactive' | 'pending' | 'active' | 'past_due' | 'canceled';
+  creditsAllowance: number;
+  creditsUsed: number;
+  creditsRemaining: number;
+  periodEnd: string | null;
+  customDomain: string | null;
+};
+
+export async function fetchHostedRuntimePremiumStatus(sessionId: string): Promise<HostedPremiumStatus | null> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/premium`,
+    {
+      headers: { Accept: 'application/json' },
+      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      label: 'hosted-runtime/premium-status',
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as { premium?: HostedPremiumStatus };
+
+  return payload.premium || null;
+}
+
+export async function verifyHostedRuntimePremiumDomain(sessionId: string): Promise<{
+  ok: boolean;
+  status: 'active' | 'pending-dns';
+  message: string;
+  url?: string | null;
+  dnsInstructions?: HostedProjectDnsInstructions;
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/premium/domain/verify`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      timeoutMs: Math.max(HOSTED_SYNC_TIMEOUT_MS, 60_000),
+      label: 'hosted-runtime/premium-domain-verify',
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
+
+  if (!response.ok) {
+    throw new Error(payload.message || `Premium domain verification failed with status ${response.status}`);
+  }
+
+  return payload as {
+    ok: boolean;
+    status: 'active' | 'pending-dns';
+    message: string;
+    url?: string | null;
+    dnsInstructions?: HostedProjectDnsInstructions;
+  };
+}
+
+export async function deployHostedRuntimeProjectToCloudflare(options: {
+  sessionId: string;
+  projectName: string;
+}): Promise<{
+  ok: true;
+  deployment: HostedCloudflareProjectDeployment;
+}> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(options.sessionId)}/deploy/cloudflare`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ projectName: options.projectName }),
+      timeoutMs: Math.max(HOSTED_SYNC_TIMEOUT_MS, 10 * 60 * 1000),
+      label: 'hosted-runtime/cloudflare-deploy',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Cloudflare deployment failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    deployment: HostedCloudflareProjectDeployment;
+  };
+}
+
 export async function createHostedRuntimeCustomDomainCheckout(options: {
   sessionId: string;
   customDomain: string;

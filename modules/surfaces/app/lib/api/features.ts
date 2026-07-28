@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.4.0',
+    name: 'v3.4.0 deployment and WebCoder Premium',
+    description:
+      'GitHub deployment no longer races artifact initialization, generated apps can deploy directly to the protected OpenWeb Cloudflare account or OpenWeb.Software FREE hosting, and WebCoder.codes Premium adds payment-verified custom domains, Deep Build orchestration, and 10,000 complexity-priced credits for $5 every 28 days.',
+    releaseDate: '2026-07-28',
+  },
+  {
     id: 'release-v3.3.1',
     name: 'v3.3.1 focused web and Linux release',
     description:

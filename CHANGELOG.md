@@ -4,6 +4,38 @@
 
 No unreleased changes.
 
+## v3.4.0 (2026-07-28)
+
+### Added
+
+- Added server-side Cloudflare Pages Direct Upload deployment for generated projects, using the same protected Cloudflare account connection as `create.bolt.gives`. Builds are staged without environment files, keys, logs, symlinks, or dependency trees and receive a health-verified `pages.dev` URL.
+- Added an explicit `Deploy to OpenWeb.Software (FREE)` action for publishing a hosted runtime project to a shareable `https://{subdomain}.bolt.gives` address.
+- Added WebCoder.codes Premium at `/premium` and `premium.bolt.gives`, including a per-project `$5` subscription billed every 28 days, 10,000 complexity-priced credits per paid period, Deep Build orchestration, custom-domain hosting, and visible credit balances.
+- Added signed, idempotent Stripe webhook fulfillment for checkout, renewal, payment-failure, subscription-update, and cancellation events. Premium access and credit resets now follow verified payment state instead of browser redirects.
+- Added custom-domain DNS verification and Caddy activation after Premium payment.
+- Added regression coverage for asynchronous deployment-artifact initialization, Cloudflare project/build selection, 28-day Stripe payloads, raw-body webhook signatures, entitlement resets, and credit exhaustion.
+
+### Fixed
+
+- Fixed `Deploy to GitHub` failing with `Cannot read properties of undefined (reading 'runner')` by awaiting asynchronous deployment-artifact creation. The same race was removed from GitLab, Netlify, and Vercel deployment hooks.
+- Separated generated-project Wrangler state from managed-fleet Wrangler state so user deployments cannot collide with fleet rollout symlinks.
+- Cloudflare deployment health now verifies both immutable and canonical Pages hostnames, tolerating temporary immutable-host TLS propagation without accepting an unhealthy deployment.
+
+### Changed
+
+- Custom-domain hosting is now the WebCoder.codes Premium project plan at `$5` every 28 days instead of `$10/month`.
+- The deployment menu now presents OpenWeb.Software FREE, Cloudflare Pages, GitHub, GitLab, Netlify, and Vercel as explicit destinations.
+
+### Validation
+
+- Real Cloudflare Pages project creation, upload, canonical-host health check, browser render, and cleanup.
+- `pnpm run typecheck`
+- `pnpm run lint`
+- `pnpm test` (`1,040` passed, `3` skipped)
+- `pnpm run check:boundaries:strict`
+- `pnpm run build` with client bundle budgets enforced
+- `pnpm run smoke:self-host-installer`
+
 ## v3.3.1 (2026-07-27)
 
 ### Changed
