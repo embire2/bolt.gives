@@ -19,6 +19,8 @@ No unreleased changes.
 
 - Fixed `Deploy to GitHub` failing with `Cannot read properties of undefined (reading 'runner')` by awaiting asynchronous deployment-artifact creation. The same race was removed from GitLab, Netlify, and Vercel deployment hooks.
 - GitHub and GitLab repository preparation now build and read the authoritative hosted runtime snapshot instead of waiting on a dormant browser WebContainer. Local/self-hosted browser runtimes retain their existing build path.
+- Built-in TypeScript Vite projects now include the Node typings required by their referenced build configuration. Existing hosted projects receive one bounded automatic typings repair and build retry when that exact failure is detected.
+- Deployment-menu logos now use bundled icons instead of third-party image requests that could fail CORS checks and render broken controls.
 - Kept the Premium header status out of the initial workbench dependency graph, preventing an `index -> workbench -> index` initialization cycle that could leave `/chat` stuck on its loading shell.
 - Separated generated-project Wrangler state from managed-fleet Wrangler state so user deployments cannot collide with fleet rollout symlinks.
 - Cloudflare deployment health now verifies both immutable and canonical Pages hostnames, tolerating temporary immutable-host TLS propagation without accepting an unhealthy deployment.

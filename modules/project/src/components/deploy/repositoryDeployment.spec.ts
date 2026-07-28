@@ -61,4 +61,34 @@ describe('buildAndSnapshotHostedRepository', () => {
     });
     expect(fetchSnapshot).not.toHaveBeenCalled();
   });
+
+  it('repairs missing Node typings once and reruns the hosted build', async () => {
+    const runCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 2,
+        output: "error TS2688: Cannot find type definition file for 'node'.",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, output: 'installed @types/node' })
+      .mockResolvedValueOnce({ exitCode: 0, output: 'built after repair' });
+    const fetchSnapshot = vi.fn(async () => ({
+      '/home/project/package.json': { type: 'file' as const, content: '{}', isBinary: false },
+    }));
+
+    await expect(
+      buildAndSnapshotHostedRepository('session-123', {
+        runCommand,
+        fetchSnapshot,
+      }),
+    ).resolves.toEqual({
+      buildOutput: { exitCode: 0, output: 'built after repair' },
+      files: { 'package.json': '{}' },
+    });
+    expect(runCommand.mock.calls.map(([options]) => options.command)).toEqual([
+      'pnpm run build',
+      'pnpm add --save-dev @types/node@^22.10.0',
+      'pnpm run build',
+    ]);
+    expect(fetchSnapshot).toHaveBeenCalledWith('session-123');
+  });
 });

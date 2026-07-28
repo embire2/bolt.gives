@@ -29,9 +29,12 @@ describe('local starter template coverage', () => {
 
     const files = getLocalStarterTemplateFiles(template!);
     const filePaths = files.map((file) => file.path);
+    const packageFile = files.find((file) => file.path === 'package.json');
+    const packageJson = JSON.parse(packageFile?.content || '{}');
 
     expect(filePaths).toContain('package.json');
     expect(filePaths).toContain('src/main.tsx');
     expect(filePaths).toContain('vite.config.ts');
+    expect(packageJson.devDependencies?.['@types/node']).toBe('^22.10.0');
   });
 });

@@ -122,6 +122,7 @@ const VITE_REACT_FALLBACK_FILES: LocalTemplateFile[] = [
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",

@@ -2,6 +2,7 @@ import type { FileMap } from '@bolt/core/types/files';
 import { fetchHostedRuntimeSnapshot, runHostedRuntimeCommand } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 
 const EXCLUDED_DIRECTORY_NAMES = new Set(['.cache', '.git', '.next', 'build', 'dist', 'node_modules', 'out', 'output']);
+const MISSING_NODE_TYPES_RE = /Cannot find type definition file for ['"]node['"]/i;
 
 function normalizeRepositoryPath(filePath: string) {
   return filePath.replace(/\\/g, '/').replace(/^\/?(?:home\/project\/)?/, '');
@@ -53,11 +54,32 @@ export async function buildAndSnapshotHostedRepository(
 
   const runCommand = dependencies.runCommand || runHostedRuntimeCommand;
   const fetchSnapshot = dependencies.fetchSnapshot || fetchHostedRuntimeSnapshot;
-  const buildOutput = await runCommand({
+  let buildOutput = await runCommand({
     sessionId,
     command: 'pnpm run build',
     kind: 'shell',
   });
+
+  if (buildOutput.exitCode !== 0 && MISSING_NODE_TYPES_RE.test(buildOutput.output)) {
+    const repairOutput = await runCommand({
+      sessionId,
+      command: 'pnpm add --save-dev @types/node@^22.10.0',
+      kind: 'shell',
+    });
+
+    if (repairOutput.exitCode === 0) {
+      buildOutput = await runCommand({
+        sessionId,
+        command: 'pnpm run build',
+        kind: 'shell',
+      });
+    } else {
+      buildOutput = {
+        ...repairOutput,
+        output: `${buildOutput.output}\n${repairOutput.output}`.trim(),
+      };
+    }
+  }
 
   if (buildOutput.exitCode !== 0) {
     return {

@@ -222,14 +222,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview}
               onClick={handleCloudflareDeployClick}
             >
-              <img
-                className="w-5 h-5"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/cloudflare"
-                alt="cloudflare"
-              />
+              <span className="i-simple-icons:cloudflare h-5 w-5 text-orange-500" aria-hidden="true" />
               <span className="mx-auto">Deploy to Cloudflare</span>
             </DropdownMenu.Item>
 
@@ -243,13 +236,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !netlifyConn.user}
               onClick={handleNetlifyDeployClick}
             >
-              <img
-                className="w-5 h-5"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/netlify"
-              />
+              <span className="i-simple-icons:netlify h-5 w-5 text-cyan-500" aria-hidden="true" />
               <span className="mx-auto">
                 {!netlifyConn.user ? 'No Netlify Account Connected' : 'Deploy to Netlify'}
               </span>
@@ -266,14 +253,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !vercelConn.user}
               onClick={handleVercelDeployClick}
             >
-              <img
-                className="w-5 h-5 bg-black p-1 rounded"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/vercel/white"
-                alt="vercel"
-              />
+              <span className="i-simple-icons:vercel h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
               <span className="mx-auto">{!vercelConn.user ? 'No Vercel Account Connected' : 'Deploy to Vercel'}</span>
               {vercelConn.user && <VercelDeploymentLink />}
             </DropdownMenu.Item>
@@ -288,14 +268,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview}
               onClick={handleGitHubDeployClick}
             >
-              <img
-                className="w-5 h-5"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/github"
-                alt="github"
-              />
+              <span className="i-ph:github-logo h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
               <span className="mx-auto">Deploy to GitHub</span>
             </DropdownMenu.Item>
 
@@ -309,14 +282,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !gitlabIsConnected}
               onClick={handleGitLabDeployClick}
             >
-              <img
-                className="w-5 h-5"
-                height="24"
-                width="24"
-                crossOrigin="anonymous"
-                src="https://cdn.simpleicons.org/gitlab"
-                alt="gitlab"
-              />
+              <span className="i-simple-icons:gitlab h-5 w-5 text-orange-500" aria-hidden="true" />
               <span className="mx-auto">{!gitlabIsConnected ? 'No GitLab Account Connected' : 'Deploy to GitLab'}</span>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
