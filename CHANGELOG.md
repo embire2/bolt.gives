@@ -36,7 +36,7 @@ No unreleased changes.
 - Real alpha FREE prompt-to-preview generation plus deployment-menu and hosted GitHub artifact preparation.
 - `pnpm run typecheck`
 - `pnpm run lint`
-- `pnpm test` (`1,043` passed, `3` skipped)
+- `pnpm test` (`1,044` passed, `3` skipped)
 - `pnpm run check:boundaries:strict`
 - `pnpm run build` with client bundle budgets enforced
 - `pnpm run smoke:self-host-installer`
