@@ -222,7 +222,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview}
               onClick={handleCloudflareDeployClick}
             >
-              <span className="i-simple-icons:cloudflare h-5 w-5 text-orange-500" aria-hidden="true" />
+              <span className="i-ph:cloud-arrow-up h-5 w-5 text-orange-500" aria-hidden="true" />
               <span className="mx-auto">Deploy to Cloudflare</span>
             </DropdownMenu.Item>
 
@@ -236,7 +236,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !netlifyConn.user}
               onClick={handleNetlifyDeployClick}
             >
-              <span className="i-simple-icons:netlify h-5 w-5 text-cyan-500" aria-hidden="true" />
+              <span className="i-ph:network h-5 w-5 text-cyan-500" aria-hidden="true" />
               <span className="mx-auto">
                 {!netlifyConn.user ? 'No Netlify Account Connected' : 'Deploy to Netlify'}
               </span>
@@ -253,7 +253,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !vercelConn.user}
               onClick={handleVercelDeployClick}
             >
-              <span className="i-simple-icons:vercel h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
+              <span className="i-ph:triangle h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
               <span className="mx-auto">{!vercelConn.user ? 'No Vercel Account Connected' : 'Deploy to Vercel'}</span>
               {vercelConn.user && <VercelDeploymentLink />}
             </DropdownMenu.Item>
@@ -282,7 +282,7 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !gitlabIsConnected}
               onClick={handleGitLabDeployClick}
             >
-              <span className="i-simple-icons:gitlab h-5 w-5 text-orange-500" aria-hidden="true" />
+              <span className="i-ph:gitlab-logo h-5 w-5 text-orange-500" aria-hidden="true" />
               <span className="mx-auto">{!gitlabIsConnected ? 'No GitLab Account Connected' : 'Deploy to GitLab'}</span>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
