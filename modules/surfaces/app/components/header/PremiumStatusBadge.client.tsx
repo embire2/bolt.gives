@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { workbenchStore } from '@bolt/project/lib/stores/workbench';
 import {
   fetchHostedRuntimePremiumStatus,
   type HostedPremiumStatus,
@@ -12,6 +11,7 @@ export function PremiumStatusBadge() {
     let cancelled = false;
 
     const refresh = async () => {
+      const { workbenchStore } = await import('@bolt/project/lib/stores/workbench');
       const sessionId = workbenchStore.hostedRuntimeSessionId;
 
       if (!sessionId) {
