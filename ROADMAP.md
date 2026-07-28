@@ -31,7 +31,7 @@ Release theme: complete Premium account lifecycle, broaden template acceptance, 
 
 Release theme: make deployment reliable and introduce payment-verified WebCoder.codes Premium projects.
 
-- [x] Fix asynchronous deployment-artifact initialization across GitHub, GitLab, Netlify, and Vercel.
+- [x] Fix asynchronous deployment-artifact initialization across GitHub, GitLab, Netlify, and Vercel, and move hosted repository build/snapshot preparation off the dormant browser WebContainer.
 - [x] Add protected server-side Cloudflare Pages Direct Upload with build staging and live health verification.
 - [x] Make OpenWeb.Software FREE publishing an explicit deployment destination with a shareable bolt.gives subdomain.
 - [x] Add `$5` every-28-days WebCoder.codes Premium checkout with 10,000 complexity-priced credits per paid project period.

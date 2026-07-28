@@ -18,6 +18,7 @@ No unreleased changes.
 ### Fixed
 
 - Fixed `Deploy to GitHub` failing with `Cannot read properties of undefined (reading 'runner')` by awaiting asynchronous deployment-artifact creation. The same race was removed from GitLab, Netlify, and Vercel deployment hooks.
+- GitHub and GitLab repository preparation now build and read the authoritative hosted runtime snapshot instead of waiting on a dormant browser WebContainer. Local/self-hosted browser runtimes retain their existing build path.
 - Kept the Premium header status out of the initial workbench dependency graph, preventing an `index -> workbench -> index` initialization cycle that could leave `/chat` stuck on its loading shell.
 - Separated generated-project Wrangler state from managed-fleet Wrangler state so user deployments cannot collide with fleet rollout symlinks.
 - Cloudflare deployment health now verifies both immutable and canonical Pages hostnames, tolerating temporary immutable-host TLS propagation without accepting an unhealthy deployment.
@@ -30,6 +31,7 @@ No unreleased changes.
 ### Validation
 
 - Real Cloudflare Pages project creation, upload, canonical-host health check, browser render, and cleanup.
+- Real alpha FREE prompt-to-preview generation plus deployment-menu and hosted GitHub artifact preparation.
 - `pnpm run typecheck`
 - `pnpm run lint`
 - `pnpm test` (`1,040` passed, `3` skipped)

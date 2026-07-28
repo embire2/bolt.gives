@@ -3,12 +3,14 @@ import { useStore } from '@nanostores/react';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
 import { webcontainer } from '@bolt/project/lib/webcontainer';
 import { path } from '@bolt/core/utils/path';
+import { isHostedRuntimeEnabled } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { useState } from 'react';
 import type { ActionCallbackData } from '@bolt/agent/lib/runtime/message-parser';
 import { chatId } from '@bolt/project/lib/persistence/useChatHistory';
 import { getLocalStorage } from '@bolt/project/lib/persistence/localStorage';
 import { formatBuildFailureOutput } from './deployUtils';
 import { createDeploymentArtifact } from './deploymentArtifact';
+import { buildAndSnapshotHostedRepository } from './repositoryDeployment';
 
 export function useGitLabDeploy() {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -48,24 +50,71 @@ export function useGitLabDeploy() {
       // Notify that build is starting
       deployArtifact.runner.handleDeployAction('building', 'running', { source: 'gitlab' });
 
-      const actionId = 'build-' + Date.now();
-      const actionData: ActionCallbackData = {
-        messageId: 'gitlab build',
-        artifactId: artifact.id,
-        actionId,
-        action: {
-          type: 'build' as const,
-          content: 'npm run build',
-        },
-      };
+      let buildOutput;
+      let fileContents: Record<string, string>;
 
-      // Add the action first
-      artifact.runner.addAction(actionData);
+      if (isHostedRuntimeEnabled()) {
+        const hostedResult = await buildAndSnapshotHostedRepository(workbenchStore.hostedRuntimeSessionId);
+        buildOutput = hostedResult.buildOutput;
+        fileContents = hostedResult.files;
+      } else {
+        const actionId = 'build-' + Date.now();
+        const actionData: ActionCallbackData = {
+          messageId: 'gitlab build',
+          artifactId: artifact.id,
+          actionId,
+          action: {
+            type: 'build' as const,
+            content: 'npm run build',
+          },
+        };
 
-      // Then run it
-      await artifact.runner.runAction(actionData);
+        artifact.runner.addAction(actionData);
+        await artifact.runner.runAction(actionData);
+        buildOutput = artifact.runner.buildOutput;
 
-      const buildOutput = artifact.runner.buildOutput;
+        const container = await webcontainer;
+
+        async function getAllFiles(dirPath: string, basePath: string = ''): Promise<Record<string, string>> {
+          const files: Record<string, string> = {};
+          const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
+
+          for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
+            const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+            if (
+              entry.isDirectory() &&
+              (entry.name === 'node_modules' ||
+                entry.name === '.git' ||
+                entry.name === 'dist' ||
+                entry.name === 'build' ||
+                entry.name === '.cache' ||
+                entry.name === '.next')
+            ) {
+              continue;
+            }
+
+            if (entry.isFile()) {
+              if (entry.name.endsWith('.DS_Store') || entry.name.endsWith('.log') || entry.name.startsWith('.env')) {
+                continue;
+              }
+
+              try {
+                files[relativePath] = await container.fs.readFile(fullPath, 'utf-8');
+              } catch (error) {
+                console.warn(`Could not read file ${fullPath}:`, error);
+              }
+            } else if (entry.isDirectory()) {
+              Object.assign(files, await getAllFiles(fullPath, relativePath));
+            }
+          }
+
+          return files;
+        }
+
+        fileContents = await getAllFiles('/');
+      }
 
       if (!buildOutput || buildOutput.exitCode !== 0) {
         // Notify that build failed
@@ -80,59 +129,6 @@ export function useGitLabDeploy() {
       deployArtifact.runner.handleDeployAction('deploying', 'running', {
         source: 'gitlab',
       });
-
-      // Get all project files instead of just the build directory since we're deploying to a repository
-      const container = await webcontainer;
-
-      // Get all files recursively - we'll deploy the entire project, not just the build directory
-      async function getAllFiles(dirPath: string, basePath: string = ''): Promise<Record<string, string>> {
-        const files: Record<string, string> = {};
-        const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-          const fullPath = path.join(dirPath, entry.name);
-
-          // Create a relative path without the leading slash for GitLab
-          const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;
-
-          // Skip node_modules, .git directories and other common excludes
-          if (
-            entry.isDirectory() &&
-            (entry.name === 'node_modules' ||
-              entry.name === '.git' ||
-              entry.name === 'dist' ||
-              entry.name === 'build' ||
-              entry.name === '.cache' ||
-              entry.name === '.next')
-          ) {
-            continue;
-          }
-
-          if (entry.isFile()) {
-            // Skip binary files, large files and other common excludes
-            if (entry.name.endsWith('.DS_Store') || entry.name.endsWith('.log') || entry.name.startsWith('.env')) {
-              continue;
-            }
-
-            try {
-              const content = await container.fs.readFile(fullPath, 'utf-8');
-
-              // Store the file with its relative path, not the full system path
-              files[relativePath] = content;
-            } catch (error) {
-              console.warn(`Could not read file ${fullPath}:`, error);
-              continue;
-            }
-          } else if (entry.isDirectory()) {
-            const subFiles = await getAllFiles(fullPath, relativePath);
-            Object.assign(files, subFiles);
-          }
-        }
-
-        return files;
-      }
-
-      const fileContents = await getAllFiles('/');
 
       /*
        * Show GitLab deployment dialog here - it will handle the actual deployment

@@ -63,7 +63,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ### v3.4.0 deployment and WebCoder Premium release
 
-- `Deploy to GitHub` now waits for its asynchronous deployment artifact before reading `runner`; GitLab, Netlify, and Vercel received the same preventative fix.
+- `Deploy to GitHub` now waits for its asynchronous deployment artifact before reading `runner`; GitLab, Netlify, and Vercel received the same preventative fix. Hosted GitHub/GitLab preparation builds and exports the authoritative server workspace rather than stalling on a dormant browser WebContainer.
 - `Deploy to Cloudflare` builds and stages the generated project server-side, excludes secrets and dependency trees, uploads through the protected Cloudflare account used by `create.bolt.gives`, and returns a health-verified Pages URL.
 - `Deploy to OpenWeb.Software (FREE)` publishes the current hosted project to a shareable `https://{subdomain}.bolt.gives` address.
 - WebCoder.codes Premium is available from [`premium.bolt.gives`](https://premium.bolt.gives). Each project receives Deep Build orchestration, 10,000 complexity-priced credits per paid period, custom-domain hosting, priority recovery instructions, and deployment health verification for `$5` every 28 days.
