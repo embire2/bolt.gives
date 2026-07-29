@@ -28,6 +28,7 @@ No unreleased changes.
 - Prevented completion retries from double-recording Custom Domain token usage.
 - Preserved exhausted-quota responses as valid balance data so the 100-token hard stop opens the paused-service upgrade modal instead of surfacing a false `503`.
 - Added an explicit Custom Domain pricing contract to post-deploy health checks so `/pricing` and the `/premium` redirect are not misclassified as failed homepages.
+- Kept release screenshot automation compatible with mandatory profile onboarding by hiding the modal only inside capture-only Playwright pages; live users still must create or authenticate a profile.
 - Added profile-cookie secrets to canonical and managed Cloudflare Pages secret synchronization without exposing upstream model keys.
 
 ### Validation

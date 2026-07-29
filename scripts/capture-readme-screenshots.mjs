@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { getReleaseHomeReadinessMarkers } from './release-gate-utils.mjs';
+import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const homeUrl = new URL('/', baseUrl).toString();
@@ -88,6 +89,7 @@ async function captureHome() {
 
 async function runPromptCapture({ prompt, token, outputName }) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await hideProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const promptInput = getPromptLocator();
@@ -111,6 +113,7 @@ async function runPromptCapture({ prompt, token, outputName }) {
 
 async function capturePromptShell(outputName) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await hideProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const text = await page.evaluate(() => document.body.innerText || '');
@@ -124,6 +127,7 @@ async function capturePromptShell(outputName) {
 
 async function captureWorkspaceShell() {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await hideProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
