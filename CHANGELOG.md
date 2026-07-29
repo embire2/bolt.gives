@@ -26,6 +26,7 @@ No unreleased changes.
 
 - Prevented surrounding header controls from collapsing or covering the current project title.
 - Prevented completion retries from double-recording Custom Domain token usage.
+- Preserved exhausted-quota responses as valid balance data so the 100-token hard stop opens the paused-service upgrade modal instead of surfacing a false `503`.
 - Added profile-cookie secrets to canonical and managed Cloudflare Pages secret synchronization without exposing upstream model keys.
 
 ### Validation

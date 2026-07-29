@@ -3,6 +3,7 @@ import {
   assertFreeUsageQuotaAllowed,
   buildFreeUsageQuotaLimitMessage,
   buildFreeUsageQuotaSubjectHash,
+  getFreeUsageQuotaForRequest,
   recordFreeUsageQuotaForRequest,
 } from './free-usage-quota';
 
@@ -69,6 +70,47 @@ describe('hosted FREE usage quota client', () => {
     ).rejects.toThrow('FREE_PROVIDER_DAILY_LIMIT_EXCEEDED');
     expect(buildFreeUsageQuotaLimitMessage()).toContain('100 Agent tokens');
     expect(buildFreeUsageQuotaLimitMessage()).toContain('$5/month launch price');
+  });
+
+  it('returns an exhausted balance so the paused-service modal can render', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            quota: {
+              allowed: false,
+              usedTokens: 11846,
+              remainingTokens: 0,
+              tokenLimit: 100,
+              usedUsd: 0.01,
+              remainingUsd: 0.99,
+              limitUsd: 1,
+              resetAt: '2026-06-26T22:00:00.000Z',
+              resetTimezone: 'GMT+2',
+              message: buildFreeUsageQuotaLimitMessage(),
+            },
+          }),
+          {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      getFreeUsageQuotaForRequest({
+        request: new Request('https://bolt.gives/api/usage-balance'),
+        runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      usedTokens: 11846,
+      remainingTokens: 0,
+      tokenLimit: 100,
+    });
   });
 
   it('records estimated selected-model usage cost against the runtime quota ledger', async () => {

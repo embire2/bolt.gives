@@ -170,6 +170,14 @@ async function fetchFreeUsageQuota<T>(options: {
       payload && typeof payload === 'object' && 'message' in payload
         ? String((payload as { message?: unknown }).message || '')
         : '';
+    const maybeQuota =
+      payload && typeof payload === 'object' && 'quota' in payload
+        ? (payload as { quota?: FreeUsageQuotaDecision }).quota
+        : null;
+
+    if (response.status === 429 && maybeQuota?.allowed === false) {
+      return payload;
+    }
 
     if (response.status === 429 || maybeMessage.includes(FREE_QUOTA_ERROR_CODE)) {
       throw new FreeUsageQuotaExceededError(maybeMessage || buildFreeUsageQuotaLimitMessage());
