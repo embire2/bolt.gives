@@ -60,10 +60,8 @@ import {
   verifyHostedFreeRelayAuthorization,
 } from '@bolt/agent/lib/.server/llm/hosted-free-relay';
 import {
-  assertFreeUsageQuotaAllowed,
   buildFreeUsageQuotaLimitMessage,
   getFreeUsageQuotaErrorCode,
-  recordFreeUsageQuotaForRequest,
 } from '@bolt/agent/lib/.server/llm/free-usage-quota';
 import {
   ensureLatestUserMessageSelectionEnvelope,
@@ -74,12 +72,14 @@ import {
   type HostedRuntimePreviewStatus,
   waitForHostedRuntimePreviewVerificationForRequest,
 } from '@bolt/runtime/lib/.server/hosted-runtime-snapshot';
-import { preparePremiumChatSelection } from '~/lib/.server/premium-chat-selection';
+import { preparePremiumChatSelection, type PremiumChatSelection } from '~/lib/.server/premium-chat-selection';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
+import { createProfileFreeUsageMeter } from '~/lib/.server/profile-free-usage';
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
 import { parseCookies } from '~/lib/api/cookies';
+import { scheduleBackgroundTask } from '~/lib/.server/background-task';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -1155,10 +1155,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   try {
     logger.info(`chat request started ${JSON.stringify(requestDebugContext)}`);
 
-    await assertFreeUsageQuotaAllowed({
+    const freeUsageMeter = await createProfileFreeUsageMeter({
       request,
       runtimeEnv,
       providerName: selectedProvider,
+      sessionId: hostedRuntimeSessionId,
     });
 
     const mcpService = MCPService.getInstance();
@@ -1184,6 +1185,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let lastVisibleResultForHeartbeat = '';
         let lastProgressMessageForHeartbeat = '';
         const effectiveChatMode = chatMode || 'build';
+        let chatSelection: PremiumChatSelection | null = null;
 
         const stopCommentaryHeartbeat = () => {
           if (commentaryHeartbeat) {
@@ -1321,20 +1323,15 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             totalTokens: cumulativeUsage.totalTokens,
             timestamp: new Date().toISOString(),
           };
-          void recordFreeUsageQuotaForRequest({
-            request,
-            runtimeEnv,
-            providerName: provider,
-            modelName: model,
-            usage: cumulativeUsage,
-            runId,
-          }).catch((quotaError) => {
-            logger.warn(
-              `Failed to record hosted FREE quota usage: ${
-                quotaError instanceof Error ? quotaError.message : String(quotaError)
-              }`,
-            );
-          });
+          scheduleBackgroundTask(
+            context,
+            Promise.all([
+              freeUsageMeter.record({ providerName: provider, modelName: model, usage: cumulativeUsage, runId }),
+              ...(chatSelection
+                ? [chatSelection.recordUsage({ runId, totalTokens: cumulativeUsage.totalTokens })]
+                : []),
+            ]),
+          );
 
           const runMetricsEvent: AgentRunMetricsDataEvent = {
             type: 'run-metrics',
@@ -1557,7 +1554,7 @@ Next: I will continue and can still use any URL details present in the prompt.`,
           );
         }
 
-        const chatSelection = await preparePremiumChatSelection({
+        chatSelection = await preparePremiumChatSelection({
           messages: processedMessages,
           selectedModel,
           selectedProvider,
@@ -1569,7 +1566,8 @@ Next: I will continue and can still use any URL details present in the prompt.`,
           contextFileCount: Object.keys(files || {}).length,
           env: envVars,
         });
-        const { selection: sanitizedSelection, charge: premiumTaskCharge } = chatSelection;
+
+        const { selection: sanitizedSelection } = chatSelection;
         processedMessages = chatSelection.messages;
         resolvedSelectionForLogs = sanitizedSelection;
         chatSelection.report((event) => dataStream.writeData(event), writeCommentary);
@@ -1850,7 +1848,7 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
           supabaseConnection: supabase,
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
-          maxSteps: premiumTaskCharge ? Math.min(20, Math.max(maxLLMSteps, 12)) : maxLLMSteps,
+          maxSteps: chatSelection.charge ? Math.min(20, Math.max(maxLLMSteps, 12)) : maxLLMSteps,
           onChunk: ({ chunk }) => {
             if (shouldTrackModelStreamChunkActivity(chunk)) {
               markRunActivity();

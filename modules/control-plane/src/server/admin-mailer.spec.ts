@@ -72,6 +72,31 @@ describe('admin-mailer', () => {
     expect(batch.messages[1]?.profileEmail).toBe('bob@example.com');
   });
 
+  it('sends a one-time profile login link without recording it in admin mail history', async () => {
+    readMergedRuntimeEnvMock.mockReturnValue({
+      BOLT_ADMIN_SMTP_HOST: 'smtp.example.com',
+      BOLT_ADMIN_SMTP_PORT: '587',
+      BOLT_ADMIN_SMTP_USER: 'mailer',
+      BOLT_ADMIN_SMTP_PASSWORD: 'secret',
+      BOLT_ADMIN_SMTP_FROM: 'hello@example.com',
+    });
+
+    const { sendProfileLoginLink } = await import('./admin-mailer.mjs');
+    const result = await sendProfileLoginLink({
+      profileEmail: 'ada@example.com',
+      name: 'Ada Lovelace',
+      loginUrl: 'https://bolt.gives/login?token=one-time-secret',
+    });
+
+    expect(result.status).toBe('sent');
+    expect(sendMailMock).toHaveBeenCalledOnce();
+    expect((sendMailMock.mock.calls as Array<Array<Record<string, unknown>>>)[0]?.[0]).toMatchObject({
+      to: 'ada@example.com',
+      subject: 'Your secure bolt.gives sign-in link',
+    });
+    expect(recordAdminEmailMessageMock).not.toHaveBeenCalled();
+  });
+
   it('returns a draft bug-report notification when smtp is not configured', async () => {
     const { sendBugReportNotification } = await import('./admin-mailer.mjs');
     const result = await sendBugReportNotification({

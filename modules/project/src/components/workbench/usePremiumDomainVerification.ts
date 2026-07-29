@@ -23,17 +23,17 @@ export function usePremiumDomainVerification(previewBaseUrl: string | undefined,
     }
 
     attemptedSessionRef.current = sessionId;
-    setStatus('Payment received. Verifying WebCoder Premium and custom-domain DNS...');
+    setStatus('Payment received. Verifying Custom Domain access and DNS...');
     void verifyHostedRuntimePremiumDomain(sessionId)
       .then((result) => {
         setStatus(
           result.ok
-            ? `WebCoder Premium is active. Your custom domain is live at ${result.url}.`
+            ? `Custom Domain is active. Your project is live at ${result.url}.`
             : result.dnsInstructions?.note || result.message,
         );
       })
       .catch((error) => {
-        setStatus(error instanceof Error ? error.message : 'Premium activation verification failed.');
+        setStatus(error instanceof Error ? error.message : 'Custom Domain activation verification failed.');
       });
   }, [previewBaseUrl, setStatus]);
 }

@@ -531,8 +531,11 @@ export type HostedCloudflareProjectDeployment = {
 };
 
 export type HostedPremiumStatus = {
-  plan: 'free' | 'webcoder-premium';
+  plan: 'free' | 'custom-domain';
   status: 'inactive' | 'pending' | 'active' | 'past_due' | 'canceled';
+  tokensAllowance: number;
+  tokensUsed: number;
+  tokensRemaining: number;
   creditsAllowance: number;
   creditsUsed: number;
   creditsRemaining: number;
@@ -578,7 +581,7 @@ export async function verifyHostedRuntimePremiumDomain(sessionId: string): Promi
   const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
 
   if (!response.ok) {
-    throw new Error(payload.message || `Premium domain verification failed with status ${response.status}`);
+    throw new Error(payload.message || `Custom Domain verification failed with status ${response.status}`);
   }
 
   return payload as {

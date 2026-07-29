@@ -12,17 +12,24 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
-    id: 'release-v3.4.0',
-    name: 'v3.4.0 deployment and WebCoder Premium',
+    id: 'release-v3.4.1',
+    name: 'v3.4.1 personal profiles and transparent token plans',
     description:
-      'GitHub deployment no longer races artifact initialization, generated apps can deploy directly to the protected OpenWeb Cloudflare account or OpenWeb.Software FREE hosting, and WebCoder.codes Premium adds payment-verified custom domains, Deep Build orchestration, and 10,000 complexity-priced credits for $5 every 28 days.',
+      'First-time users create a PostgreSQL-backed profile, returning users sign in with a secure one-time link, new chats greet them by name, FREE includes 100 Agent tokens daily, and Custom Domain includes 10,000 Agent tokens at the $5/month launch price.',
+    releaseDate: '2026-07-29',
+  },
+  {
+    id: 'release-v3.4.0',
+    name: 'v3.4.0 deployment and custom-domain foundations',
+    description:
+      'GitHub deployment no longer races artifact initialization, and generated apps can deploy directly to the protected OpenWeb Cloudflare account or OpenWeb.Software FREE hosting. The payment-verified domain foundation is upgraded to actual token accounting in v3.4.1.',
     releaseDate: '2026-07-28',
   },
   {
     id: 'release-v3.3.1',
     name: 'v3.3.1 focused web and Linux release',
     description:
-      'The retired Electron app, packaging toolchain, and release workflow are gone. Hosted web and Linux self-host behavior stays unchanged while a separately engineered native Windows app is prepared for a future Premium offering.',
+      'The retired Electron app, packaging toolchain, and release workflow are gone. Hosted web and Linux self-host behavior stays unchanged while a separately engineered native Windows app is prepared as a future paid offering.',
     releaseDate: '2026-07-27',
   },
   {

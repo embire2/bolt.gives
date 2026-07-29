@@ -4,6 +4,36 @@
 
 No unreleased changes.
 
+## v3.4.1 (2026-07-29)
+
+### Added
+
+- Added mandatory first-visit personal profiles with full name, email address, and country, backed by PostgreSQL profile, session, and one-time login-link records.
+- Added passwordless login from the public header, signed HTTP-only profile cookies, expiring one-time email links, logout revocation, and first-name greetings for new chats.
+- Added a live Agent-token balance in the header and profile page. Hosted FREE users receive 100 Agent tokens per GMT+2 day; Custom Domain projects receive 10,000 Agent tokens per successfully paid month.
+- Added a paused-service modal when the daily FREE allocation is exhausted, with the `$5/month` Custom Domain launch promotion, its `$20/month` value, and a path for users who prefer their own provider key.
+- Added a `/pricing` comparison for FREE and Custom Domain. The former `/premium` route now redirects to the current pricing page.
+- Added a safe `.env.example` and installer-generated profile-cookie secret, fixing the self-host installer’s missing template contract.
+
+### Changed
+
+- Renamed the user-facing paid project plan to `Custom Domain`, priced at a `$5/month` launch promotion against a `$20/month` package value.
+- Replaced complexity-priced task deductions with actual provider-reported token accounting. Paid runs preflight entitlement state before generation and record usage idempotently after completion.
+- Removed the WebCoder and Admin Panel links from the public menu.
+- Made the Deploy dropdown opaque white with dark text and reserved a flexible center column for the project title.
+
+### Fixed
+
+- Prevented surrounding header controls from collapsing or covering the current project title.
+- Prevented completion retries from double-recording Custom Domain token usage.
+- Added profile-cookie secrets to canonical and managed Cloudflare Pages secret synchronization without exposing upstream model keys.
+
+### Validation
+
+- Module typechecks and focused control-plane/runtime regression suites.
+- Full `pnpm run typecheck`, `pnpm run lint`, `pnpm test`, and `pnpm run build`.
+- Browser E2E on `alpha1.bolt.gives` covering registration, greeting, token balance, pricing, deployment-menu contrast, real FREE generation, and Preview.
+
 ## v3.4.0 (2026-07-28)
 
 ### Added

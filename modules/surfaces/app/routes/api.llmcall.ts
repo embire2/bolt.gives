@@ -23,6 +23,8 @@ import {
   getFreeUsageQuotaErrorCode,
   recordFreeUsageQuotaForRequest,
 } from '@bolt/agent/lib/.server/llm/free-usage-quota';
+import { resolveProfileSession } from '~/lib/.server/profile-session';
+import { scheduleBackgroundTask } from '~/lib/.server/background-task';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -128,6 +130,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   const rawApiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
   const runtimeEnv = resolveRuntimeEnvFromContext(context);
+  const userProfile = await resolveProfileSession(request, runtimeEnv);
   const llmManager = LLMManager.getInstance(runtimeEnv);
   const serverManagedProviderNames = llmManager
     .getAllProviders()
@@ -181,6 +184,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         request,
         runtimeEnv,
         providerName,
+        subjectKey: userProfile?.id,
       });
 
       const result = await streamText({
@@ -197,6 +201,26 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         apiKeys,
         providerSettings,
       });
+
+      const quotaRecordingTask = result.usage
+        .then((usage) =>
+          recordFreeUsageQuotaForRequest({
+            request,
+            runtimeEnv,
+            providerName,
+            modelName: model,
+            usage,
+            subjectKey: userProfile?.id,
+          }),
+        )
+        .catch((quotaError) => {
+          logger.warn(
+            `Failed to record streamed hosted FREE quota usage: ${
+              quotaError instanceof Error ? quotaError.message : String(quotaError)
+            }`,
+          );
+        });
+      scheduleBackgroundTask(context, quotaRecordingTask);
 
       return new Response(result.textStream, {
         status: 200,
@@ -253,6 +277,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         request,
         runtimeEnv,
         providerName,
+        subjectKey: userProfile?.id,
       });
 
       const models = await getModelList({ apiKeys, providerSettings, serverEnv: runtimeEnv });
@@ -352,6 +377,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         providerName: provider.name,
         modelName: modelDetails.name,
         usage: result.usage as any,
+        subjectKey: userProfile?.id,
       }).catch((quotaError) => {
         logger.warn(
           `Failed to record hosted FREE quota usage: ${

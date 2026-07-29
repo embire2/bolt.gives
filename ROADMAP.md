@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.4.0`
+- [x] `v3.4.1`
 
 Next release target:
 
@@ -18,26 +18,38 @@ Next release target:
 
 ## v3.5.0 - In Progress
 
-Release theme: complete Premium account lifecycle, broaden template acceptance, and deepen operator-visible resource controls.
+Release theme: complete Custom Domain account lifecycle, broaden template acceptance, and deepen operator-visible resource controls.
 
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- [ ] Add a customer billing portal, subscription cancellation flow, invoices, and operator-visible Premium entitlement search.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.0 initial-route budget.
+- [ ] Add a customer billing portal, subscription cancellation flow, invoices, and operator-visible Custom Domain entitlement search.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.1 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.4.1 - Shipped
+
+Release theme: make the first visit personal, show real token balances, and make Custom Domain pricing and deployment controls unambiguous.
+
+- [x] Add PostgreSQL-backed profiles for name and surname, email address, and country.
+- [x] Add secure one-time-link login, signed HTTP-only cookies, revocation, and first-name chat greetings.
+- [x] Give FREE users 100 Agent tokens per GMT+2 day and Custom Domain projects 10,000 actual Agent tokens per paid month.
+- [x] Pause hosted FREE generation at exhaustion with an upgrade modal and a personal-provider-key alternative.
+- [x] Rename the user-facing paid plan to Custom Domain at the `$5/month` launch price, show its `$20/month` value, and add a clear `/pricing` comparison.
+- [x] Remove public WebCoder/Admin menu links, protect the project title, and make the Deploy dropdown opaque and readable.
+- [x] Repair the self-host `.env.example` contract and propagate the profile-cookie secret to managed Cloudflare instances.
 
 ## v3.4.0 - Shipped
 
-Release theme: make deployment reliable and introduce payment-verified WebCoder.codes Premium projects.
+Release theme: make deployment reliable and introduce the payment-verified custom-domain foundation.
 
 - [x] Fix asynchronous deployment-artifact initialization across GitHub, GitLab, Netlify, and Vercel, and move hosted repository build/snapshot preparation off the dormant browser WebContainer.
 - [x] Add protected server-side Cloudflare Pages Direct Upload with build staging and live health verification.
 - [x] Make OpenWeb.Software FREE publishing an explicit deployment destination with a shareable bolt.gives subdomain.
-- [x] Add `$5` every-28-days WebCoder.codes Premium checkout with 10,000 complexity-priced credits per paid project period.
+- [x] Add server-side Stripe Checkout and entitlement handling for the custom-domain foundation.
 - [x] Add raw-body Stripe signature verification, idempotent webhook fulfillment, renewal resets, and subscription-state handling.
 - [x] Add custom-domain DNS verification and server routing activation.
-- [x] Add Premium Deep Build orchestration, visible credit state, product page, and `premium.bolt.gives` entry point.
+- [x] Add Deep Build orchestration, visible entitlement state, and a hosted pricing entry point.
 
 ## v3.3.1 - Shipped
 
@@ -47,7 +59,7 @@ Release theme: retire the legacy Electron release surface without changing the h
 - [x] Remove the Electron tag workflow and obsolete web-CI download workarounds.
 - [x] Add regression coverage that prevents the retired build and release surface from returning.
 - [x] Keep the Linux installer and hosted deployment path unchanged.
-- [x] Announce a separately engineered native Windows application for a future Premium offering.
+- [x] Announce a separately engineered native Windows application as a future paid offering.
 
 ## v3.3.0 - Shipped
 

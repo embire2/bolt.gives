@@ -2,7 +2,8 @@
 
 import crypto from 'node:crypto';
 
-export const DEFAULT_PREMIUM_CREDIT_ALLOWANCE = 10_000;
+export const DEFAULT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE = 10_000;
+export const DEFAULT_PREMIUM_CREDIT_ALLOWANCE = DEFAULT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE;
 
 const PREMIUM_STATUSES = new Set(['pending', 'active', 'past_due', 'canceled']);
 
@@ -62,6 +63,12 @@ export function estimatePremiumTaskCredits(prompt, options = {}) {
   return Math.max(20, Math.min(600, Math.round(credits)));
 }
 
+export function classifyPremiumTaskComplexity(prompt, options = {}) {
+  const score = estimatePremiumTaskCredits(prompt, options);
+
+  return score >= 300 ? 'deep' : score >= 140 ? 'advanced' : score >= 70 ? 'standard' : 'quick';
+}
+
 export function buildPremiumCheckoutPayload(options) {
   const metadata = {
     kind: 'webcoder-premium',
@@ -71,6 +78,10 @@ export function buildPremiumCheckoutPayload(options) {
     boltHostname: options.deployment.hostname,
     customDomain: options.customDomain,
     creditsAllowance: String(options.creditsAllowance),
+    tokensAllowance: String(options.creditsAllowance),
+    billingInterval: 'month',
+    launchPromotion: 'true',
+    regularValueUsd: '20',
   };
 
   return {
@@ -84,10 +95,10 @@ export function buildPremiumCheckoutPayload(options) {
         price_data: {
           currency: 'usd',
           unit_amount: Math.round(Number(options.priceUsd) * 100),
-          recurring: { interval: 'day', interval_count: 28 },
+          recurring: { interval: 'month', interval_count: 1 },
           product_data: {
-            name: 'WebCoder.codes Premium',
-            description: `$${options.priceUsd} every 28 days for ${options.customDomain}, Premium Agent access, and ${Number(options.creditsAllowance).toLocaleString('en-US')} credits`,
+            name: 'Custom Domain',
+            description: `$${options.priceUsd}/month launch price for ${options.customDomain}, Deep Build orchestration, and ${Number(options.creditsAllowance).toLocaleString('en-US')} Agent tokens ($20/month value)`,
           },
         },
       },
@@ -99,9 +110,10 @@ export function buildPremiumCheckoutPayload(options) {
 
 export function normalizePremiumEntitlementRegistry(input) {
   const now = new Date().toISOString();
+  const sourceVersion = Math.max(1, Number(input?.version || 1));
 
   return {
-    version: 1,
+    version: 2,
     entitlements: (Array.isArray(input?.entitlements) ? input.entitlements : [])
       .map((entry) => ({
         id: String(entry?.id || crypto.randomUUID()),
@@ -115,8 +127,17 @@ export function normalizePremiumEntitlementRegistry(input) {
           typeof entry?.stripeCheckoutSessionId === 'string' ? entry.stripeCheckoutSessionId : null,
         stripeSubscriptionId: typeof entry?.stripeSubscriptionId === 'string' ? entry.stripeSubscriptionId : null,
         stripeCustomerId: typeof entry?.stripeCustomerId === 'string' ? entry.stripeCustomerId : null,
-        creditsAllowance: Math.max(1, Number(entry?.creditsAllowance || DEFAULT_PREMIUM_CREDIT_ALLOWANCE)),
-        creditsUsed: Math.max(0, Number(entry?.creditsUsed || 0)),
+        meteringUnit: 'tokens',
+        creditsAllowance: Math.max(
+          1,
+          Number(entry?.tokensAllowance || entry?.creditsAllowance || DEFAULT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
+        ),
+        creditsUsed: Math.max(
+          0,
+          Number(
+            entry?.meteringUnit === 'tokens' || sourceVersion >= 2 ? (entry?.tokensUsed ?? entry?.creditsUsed ?? 0) : 0,
+          ),
+        ),
         periodStart: typeof entry?.periodStart === 'string' ? entry.periodStart : null,
         periodEnd: typeof entry?.periodEnd === 'string' ? entry.periodEnd : null,
         lastStripeEventId: typeof entry?.lastStripeEventId === 'string' ? entry.lastStripeEventId : null,
@@ -146,6 +167,7 @@ export function upsertPendingPremiumEntitlement(registry, input) {
       stripeCheckoutSessionId: input.stripeCheckoutSessionId || null,
       stripeSubscriptionId: null,
       stripeCustomerId: null,
+      meteringUnit: 'tokens',
       creditsAllowance: Number(input.creditsAllowance || DEFAULT_PREMIUM_CREDIT_ALLOWANCE),
       creditsUsed: 0,
       periodStart: null,
@@ -226,26 +248,82 @@ export function consumePremiumTaskCredits(registry, input) {
     return { ok: false, reason: 'inactive', credits: 0, remaining: 0, entitlement: null };
   }
 
-  const credits = estimatePremiumTaskCredits(input.prompt, input);
+  const complexity = classifyPremiumTaskComplexity(input.prompt, input);
   const remaining = Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed);
 
-  if (credits > remaining) {
-    return { ok: false, reason: 'credits-exhausted', credits, remaining, entitlement };
+  if (remaining <= 0) {
+    return { ok: false, reason: 'tokens-exhausted', credits: 0, remaining, entitlement };
   }
 
-  entitlement.creditsUsed += credits;
-  entitlement.updatedAt = new Date().toISOString();
-
   const usage = {
-    id: crypto.randomUUID(),
     sessionId: input.sessionId,
-    credits,
-    complexity: credits >= 300 ? 'deep' : credits >= 140 ? 'advanced' : credits >= 70 ? 'standard' : 'quick',
+    credits: 0,
+    tokens: 0,
+    complexity,
     promptHash: crypto
       .createHash('sha256')
       .update(String(input.prompt || ''))
       .digest('hex'),
     chatMode: input.chatMode === 'build' ? 'build' : 'discuss',
+  };
+
+  return {
+    ok: true,
+    reason: null,
+    credits: 0,
+    remaining,
+    entitlement,
+    usage,
+  };
+}
+
+export function recordPremiumTaskTokens(registry, input) {
+  const entitlement = registry.entitlements.find(
+    (entry) => entry.sessionId === input.sessionId && entry.status === 'active',
+  );
+
+  if (!entitlement) {
+    return { ok: false, reason: 'inactive', tokens: 0, remaining: 0, entitlement: null };
+  }
+
+  const runId = String(input.runId || '').trim();
+  const existingUsage = runId ? registry.usage.find((entry) => entry.runId === runId) : null;
+
+  if (existingUsage) {
+    return {
+      ok: true,
+      reason: null,
+      tokens: 0,
+      remaining: Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed),
+      entitlement,
+      usage: existingUsage,
+      duplicate: true,
+    };
+  }
+
+  const tokens = Math.max(0, Math.floor(Number(input.totalTokens || input.tokens || 0)));
+
+  if (tokens <= 0) {
+    return {
+      ok: true,
+      reason: null,
+      tokens: 0,
+      remaining: Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed),
+      entitlement,
+      usage: null,
+      duplicate: false,
+    };
+  }
+
+  entitlement.creditsUsed += tokens;
+  entitlement.updatedAt = new Date().toISOString();
+
+  const usage = {
+    id: crypto.randomUUID(),
+    runId: runId || null,
+    sessionId: input.sessionId,
+    tokens,
+    complexity: ['quick', 'standard', 'advanced', 'deep'].includes(input.complexity) ? input.complexity : 'standard',
     createdAt: entitlement.updatedAt,
   };
   registry.usage = [...registry.usage.slice(-1999), usage];
@@ -253,10 +331,11 @@ export function consumePremiumTaskCredits(registry, input) {
   return {
     ok: true,
     reason: null,
-    credits,
+    tokens,
     remaining: Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed),
     entitlement,
     usage,
+    duplicate: false,
   };
 }
 
@@ -276,6 +355,9 @@ export function sanitizePremiumEntitlement(entitlement) {
     return {
       plan: 'free',
       status: 'inactive',
+      tokensAllowance: 0,
+      tokensUsed: 0,
+      tokensRemaining: 0,
       creditsAllowance: 0,
       creditsUsed: 0,
       creditsRemaining: 0,
@@ -285,8 +367,11 @@ export function sanitizePremiumEntitlement(entitlement) {
   }
 
   return {
-    plan: 'webcoder-premium',
+    plan: 'custom-domain',
     status: entitlement.status,
+    tokensAllowance: entitlement.creditsAllowance,
+    tokensUsed: entitlement.creditsUsed,
+    tokensRemaining: Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed),
     creditsAllowance: entitlement.creditsAllowance,
     creditsUsed: entitlement.creditsUsed,
     creditsRemaining: Math.max(0, entitlement.creditsAllowance - entitlement.creditsUsed),

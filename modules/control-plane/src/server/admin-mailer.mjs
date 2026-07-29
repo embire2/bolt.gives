@@ -99,6 +99,67 @@ function normalizeMessageBody(body) {
     .trim();
 }
 
+export function buildProfileLoginEmail({ name, loginUrl, expiresMinutes = 15 } = {}) {
+  const normalizedName = String(name || '').trim() || 'there';
+  const normalizedUrl = String(loginUrl || '').trim();
+  const expiry = Math.max(1, Math.round(Number(expiresMinutes) || 15));
+  const text = `Hi ${normalizedName},
+
+Use this secure link to sign in to your bolt.gives profile:
+${normalizedUrl}
+
+The link expires in ${expiry} minutes and can be used only once. If you did not request it, you can ignore this email.`;
+  const html = `
+    <div style="margin:0;background:#eef2ec;padding:32px 16px;color:#10231d;font-family:Manrope,Segoe UI,sans-serif;">
+      <div style="margin:0 auto;max-width:620px;overflow:hidden;border:1px solid #173f32;border-radius:28px;background:#fffdf5;box-shadow:12px 12px 0 #c9f36a;">
+        <div style="padding:28px 32px;border-bottom:1px solid #173f32;background:#173f32;color:#fffdf5;">
+          <div style="font-size:12px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#c9f36a;">bolt.gives profile</div>
+          <h1 style="margin:12px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.05;">Welcome back, ${escapeHtml(normalizedName)}.</h1>
+        </div>
+        <div style="padding:32px;">
+          <p style="margin:0 0 24px;font-size:16px;line-height:1.7;">Continue to your projects, history, token balance, and coding workspace with this one-time sign-in link.</p>
+          <a href="${escapeHtml(normalizedUrl)}" style="display:inline-block;border:1px solid #173f32;border-radius:14px;background:#c9f36a;padding:15px 22px;color:#10231d;font-size:14px;font-weight:900;text-decoration:none;">Sign in securely</a>
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#52645e;">This link expires in ${expiry} minutes and works once. If you did not request it, no action is required.</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return { text, html };
+}
+
+export async function sendProfileLoginLink({ profileEmail, name, loginUrl } = {}) {
+  const support = buildAdminMailSupport();
+  const normalizedEmail = String(profileEmail || '')
+    .trim()
+    .toLowerCase();
+  const normalizedUrl = String(loginUrl || '').trim();
+
+  if (!normalizedEmail || !normalizedUrl) {
+    throw new Error('Profile email and login URL are required.');
+  }
+
+  if (!support.configured) {
+    throw new Error(support.reason || 'Profile email login is unavailable.');
+  }
+
+  const transporter = await getTransporter();
+  const message = buildProfileLoginEmail({ name, loginUrl: normalizedUrl });
+
+  await transporter.sendMail({
+    from: support.fromAddress,
+    to: normalizedEmail,
+    subject: 'Your secure bolt.gives sign-in link',
+    text: message.text,
+    html: message.html,
+  });
+
+  return {
+    status: 'sent',
+    transport: support.transportLabel,
+  };
+}
+
 export async function sendAdminEmail({ profileEmail, subject, body, actor = 'admin' } = {}) {
   const support = buildAdminMailSupport();
   const normalizedEmail = String(profileEmail || '')

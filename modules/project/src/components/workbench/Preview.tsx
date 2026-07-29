@@ -1132,13 +1132,13 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       return;
     }
 
-    const customDomain = window.prompt('WebCoder.codes Premium custom domain ($5 every 28 days; 10,000 credits):');
+    const customDomain = window.prompt('Custom Domain ($5/month launch price; 10,000 Agent tokens):');
 
     if (!customDomain) {
       return;
     }
 
-    setPublishStatus('Creating secure Stripe Checkout for WebCoder.codes Premium...');
+    setPublishStatus('Creating secure Stripe Checkout for Custom Domain...');
 
     try {
       const result = await createHostedRuntimeCustomDomainCheckout({
@@ -1328,9 +1328,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 onClick={startCustomDomainCheckout}
                 disabled={!activePreview}
                 className="hidden rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex dark:text-sky-200"
-                title="Upgrade this project to WebCoder.codes Premium for $5 every 28 days"
+                title="Attach a Custom Domain at the $5/month launch price"
               >
-                WebCoder Premium
+                Custom Domain
               </button>
             </>
           )}

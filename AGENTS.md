@@ -6,7 +6,7 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.4.0`
+- Stable: `v3.4.1`
 - In progress: `v3.5.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
@@ -56,8 +56,8 @@ The current hosted product baseline is:
 - Interactive self-host installer with local PostgreSQL and Caddy HTTPS support
 - Dedicated runtime-node Live Workspaces at `/workspace-setup` for per-project Ubuntu CLI users, private workspace directories, and per-project PostgreSQL databases
 - Hosted chat-created projects auto-provision dedicated runtime-node CLI/database workspaces and inject the project database into server-side commands/Preview through an isolated SSH tunnel.
-- Preview can deploy projects to OpenWeb.Software FREE `https://{subdomain}.bolt.gives`, the protected OpenWeb Cloudflare Pages account, or WebCoder.codes Premium custom-domain hosting for `$5` every 28 days.
-- WebCoder.codes Premium projects receive 10,000 complexity-priced credits per successfully paid 28-day period; access and resets are controlled by signed Stripe webhooks, never browser redirects.
+- Preview can deploy projects to OpenWeb.Software FREE `https://{subdomain}.bolt.gives`, the protected OpenWeb Cloudflare Pages account, or Custom Domain hosting at the `$5/month` launch price.
+- Hosted FREE profiles receive 100 Agent tokens per GMT+2 day. Custom Domain projects receive 10,000 provider-reported Agent tokens per successfully paid month; access and resets are controlled by signed Stripe webhooks, never browser redirects.
 
 Do not regress any of the above without an explicit user request.
 
@@ -201,7 +201,7 @@ If deployment fails:
 
 - Free project publishing uses `https://{subdomain}.bolt.gives`.
 - Reserved operational subdomains such as `admin`, `create`, `alpha1`, and `ahmad` must never be assigned to user projects.
-- Custom-domain hosting is part of the `$5` every-28-days WebCoder.codes Premium project subscription through server-side Stripe Checkout and signed webhook fulfillment.
+- Custom-domain hosting is part of the `$5/month` launch-price Custom Domain project subscription through server-side Stripe Checkout and signed webhook fulfillment. The package is presented as a `$20/month` value.
 - Stripe secret keys must stay only in ignored server env/service files; browsers may receive Checkout URLs and publishable-key metadata only.
 - Custom-domain users must be shown clear DNS guidance: create an `A` record pointing at the configured bolt.gives server IP.
 

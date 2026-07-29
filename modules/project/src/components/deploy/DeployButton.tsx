@@ -189,9 +189,9 @@ export const DeployButton = ({
           <DropdownMenu.Content
             className={classNames(
               'z-[250]',
-              'bg-bolt-elements-background-depth-2',
-              'rounded-lg shadow-lg',
-              'border border-bolt-elements-borderColor',
+              'min-w-[310px] bg-white text-slate-950',
+              'rounded-lg shadow-2xl',
+              'border border-slate-200',
               'animate-in fade-in-0 zoom-in-95',
               'py-1',
             )}
@@ -200,7 +200,7 @@ export const DeployButton = ({
           >
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview,
                 },
@@ -214,7 +214,7 @@ export const DeployButton = ({
 
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview,
                 },
@@ -228,7 +228,7 @@ export const DeployButton = ({
 
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview || !netlifyConn.user,
                 },
@@ -245,7 +245,7 @@ export const DeployButton = ({
 
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview || !vercelConn.user,
                 },
@@ -253,14 +253,14 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview || !vercelConn.user}
               onClick={handleVercelDeployClick}
             >
-              <span className="i-ph:triangle h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
+              <span className="i-ph:triangle h-5 w-5 text-slate-900" aria-hidden="true" />
               <span className="mx-auto">{!vercelConn.user ? 'No Vercel Account Connected' : 'Deploy to Vercel'}</span>
               {vercelConn.user && <VercelDeploymentLink />}
             </DropdownMenu.Item>
 
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview,
                 },
@@ -268,13 +268,13 @@ export const DeployButton = ({
               disabled={isDeploying || !activePreview}
               onClick={handleGitHubDeployClick}
             >
-              <span className="i-ph:github-logo h-5 w-5 text-bolt-elements-textPrimary" aria-hidden="true" />
+              <span className="i-ph:github-logo h-5 w-5 text-slate-900" aria-hidden="true" />
               <span className="mx-auto">Deploy to GitHub</span>
             </DropdownMenu.Item>
 
             <DropdownMenu.Item
               className={classNames(
-                'cursor-pointer flex items-center w-full px-4 py-2 text-sm text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive gap-2 rounded-md group relative',
+                'cursor-pointer flex items-center w-full px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 focus:bg-slate-100 gap-2 rounded-md group relative outline-none',
                 {
                   'opacity-60 cursor-not-allowed': isDeploying || !activePreview || !gitlabIsConnected,
                 },

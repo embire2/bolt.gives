@@ -11,6 +11,7 @@ export type ClientProfileRecord = {
   registrationSource: string | null;
   createdAt: string;
   updatedAt: string;
+  lastLoginAt: string | null;
   lastInstanceSlug: string | null;
   lastInstanceStatus: string | null;
   lastInstanceUrl: string | null;

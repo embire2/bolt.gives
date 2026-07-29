@@ -6,13 +6,14 @@ import {
   consumePremiumTaskCredits,
   estimatePremiumTaskCredits,
   normalizePremiumEntitlementRegistry,
+  recordPremiumTaskTokens,
   resolvePremiumStripeEventStatus,
   upsertPendingPremiumEntitlement,
   verifyStripeWebhookSignature,
 } from './premium-entitlements.mjs';
 
-describe('WebCoder Premium entitlements', () => {
-  it('charges more credits for complex production work than a small copy edit', () => {
+describe('Custom Domain entitlements', () => {
+  it('classifies complex production work above a small copy edit without charging arbitrary credits', () => {
     const copyEdit = estimatePremiumTaskCredits('Change the heading to Hello.', { chatMode: 'build' });
     const fullStack = estimatePremiumTaskCredits(
       'Build a production full-stack app with PostgreSQL authentication, Stripe webhooks, Cloudflare deployment and Playwright e2e tests.',
@@ -23,7 +24,7 @@ describe('WebCoder Premium entitlements', () => {
     expect(fullStack).toBeLessThanOrEqual(600);
   });
 
-  it('resets 10,000 credits only when Stripe confirms a new paid period', () => {
+  it('records real API tokens and resets the 10,000-token balance only for a new paid period', () => {
     const registry = normalizePremiumEntitlementRegistry({});
     const entitlement = upsertPendingPremiumEntitlement(registry, {
       sessionId: 'session-1',
@@ -44,7 +45,19 @@ describe('WebCoder Premium entitlements', () => {
       chatMode: 'build',
     });
     expect(charge.ok).toBe(true);
-    expect(charge.remaining).toBeLessThan(10_000);
+    expect(charge.remaining).toBe(10_000);
+
+    if (!charge.ok || !charge.usage) {
+      throw new Error('Expected the active Custom Domain task to pass preflight.');
+    }
+
+    const usage = recordPremiumTaskTokens(registry, {
+      sessionId: 'session-1',
+      runId: 'run-1',
+      totalTokens: 1_234,
+      complexity: charge.usage.complexity,
+    });
+    expect(usage).toMatchObject({ ok: true, tokens: 1_234, remaining: 8_766, duplicate: false });
 
     activatePremiumEntitlement(entitlement, {
       eventId: 'evt_2',
@@ -55,8 +68,34 @@ describe('WebCoder Premium entitlements', () => {
     expect(entitlement.creditsUsed).toBe(0);
   });
 
-  it('refuses tasks after the project allowance is exhausted', () => {
+  it('refuses tasks after the project token allowance is exhausted', () => {
     const registry = normalizePremiumEntitlementRegistry({
+      version: 2,
+      entitlements: [
+        {
+          sessionId: 'session-1',
+          deploymentId: 'deployment-1',
+          customDomain: 'example.com',
+          status: 'active',
+          meteringUnit: 'tokens',
+          creditsAllowance: 10_000,
+          creditsUsed: 10_000,
+        },
+      ],
+    });
+
+    expect(
+      consumePremiumTaskCredits(registry, {
+        sessionId: 'session-1',
+        prompt: 'Fix one button.',
+        chatMode: 'build',
+      }),
+    ).toMatchObject({ ok: false, reason: 'tokens-exhausted', remaining: 0 });
+  });
+
+  it('migrates legacy complexity-credit usage to a fresh token meter once', () => {
+    const registry = normalizePremiumEntitlementRegistry({
+      version: 1,
       entitlements: [
         {
           sessionId: 'session-1',
@@ -69,13 +108,45 @@ describe('WebCoder Premium entitlements', () => {
       ],
     });
 
-    expect(
-      consumePremiumTaskCredits(registry, {
-        sessionId: 'session-1',
-        prompt: 'Fix one button.',
-        chatMode: 'build',
-      }),
-    ).toMatchObject({ ok: false, reason: 'credits-exhausted', remaining: 5 });
+    expect(registry.version).toBe(2);
+    expect(registry.entitlements[0]).toMatchObject({
+      meteringUnit: 'tokens',
+      creditsAllowance: 10_000,
+      creditsUsed: 0,
+    });
+  });
+
+  it('does not double-record tokens when a completion event is retried', () => {
+    const registry = normalizePremiumEntitlementRegistry({
+      version: 2,
+      entitlements: [
+        {
+          sessionId: 'session-1',
+          deploymentId: 'deployment-1',
+          customDomain: 'example.com',
+          status: 'active',
+          meteringUnit: 'tokens',
+          creditsAllowance: 10_000,
+          creditsUsed: 0,
+        },
+      ],
+    });
+
+    const first = recordPremiumTaskTokens(registry, {
+      sessionId: 'session-1',
+      runId: 'run-1',
+      totalTokens: 400,
+      complexity: 'standard',
+    });
+    const duplicate = recordPremiumTaskTokens(registry, {
+      sessionId: 'session-1',
+      runId: 'run-1',
+      totalTokens: 400,
+      complexity: 'standard',
+    });
+
+    expect(first).toMatchObject({ tokens: 400, remaining: 9_600, duplicate: false });
+    expect(duplicate).toMatchObject({ tokens: 0, remaining: 9_600, duplicate: true });
   });
 
   it('verifies Stripe signatures against the unmodified request body and rejects stale payloads', () => {
@@ -101,7 +172,7 @@ describe('WebCoder Premium entitlements', () => {
     ).toBe(false);
   });
 
-  it('builds a $5 subscription that renews every 28 days with project-scoped metadata', () => {
+  it('builds a $5 monthly launch subscription with project-scoped metadata', () => {
     const payload = buildPremiumCheckoutPayload({
       origin: 'https://premium.bolt.gives',
       customDomain: 'example.com',
@@ -118,14 +189,18 @@ describe('WebCoder Premium entitlements', () => {
     expect(payload.mode).toBe('subscription');
     expect(payload.line_items[0].price_data).toMatchObject({
       unit_amount: 500,
-      recurring: { interval: 'day', interval_count: 28 },
+      recurring: { interval: 'month', interval_count: 1 },
     });
     expect(payload.subscription_data.metadata).toMatchObject({
       kind: 'webcoder-premium',
       sessionId: 'session-1',
       deploymentId: 'deployment-1',
       creditsAllowance: '10000',
+      billingInterval: 'month',
+      launchPromotion: 'true',
+      regularValueUsd: '20',
     });
+    expect(payload.line_items[0].price_data.product_data.description).toContain('$20/month value');
   });
 
   it('maps delayed-payment failures and expired Checkout sessions to non-active states', () => {

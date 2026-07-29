@@ -1,5 +1,6 @@
 const LOCAL_RUNTIME_CONTROL_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const CANONICAL_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
+type RuntimeEnv = Record<string, string | undefined>;
 
 class RuntimeControlError extends Error {
   constructor(
@@ -11,16 +12,27 @@ class RuntimeControlError extends Error {
   }
 }
 
-export function getRuntimeControlBaseUrl() {
-  if (typeof process !== 'undefined' && process.env?.BOLT_RUNTIME_CONTROL_URL) {
-    return process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
+export function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}) {
+  const configured =
+    runtimeEnv.BOLT_RUNTIME_CONTROL_URL?.trim() ||
+    runtimeEnv.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim() ||
+    (typeof process !== 'undefined'
+      ? process.env?.BOLT_RUNTIME_CONTROL_URL?.trim() || process.env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim()
+      : '');
+
+  if (configured) {
+    return configured.replace(/\/$/, '');
   }
 
   return LOCAL_RUNTIME_CONTROL_BASE_URL;
 }
 
-export async function fetchRuntimeControlJson<T>(pathname: string, init?: RequestInit): Promise<T> {
-  const baseUrl = getRuntimeControlBaseUrl();
+export async function fetchRuntimeControlJson<T>(
+  pathname: string,
+  init?: RequestInit,
+  runtimeEnv: RuntimeEnv = {},
+): Promise<T> {
+  const baseUrl = getRuntimeControlBaseUrl(runtimeEnv);
 
   try {
     return await fetchRuntimeControlJsonFromBase<T>(baseUrl, pathname, init);

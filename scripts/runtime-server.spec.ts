@@ -120,15 +120,18 @@ describe('runtime server workspace isolation', () => {
     expect(getFreeUsageQuotaResetAt(new Date('2026-06-26T22:00:01.000Z'))).toBe('2026-06-27T22:00:00.000Z');
   });
 
-  it('blocks hosted FREE usage when the daily dollar cap is reached', () => {
+  it('blocks hosted FREE usage when the daily 100-Agent-token allowance is reached', () => {
     const decision = buildFreeUsageQuotaDecision(
-      { costUsd: 1 },
-      { limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
+      { totalTokens: 100, costUsd: 0.04 },
+      { tokenLimit: 100, limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
     );
 
     expect(decision.allowed).toBe(false);
-    expect(decision.remainingUsd).toBe(0);
-    expect(decision.message).toContain('FREE daily coding limit');
+    expect(decision.usedTokens).toBe(100);
+    expect(decision.remainingTokens).toBe(0);
+    expect(decision.remainingUsd).toBeCloseTo(0.96);
+    expect(decision.message).toContain('100 Agent tokens');
+    expect(decision.message).toContain('$5/month launch price');
     expect(decision.message).toContain('00:00 GMT+2');
   });
 

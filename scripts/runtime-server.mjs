@@ -34,11 +34,17 @@ import {
 } from './managed-instances.mjs';
 import {
   buildAdminDatabaseConfig,
+  consumeClientProfileLoginLink,
+  createClientProfileLoginLink,
+  createClientProfileSession,
+  readClientProfileSession,
+  registerClientProfile,
   listBugReports,
   listAdminEmailMessages,
   listClientProfiles,
   listManagedInstanceAssignments,
   recordBugReport,
+  revokeClientProfileSession,
   syncManagedInstanceAssignments,
   upsertClientProfile,
   upsertManagedInstanceAssignment,
@@ -50,6 +56,7 @@ import {
   sendAdminEmailBatch,
   sendBugReportNotification,
   sendContributorApplicationEmails,
+  sendProfileLoginLink,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
 import {
@@ -87,18 +94,28 @@ import {
   selectCloudflareBuildOutput,
 } from './cloudflare-project-deployments.mjs';
 import {
-  DEFAULT_PREMIUM_CREDIT_ALLOWANCE,
+  DEFAULT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
   activatePremiumEntitlement,
   appendPremiumEntitlementEvent,
   buildPremiumCheckoutPayload,
   consumePremiumTaskCredits,
   normalizePremiumEntitlementRegistry,
+  recordPremiumTaskTokens,
   resolvePremiumStripeEventStatus,
   sanitizePremiumEntitlement,
   updatePremiumEntitlementStatus,
   upsertPendingPremiumEntitlement,
   verifyStripeWebhookSignature,
 } from './premium-entitlements.mjs';
+import {
+  createProfileAuthRateLimitKey,
+  createProfileLoginCredentials,
+  createProfileSessionCredentials,
+  hashProfileAuthToken,
+  normalizeProfileReturnTo,
+  sanitizeUserProfile,
+  validateUserProfileInput,
+} from './profile-auth.mjs';
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
@@ -193,9 +210,13 @@ const STRIPE_PUBLISHABLE_KEY = process.env.BOLT_STRIPE_PUBLISHABLE_KEY || '';
 const STRIPE_SECRET_KEY = process.env.BOLT_STRIPE_SECRET_KEY || '';
 const STRIPE_CUSTOM_DOMAIN_PRICE_USD = Number(process.env.BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD || '5');
 const STRIPE_WEBHOOK_SECRET = process.env.BOLT_STRIPE_WEBHOOK_SECRET || '';
-const PREMIUM_CREDIT_ALLOWANCE = Math.max(
+const CUSTOM_DOMAIN_TOKEN_ALLOWANCE = Math.max(
   1,
-  Number(process.env.BOLT_PREMIUM_CREDIT_ALLOWANCE || DEFAULT_PREMIUM_CREDIT_ALLOWANCE),
+  Number(
+    process.env.BOLT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE ||
+      process.env.BOLT_PREMIUM_CREDIT_ALLOWANCE ||
+      DEFAULT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
+  ),
 );
 const PREMIUM_INTERNAL_SECRET =
   process.env.BOLT_PREMIUM_INTERNAL_SECRET || process.env.BOLT_HOSTED_FREE_RELAY_SECRET || '';
@@ -228,17 +249,25 @@ const FREE_USAGE_QUOTA_SECRET =
   MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET;
 const FREE_USAGE_QUOTA_PATH =
   process.env.RUNTIME_FREE_USAGE_QUOTA_PATH || path.join(PERSIST_ROOT, 'free-usage-quota.json');
+const FREE_USAGE_DAILY_TOKEN_LIMIT = Math.max(
+  1,
+  Number(process.env.BOLT_FREE_DAILY_TOKEN_LIMIT || process.env.FREE_DAILY_TOKEN_LIMIT || '100'),
+);
 const FREE_USAGE_DAILY_LIMIT_USD = Number(
   process.env.BOLT_FREE_DAILY_USD_LIMIT || process.env.FREE_DAILY_USD_LIMIT || '1',
 );
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
+const PROFILE_LOGIN_PUBLIC_ORIGIN = process.env.BOLT_APP_PUBLIC_URL || 'https://bolt.gives';
 const SHOUTBOX_MESSAGES_PATH =
   process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
 const MAX_SHOUTBOX_MESSAGES = Number(process.env.RUNTIME_SHOUTBOX_MAX_MESSAGES || '250');
 const BUG_REPORTS_RATE_LIMIT = new Map();
 const BUG_REPORT_WINDOW_MS = 30 * 60 * 1000;
 const BUG_REPORT_MAX_PER_WINDOW = 5;
+const PROFILE_AUTH_RATE_LIMIT = new Map();
+const PROFILE_AUTH_WINDOW_MS = 30 * 60 * 1000;
+const PROFILE_AUTH_MAX_PER_WINDOW = 6;
 
 function normalizeBooleanInput(value) {
   return ['1', 'true', 'yes', 'on'].includes(
@@ -287,6 +316,36 @@ function consumeBugReportRateLimit(key) {
   BUG_REPORTS_RATE_LIMIT.set(key, current);
 
   return true;
+}
+
+function consumeProfileAuthRateLimit(key) {
+  const now = Date.now();
+  const current = PROFILE_AUTH_RATE_LIMIT.get(key);
+
+  if (!current || current.resetAt <= now) {
+    PROFILE_AUTH_RATE_LIMIT.set(key, {
+      count: 1,
+      resetAt: now + PROFILE_AUTH_WINDOW_MS,
+    });
+    return true;
+  }
+
+  if (current.count >= PROFILE_AUTH_MAX_PER_WINDOW) {
+    return false;
+  }
+
+  current.count += 1;
+  PROFILE_AUTH_RATE_LIMIT.set(key, current);
+
+  return true;
+}
+
+function buildProfileLoginUrl(token, returnTo) {
+  const url = new URL('/login', PROFILE_LOGIN_PUBLIC_ORIGIN);
+  url.searchParams.set('token', token);
+  url.searchParams.set('returnTo', normalizeProfileReturnTo(returnTo));
+
+  return url.toString();
 }
 
 const sessions = new Map();
@@ -368,6 +427,11 @@ function normalizeFreeUsageLimitUsd(value = FREE_USAGE_DAILY_LIMIT_USD) {
   return Number.isFinite(limit) && limit > 0 ? limit : 1;
 }
 
+function normalizeFreeUsageTokenLimit(value = FREE_USAGE_DAILY_TOKEN_LIMIT) {
+  const limit = Number(value);
+  return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100;
+}
+
 function normalizeFreeUsageCostUsd(value) {
   const cost = Number(value);
   return Number.isFinite(cost) && cost > 0 ? cost : 0;
@@ -415,16 +479,22 @@ export function normalizeFreeUsageQuotaLedger(input) {
 
 export function buildFreeUsageQuotaDecision(entry = {}, options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
+  const tokenLimit = normalizeFreeUsageTokenLimit(options.tokenLimit);
+  const usedTokens = normalizeFreeUsageTokens(entry?.totalTokens);
+  const remainingTokens = Math.max(0, tokenLimit - usedTokens);
   const limitUsd = normalizeFreeUsageLimitUsd(options.limitUsd);
   const usedUsd = normalizeFreeUsageCostUsd(entry?.costUsd);
   const remainingUsd = Math.max(0, limitUsd - usedUsd);
-  const allowed = usedUsd < limitUsd;
+  const allowed = usedTokens < tokenLimit;
   const message = allowed
     ? null
-    : 'You have hit your FREE daily coding limit for today. You can use your own API key from any provider or wait for the limit to reset at 00:00 GMT+2.';
+    : 'The hosted FREE service has been paused because you have used all 100 Agent tokens for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at 00:00 GMT+2.';
 
   return {
     allowed,
+    usedTokens,
+    remainingTokens,
+    tokenLimit,
     usedUsd,
     remainingUsd,
     limitUsd,
@@ -493,7 +563,7 @@ function normalizeFreeUsageQuotaUsage(usage) {
   };
 }
 
-export async function checkFreeUsageQuota({ subjectHash, limitUsd, now = new Date() } = {}) {
+export async function checkFreeUsageQuota({ subjectHash, tokenLimit, limitUsd, now = new Date() } = {}) {
   const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
   const dayKey = getFreeUsageQuotaDayKey(now);
   const ledger = await readFreeUsageQuotaLedger();
@@ -501,10 +571,17 @@ export async function checkFreeUsageQuota({ subjectHash, limitUsd, now = new Dat
 
   const entry = ledger.days[dayKey]?.[normalizedSubjectHash] || {};
 
-  return buildFreeUsageQuotaDecision(entry, { limitUsd, now });
+  return buildFreeUsageQuotaDecision(entry, { tokenLimit, limitUsd, now });
 }
 
-export async function recordFreeUsageQuota({ subjectHash, costUsd, usage, limitUsd, now = new Date() } = {}) {
+export async function recordFreeUsageQuota({
+  subjectHash,
+  costUsd,
+  usage,
+  tokenLimit,
+  limitUsd,
+  now = new Date(),
+} = {}) {
   const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
   const dayKey = getFreeUsageQuotaDayKey(now);
   const ledger = await readFreeUsageQuotaLedger();
@@ -532,7 +609,7 @@ export async function recordFreeUsageQuota({ subjectHash, costUsd, usage, limitU
 
   await writeFreeUsageQuotaLedger(ledger);
 
-  return buildFreeUsageQuotaDecision(entry, { limitUsd, now });
+  return buildFreeUsageQuotaDecision(entry, { tokenLimit, limitUsd, now });
 }
 
 function buildClientRegistrationSource(hostname = '') {
@@ -1132,8 +1209,12 @@ async function writeCloudflareProjectDeploymentRegistry(registry) {
 async function ensurePremiumEntitlementRegistry() {
   try {
     const raw = await fs.readFile(PREMIUM_ENTITLEMENT_REGISTRY_PATH, 'utf8');
-    const registry = normalizePremiumEntitlementRegistry(JSON.parse(raw));
-    await writePremiumEntitlementRegistry(registry);
+    const storedRegistry = JSON.parse(raw);
+    const registry = normalizePremiumEntitlementRegistry(storedRegistry);
+
+    if (Number(storedRegistry?.version || 0) !== registry.version) {
+      await writePremiumEntitlementRegistry(registry);
+    }
 
     return registry;
   } catch {
@@ -1146,6 +1227,15 @@ async function ensurePremiumEntitlementRegistry() {
 
 async function writePremiumEntitlementRegistry(registry) {
   await writeJsonAtomically(PREMIUM_ENTITLEMENT_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+}
+
+let premiumEntitlementMutationQueue = Promise.resolve();
+
+function runPremiumEntitlementMutation(operation) {
+  const next = premiumEntitlementMutationQueue.then(operation, operation);
+  premiumEntitlementMutationQueue = next.catch(() => {});
+
+  return next;
 }
 
 function buildAutoRuntimeNodeProjectSlug(sessionId) {
@@ -5887,7 +5977,7 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
     deployment,
     customDomain,
     priceUsd: STRIPE_CUSTOM_DOMAIN_PRICE_USD,
-    creditsAllowance: PREMIUM_CREDIT_ALLOWANCE,
+    creditsAllowance: CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
   });
 
   if (customerEmail && isLikelyValidEmail(customerEmail)) {
@@ -6029,12 +6119,12 @@ async function applyPremiumStripeEvent(event) {
       deploymentId: String(metadata.deploymentId),
       customDomain: String(metadata.customDomain || ''),
       stripeCheckoutSessionId: object.object === 'checkout.session' ? object.id : null,
-      creditsAllowance: Number(metadata.creditsAllowance || PREMIUM_CREDIT_ALLOWANCE),
+      creditsAllowance: Number(metadata.tokensAllowance || metadata.creditsAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
     });
   }
 
   if (!entitlement) {
-    throw new Error('Stripe Premium event could not be matched to a project entitlement.');
+    throw new Error('Stripe Custom Domain event could not be matched to a project entitlement.');
   }
 
   if (['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType)) {
@@ -7342,6 +7432,201 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/runtime/profile/register') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Profile storage is not configured on this server.');
+          return;
+        }
+
+        if (
+          !consumeProfileAuthRateLimit(
+            createProfileAuthRateLimitKey({
+              scope: 'register',
+              requestKey: deriveBugReporterKey(req),
+            }),
+          )
+        ) {
+          sendText(res, 429, 'Too many profile requests. Try again in 30 minutes.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const input = validateUserProfileInput(body);
+        const profile = await registerClientProfile(input);
+        const credentials = createProfileSessionCredentials();
+        await createClientProfileSession({
+          profileId: profile.id,
+          id: credentials.id,
+          tokenHash: credentials.tokenHash,
+          createdAt: credentials.createdAt,
+          expiresAt: credentials.expiresAt,
+        });
+
+        sendJson(res, 201, {
+          ok: true,
+          profile: sanitizeUserProfile(profile),
+          session: {
+            id: credentials.id,
+            token: credentials.token,
+            expiresAt: credentials.expiresAt,
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to create the profile.';
+        sendText(res, /already exists/i.test(message) ? 409 : 400, message);
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/session') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Profile storage is not configured on this server.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const profile = await readClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+
+        if (!profile) {
+          sendText(res, 401, 'Profile session is invalid or expired.');
+          return;
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          profile: sanitizeUserProfile(profile),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to load the profile session.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/login/request') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Profile login is not configured on this server.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const email = String(body?.email || '')
+          .trim()
+          .toLowerCase();
+
+        if (!isLikelyValidEmail(email)) {
+          sendText(res, 400, 'Enter a valid email address.');
+          return;
+        }
+
+        if (
+          !consumeProfileAuthRateLimit(
+            createProfileAuthRateLimitKey({
+              scope: 'login',
+              requestKey: deriveBugReporterKey(req),
+              email,
+            }),
+          )
+        ) {
+          sendText(res, 429, 'Too many login requests. Try again in 30 minutes.');
+          return;
+        }
+
+        const credentials = createProfileLoginCredentials();
+        const profile = await createClientProfileLoginLink({
+          email,
+          id: credentials.id,
+          tokenHash: credentials.tokenHash,
+          createdAt: credentials.createdAt,
+          expiresAt: credentials.expiresAt,
+        });
+
+        if (profile) {
+          const loginUrl = buildProfileLoginUrl(credentials.token, body?.returnTo);
+          await sendProfileLoginLink({
+            profileEmail: profile.email,
+            name: profile.name,
+            loginUrl,
+          });
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          message: 'If that profile exists, a secure sign-in link is on its way.',
+        });
+      } catch {
+        sendText(res, 503, 'Secure profile email is temporarily unavailable. Try again shortly.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/login/consume') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Profile login is not configured on this server.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const token = String(body?.token || '').trim();
+
+        if (token.length < 32) {
+          sendText(res, 400, 'This sign-in link is invalid or expired.');
+          return;
+        }
+
+        const profile = await consumeClientProfileLoginLink({
+          tokenHash: hashProfileAuthToken(token),
+        });
+
+        if (!profile) {
+          sendText(res, 400, 'This sign-in link is invalid or expired.');
+          return;
+        }
+
+        const credentials = createProfileSessionCredentials();
+        await createClientProfileSession({
+          profileId: profile.id,
+          id: credentials.id,
+          tokenHash: credentials.tokenHash,
+          createdAt: credentials.createdAt,
+          expiresAt: credentials.expiresAt,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          profile: sanitizeUserProfile(profile),
+          session: {
+            id: credentials.id,
+            token: credentials.token,
+            expiresAt: credentials.expiresAt,
+          },
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to complete profile login.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/logout') {
+      try {
+        const body = await readJsonBody(req);
+        await revokeClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+        sendJson(res, 200, { ok: true });
+      } catch {
+        sendJson(res, 200, { ok: true });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/runtime/internal/hosted-free-relay/verify') {
       try {
         const body = await readJsonBody(req);
@@ -7369,6 +7654,7 @@ export function createRuntimeServer() {
         const body = await readJsonBody(req);
         const quota = await checkFreeUsageQuota({
           subjectHash: body?.subjectHash,
+          tokenLimit: body?.tokenLimit,
           limitUsd: body?.limitUsd,
         });
 
@@ -7400,6 +7686,7 @@ export function createRuntimeServer() {
           subjectHash: body?.subjectHash,
           costUsd: body?.costUsd,
           usage: body?.usage,
+          tokenLimit: body?.tokenLimit,
           limitUsd: body?.limitUsd,
         });
 
@@ -7805,6 +8092,7 @@ export function createRuntimeServer() {
     const customDomainCheckoutMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/custom-domain\/checkout$/);
     const premiumStatusMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium$/);
     const premiumCreditsConsumeMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium\/credits\/consume$/);
+    const premiumTokensRecordMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium\/tokens\/record$/);
     const premiumDomainVerifyMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/premium\/domain\/verify$/);
 
     if (req.method === 'GET' && pathname === '/runtime/tenant-admin/status') {
@@ -8869,14 +9157,16 @@ export function createRuntimeServer() {
         sendJson(res, 200, {
           ok: true,
           premium: sanitizePremiumEntitlement(entitlement),
-          brand: 'WebCoder.codes',
+          brand: 'Custom Domain',
           billing: {
             priceUsd: STRIPE_CUSTOM_DOMAIN_PRICE_USD,
-            intervalDays: 28,
+            interval: 'month',
+            launchPromotion: true,
+            regularValueUsd: 20,
           },
           features: [
             'Deep Build orchestration',
-            'complexity-priced task credits',
+            '10,000 Agent tokens per paid month',
             'production preview verification',
             'custom-domain hosting',
             'priority recovery',
@@ -8884,7 +9174,7 @@ export function createRuntimeServer() {
           ],
         });
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect Premium status.');
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect Custom Domain status.');
       }
       return;
     }
@@ -8892,12 +9182,12 @@ export function createRuntimeServer() {
     if (req.method === 'POST' && premiumCreditsConsumeMatch) {
       try {
         if (!PREMIUM_INTERNAL_SECRET) {
-          sendText(res, 503, 'Premium credit metering is not configured.');
+          sendText(res, 503, 'Custom Domain token metering is not configured.');
           return;
         }
 
         if (!secretsMatch(req.headers['x-bolt-premium-internal'], PREMIUM_INTERNAL_SECRET)) {
-          sendText(res, 401, 'Premium credit metering authorization failed.');
+          sendText(res, 401, 'Custom Domain token metering authorization failed.');
           return;
         }
 
@@ -8913,36 +9203,84 @@ export function createRuntimeServer() {
         });
 
         if (!result.ok) {
-          sendJson(res, result.reason === 'credits-exhausted' ? 402 : 403, {
+          sendJson(res, result.reason === 'tokens-exhausted' ? 402 : 403, {
             ok: false,
             reason: result.reason,
-            creditsRequired: result.credits,
-            creditsRemaining: result.remaining,
+            tokensRemaining: result.remaining,
           });
           return;
         }
 
-        appendPremiumEntitlementEvent(registry, {
-          actor: 'premium-agent',
-          action: 'premium.credits.consumed',
-          target: result.entitlement.id,
-          details: {
-            sessionId: requestedSessionId,
-            credits: result.credits,
-            remaining: result.remaining,
-            complexity: result.usage.complexity,
-          },
-        });
-        await writePremiumEntitlementRegistry(registry);
         sendJson(res, 200, {
           ok: true,
-          creditsCharged: result.credits,
+          creditsCharged: 0,
           creditsRemaining: result.remaining,
+          tokensRemaining: result.remaining,
           complexity: result.usage.complexity,
           premium: sanitizePremiumEntitlement(result.entitlement),
         });
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record Premium task credits.');
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to preflight Custom Domain tokens.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && premiumTokensRecordMatch) {
+      try {
+        if (!PREMIUM_INTERNAL_SECRET) {
+          sendText(res, 503, 'Custom Domain token metering is not configured.');
+          return;
+        }
+
+        if (!secretsMatch(req.headers['x-bolt-premium-internal'], PREMIUM_INTERNAL_SECRET)) {
+          sendText(res, 401, 'Custom Domain token metering authorization failed.');
+          return;
+        }
+
+        const requestedSessionId = normalizeSessionId(premiumTokensRecordMatch[1]);
+        const body = await readJsonBody(req);
+        const result = await runPremiumEntitlementMutation(async () => {
+          const registry = await ensurePremiumEntitlementRegistry();
+          const mutation = recordPremiumTaskTokens(registry, {
+            sessionId: requestedSessionId,
+            runId: String(body.runId || '').slice(0, 200),
+            totalTokens: body.totalTokens,
+            complexity: body.complexity,
+          });
+
+          if (mutation.ok && !mutation.duplicate && mutation.tokens > 0) {
+            appendPremiumEntitlementEvent(registry, {
+              actor: 'custom-domain-agent',
+              action: 'custom-domain.tokens.recorded',
+              target: mutation.entitlement.id,
+              details: {
+                sessionId: requestedSessionId,
+                runId: String(body.runId || '').slice(0, 200) || null,
+                tokens: mutation.tokens,
+                remaining: mutation.remaining,
+                complexity: mutation.usage?.complexity || null,
+              },
+            });
+            await writePremiumEntitlementRegistry(registry);
+          }
+
+          return mutation;
+        });
+
+        if (!result.ok) {
+          sendJson(res, 403, { ok: false, reason: result.reason, tokensRemaining: result.remaining });
+          return;
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          tokensRecorded: result.tokens,
+          tokensRemaining: result.remaining,
+          duplicate: result.duplicate,
+          premium: sanitizePremiumEntitlement(result.entitlement),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Failed to record Custom Domain token usage.');
       }
       return;
     }
@@ -8956,7 +9294,7 @@ export function createRuntimeServer() {
         );
 
         if (!entitlement) {
-          sendText(res, 403, 'WebCoder Premium must be active before verifying a custom domain.');
+          sendText(res, 403, 'Custom Domain access must be active before verifying DNS.');
           return;
         }
 
@@ -8967,7 +9305,7 @@ export function createRuntimeServer() {
         const customDomain = deployment?.customDomains.find((entry) => entry.domain === entitlement.customDomain);
 
         if (!deployment || !customDomain) {
-          sendText(res, 404, 'The Premium custom-domain assignment was not found.');
+          sendText(res, 404, 'The Custom Domain assignment was not found.');
           return;
         }
 
@@ -9005,7 +9343,7 @@ export function createRuntimeServer() {
           dnsInstructions: buildCustomDomainDnsInstructions(entitlement.customDomain, PROJECT_PUBLIC_IP),
         });
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Premium custom-domain verification failed.');
+        sendText(res, 500, error instanceof Error ? error.message : 'Custom Domain verification failed.');
       }
       return;
     }
@@ -9191,7 +9529,7 @@ export function createRuntimeServer() {
           deploymentId: deployment.id,
           customDomain,
           stripeCheckoutSessionId: checkout.checkoutSessionId,
-          creditsAllowance: PREMIUM_CREDIT_ALLOWANCE,
+          creditsAllowance: CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
         });
         appendPremiumEntitlementEvent(premiumRegistry, {
           actor: 'runtime-session',

@@ -699,9 +699,15 @@ prepare_env_file() {
 
   local existing_cookie_secret
   existing_cookie_secret="$(read_env_value "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET")"
+  local existing_profile_cookie_secret
+  existing_profile_cookie_secret="$(read_env_value "${env_file}" "BOLT_PROFILE_COOKIE_SECRET")"
 
   if [[ -z "${existing_cookie_secret}" ]]; then
     existing_cookie_secret="$(generate_secret)"
+  fi
+
+  if [[ -z "${existing_profile_cookie_secret}" ]]; then
+    existing_profile_cookie_secret="$(generate_secret)"
   fi
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 && -z "${POSTGRES_PASSWORD}" ]]; then
@@ -716,6 +722,7 @@ prepare_env_file() {
   upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
   upsert_env_line "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET" "${existing_cookie_secret}"
+  upsert_env_line "${env_file}" "BOLT_PROFILE_COOKIE_SECRET" "${existing_profile_cookie_secret}"
   upsert_env_line "${env_file}" "BOLT_APP_PUBLIC_URL" "${APP_DOMAIN:+https://${APP_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_ADMIN_PANEL_PUBLIC_URL" "${ADMIN_DOMAIN:+https://${ADMIN_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_CREATE_TRIAL_PUBLIC_URL" "${CREATE_DOMAIN:+https://${CREATE_DOMAIN}}"

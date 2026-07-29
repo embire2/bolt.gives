@@ -1,38 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { getRuntimeControlBaseUrl } from './runtime-control';
 
-import { fetchRuntimeControlJson, getRuntimeControlBaseUrl } from './runtime-control';
-
-describe('runtime control client', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
+describe('runtime control environment resolution', () => {
+  it('prefers request-scoped Cloudflare bindings over process defaults', () => {
+    expect(
+      getRuntimeControlBaseUrl({
+        BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime/',
+      }),
+    ).toBe('https://alpha1.bolt.gives/runtime');
   });
 
-  it('uses an explicit runtime control URL without a trailing slash', () => {
-    vi.stubEnv('BOLT_RUNTIME_CONTROL_URL', 'https://runtime.example.com/runtime/');
-
-    expect(getRuntimeControlBaseUrl()).toBe('https://runtime.example.com/runtime');
-  });
-
-  it('falls back to the canonical runtime when Cloudflare rejects local direct-IP fetches', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response('error code: 1003', { status: 500 }))
-      .mockResolvedValueOnce(Response.json({ ok: true, messages: [] }));
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(fetchRuntimeControlJson('/shout/messages')).resolves.toEqual({ ok: true, messages: [] });
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://127.0.0.1:4321/runtime/shout/messages', undefined);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://bolt.gives/runtime/shout/messages', undefined);
-  });
-
-  it('does not hide ordinary runtime control failures', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('runtime unavailable', { status: 503 }));
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(fetchRuntimeControlJson('/shout/messages')).rejects.toThrow('runtime unavailable');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  it('uses an explicit internal runtime URL before the public URL', () => {
+    expect(
+      getRuntimeControlBaseUrl({
+        BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4321/runtime/',
+        BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://bolt.gives/runtime',
+      }),
+    ).toBe('http://127.0.0.1:4321/runtime');
   });
 });

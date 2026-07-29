@@ -9,6 +9,7 @@ import {
   buildPremiumAgentExecutionContract,
   consumePremiumRuntimeCredits,
   fetchPremiumRuntimeStatus,
+  recordPremiumRuntimeTokenUsage,
   type PremiumTaskCharge,
 } from '@bolt/runtime/lib/.server/premium-runtime';
 
@@ -16,9 +17,8 @@ type CommentaryWriter = (phase: 'plan', message: string, status: 'complete', det
 
 type PremiumUsageEvent = {
   type: 'premium-usage';
-  brand: 'WebCoder.codes';
-  creditsCharged: number;
-  creditsRemaining: number;
+  brand: 'Custom Domain';
+  tokensRemaining: number;
   complexity: PremiumTaskCharge['complexity'];
 };
 
@@ -26,6 +26,7 @@ export type PremiumChatSelection = {
   selection: { provider: string; model: string };
   messages: Messages;
   charge: PremiumTaskCharge | null;
+  recordUsage: (input: { runId: string; totalTokens: number }) => Promise<void>;
   report: (writeData: (event: PremiumUsageEvent) => void, writeCommentary: CommentaryWriter) => void;
 };
 
@@ -92,6 +93,31 @@ export async function preparePremiumChatSelection(options: {
     selection,
     messages,
     charge,
+    async recordUsage(input) {
+      if (!charge || !options.sessionId?.trim() || input.totalTokens <= 0) {
+        return;
+      }
+
+      try {
+        await recordPremiumRuntimeTokenUsage({
+          requestUrl: options.requestUrl,
+          sessionId: options.sessionId,
+          runId: input.runId,
+          totalTokens: input.totalTokens,
+          complexity: charge.complexity,
+          internalSecret:
+            options.env.BOLT_PREMIUM_INTERNAL_SECRET ||
+            options.env.BOLT_HOSTED_FREE_RELAY_SECRET ||
+            process.env.BOLT_PREMIUM_INTERNAL_SECRET ||
+            process.env.BOLT_HOSTED_FREE_RELAY_SECRET ||
+            '',
+        });
+      } catch (error) {
+        console.warn(
+          `Failed to record Custom Domain token usage: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
     report(writeData, writeCommentary) {
       if (!charge) {
         return;
@@ -99,17 +125,16 @@ export async function preparePremiumChatSelection(options: {
 
       writeData({
         type: 'premium-usage',
-        brand: 'WebCoder.codes',
-        creditsCharged: charge.creditsCharged,
-        creditsRemaining: charge.creditsRemaining,
+        brand: 'Custom Domain',
+        tokensRemaining: charge.tokensRemaining,
         complexity: charge.complexity,
       });
       writeCommentary(
         'plan',
-        `WebCoder Deep Build classified this as a ${charge.complexity} task.`,
+        `Custom Domain Deep Build classified this as a ${charge.complexity} task.`,
         'complete',
-        `Key changes: Charged ${charge.creditsCharged.toString()} complexity credits; ${charge.creditsRemaining.toString()} remain.
-Next: I will run the Premium implementation, review, test, and preview-verification passes.`,
+        `Key changes: ${charge.tokensRemaining.toLocaleString('en-US')} Agent tokens are available before this run; actual usage is recorded from the provider response.
+Next: I will run the Custom Domain implementation, review, test, and preview-verification passes.`,
       );
     },
   };

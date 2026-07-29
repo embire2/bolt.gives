@@ -27,6 +27,7 @@ modules/surfaces/tauri/target
 
 /.history
 /.cache
+**/.cache/
 *.tsbuildinfo
 /build/*
 !/build/server.d.ts
@@ -75,6 +76,7 @@ favicon.png
 # Environment and credential files
 .env
 .env.*
+!.env.example
 *.env
 credentials.json
 *.pem

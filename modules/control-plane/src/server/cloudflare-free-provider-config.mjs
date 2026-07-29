@@ -14,6 +14,7 @@ const DEFAULT_RUNTIME_CONTROL_URL = 'https://bolt.gives/runtime';
 const DEFAULT_REGISTRY_PATH = '/srv/bolt-gives-runtime-workspaces/managed-instance-registry.json';
 const HOSTED_FREE_RELAY_SECRET_NAME = 'BOLT_HOSTED_FREE_RELAY_SECRET';
 const FREE_USAGE_QUOTA_SECRET_NAME = 'BOLT_FREE_USAGE_QUOTA_SECRET';
+const PROFILE_COOKIE_SECRET_NAME = 'BOLT_PROFILE_COOKIE_SECRET';
 const STAGES = ['preview', 'production'];
 
 function normalizeListValue(value) {
@@ -313,10 +314,14 @@ export function buildFreeProviderSecretValues(env = {}) {
   const freeUsageQuotaSecret = String(
     env.BOLT_FREE_USAGE_QUOTA_SECRET || env.FREE_USAGE_QUOTA_SECRET || hostedFreeRelaySecret,
   ).trim();
+  const profileCookieSecret = String(
+    env.BOLT_PROFILE_COOKIE_SECRET || env.BOLT_TENANT_ADMIN_COOKIE_SECRET || hostedFreeRelaySecret,
+  ).trim();
 
   return {
     [HOSTED_FREE_RELAY_SECRET_NAME]: hostedFreeRelaySecret,
     [FREE_USAGE_QUOTA_SECRET_NAME]: freeUsageQuotaSecret,
+    [PROFILE_COOKIE_SECRET_NAME]: profileCookieSecret,
   };
 }
 

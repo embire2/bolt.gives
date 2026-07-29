@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://alpha1.bolt.gives">live alpha</a> ·
   <a href="https://create.bolt.gives">create a managed instance</a> ·
-  <a href="https://premium.bolt.gives">WebCoder Premium</a> ·
+  <a href="https://bolt.gives/pricing">Custom Domain pricing</a> ·
   <a href="https://github.com/embire2/bolt.gives">contribute on GitHub</a> ·
   <a href="docs/architecture/modules.md">architecture</a> ·
   <a href="CHANGELOG.md">changelog</a> ·
@@ -26,7 +26,7 @@
 ## Start Here
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
-- [Explore WebCoder.codes Premium](https://premium.bolt.gives)
+- [Compare FREE and Custom Domain](https://bolt.gives/pricing)
 - [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Understand the six-module architecture](docs/architecture/modules.md)
@@ -57,21 +57,33 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.4.0`)
+## Current Release (`v3.4.1`)
 
-`v3.4.0` is the current stable hosted and Linux self-hosted release. It fixes the GitHub deployment race, adds direct Cloudflare Pages and OpenWeb.Software deployments, and introduces payment-verified WebCoder.codes Premium projects.
+`v3.4.1` is the current stable hosted and Linux self-hosted release. It adds PostgreSQL-backed personal profiles and passwordless login, gives each new chat a personal greeting, makes deployment controls readable, protects the project title from surrounding navigation, and replaces arbitrary task credits with transparent Agent-token balances based on provider-reported usage.
 
-### v3.4.0 deployment and WebCoder Premium release
+### v3.4.1 profiles, token balances, and Custom Domain release
+
+- First-time visitors create a profile with name and surname, email address, and country. Profiles, opaque session hashes, one-time login-link hashes, expiry, and revocation state are stored in PostgreSQL; plaintext login tokens are never stored.
+- Returning users use the new top-menu `Login` button and an emailed one-time link. New chats greet signed-in users with `Hi {Name}, what are we creating today?`.
+- The header shows an actual Agent-token balance with a progress meter. Hosted `FREE` includes 100 Agent tokens each day, resetting at `00:00 GMT+2`.
+- When the FREE allocation is exhausted, a paused-service modal explains the reset and offers the `Custom Domain` launch promotion or continued use with a personal provider key.
+- `Custom Domain` replaces the old Premium wording. Its launch price is `$5/month` per project, a `$20/month` value, and includes 10,000 Agent tokens, Deep Build orchestration, custom-domain hosting, priority recovery, Preview verification, and deployment health checks.
+- Custom Domain runs are preflighted before generation and charged only from actual provider-reported token usage afterward. Completion retries are idempotent and cannot double-record the same run.
+- The Deploy dropdown now has a solid white background and dark option text in every theme. The project title has a reserved, flexible center column so surrounding controls cannot cover it.
+- Operator-only Admin Panel and former WebCoder menu links are removed from the public header. `/premium` remains only as a compatibility redirect to `/pricing`.
+- The self-host installer now ships the previously missing `.env.example`, generates an independent profile-cookie secret, and keeps PostgreSQL profile setup aligned with the normal installation path.
+
+### v3.4.0 deployment and custom-domain foundation
 
 - `Deploy to GitHub` now waits for its asynchronous deployment artifact before reading `runner`; GitLab, Netlify, and Vercel received the same preventative fix. Hosted GitHub/GitLab preparation builds and exports the authoritative server workspace rather than stalling on a dormant browser WebContainer.
 - TypeScript Vite starters include their required Node typings. If an older hosted project is missing only that dependency, repository deployment repairs it once and reruns the production build before opening the GitHub/GitLab dialog.
 - `Deploy to Cloudflare` builds and stages the generated project server-side, excludes secrets and dependency trees, uploads through the protected Cloudflare account used by `create.bolt.gives`, and returns a health-verified Pages URL.
 - `Deploy to OpenWeb.Software (FREE)` publishes the current hosted project to a shareable `https://{subdomain}.bolt.gives` address.
-- WebCoder.codes Premium is available from [`premium.bolt.gives`](https://premium.bolt.gives). Each project receives Deep Build orchestration, 10,000 complexity-priced credits per paid period, custom-domain hosting, priority recovery instructions, and deployment health verification for `$5` every 28 days.
-- Stripe fulfillment verifies the raw-body signature, processes events idempotently, activates access only after payment, resets credits after successful renewals, and handles failed, updated, and canceled subscriptions.
-- Premium implementation and billing secrets stay behind the hosted server boundary. The public repository contains the integration contracts and transparent entitlement rules, not operator credentials or model-provider secrets.
+- The payment-verified custom-domain foundation includes Stripe webhook verification, DNS validation, Caddy activation, and entitlement state. `v3.4.1` now presents this as Custom Domain with actual Agent-token accounting and monthly billing.
+- Stripe fulfillment verifies the raw-body signature, processes events idempotently, activates access only after payment, resets tokens after successful renewals, and handles failed, updated, and canceled subscriptions.
+- Billing secrets stay behind the hosted server boundary. The public repository contains the integration contracts and transparent entitlement rules, not operator credentials or model-provider secrets.
 
-The WebCoder.codes product surface is the Premium identity. The open-source core remains available under `bolt.gives`; Premium-only hosted services can evolve behind authenticated server APIs without shipping private credentials or proprietary service internals in this public repository.
+The open-source core remains available under `bolt.gives`; hosted Custom Domain services use authenticated server APIs without shipping private credentials in this public repository.
 
 ### v3.3.1 web and Linux release
 
@@ -80,7 +92,7 @@ The WebCoder.codes product surface is the Premium identity. The open-source core
 - Added regression coverage that fails if Electron scripts, dependencies, source, packaging configuration, or tag workflow return.
 - GitHub releases continue to provide the supported Linux installer; `v3.3.1` does not include an Electron or Windows desktop binary.
 
-We are working on a brand-new native Windows application that will become part of the bolt.gives Premium offering in the near future. It will use a separate architecture, installer, update channel, security review, and release process rather than carrying forward the retired Electron code.
+We are working on a brand-new native Windows application as a future paid offering. It will use a separate architecture, installer, update channel, security review, and release process rather than carrying forward the retired Electron code.
 
 ### v3.3.0 modular workspace architecture
 
@@ -198,7 +210,7 @@ Project file writes must be emitted as complete file actions, not terminal redir
 
 From the hosted Preview toolbar, users can publish the current project to a free bolt.gives subdomain such as `https://acme-dashboard.bolt.gives`. The runtime control plane records the deployment, attempts to create/update the Cloudflare A record, attempts to add a Caddy route, waits for HTTPS readiness, and keeps explicit DNS/routing status for operators.
 
-Users who want their own domain can select WebCoder Premium from Preview. bolt.gives creates a server-side Stripe Checkout subscription for `$5` every 28 days. Verified Stripe webhooks activate Premium and the 10,000-credit allowance; users then create an `A` record for their domain pointing at the configured bolt.gives server IP and rerun domain verification.
+Users who want their own domain select `Custom Domain` from Preview. bolt.gives creates a server-side Stripe Checkout subscription at the `$5/month` launch price, advertised as a `$20/month` value. Verified Stripe webhooks activate Custom Domain and the 10,000-Agent-token allowance; users then create an `A` record for their domain pointing at the configured bolt.gives server IP and rerun domain verification.
 
 Required server-side env:
 
@@ -211,11 +223,13 @@ BOLT_STRIPE_PUBLISHABLE_KEY=pk_live_...
 BOLT_STRIPE_SECRET_KEY=sk_live_...
 BOLT_STRIPE_WEBHOOK_SECRET=whsec_...
 BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD=5
-BOLT_PREMIUM_CREDIT_ALLOWANCE=10000
+BOLT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE=10000
 BOLT_PREMIUM_INTERNAL_SECRET=<random-server-only-secret>
+BOLT_FREE_DAILY_TOKEN_LIMIT=100
+BOLT_PROFILE_COOKIE_SECRET=<independent-random-cookie-secret>
 ```
 
-Keep the Stripe secret, webhook secret, and Premium internal secret in ignored server env files only. Do not commit them or expose them through Pages assets, generated projects, managed customer payloads, screenshots, or browser configuration.
+Keep the Stripe secret, webhook secret, token-metering secret, and profile-cookie secret in ignored server env files only. Do not commit them or expose them through Pages assets, generated projects, managed customer payloads, screenshots, or browser configuration.
 
 The full prompt experience is preserved in `Chat`. Provider/model controls, attachments, web research, prompt enhancement, speech, mode toggles, save/resume/share, and the built-in web research note all remain available there. Google Calendar-style prompts now start from a deterministic React/CSS Calendar Planner with a week grid, agenda panel, create-event action, and any explicit visible heading text requested by the user.
 
@@ -261,25 +275,25 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.4.0`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.4.1`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v3.4.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.4.1` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.4.0`](https://github.com/embire2/bolt.gives/releases/tag/v3.4.0)
+- Release: [`v3.4.1`](https://github.com/embire2/bolt.gives/releases/tag/v3.4.1)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.0/install.sh)
-- Release commit: see the `v3.4.0` GitHub tag.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.1/install.sh)
+- Release commit: see the `v3.4.1` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.0/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.1/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-sudo env BRANCH=v3.4.0 ./install-bolt-gives.sh
+sudo env BRANCH=v3.4.1 ./install-bolt-gives.sh
 ```
 
 The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
@@ -340,15 +354,15 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 ## Roadmap to v3.5.0
 
-`v3.5.0` is the next platform-hardening release. The focus is completing Premium account and billing lifecycle, broader first-party template acceptance, stronger operator-visible resource controls, installer resilience, and continued server-side runtime offload.
+`v3.5.0` is the next platform-hardening release. The focus is completing Custom Domain account and billing lifecycle, broader first-party template acceptance, stronger operator-visible resource controls, installer resilience, and continued server-side runtime offload.
 
 ### Launch blockers
 
 - Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- Add a customer billing portal, cancellation lifecycle, invoice history, and operator-visible Premium entitlement search.
-- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.0 initial-route budget.
+- Add a customer billing portal, cancellation lifecycle, invoice history, and operator-visible Custom Domain entitlement search.
+- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.1 initial-route budget.
 - Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
 
 ### Key improvements planned
@@ -359,20 +373,20 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Make runtime quotas, collaboration audit data, and installer recovery visible and repeatable.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.4.0`)
+## Current Platform Baseline (`v3.4.1`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
 - Preview and Code are focused workspace surfaces: status and activity chrome stay compact, the preview defaults to a desktop/full-width canvas, and user-selected workbench tabs are not overridden by preview recovery refreshes.
 - Live Workspaces can provision per-project Ubuntu CLI users, private workspace directories, and dedicated PostgreSQL roles/databases on a configured runtime node.
 - Hosted chat-created projects now auto-provision a runtime-node CLI workspace and project database instead of requiring a separate manual setup step.
-- Published projects can be assigned `https://{subdomain}.bolt.gives`, deployed directly to the protected OpenWeb Cloudflare account, or upgraded to a payment-verified WebCoder.codes Premium project with custom-domain hosting.
+- Published projects can be assigned `https://{subdomain}.bolt.gives`, deployed directly to the protected OpenWeb Cloudflare account, or upgraded to a payment-verified Custom Domain project.
 - Google Calendar-style app prompts now start from a deterministic first-party React/CSS Calendar Planner pack with visible calendar, agenda, and create-event smoke signals.
 - Exact visible text requested in follow-up prompts is now treated as an objective completion check against the current UI source files, so explicit labels and tokens must land before the run is accepted as complete.
 - Mutating follow-up prompts remain history-aware and continue from the hosted runtime snapshot until the requested improvement/change is actually applied to project files.
 - Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into source files, reducing preview-breaking corruption during large app generations.
 - Hosted `FREE` ships with ChatGPT-5.6 SOL as default plus Opus 4.8, Sonnet 5, and Fable 5 through a protected server-side Responses API route.
-- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, and control origin without placing `MAGNET_API_KEY` in managed/customer projects.
+- Cloudflare Pages deployments can be synced with `pnpm run cloudflare:sync-free-provider -- --include-managed`, which applies the hosted FREE relay secret, FREE quota secret, profile-cookie secret, and control origin without placing `MAGNET_API_KEY` in managed/customer projects.
 - Cloudflare Pages and managed fleet hosts use the central collaboration WebSocket transport at `wss://bolt.gives/collab`, avoiding same-host `/collab` 404s on Pages domains.
 - User-supplied API keys can target the refreshed coding model catalog, including MiniMax M3/M2.7, current OpenAI/Claude/Gemini/DeepSeek/Groq/Mistral/xAI models, and dynamic provider model discovery where supported.
 - The workspace defers terminal, performance monitor, and chat-export persistence until the user opens those tools, reducing startup weight for new project creation and follow-up edits.

@@ -11,6 +11,7 @@ vi.mock('remix-utils/client-only', () => ({
 vi.mock('~/components/header/Header', () => ({ Header: () => <div>Header</div> }));
 vi.mock('~/components/ui/BackgroundRays', () => ({ default: () => <div>Background</div> }));
 vi.mock('~/components/chat/Chat.client', () => ({ Chat: () => <div>Chat Client</div> }));
+vi.mock('~/components/profile/ProfileOnboarding', () => ({ ProfileOnboarding: () => null }));
 
 describe('index route fallback shell', () => {
   beforeAll(() => {

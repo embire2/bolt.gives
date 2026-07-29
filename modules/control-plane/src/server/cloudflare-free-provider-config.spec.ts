@@ -26,12 +26,14 @@ describe('cloudflare FREE provider config helpers', () => {
     const secrets = buildFreeProviderSecretValues({
       BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
       BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
+      BOLT_PROFILE_COOKIE_SECRET: 'profile-secret',
       MAGNET_API_KEY: 'must-not-be-used',
     });
 
     expect(secrets).toEqual({
       BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
       BOLT_FREE_USAGE_QUOTA_SECRET: 'quota-secret',
+      BOLT_PROFILE_COOKIE_SECRET: 'profile-secret',
     });
     expect(JSON.stringify(secrets)).not.toContain('must-not-be-used');
   });
@@ -44,6 +46,7 @@ describe('cloudflare FREE provider config helpers', () => {
     ).toEqual({
       BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret',
       BOLT_FREE_USAGE_QUOTA_SECRET: 'relay-secret',
+      BOLT_PROFILE_COOKIE_SECRET: 'relay-secret',
     });
   });
 

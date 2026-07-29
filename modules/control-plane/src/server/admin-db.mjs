@@ -2,6 +2,7 @@
 
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { validateUserProfileInput } from './profile-auth.mjs';
 
 const { Pool } = pg;
 
@@ -98,9 +99,38 @@ export async function ensureAdminDatabaseSchema() {
             registration_source TEXT NULL,
             created_at TIMESTAMPTZ NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL,
+            last_login_at TIMESTAMPTZ NULL,
             last_instance_slug TEXT NULL,
             last_instance_status TEXT NULL,
             last_instance_url TEXT NULL
+          );
+        `);
+
+        await client.query(`
+          ALTER TABLE bolt_admin_client_profiles
+          ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ NULL;
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_sessions (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            last_seen_at TIMESTAMPTZ NOT NULL,
+            revoked_at TIMESTAMPTZ NULL
+          );
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_login_links (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ NULL
           );
         `);
 
@@ -176,6 +206,18 @@ export async function ensureAdminDatabaseSchema() {
           `CREATE INDEX IF NOT EXISTS bolt_admin_client_profiles_email_idx ON bolt_admin_client_profiles (email);`,
         );
         await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_sessions_profile_idx ON bolt_user_profile_sessions (profile_id);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_sessions_expiry_idx ON bolt_user_profile_sessions (expires_at);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_links_profile_idx ON bolt_user_profile_login_links (profile_id);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_links_expiry_idx ON bolt_user_profile_login_links (expires_at);`,
+        );
+        await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_admin_managed_instances_profile_email_idx ON bolt_admin_managed_instances (profile_email);`,
         );
         await client.query(
@@ -245,6 +287,7 @@ function mapClientProfileRow(row) {
     registrationSource: row.registration_source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    lastLoginAt: row.last_login_at,
     lastInstanceSlug: row.last_instance_slug,
     lastInstanceStatus: row.last_instance_status,
     lastInstanceUrl: row.last_instance_url,
@@ -313,6 +356,209 @@ export async function listClientProfiles() {
   `);
 
   return result.rows.map(mapClientProfileRow);
+}
+
+export async function registerClientProfile(input = {}) {
+  const profile = validateUserProfileInput(input);
+
+  if (!(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const result = await getAdminDatabasePool().query(
+    `
+      INSERT INTO bolt_admin_client_profiles (
+        id, name, email, company, role, phone, country, use_case, requested_subdomain, registration_source,
+        created_at, updated_at, last_login_at, last_instance_slug, last_instance_status, last_instance_url
+      )
+      VALUES ($1,$2,$3,NULL,NULL,NULL,$4,NULL,NULL,$5,$6,$6,$6,NULL,NULL,NULL)
+      ON CONFLICT (email) DO NOTHING
+      RETURNING *
+    `,
+    [id, profile.name, profile.email, profile.country, 'profile-onboarding', now],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error('A profile already exists for this email address. Use Login to continue.');
+  }
+
+  return mapClientProfileRow(result.rows[0]);
+}
+
+export async function findClientProfileByEmail(email) {
+  const normalizedEmail = String(email || '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedEmail || !(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  const result = await getAdminDatabasePool().query(
+    `
+      SELECT *
+      FROM bolt_admin_client_profiles
+      WHERE email = $1
+      LIMIT 1
+    `,
+    [normalizedEmail],
+  );
+
+  return result.rows[0] ? mapClientProfileRow(result.rows[0]) : null;
+}
+
+export async function createClientProfileSession({ profileId, id, tokenHash, createdAt, expiresAt } = {}) {
+  if (!profileId || !id || !tokenHash || !createdAt || !expiresAt || !(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  await getAdminDatabasePool().query(
+    `
+      INSERT INTO bolt_user_profile_sessions (
+        id, profile_id, token_hash, created_at, expires_at, last_seen_at, revoked_at
+      )
+      VALUES ($1,$2,$3,$4,$5,$4,NULL)
+    `,
+    [id, profileId, tokenHash, createdAt, expiresAt],
+  );
+  await getAdminDatabasePool().query(
+    `
+      UPDATE bolt_admin_client_profiles
+      SET last_login_at = $2, updated_at = GREATEST(updated_at, $2::timestamptz)
+      WHERE id = $1
+    `,
+    [profileId, createdAt],
+  );
+
+  return { id, profileId, createdAt, expiresAt };
+}
+
+export async function readClientProfileSession({ id, tokenHash, now = new Date() } = {}) {
+  if (!id || !tokenHash || !(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  const nowIso = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
+  const result = await getAdminDatabasePool().query(
+    `
+      SELECT p.*
+      FROM bolt_user_profile_sessions s
+      JOIN bolt_admin_client_profiles p ON p.id = s.profile_id
+      WHERE
+        s.id = $1
+        AND s.token_hash = $2
+        AND s.revoked_at IS NULL
+        AND s.expires_at > $3::timestamptz
+      LIMIT 1
+    `,
+    [id, tokenHash, nowIso],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  await getAdminDatabasePool().query(
+    `
+      UPDATE bolt_user_profile_sessions
+      SET last_seen_at = $2
+      WHERE id = $1 AND last_seen_at < $2::timestamptz - INTERVAL '5 minutes'
+    `,
+    [id, nowIso],
+  );
+
+  return mapClientProfileRow(result.rows[0]);
+}
+
+export async function revokeClientProfileSession({ id, tokenHash, now = new Date() } = {}) {
+  if (!id || !tokenHash || !(await ensureAdminDatabaseSchema())) {
+    return false;
+  }
+
+  const nowIso = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
+  const result = await getAdminDatabasePool().query(
+    `
+      UPDATE bolt_user_profile_sessions
+      SET revoked_at = $3
+      WHERE id = $1 AND token_hash = $2 AND revoked_at IS NULL
+      RETURNING id
+    `,
+    [id, tokenHash, nowIso],
+  );
+
+  return result.rowCount > 0;
+}
+
+export async function createClientProfileLoginLink({ email, id, tokenHash, createdAt, expiresAt } = {}) {
+  const profile = await findClientProfileByEmail(email);
+
+  if (!profile || !id || !tokenHash || !createdAt || !expiresAt) {
+    return null;
+  }
+
+  await getAdminDatabasePool().query(
+    `
+      INSERT INTO bolt_user_profile_login_links (
+        id, profile_id, token_hash, created_at, expires_at, consumed_at
+      )
+      VALUES ($1,$2,$3,$4,$5,NULL)
+    `,
+    [id, profile.id, tokenHash, createdAt, expiresAt],
+  );
+
+  return profile;
+}
+
+export async function consumeClientProfileLoginLink({ tokenHash, now = new Date() } = {}) {
+  if (!tokenHash || !(await ensureAdminDatabaseSchema())) {
+    return null;
+  }
+
+  const client = await getAdminDatabasePool().connect();
+  const nowIso = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+        SELECT p.*, l.id AS login_link_id
+        FROM bolt_user_profile_login_links l
+        JOIN bolt_admin_client_profiles p ON p.id = l.profile_id
+        WHERE
+          l.token_hash = $1
+          AND l.consumed_at IS NULL
+          AND l.expires_at > $2::timestamptz
+        FOR UPDATE OF l
+        LIMIT 1
+      `,
+      [tokenHash, nowIso],
+    );
+
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `
+        UPDATE bolt_user_profile_login_links
+        SET consumed_at = $2
+        WHERE id = $1
+      `,
+      [result.rows[0].login_link_id, nowIso],
+    );
+    await client.query('COMMIT');
+
+    return mapClientProfileRow(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function mapManagedInstanceRow(row) {

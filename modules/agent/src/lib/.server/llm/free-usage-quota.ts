@@ -11,13 +11,17 @@ import { getHostedFreeRelaySecret, HOSTED_FREE_RELAY_SECRET_HEADER } from './hos
 
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const DEFAULT_FREE_DAILY_LIMIT_USD = 1;
+const DEFAULT_FREE_DAILY_TOKEN_LIMIT = 100;
 const FREE_QUOTA_RESET_LABEL = '00:00 GMT+2';
 const FREE_QUOTA_ERROR_CODE = 'FREE_PROVIDER_DAILY_LIMIT_EXCEEDED';
 
 type RuntimeEnv = Record<string, string | undefined>;
 
-interface FreeUsageQuotaDecision {
+export interface FreeUsageQuotaDecision {
   allowed: boolean;
+  usedTokens: number;
+  remainingTokens: number;
+  tokenLimit: number;
   usedUsd: number;
   remainingUsd: number;
   limitUsd: number;
@@ -49,7 +53,7 @@ export class FreeUsageQuotaExceededError extends Error {
 }
 
 export function buildFreeUsageQuotaLimitMessage() {
-  return `You have hit your FREE daily coding limit for today. You can use your own API key from any provider or wait for the limit to reset at ${FREE_QUOTA_RESET_LABEL}.`;
+  return `The hosted FREE service has been paused because you have used all 100 Agent tokens for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at ${FREE_QUOTA_RESET_LABEL}.`;
 }
 
 function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}) {
@@ -77,6 +81,7 @@ function firstHeaderValue(value: string | null) {
 function getFreeUsageQuotaSubjectBasis(request: Request) {
   const cookies = parseCookies(request.headers.get('Cookie'));
   const sessionCookie =
+    cookies.bolt_profile_session ||
     cookies.bolt_tenant_session ||
     cookies.bolt_managed_instance ||
     cookies.bolt_free_subject ||
@@ -107,17 +112,32 @@ async function sha256Hex(input: string) {
     .join('');
 }
 
-export async function buildFreeUsageQuotaSubjectHash(options: { request: Request; runtimeEnv?: RuntimeEnv }) {
+export async function buildFreeUsageQuotaSubjectHash(options: {
+  request: Request;
+  runtimeEnv?: RuntimeEnv;
+  subjectKey?: string | null;
+}) {
   const secret =
     getFreeUsageQuotaSecret(options.runtimeEnv) ||
     normalizeCredential(options.runtimeEnv?.[FREE_HOSTED_API_TOKEN_KEY]) ||
     'bolt-free-usage-quota';
-  return sha256Hex(`${secret}:${getFreeUsageQuotaSubjectBasis(options.request)}`);
+  const subjectBasis = options.subjectKey?.trim()
+    ? `profile:${options.subjectKey.trim()}`
+    : getFreeUsageQuotaSubjectBasis(options.request);
+
+  return sha256Hex(`${secret}:${subjectBasis}`);
 }
 
-function normalizeDailyLimit(runtimeEnv: RuntimeEnv = {}) {
+function normalizeDailyCostLimit(runtimeEnv: RuntimeEnv = {}) {
   const configuredLimit = Number(runtimeEnv.BOLT_FREE_DAILY_USD_LIMIT || runtimeEnv.FREE_DAILY_USD_LIMIT);
   return Number.isFinite(configuredLimit) && configuredLimit > 0 ? configuredLimit : DEFAULT_FREE_DAILY_LIMIT_USD;
+}
+
+function normalizeDailyTokenLimit(runtimeEnv: RuntimeEnv = {}) {
+  const configuredLimit = Number(runtimeEnv.BOLT_FREE_DAILY_TOKEN_LIMIT || runtimeEnv.FREE_DAILY_TOKEN_LIMIT);
+  return Number.isFinite(configuredLimit) && configuredLimit > 0
+    ? Math.floor(configuredLimit)
+    : DEFAULT_FREE_DAILY_TOKEN_LIMIT;
 }
 
 function buildQuotaRuntimeUrl(runtimeEnv: RuntimeEnv, pathname: string) {
@@ -165,31 +185,47 @@ export async function assertFreeUsageQuotaAllowed(options: {
   request: Request;
   runtimeEnv?: RuntimeEnv;
   providerName?: string;
+  subjectKey?: string | null;
 }) {
   if (options.providerName !== FREE_PROVIDER_NAME) {
     return null;
   }
 
-  const runtimeEnv = options.runtimeEnv || {};
-  const subjectHash = await buildFreeUsageQuotaSubjectHash({
+  const quota = await getFreeUsageQuotaForRequest({
     request: options.request,
-    runtimeEnv,
+    runtimeEnv: options.runtimeEnv,
+    subjectKey: options.subjectKey,
   });
-  const payload = await fetchFreeUsageQuota<FreeUsageQuotaCheckResponse>({
-    runtimeEnv,
-    pathname: '/internal/free-usage-quota/check',
-    body: {
-      subjectHash,
-      limitUsd: normalizeDailyLimit(runtimeEnv),
-    },
-  });
-  const quota = payload?.quota;
 
   if (quota && quota.allowed === false) {
     throw new FreeUsageQuotaExceededError(quota.message || buildFreeUsageQuotaLimitMessage());
   }
 
   return quota || null;
+}
+
+export async function getFreeUsageQuotaForRequest(options: {
+  request: Request;
+  runtimeEnv?: RuntimeEnv;
+  subjectKey?: string | null;
+}) {
+  const runtimeEnv = options.runtimeEnv || {};
+  const subjectHash = await buildFreeUsageQuotaSubjectHash({
+    request: options.request,
+    runtimeEnv,
+    subjectKey: options.subjectKey,
+  });
+  const payload = await fetchFreeUsageQuota<FreeUsageQuotaCheckResponse>({
+    runtimeEnv,
+    pathname: '/internal/free-usage-quota/check',
+    body: {
+      subjectHash,
+      tokenLimit: normalizeDailyTokenLimit(runtimeEnv),
+      limitUsd: normalizeDailyCostLimit(runtimeEnv),
+    },
+  });
+
+  return payload?.quota || null;
 }
 
 function estimateFreeUsageCostUsd(usage: UsageLike | null | undefined, modelName: string | undefined) {
@@ -213,6 +249,7 @@ export async function recordFreeUsageQuotaForRequest(options: {
   modelName?: string;
   usage?: UsageLike | null;
   runId?: string;
+  subjectKey?: string | null;
 }) {
   if (options.providerName !== FREE_PROVIDER_NAME) {
     return null;
@@ -220,23 +257,25 @@ export async function recordFreeUsageQuotaForRequest(options: {
 
   const runtimeEnv = options.runtimeEnv || {};
   const costUsd = estimateFreeUsageCostUsd(options.usage, options.modelName);
+  const normalizedUsage = normalizeUsage(options.usage);
 
-  if (!Number.isFinite(costUsd) || costUsd <= 0) {
+  if (!normalizedUsage || normalizedUsage.totalTokens <= 0) {
     return null;
   }
 
   const subjectHash = await buildFreeUsageQuotaSubjectHash({
     request: options.request,
     runtimeEnv,
+    subjectKey: options.subjectKey,
   });
-  const normalizedUsage = normalizeUsage(options.usage);
   const payload = await fetchFreeUsageQuota<FreeUsageQuotaRecordResponse>({
     runtimeEnv,
     pathname: '/internal/free-usage-quota/record',
     body: {
       subjectHash,
-      costUsd,
-      limitUsd: normalizeDailyLimit(runtimeEnv),
+      costUsd: Number.isFinite(costUsd) && costUsd > 0 ? costUsd : 0,
+      tokenLimit: normalizeDailyTokenLimit(runtimeEnv),
+      limitUsd: normalizeDailyCostLimit(runtimeEnv),
       providerName: options.providerName,
       modelName: options.modelName || FREE_HOSTED_MODEL,
       usage: normalizedUsage,

@@ -67,6 +67,8 @@ describe('hosted FREE usage quota client', () => {
         providerName: 'FREE',
       }),
     ).rejects.toThrow('FREE_PROVIDER_DAILY_LIMIT_EXCEEDED');
+    expect(buildFreeUsageQuotaLimitMessage()).toContain('100 Agent tokens');
+    expect(buildFreeUsageQuotaLimitMessage()).toContain('$5/month launch price');
   });
 
   it('records estimated selected-model usage cost against the runtime quota ledger', async () => {
@@ -108,6 +110,7 @@ describe('hosted FREE usage quota client', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4321/runtime/internal/free-usage-quota/record');
     expect(requestBody.costUsd).toBeCloseTo(0.01, 8);
     expect(requestBody.limitUsd).toBe(1);
+    expect(requestBody.tokenLimit).toBe(100);
     expect(requestBody.providerName).toBe('FREE');
     expect(requestBody.modelName).toBe('claude-fable-5');
   });

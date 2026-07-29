@@ -14,6 +14,9 @@ import globalStyles from './styles/index.scss?url';
 import { CursorGlow } from './components/ui/CursorGlow';
 import { PublicUrlConfigProvider } from '@bolt/core/lib/public-url-context';
 import { getPublicUrlConfig } from '@bolt/core/lib/public-urls';
+import { ProfileProvider } from './lib/profile-context';
+import { resolveProfileSession } from './lib/.server/profile-session';
+import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 
 import 'virtual:uno.css';
 
@@ -59,9 +62,12 @@ export const headers: HeadersFunction = () => ({
   'Cache-Control': 'no-store, max-age=0, must-revalidate',
 });
 
-export const loader = ({ request: _request }: LoaderFunctionArgs) => {
+export const loader = async ({ context, request }: LoaderFunctionArgs) => {
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
+
   return json({
     publicUrls: getPublicUrlConfig(),
+    profile: await resolveProfileSession(request, runtimeEnv),
   });
 };
 
@@ -194,9 +200,11 @@ export default function App() {
 
   return (
     <PublicUrlConfigProvider value={data.publicUrls}>
-      <Layout>
-        <Outlet />
-      </Layout>
+      <ProfileProvider profile={data.profile}>
+        <Layout>
+          <Outlet />
+        </Layout>
+      </ProfileProvider>
     </PublicUrlConfigProvider>
   );
 }

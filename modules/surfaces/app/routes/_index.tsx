@@ -5,6 +5,7 @@ import { Header } from '~/components/header/Header';
 import { FREE_HOSTED_MODEL_LABEL, FREE_PROVIDER_NAME } from '@bolt/agent/lib/modules/llm/free-provider-config';
 import { getCreateRedirectHost, getPublicUrlConfig } from '@bolt/core/lib/public-urls';
 import BackgroundRays from '~/components/ui/BackgroundRays';
+import { ProfileOnboarding } from '~/components/profile/ProfileOnboarding';
 import { APP_VERSION } from '@bolt/core/lib/version';
 
 const SCREENSHOT_BASE_URL = '/screenshots';
@@ -56,7 +57,8 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.4.0 release with reliable GitHub deployment, direct Cloudflare Pages publishing, OpenWeb.Software FREE subdomains, and payment-verified WebCoder.codes Premium projects.',
+  'Stable v3.4.1 release with PostgreSQL-backed personal profiles, secure login links, readable deployment controls, and protected project titles.',
+  'FREE includes 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
@@ -336,6 +338,7 @@ export function ChatWorkspace() {
       <BackgroundRays />
       <Header />
       <ClientOnly fallback={<HomeShellFallback />}>{() => <Chat />}</ClientOnly>
+      <ProfileOnboarding />
     </div>
   );
 }
@@ -410,7 +413,7 @@ export default function Index() {
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">stable</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
-                  <div className="text-2xl font-black">v3.4.0</div>
+                  <div className="text-2xl font-black">v3.5.0</div>
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">roadmap</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
@@ -664,6 +667,7 @@ export default function Index() {
           </div>
         </section>
       </main>
+      <ProfileOnboarding />
     </div>
   );
 }

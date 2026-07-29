@@ -30,7 +30,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import type { ElementInfo } from '@bolt/project/components/workbench/Inspector';
 import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '@bolt/agent/lib/runtime/autonomy';
-import { usePublicUrlConfig } from '@bolt/core/lib/public-url-context';
+import { getProfileFirstName, useProfile } from '~/lib/profile-context';
 import { logStore } from '@bolt/project/lib/stores/logs';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
 
@@ -460,7 +460,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     },
     ref,
   ) => {
-    const { adminPanelUrl } = usePublicUrlConfig();
+    const profile = useProfile();
+    const firstName = getProfileFirstName(profile);
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 132 : 136;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
     const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
@@ -1036,7 +1037,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         {!chatStarted && (
           <div id="intro" className="mt-[10vh] sm:mt-[12vh] lg:mt-[16vh] mx-auto max-w-3xl px-4 text-center lg:px-0">
             <h1 className="mb-3 text-4xl font-bold text-bolt-elements-textPrimary animate-fade-in sm:text-5xl lg:text-6xl">
-              What are we creating today?
+              {firstName ? `Hi ${firstName}, what are we creating today?` : 'What are we creating today?'}
             </h1>
             <p className="mb-6 text-base text-bolt-elements-textSecondary animate-fade-in animation-delay-200 sm:mb-8 sm:text-lg lg:text-xl">
               Create / Approve / Rinse / Repeat. There are no limits to your creativity with Bolt.gives
@@ -1082,13 +1083,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             <div className="flex justify-center gap-2">
               {ImportButtons(importChat)}
               <GitCloneButton importChat={importChat} />
-              <a
-                href={adminPanelUrl}
-                className="inline-flex items-center gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-4 py-2 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-focus"
-              >
-                <span className="i-ph:buildings text-base" />
-                Admin Panel
-              </a>
             </div>
           )}
           <div className="flex flex-col gap-5">
@@ -1098,20 +1092,15 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   <div className="i-ph:rocket-launch-duotone mt-0.5 text-2xl text-bolt-elements-textPrimary" />
                   <div className="flex-1">
                     <div className="font-medium text-bolt-elements-textPrimary">
-                      Getting started (no bolt.gives signup required)
+                      Getting started with your bolt.gives profile
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
                       <div>
-                        1. Start with FREE and choose ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, or Fable 5. No account or API
-                        key is required.
+                        1. Start with FREE and choose ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, or Fable 5. No API key is
+                        required.
                       </div>
                       <div>2. Or pick your own provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.).</div>
                       <div>3. For another cloud provider, add its API key in the chat box or Settings.</div>
-                      <div>
-                        4. If you self-host for a team or customers, open <code>{adminPanelUrl}</code> or{' '}
-                        <code>/tenant-admin</code> to manage registrations, tenant accounts, and Cloudflare trial
-                        instances on this server.
-                      </div>
                       <div className="mt-2 text-xs">
                         Note: keys you supply for other providers stay in your browser and are sent only with requests
                         to that provider. The hosted FREE key remains server-side.

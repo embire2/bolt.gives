@@ -2,12 +2,12 @@ import { useStore } from '@nanostores/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { lazy, Suspense } from 'react';
 import { chatStore } from '@bolt/project/lib/stores/chat';
-import { usePublicUrlConfig } from '@bolt/core/lib/public-url-context';
 import { classNames } from '@bolt/core/utils/classNames';
 import { ChatDescription } from '@bolt/project/lib/persistence/ChatDescription.client';
 import { APP_VERSION } from '@bolt/core/lib/version';
+import { getProfileFirstName, useProfile } from '~/lib/profile-context';
 import { BugReportLauncher } from './BugReportLauncher.client';
-import { PremiumStatusBadge } from './PremiumStatusBadge.client';
+import { UsageBalanceBadge } from './UsageBalanceBadge.client';
 
 const HeaderActionButtons = lazy(() =>
   import('./HeaderActionButtons.client').then((module) => ({
@@ -17,7 +17,8 @@ const HeaderActionButtons = lazy(() =>
 
 export function Header() {
   const chat = useStore(chatStore);
-  const { adminPanelUrl, createTrialUrl } = usePublicUrlConfig();
+  const profile = useProfile();
+  const firstName = getProfileFirstName(profile);
 
   const handleSidebarToggle = () => {
     if (typeof window === 'undefined') {
@@ -29,10 +30,13 @@ export function Header() {
 
   return (
     <header
-      className={classNames('relative flex items-center px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]', {
-        'border-transparent': !chat.started,
-        'border-bolt-elements-borderColor': chat.started,
-      })}
+      className={classNames(
+        'relative flex items-center justify-between px-2 sm:px-3 md:px-4 border-b h-[var(--header-height)]',
+        {
+          'border-transparent': !chat.started,
+          'border-bolt-elements-borderColor': chat.started,
+        },
+      )}
     >
       <div className="flex items-center gap-1.5 sm:gap-2 z-logo text-bolt-elements-textPrimary">
         <button
@@ -57,48 +61,26 @@ export function Header() {
         </a>
       </div>
 
-      <span className="hidden md:block flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">
+      <span className="mx-3 hidden min-w-0 flex-1 overflow-hidden rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-1 text-center font-medium text-bolt-elements-textPrimary shadow-sm md:block">
         {chat.started ? <ClientOnly>{() => <ChatDescription />}</ClientOnly> : null}
       </span>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
         <ClientOnly>{() => <BugReportLauncher />}</ClientOnly>
-        <ClientOnly>{() => <PremiumStatusBadge />}</ClientOnly>
-        <a
-          href="/tenant"
-          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
-        >
-          Tenant Portal
-        </a>
-        <a
-          href={createTrialUrl}
-          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
-        >
-          Cloudflare Trials
-        </a>
-        <a
-          href="/workspace-setup"
-          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
-        >
-          Live Workspaces
-        </a>
-        <a
-          href="https://github.com/embire2/bolt.gives"
-          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
-        >
-          GitHub
-        </a>
-        <a
-          href={adminPanelUrl}
-          className="hidden sm:inline-flex text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
-        >
-          Admin Panel
-        </a>
+        <ClientOnly>{() => <UsageBalanceBadge />}</ClientOnly>
         <a
           href="/changelog"
-          className="text-xs sm:text-sm text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary underline-offset-4 hover:underline"
+          className="hidden text-xs text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary xl:inline-flex"
         >
           Changelog
+        </a>
+        <a
+          href={profile ? '/profile' : '/login'}
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-[#173f32] bg-[#173f32] px-3 text-xs font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#245543] sm:px-4"
+          title={profile ? `Open ${profile.name}'s profile` : 'Login to your bolt.gives profile'}
+        >
+          <span className={profile ? 'i-ph:user-circle-fill text-[#c9f36a]' : 'i-ph:sign-in text-[#c9f36a]'} />
+          <span>{profile ? `Hi, ${firstName}` : 'Login'}</span>
         </a>
 
         {chat.started ? (

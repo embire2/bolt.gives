@@ -1,8 +1,11 @@
 import { resolveHostedRuntimeBaseUrlForRequest } from './hosted-runtime-snapshot';
 
 export type PremiumRuntimeStatus = {
-  plan: 'free' | 'webcoder-premium';
+  plan: 'free' | 'custom-domain';
   status: 'inactive' | 'pending' | 'active' | 'past_due' | 'canceled';
+  tokensAllowance: number;
+  tokensUsed: number;
+  tokensRemaining: number;
   creditsAllowance: number;
   creditsUsed: number;
   creditsRemaining: number;
@@ -13,6 +16,7 @@ export type PremiumRuntimeStatus = {
 export type PremiumTaskCharge = {
   creditsCharged: number;
   creditsRemaining: number;
+  tokensRemaining: number;
   complexity: 'quick' | 'standard' | 'advanced' | 'deep';
   premium: PremiumRuntimeStatus;
 };
@@ -20,7 +24,7 @@ export type PremiumTaskCharge = {
 export class PremiumRuntimeError extends Error {
   statusCode: number;
   isRetryable: boolean;
-  provider = 'WebCoder.codes Premium';
+  provider = 'Custom Domain';
 
   constructor(message: string, statusCode: number, isRetryable: boolean) {
     super(message);
@@ -58,7 +62,7 @@ export async function consumePremiumRuntimeCredits(options: {
 }): Promise<PremiumTaskCharge> {
   if (!options.internalSecret) {
     throw new PremiumRuntimeError(
-      'WebCoder Premium metering is temporarily unavailable, so the task was stopped before untracked usage occurred.',
+      'Custom Domain token metering is temporarily unavailable, so the task was stopped before untracked usage occurred.',
       503,
       true,
     );
@@ -84,16 +88,16 @@ export async function consumePremiumRuntimeCredits(options: {
   const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
 
   if (!response.ok) {
-    if (response.status === 402 || payload.reason === 'credits-exhausted') {
+    if (response.status === 402 || payload.reason === 'tokens-exhausted') {
       throw new PremiumRuntimeError(
-        `This project has ${Number(payload.creditsRemaining || 0)} Premium credits remaining, but the task needs ${Number(payload.creditsRequired || 0)}. Credits reset after the next successful 28-day renewal.`,
+        `This project has used its 10,000 Custom Domain Agent tokens. Tokens reset after the next successful monthly renewal.`,
         402,
         false,
       );
     }
 
     throw new PremiumRuntimeError(
-      payload.message || `Premium metering failed with status ${response.status}.`,
+      payload.message || `Custom Domain token metering failed with status ${response.status}.`,
       503,
       true,
     );
@@ -103,13 +107,61 @@ export async function consumePremiumRuntimeCredits(options: {
 }
 
 export function buildPremiumAgentExecutionContract(charge: PremiumTaskCharge) {
-  return `[WebCoder.codes Premium execution contract]
-This project has active Premium access. The current request is classified as ${charge.complexity} and has charged ${charge.creditsCharged} credits.
+  return `[Custom Domain execution contract]
+This project has active Custom Domain access. The current request is classified as ${charge.complexity}. Actual Agent token usage is recorded from the model response.
 - Work in Deep Build mode: inspect existing state, form a concrete plan, implement, test, and verify the live preview before stopping.
 - Use checkpoints around risky changes and preserve a rollback path.
 - Run independent implementation and review passes when the task spans architecture, data, deployment, security, or billing.
 - Treat production logs, build output, browser errors, and health checks as first-class context.
 - Prefer complete working outcomes over scaffolds, placeholders, or hand-off instructions.
 - Keep progress factual and tied to actual execution events.
-Do not claim Premium capabilities that were not executed. ${charge.creditsRemaining} credits remain after this task reservation.`;
+Do not claim Custom Domain capabilities that were not executed. ${charge.tokensRemaining} Agent tokens remain before this run.`;
+}
+
+export async function recordPremiumRuntimeTokenUsage(options: {
+  requestUrl: string;
+  sessionId: string;
+  runId: string;
+  totalTokens: number;
+  complexity: PremiumTaskCharge['complexity'];
+  internalSecret: string;
+}) {
+  if (!options.internalSecret || !Number.isFinite(options.totalTokens) || options.totalTokens <= 0) {
+    return null;
+  }
+
+  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(options.requestUrl);
+  const response = await fetch(
+    `${runtimeBaseUrl}/sessions/${encodeURIComponent(options.sessionId.trim())}/premium/tokens/record`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Bolt-Premium-Internal': options.internalSecret,
+      },
+      body: JSON.stringify({
+        runId: options.runId,
+        totalTokens: Math.floor(options.totalTokens),
+        complexity: options.complexity,
+      }),
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
+
+  if (!response.ok) {
+    throw new PremiumRuntimeError(
+      payload.message || `Custom Domain token recording failed with status ${response.status}.`,
+      503,
+      true,
+    );
+  }
+
+  return payload as {
+    ok: true;
+    tokensRecorded: number;
+    tokensRemaining: number;
+    duplicate: boolean;
+    premium: PremiumRuntimeStatus;
+  };
 }
