@@ -38,6 +38,10 @@ export function inferExpectedSurface(baseUrl) {
     return 'chat';
   }
 
+  if (pathname === '/pricing' || pathname === '/premium') {
+    return 'pricing';
+  }
+
   return 'website';
 }
 
@@ -57,6 +61,13 @@ export function matchesExpectedSurface(expectedSurface, { title = '', bodyText =
       haystack.includes('transparent ai coding workspace') ||
       haystack.includes('prompt-to-preview') ||
       haystack.includes('contribute to project')
+    );
+  }
+
+  if (expectedSurface === 'pricing') {
+    return (
+      haystack.includes('custom domain') &&
+      (haystack.includes('launch promotion') || haystack.includes('10,000 agent tokens'))
     );
   }
 
