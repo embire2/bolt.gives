@@ -434,6 +434,20 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 
 ## Screenshots
 
+Real `v3.4.1` browser E2E on `alpha1.bolt.gives`, covering PostgreSQL-backed profile creation, a FREE ChatGPT-5.6 SOL prompt-to-preview build, saved-project restoration after an alpha service restart, the 100-Agent-token pause boundary, and Custom Domain pricing:
+
+Personal workspace onboarding:
+![bolt.gives v3.4.1 personal workspace onboarding](docs/screenshots/profile-onboarding-v3.4.1.png)
+
+Generated Tideboard app in the restored live Preview:
+![bolt.gives v3.4.1 Tideboard prompt-to-preview E2E](docs/screenshots/tideboard-preview-v3.4.1.png)
+
+FREE service pause modal after the 100-Agent-token daily allocation:
+![bolt.gives v3.4.1 FREE Agent token pause modal](docs/screenshots/free-plan-paused-v3.4.1.png)
+
+Custom Domain pricing with the `$5/month` launch promotion and `$20/month` regular value:
+![bolt.gives v3.4.1 Custom Domain pricing](docs/screenshots/pricing-v3.4.1.png)
+
 Real v3.2.0 Calendar E2E on `alpha1.bolt.gives` after first-pass generation, a follow-up change, saved-history restoration, and isolated PostgreSQL verification:
 ![bolt.gives v3.2.0 Calendar project E2E](docs/screenshots/calendar-e2e-v3.2.0.png)
 
@@ -1019,6 +1033,13 @@ Outputs:
 - `docs/screenshots/chat-plan.png`
 - `docs/screenshots/system-in-action.png`
 - `docs/screenshots/changelog.png`
+
+Release-gate browser evidence committed for `v3.4.1`:
+
+- `docs/screenshots/profile-onboarding-v3.4.1.png`
+- `docs/screenshots/tideboard-preview-v3.4.1.png`
+- `docs/screenshots/free-plan-paused-v3.4.1.png`
+- `docs/screenshots/pricing-v3.4.1.png`
 
 To capture screenshots from the live alpha environment instead of a local dev server:
 

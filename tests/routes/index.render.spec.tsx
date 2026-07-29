@@ -39,6 +39,10 @@ describe('index route fallback shell', () => {
     expect(screen.getAllByText('Contribute on GitHub').length).toBeGreaterThan(0);
     expect(screen.getByText('Create managed instance')).toBeTruthy();
     expect(screen.getByText('Real screenshots')).toBeTruthy();
+    expect(screen.getByAltText('Personal workspace profile screenshot')).toBeTruthy();
+    expect(screen.getByAltText('Working prompt-to-preview app screenshot')).toBeTruthy();
+    expect(screen.getByAltText('Visible FREE boundary screenshot')).toBeTruthy();
+    expect(screen.getByAltText('Custom Domain pricing screenshot')).toBeTruthy();
     expect(screen.getByAltText(/Generated bolt\.gives SEO image/i)).toBeTruthy();
     expect(
       screen.queryByText(

@@ -30,29 +30,24 @@ const SEO_KEYWORDS = [
 
 const screenshotCards = [
   {
-    title: 'Public home',
-    description: 'The public project website with release notes, links, and GitHub contribution path.',
-    src: `${SCREENSHOT_BASE_URL}/home.png`,
+    title: 'Personal workspace profile',
+    description: 'First-time builders create the profile that owns their history, usage, and deployment access.',
+    src: `${SCREENSHOT_BASE_URL}/profile-onboarding-v3.4.1.png`,
   },
   {
-    title: 'Chat workspace',
-    description: 'The hosted FREE model path starts from a visible chat-first coding surface.',
-    src: `${SCREENSHOT_BASE_URL}/chat.png`,
+    title: 'Working prompt-to-preview app',
+    description: 'A real FREE ChatGPT-5.6 SOL run generated and restored this Tideboard Preview on live alpha.',
+    src: `${SCREENSHOT_BASE_URL}/tideboard-preview-v3.4.1.png`,
   },
   {
-    title: 'Plan prompts',
-    description: 'Users can ask for structured planning before file changes are made.',
-    src: `${SCREENSHOT_BASE_URL}/chat-plan.png`,
+    title: 'Visible FREE boundary',
+    description: 'At 100 daily Agent tokens, hosted coding pauses cleanly and explains every available next step.',
+    src: `${SCREENSHOT_BASE_URL}/free-plan-paused-v3.4.1.png`,
   },
   {
-    title: 'Workspace preview',
-    description: 'Generated files, execution state, and preview stay visible while the runtime works.',
-    src: `${SCREENSHOT_BASE_URL}/system-in-action.png`,
-  },
-  {
-    title: 'Changelog',
-    description: 'Release history stays public so changes are visible and auditable.',
-    src: `${SCREENSHOT_BASE_URL}/changelog.png`,
+    title: 'Custom Domain pricing',
+    description: 'The launch promotion, regular value, Agent-token allowance, and deployment benefits stay explicit.',
+    src: `${SCREENSHOT_BASE_URL}/pricing-v3.4.1.png`,
   },
 ];
 
