@@ -21,6 +21,7 @@ No unreleased changes.
 
 ### Fixed
 
+- Fixed Upgrade buttons being rejected by the global CSRF guard before they could create a Stripe Checkout session; billing requests now use the same double-submit CSRF transport as other protected mutations.
 - Fixed paid account usage being ignored by `/api/llmcall` planning/template requests, which could incorrectly apply the FREE daily limit during a paid coding session.
 - Fixed server-proxied account Checkout sessions using the internal runtime origin for success/cancel URLs; customers now return to the configured public app URL.
 - Normalized PostgreSQL billing timestamps before monthly-period comparison so repeated Stripe events cannot falsely reset token usage.

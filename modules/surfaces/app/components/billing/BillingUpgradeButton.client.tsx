@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
 
 export function BillingUpgradeButton({ children, className }: { children: ReactNode; className?: string }) {
   const [loading, setLoading] = useState(false);
@@ -9,7 +10,7 @@ export function BillingUpgradeButton({ children, className }: { children: ReactN
     setError(null);
 
     try {
-      const response = await fetch('/api/billing/checkout', {
+      const response = await securedFetch('/api/billing/checkout', {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });
