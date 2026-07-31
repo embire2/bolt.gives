@@ -16,6 +16,7 @@ import {
   buildPreviewRepairHeaders,
   buildPreviewRepairPage,
   buildFreeUsageQuotaDecision,
+  calculateFreeAgentTokenCharge,
   buildManagedInstanceDeployArgs,
   buildManagedInstanceDeployArtifactDecision,
   buildManagedInstanceRolloutGuardDecision,
@@ -122,7 +123,7 @@ describe('runtime server workspace isolation', () => {
 
   it('blocks hosted FREE usage when the daily 100-Agent-token allowance is reached', () => {
     const decision = buildFreeUsageQuotaDecision(
-      { totalTokens: 100, costUsd: 0.04 },
+      { agentTokens: 100, totalTokens: 120_000, costUsd: 0.04 },
       { tokenLimit: 100, limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
     );
 
@@ -133,6 +134,12 @@ describe('runtime server workspace isolation', () => {
     expect(decision.message).toContain('100 Agent tokens');
     expect(decision.message).toContain('$5/month launch price');
     expect(decision.message).toContain('00:00 GMT+2');
+  });
+
+  it('guarantees 30 active coding minutes for the daily 100-Agent-token allowance', () => {
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 15 * 60 * 1000, providerTokens: 50_000 })).toBe(50);
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 30 * 60 * 1000, providerTokens: 100_000 })).toBe(100);
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 60 * 1000, providerTokens: 20_000 })).toBeCloseTo(10 / 3);
   });
 
   it('normalizes hosted FREE usage ledgers without retaining invalid subjects', () => {
@@ -167,6 +174,7 @@ describe('runtime server workspace isolation', () => {
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 150,
+      agentTokens: 0.15,
     });
     expect(days['2026-06-26']).not.toHaveProperty('invalid');
     expect(days).not.toHaveProperty('nope');

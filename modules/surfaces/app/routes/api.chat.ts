@@ -75,6 +75,7 @@ import {
 import { preparePremiumChatSelection, type PremiumChatSelection } from '~/lib/.server/premium-chat-selection';
 import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime-handoff';
 import { createProfileFreeUsageMeter } from '~/lib/.server/profile-free-usage';
+import { createUsageLimitResponse } from '~/lib/.server/profile-billing-response';
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
@@ -3316,20 +3317,10 @@ Next: I am sending the final result now.`,
       provider: error.provider || 'unknown',
     };
 
-    if (error.message?.includes(getFreeUsageQuotaErrorCode())) {
-      return new Response(
-        JSON.stringify({
-          ...errorResponse,
-          message: buildFreeUsageQuotaLimitMessage(),
-          statusCode: 429,
-          isRetryable: false,
-        }),
-        {
-          status: 429,
-          headers: { 'Content-Type': 'application/json' },
-          statusText: 'Hosted FREE Daily Limit Reached',
-        },
-      );
+    const usageLimitResponse = createUsageLimitResponse(error, errorResponse);
+
+    if (usageLimitResponse) {
+      return usageLimitResponse;
     }
 
     if (error.message?.includes('FREE_PROVIDER_RATE_LIMITED')) {

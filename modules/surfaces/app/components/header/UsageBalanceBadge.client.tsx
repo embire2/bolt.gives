@@ -4,15 +4,22 @@ import {
   type HostedPremiumStatus,
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { FreePlanPausedModal } from './FreePlanPausedModal.client';
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
 
 type FreeUsageBalance = {
-  plan: 'free';
+  plan: 'free' | 'custom-domain';
   tokensAllowance: number;
   tokensUsed: number;
   tokensRemaining: number;
-  resetAt: string;
+  resetAt: string | null;
   periodLabel: string;
 };
+
+function formatAgentTokens(value: number) {
+  return Number.isInteger(value)
+    ? value.toLocaleString()
+    : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
 
 function readDismissedResetAt() {
   if (typeof window === 'undefined') {
@@ -60,16 +67,17 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
     };
   }, []);
 
-  const customDomainActive = customDomain?.status === 'active';
-  const allowance = customDomainActive
+  const projectCustomDomainActive = customDomain?.status === 'active';
+  const accountCustomDomainActive = freeBalance?.plan === 'custom-domain';
+  const customDomainActive = projectCustomDomainActive || accountCustomDomainActive;
+  const allowance = projectCustomDomainActive
     ? (customDomain.tokensAllowance ?? customDomain.creditsAllowance)
     : (freeBalance?.tokensAllowance ?? 100);
-  const remaining = customDomainActive
+  const remaining = projectCustomDomainActive
     ? (customDomain.tokensRemaining ?? customDomain.creditsRemaining)
     : (freeBalance?.tokensRemaining ?? allowance);
   const percentage = allowance > 0 ? Math.max(0, Math.min(100, (remaining / allowance) * 100)) : 0;
-  const showPausedModal =
-    Boolean(freeBalance) && !customDomainActive && remaining <= 0 && dismissedResetAt !== freeBalance?.resetAt;
+  const showPausedModal = freeBalance?.plan === 'free' && remaining <= 0 && dismissedResetAt !== freeBalance?.resetAt;
 
   const dismissPausedModal = () => {
     const resetAt = freeBalance?.resetAt || 'current-period';
@@ -91,7 +99,7 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
           <div className="min-w-0">
             <div className="flex items-baseline justify-between gap-2 text-[10px] font-black uppercase tracking-[0.12em]">
               <span>{customDomainActive ? 'Custom Domain' : 'Free'}</span>
-              <span>{remaining.toLocaleString()}</span>
+              <span>{formatAgentTokens(remaining)}</span>
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#173f32]/10">
               <div
@@ -100,17 +108,14 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
               />
             </div>
             <div className="mt-0.5 text-[9px] font-semibold text-[#52645e]">
-              of {allowance.toLocaleString()} Agent tokens {customDomainActive ? 'this month' : 'today'}
+              of {formatAgentTokens(allowance)} Agent tokens {customDomainActive ? 'this month' : 'today'}
             </div>
           </div>
         </div>
         {!customDomainActive ? (
-          <a
-            href="/pricing"
-            className="self-stretch border-l border-[#173f32]/20 bg-[#c9f36a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#10231d] transition hover:bg-[#b9e759]"
-          >
+          <BillingUpgradeButton className="self-stretch border-l border-[#173f32]/20 bg-[#c9f36a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#10231d] transition hover:bg-[#b9e759]">
             <span className="flex h-full items-center">Upgrade</span>
-          </a>
+          </BillingUpgradeButton>
         ) : null}
       </div>
       <FreePlanPausedModal open={showPausedModal} resetAt={freeBalance?.resetAt} onDismiss={dismissPausedModal} />

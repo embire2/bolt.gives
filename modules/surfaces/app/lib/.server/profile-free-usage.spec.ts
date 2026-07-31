@@ -11,6 +11,11 @@ describe('profile token plan selection', () => {
     expect(shouldUseFreeTokenAllowance('FREE', 'inactive')).toBe(true);
   });
 
+  it('uses the paid account allowance even before it is attached to a project', () => {
+    expect(shouldUseFreeTokenAllowance('FREE', null, 'active')).toBe(false);
+    expect(shouldUseFreeTokenAllowance('FREE', null, 'pending')).toBe(true);
+  });
+
   it('does not apply the hosted allowance to providers using a client API key', () => {
     expect(shouldUseFreeTokenAllowance('OpenAI', null)).toBe(false);
   });

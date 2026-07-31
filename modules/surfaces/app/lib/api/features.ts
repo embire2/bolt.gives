@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.4.2',
+    name: 'v3.4.2 personal history and working account upgrades',
+    description:
+      'Signed-in users now see only their own saved projects, 100 FREE Agent tokens cover at least 30 active coding minutes, and every Upgrade action starts authenticated Stripe Checkout with signed-webhook activation. Hosted Desktop packages are available for Windows and Linux.',
+    releaseDate: '2026-07-31',
+  },
+  {
     id: 'release-v3.4.1',
     name: 'v3.4.1 personal profiles and transparent token plans',
     description:

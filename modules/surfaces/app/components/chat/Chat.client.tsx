@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 import { flushSync } from 'react-dom';
 import { BaseChat } from './BaseChat';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '@bolt/project/lib/hooks';
-import { chatId as persistedChatId, description, useChatHistory } from '@bolt/project/lib/persistence';
+import { chatId as persistedChatId, description } from '@bolt/project/lib/persistence';
 import { chatStore } from '@bolt/project/lib/stores/chat';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
 import { getCollaborationServerUrl } from '@bolt/project/lib/collaboration/config';
@@ -19,6 +19,7 @@ import { debounce } from '@bolt/core/utils/debounce';
 import { useSettings } from '@bolt/project/lib/hooks/useSettings';
 import type { IProviderSetting, ProviderInfo } from '@bolt/agent/types/model';
 import { useSearchParams } from '@remix-run/react';
+import { useAuthenticatedChatHistory as useHistory } from '~/lib/useAuthenticatedChatHistory';
 import { createSampler } from '@bolt/core/utils/sampler';
 import {
   getTemplates,
@@ -481,7 +482,7 @@ function appendArchitectTimelineEvent(event: Omit<InteractiveStepRunnerEvent, 't
 export function Chat() {
   renderLogger.trace('Chat');
 
-  const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
+  const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useHistory();
   const title = useStore(description);
   const reloadedMessageSignature = initialMessages.map((message) => message.id).join(':');
   const reloadPreparationKey = `${chatKey}:${reloadedMessageSignature}`;

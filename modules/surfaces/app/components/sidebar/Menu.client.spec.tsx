@@ -51,11 +51,8 @@ vi.mock('./date-binning', () => ({
 vi.mock('@bolt/project/lib/hooks/useSearchFilter', () => ({
   useSearchFilter: ({ items }: any) => ({ filteredItems: items, handleSearchChange: vi.fn() }),
 }));
-vi.mock('@nanostores/react', () => ({
-  useStore: () => null,
-}));
-vi.mock('@bolt/project/lib/stores/profile', () => ({
-  profileStore: {},
+vi.mock('~/lib/profile-context', () => ({
+  useProfile: () => ({ id: 'profile-a', name: 'Ada Lovelace' }),
 }));
 vi.mock('@bolt/core/utils/classNames', () => ({
   classNames: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
@@ -116,5 +113,11 @@ describe('Menu sidebar behavior', () => {
 
     const projectLink = await screen.findByRole('link', { name: 'Untitled project' });
     expect(projectLink.getAttribute('href')).toBe('/chat/1');
+    expect(getAll).toHaveBeenCalledWith(expect.anything(), 'profile-a');
+  });
+
+  it('renders the authenticated profile rather than a stale provider identity', () => {
+    render(<Menu />);
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
   });
 });

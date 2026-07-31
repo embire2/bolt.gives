@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import {
   activatePremiumEntitlement,
   buildPremiumCheckoutPayload,
+  buildProfileBillingCheckoutPayload,
   consumePremiumTaskCredits,
   estimatePremiumTaskCredits,
   normalizePremiumEntitlementRegistry,
@@ -209,5 +210,24 @@ describe('Custom Domain entitlements', () => {
     expect(resolvePremiumStripeEventStatus('checkout.session.expired')).toBe('canceled');
     expect(resolvePremiumStripeEventStatus('customer.subscription.updated', 'active')).toBe('active');
     expect(resolvePremiumStripeEventStatus('customer.subscription.updated', 'unpaid')).toBe('past_due');
+  });
+
+  it('builds an authenticated profile subscription without exposing a Stripe secret', () => {
+    const payload = buildProfileBillingCheckoutPayload({
+      origin: 'https://bolt.gives',
+      profile: { id: 'profile-1', email: 'ada@example.com' },
+      priceUsd: 5,
+      tokensAllowance: 10_000,
+    });
+
+    expect(payload).toMatchObject({
+      mode: 'subscription',
+      client_reference_id: 'profile-1',
+      customer_email: 'ada@example.com',
+      subscription_data: {
+        metadata: { kind: 'bolt-profile-custom-domain', profileId: 'profile-1', tokensAllowance: '10000' },
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('sk_');
   });
 });

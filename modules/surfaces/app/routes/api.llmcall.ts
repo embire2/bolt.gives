@@ -18,13 +18,15 @@ import {
   verifyHostedFreeRelayAuthorization,
 } from '@bolt/agent/lib/.server/llm/hosted-free-relay';
 import {
-  assertFreeUsageQuotaAllowed,
   buildFreeUsageQuotaLimitMessage,
   getFreeUsageQuotaErrorCode,
-  recordFreeUsageQuotaForRequest,
 } from '@bolt/agent/lib/.server/llm/free-usage-quota';
-import { resolveProfileSession } from '~/lib/.server/profile-session';
 import { scheduleBackgroundTask } from '~/lib/.server/background-task';
+import {
+  buildProfileBillingLimitMessage,
+  createProfileFreeUsageMeter,
+  PROFILE_BILLING_LIMIT_ERROR_CODE,
+} from '~/lib/.server/profile-free-usage';
 
 export async function action(args: ActionFunctionArgs) {
   return llmCallAction(args);
@@ -130,7 +132,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
   const rawApiKeys = getApiKeysFromCookie(cookieHeader);
   const providerSettings = getProviderSettingsFromCookie(cookieHeader);
   const runtimeEnv = resolveRuntimeEnvFromContext(context);
-  const userProfile = await resolveProfileSession(request, runtimeEnv);
   const llmManager = LLMManager.getInstance(runtimeEnv);
   const serverManagedProviderNames = llmManager
     .getAllProviders()
@@ -180,11 +181,10 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
   if (streamOutput) {
     try {
-      await assertFreeUsageQuotaAllowed({
+      const usageMeter = await createProfileFreeUsageMeter({
         request,
         runtimeEnv,
         providerName,
-        subjectKey: userProfile?.id,
       });
 
       const result = await streamText({
@@ -204,13 +204,11 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
       const quotaRecordingTask = result.usage
         .then((usage) =>
-          recordFreeUsageQuotaForRequest({
-            request,
-            runtimeEnv,
+          usageMeter.record({
             providerName,
             modelName: model,
             usage,
-            subjectKey: userProfile?.id,
+            runId: `llmcall:${crypto.randomUUID()}`,
           }),
         )
         .catch((quotaError) => {
@@ -249,6 +247,13 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         });
       }
 
+      if (error instanceof Error && error.message?.includes(PROFILE_BILLING_LIMIT_ERROR_CODE)) {
+        throw new Response(buildProfileBillingLimitMessage(), {
+          status: 429,
+          statusText: 'Custom Domain Monthly Limit Reached',
+        });
+      }
+
       // Handle token limit errors with helpful messages
       if (
         error instanceof Error &&
@@ -273,11 +278,10 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   } else {
     try {
-      await assertFreeUsageQuotaAllowed({
+      const usageMeter = await createProfileFreeUsageMeter({
         request,
         runtimeEnv,
         providerName,
-        subjectKey: userProfile?.id,
       });
 
       const models = await getModelList({ apiKeys, providerSettings, serverEnv: runtimeEnv });
@@ -371,20 +375,20 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       const result = await generateText(finalParams);
       logger.info(`Generated response`);
 
-      await recordFreeUsageQuotaForRequest({
-        request,
-        runtimeEnv,
-        providerName: provider.name,
-        modelName: modelDetails.name,
-        usage: result.usage as any,
-        subjectKey: userProfile?.id,
-      }).catch((quotaError) => {
-        logger.warn(
-          `Failed to record hosted FREE quota usage: ${
-            quotaError instanceof Error ? quotaError.message : String(quotaError)
-          }`,
-        );
-      });
+      await usageMeter
+        .record({
+          providerName: provider.name,
+          modelName: modelDetails.name,
+          usage: result.usage as any,
+          runId: `llmcall:${crypto.randomUUID()}`,
+        })
+        .catch((quotaError) => {
+          logger.warn(
+            `Failed to record hosted FREE quota usage: ${
+              quotaError instanceof Error ? quotaError.message : String(quotaError)
+            }`,
+          );
+        });
 
       return new Response(JSON.stringify(result), {
         status: 200,
@@ -415,6 +419,22 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
             status: 429,
             headers: { 'Content-Type': 'application/json' },
             statusText: 'Hosted FREE Daily Limit Reached',
+          },
+        );
+      }
+
+      if (error instanceof Error && error.message?.includes(PROFILE_BILLING_LIMIT_ERROR_CODE)) {
+        return new Response(
+          JSON.stringify({
+            ...errorResponse,
+            message: buildProfileBillingLimitMessage(),
+            statusCode: 429,
+            isRetryable: false,
+          }),
+          {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' },
+            statusText: 'Custom Domain Monthly Limit Reached',
           },
         );
       }

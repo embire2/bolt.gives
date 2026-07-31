@@ -19,6 +19,16 @@ type ProfileSessionPayload = {
 
 type RuntimeEnv = Record<string, string | undefined>;
 
+export type ProfileBillingStatus = {
+  plan: 'free' | 'custom-domain';
+  status: 'inactive' | 'pending' | 'active' | 'past_due' | 'canceled';
+  tokensAllowance: number;
+  tokensUsed: number;
+  tokensRemaining: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+};
+
 function getProfileCookieSecret(runtimeEnv: RuntimeEnv = {}) {
   const runtimeSecret =
     runtimeEnv.BOLT_PROFILE_COOKIE_SECRET?.trim() ||
@@ -162,4 +172,92 @@ export async function serializeProfileSession(session: ProfileSessionPayload['se
 
 export async function clearProfileSession(runtimeEnv: RuntimeEnv = {}) {
   return await createProfileCookie(runtimeEnv).serialize('', { maxAge: 0 });
+}
+
+export async function getProfileBillingStatus(request: Request, runtimeEnv: RuntimeEnv = {}) {
+  const credentials = await readProfileCookie(request, runtimeEnv);
+
+  if (!credentials) {
+    return null;
+  }
+
+  const payload = await fetchRuntimeControlJson<{ ok: true; billing: ProfileBillingStatus }>(
+    '/profile/billing/status',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    },
+    runtimeEnv,
+  );
+
+  return payload.billing;
+}
+
+export async function createProfileBillingCheckout(request: Request, runtimeEnv: RuntimeEnv = {}) {
+  const credentials = await readProfileCookie(request, runtimeEnv);
+
+  if (!credentials) {
+    return null;
+  }
+
+  return await fetchRuntimeControlJson<{ ok: true; checkoutUrl: string; billing: ProfileBillingStatus }>(
+    '/profile/billing/checkout',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    },
+    runtimeEnv,
+  );
+}
+
+export async function recordProfileBillingUsage(
+  request: Request,
+  input: { runId: string; totalTokens: number },
+  runtimeEnv: RuntimeEnv = {},
+) {
+  const credentials = await readProfileCookie(request, runtimeEnv);
+
+  if (!credentials) {
+    return null;
+  }
+
+  const payload = await fetchRuntimeControlJson<{ ok: true; billing: ProfileBillingStatus }>(
+    '/profile/billing/usage',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...credentials, ...input }),
+    },
+    runtimeEnv,
+  );
+
+  return payload.billing;
+}
+
+export async function attachProfileBillingDomain(
+  request: Request,
+  input: { sessionId: string; customDomain: string },
+  runtimeEnv: RuntimeEnv = {},
+) {
+  const credentials = await readProfileCookie(request, runtimeEnv);
+
+  if (!credentials) {
+    return null;
+  }
+
+  return await fetchRuntimeControlJson<{
+    ok: true;
+    requiresCheckout: false;
+    dnsInstructions: { note: string };
+  }>(
+    '/profile/billing/attach-domain',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...credentials, ...input }),
+    },
+    runtimeEnv,
+  );
 }

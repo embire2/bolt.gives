@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { isHostedFreeProviderFailure, isLlmCallApiKeyError, resolveLlmCallMaxTokens } from '~/routes/api.llmcall';
 
 describe('api.llmcall token limits', () => {
-  it('records provider-reported usage after a streamed FREE call finishes', () => {
+  it('records streamed usage through the profile-aware FREE or paid-account meter', () => {
     const source = readFileSync(resolve(process.cwd(), 'modules/surfaces/app/routes/api.llmcall.ts'), 'utf8');
 
     expect(source).toContain('const quotaRecordingTask = result.usage');
     expect(source).toContain('scheduleBackgroundTask(context, quotaRecordingTask)');
-    expect(source).toContain('recordFreeUsageQuotaForRequest({');
-    expect(source).toContain('subjectKey: userProfile?.id');
+    expect(source).toContain('const usageMeter = await createProfileFreeUsageMeter({');
+    expect(source).toContain('usageMeter.record({');
+    expect(source).toContain('runId: `llmcall:${crypto.randomUUID()}`');
   });
 
   it('uses a smaller positive request limit for bounded live probes', () => {

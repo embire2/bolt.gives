@@ -31,6 +31,7 @@ import { rebindHealthyHostedRuntimePreview } from './chat-history-runtime';
 
 export interface ChatHistoryItem {
   id: string;
+  ownerId?: string;
   urlId?: string;
   description?: string;
   messages: Message[];
@@ -52,13 +53,14 @@ async function getWorkbenchStore() {
   return (await import('@bolt/project/lib/stores/workbench')).workbenchStore;
 }
 
-export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
+export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?: string | null } = {}) {
   const navigate = useNavigate();
   const { id: routeParamId } = useParams<{ id?: string }>();
   const { id: loaderId } = useLoaderData<{ id?: string }>();
   const mixedId = resolvePersistedChatRouteId(routeParamId, loaderId);
   const [searchParams] = useSearchParams();
   const loadPersistedChat = options.loadPersistedChat !== false;
+  const ownerId = options.ownerId ?? null;
   const rewindId = searchParams.get('rewindTo');
   const loadKey = `${mixedId || 'new'}:${rewindId || 'latest'}`;
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
@@ -248,7 +250,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
 
     const loadStoredChat = async () => {
       try {
-        const storedMessages = await getMessages(db, mixedId);
+        const storedMessages = await getMessages(db, mixedId, ownerId);
 
         if (!storedMessages || storedMessages.messages.length === 0) {
           if (!cancelled) {
@@ -298,7 +300,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [loadKey, loadPersistedChat, mixedId, navigate, restoreSnapshot, rewindId]);
+  }, [loadKey, loadPersistedChat, mixedId, navigate, ownerId, restoreSnapshot, rewindId]);
 
   const storeMessageHistory = useCallback(
     (incomingMessages: Message[], isStreaming: boolean = false) => {
@@ -354,7 +356,16 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
           setUrlId(targetUrlId);
         }
 
-        await setMessages(db, targetChatId, messages, targetUrlId, description.get(), undefined, chatMetadata.get());
+        await setMessages(
+          db,
+          targetChatId,
+          messages,
+          targetUrlId,
+          description.get(),
+          undefined,
+          chatMetadata.get(),
+          ownerId,
+        );
         await takeSnapshot(
           lastMessage.id,
           workbenchStore.files.get(),
@@ -372,7 +383,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
 
       return queuedPersist;
     },
-    [mixedId, navigate, takeSnapshot],
+    [mixedId, navigate, ownerId, takeSnapshot],
   );
 
   return {
@@ -387,7 +398,12 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
       }
 
       try {
-        const storedMessages = await getMessages(db, id);
+        const storedMessages = await getMessages(db, id, ownerId);
+
+        if (!storedMessages) {
+          throw new Error('Chat not found for this profile');
+        }
+
         await setMessages(
           db,
           id,
@@ -396,6 +412,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
           storedMessages.description,
           storedMessages.timestamp,
           metadata,
+          ownerId,
         );
         chatMetadata.set(metadata);
       } catch (error) {
@@ -410,7 +427,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
       }
 
       try {
-        const newId = await duplicateChat(db, mixedId || listItemId);
+        const newId = await duplicateChat(db, mixedId || listItemId, ownerId);
         navigate(`/chat/${newId}`);
         toast.success('Chat duplicated successfully');
       } catch (error) {
@@ -424,7 +441,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
       }
 
       try {
-        const newId = await createChatFromMessages(db, description, messages, metadata);
+        const newId = await createChatFromMessages(db, description, messages, metadata, ownerId);
         window.location.href = `/chat/${newId}`;
         toast.success('Chat imported successfully');
       } catch (error) {
@@ -440,7 +457,13 @@ export function useChatHistory(options: { loadPersistedChat?: boolean } = {}) {
         return;
       }
 
-      const chat = await getMessages(db, id);
+      const chat = await getMessages(db, id, ownerId);
+
+      if (!chat) {
+        toast.error('Chat not found for this profile');
+        return;
+      }
+
       const chatData = {
         messages: chat.messages,
         description: chat.description,

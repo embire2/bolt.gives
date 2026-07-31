@@ -27,6 +27,7 @@
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
 - [Compare FREE and Custom Domain](https://bolt.gives/pricing)
+- [Download the hosted Desktop client](https://github.com/embire2/bolt.gives/releases/tag/v3.4.2)
 - [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Understand the six-module architecture](docs/architecture/modules.md)
@@ -57,9 +58,20 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v3.4.1`)
+## Current Release (`v3.4.2`)
 
-`v3.4.1` is the current stable hosted and Linux self-hosted release. It adds PostgreSQL-backed personal profiles and passwordless login, gives each new chat a personal greeting, makes deployment controls readable, protects the project title from surrounding navigation, and replaces arbitrary task credits with transparent Agent-token balances based on provider-reported usage.
+`v3.4.2` makes personal projects account-aware, recalibrates the FREE allowance to provide at least 30 active coding minutes per GMT+2 day, closes the Stripe account-upgrade loop, hardens Linux installation, and introduces separately distributed Desktop clients for Windows, Debian/Ubuntu, and AppImage-based Linux systems.
+
+### v3.4.2 personal history, usable FREE time, and account billing
+
+- Sidebar history, direct project loading, snapshots reached through chats, rename, delete, duplicate, fork, import, and export are scoped to the authenticated profile. Guest projects remain guest-only instead of appearing under whichever account signs in next on a shared browser.
+- The FREE balance remains 100 Agent tokens per day, but those tokens are now time-calibrated: 100 tokens cover at least 30 minutes of active generation. The runtime still records raw provider usage separately for operational accounting.
+- Every Upgrade button starts authenticated, server-created Stripe Checkout. Payment state is activated only by a signed Stripe webhook; monthly renewal resets the 10,000-token allowance, usage writes are idempotent, and one active subscription can be attached to one published Custom Domain project.
+- Planning and template calls through `/api/llmcall` honor paid account balances, so a Custom Domain customer cannot be stopped by the FREE daily allowance during the same coding session.
+- The self-host installer generates separate relay, quota, profile, admin-cookie, and billing secrets, writes runtime-control configuration, validates partial Stripe setup, and protects `.env.local` with `0600` permissions.
+- The compiled bolt.gives Desktop client loads the hosted workspace with hardened Electron isolation and the same profile-backed 100-token FREE plan. Desktop source is private and is not part of this MIT-licensed repository; release binaries contain no hosted-provider or Stripe secret.
+
+![bolt.gives Desktop connected to the hosted workspace](docs/screenshots/desktop-v3.4.2.png)
 
 ### v3.4.1 profiles, token balances, and Custom Domain release
 
@@ -275,28 +287,39 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.4.1`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=3.4.2`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v3.4.1` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v3.4.2` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v3.4.1`](https://github.com/embire2/bolt.gives/releases/tag/v3.4.1)
+- Release: [`v3.4.2`](https://github.com/embire2/bolt.gives/releases/tag/v3.4.2)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.1/install.sh)
-- Release commit: see the `v3.4.1` GitHub tag.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.2/install.sh)
+- Release commit: see the `v3.4.2` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.1/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.2/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-sudo env BRANCH=v3.4.1 ./install-bolt-gives.sh
+BRANCH=v3.4.2 ./install-bolt-gives.sh
 ```
 
-The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
+Run the installer as a normal sudo-capable user, not as `root`; it invokes `sudo` only for the system changes that require it. The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
+
+### Desktop release packages
+
+`v3.4.2` also provides compiled hosted clients on the [GitHub Releases page](https://github.com/embire2/bolt.gives/releases/tag/v3.4.2):
+
+- Windows x64 installer: `bolt.gives-Desktop-Setup-3.4.2-x64.exe`
+- Ubuntu/Debian x64 package: `bolt.gives-Desktop-3.4.2-amd64.deb`
+- Portable Linux x64 package: `bolt.gives-Desktop-3.4.2-x86_64.AppImage`
+- Integrity file: `bolt.gives-Desktop-3.4.2-SHA256SUMS.txt`
+
+The Desktop client connects to `https://bolt.gives`, uses the same login, saved-project isolation, hosted runtime, and 100-token FREE allowance as the browser, and does not contain a model-provider, Stripe, Cloudflare, SMTP, database, or runtime-node credential. The Desktop implementation is proprietary and distributed as compiled, unlicensed binaries; the web application and Linux self-host installer remain open source. The `v3.4.2` installers are not code-signed, so operating systems may show their normal unverified-publisher warning.
 
 `v3.0.9.19` fixed the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
 
@@ -362,7 +385,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - Add a customer billing portal, cancellation lifecycle, invoice history, and operator-visible Custom Domain entitlement search.
-- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.1 initial-route budget.
+- Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.2 initial-route budget.
 - Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
 
 ### Key improvements planned
@@ -373,9 +396,12 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Make runtime quotas, collaboration audit data, and installer recovery visible and repeatable.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v3.4.1`)
+## Current Platform Baseline (`v3.4.2`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
+- Authenticated profiles see only their own browser-saved projects; guest and other-account projects remain isolated.
+- The 100 daily FREE Agent tokens cover at least 30 minutes of active coding, with raw upstream usage retained separately for operational accounting.
+- Upgrade actions create authenticated Stripe Checkout sessions, and account access/renewals follow signed webhook state rather than browser redirects.
 - Follow-up prompts stay visible in a persistent composer after project creation, including while users are viewing files or Preview in the `Workspace` tab.
 - Preview and Code are focused workspace surfaces: status and activity chrome stay compact, the preview defaults to a desktop/full-width canvas, and user-selected workbench tabs are not overridden by preview recovery refreshes.
 - Live Workspaces can provision per-project Ubuntu CLI users, private workspace directories, and dedicated PostgreSQL roles/databases on a configured runtime node.
@@ -497,7 +523,8 @@ The `create` domain is optional. If it is omitted, the registration flow still w
 
 Windows/macOS note:
 
-- You can use bolt.gives in the browser on Windows/macOS.
+- Windows users can use bolt.gives in the browser or install the hosted Desktop client from the `v3.4.2` GitHub release.
+- macOS users should use the browser in this release; no macOS Desktop package is published yet.
 - You should install/self-host bolt.gives on Ubuntu 18.04+.
 
 ### 1. Recommended: run the installer
@@ -546,7 +573,9 @@ The installer will:
   - `BOLT_ADMIN_DATABASE_USER`
   - `BOLT_ADMIN_DATABASE_PASSWORD`
   - `BOLT_ADMIN_DATABASE_SSL=disable`
-- generate a private `BOLT_TENANT_ADMIN_COOKIE_SECRET`
+- generate independent private `BOLT_TENANT_ADMIN_COOKIE_SECRET`, `BOLT_PROFILE_COOKIE_SECRET`, `BOLT_HOSTED_FREE_RELAY_SECRET`, `BOLT_FREE_USAGE_QUOTA_SECRET`, and `BOLT_PREMIUM_INTERNAL_SECRET` values
+- write the local runtime-control URL, 100-token FREE allowance, 10,000-token Custom Domain allowance, and `$5/month` launch price
+- preserve Stripe settings supplied through the process environment, warn when Stripe is only partially configured, and set `.env.local` permissions to `0600`
 - seed the private tenant registry with your chosen operator/admin username and password hash on first install
 - build the app with a **4 GB** Node heap (`NODE_OPTIONS=--max-old-space-size=4096`)
 - install and start these systemd services:

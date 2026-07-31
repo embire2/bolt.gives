@@ -20,7 +20,7 @@ describe('FreePlanPausedModal', () => {
     expect(screen.getByText(/daily allocation of 100 Agent tokens/i)).toBeTruthy();
     expect(screen.getByText('$5')).toBeTruthy();
     expect(screen.getByText(/\$20\/month/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Upgrade for \$5\/month/i }).getAttribute('href')).toBe('/pricing');
+    expect(screen.getByRole('button', { name: /Upgrade for \$5\/month/i })).toBeTruthy();
   });
 
   it('lets own-key users dismiss the interruption', () => {

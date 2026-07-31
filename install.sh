@@ -701,6 +701,12 @@ prepare_env_file() {
   existing_cookie_secret="$(read_env_value "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET")"
   local existing_profile_cookie_secret
   existing_profile_cookie_secret="$(read_env_value "${env_file}" "BOLT_PROFILE_COOKIE_SECRET")"
+  local existing_hosted_free_relay_secret
+  existing_hosted_free_relay_secret="$(read_env_value "${env_file}" "BOLT_HOSTED_FREE_RELAY_SECRET")"
+  local existing_free_usage_quota_secret
+  existing_free_usage_quota_secret="$(read_env_value "${env_file}" "BOLT_FREE_USAGE_QUOTA_SECRET")"
+  local existing_premium_internal_secret
+  existing_premium_internal_secret="$(read_env_value "${env_file}" "BOLT_PREMIUM_INTERNAL_SECRET")"
 
   if [[ -z "${existing_cookie_secret}" ]]; then
     existing_cookie_secret="$(generate_secret)"
@@ -708,6 +714,18 @@ prepare_env_file() {
 
   if [[ -z "${existing_profile_cookie_secret}" ]]; then
     existing_profile_cookie_secret="$(generate_secret)"
+  fi
+
+  if [[ -z "${existing_hosted_free_relay_secret}" ]]; then
+    existing_hosted_free_relay_secret="$(generate_secret)"
+  fi
+
+  if [[ -z "${existing_free_usage_quota_secret}" ]]; then
+    existing_free_usage_quota_secret="$(generate_secret)"
+  fi
+
+  if [[ -z "${existing_premium_internal_secret}" ]]; then
+    existing_premium_internal_secret="$(generate_secret)"
   fi
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 && -z "${POSTGRES_PASSWORD}" ]]; then
@@ -723,9 +741,29 @@ prepare_env_file() {
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
   upsert_env_line "${env_file}" "BOLT_TENANT_ADMIN_COOKIE_SECRET" "${existing_cookie_secret}"
   upsert_env_line "${env_file}" "BOLT_PROFILE_COOKIE_SECRET" "${existing_profile_cookie_secret}"
+  upsert_env_line "${env_file}" "BOLT_HOSTED_FREE_RELAY_SECRET" "${existing_hosted_free_relay_secret}"
+  upsert_env_line "${env_file}" "BOLT_FREE_USAGE_QUOTA_SECRET" "${existing_free_usage_quota_secret}"
+  upsert_env_line "${env_file}" "BOLT_PREMIUM_INTERNAL_SECRET" "${existing_premium_internal_secret}"
+  upsert_env_line "${env_file}" "BOLT_RUNTIME_CONTROL_URL" "http://127.0.0.1:${RUNTIME_PORT}/runtime"
+  upsert_env_line "${env_file}" "BOLT_RUNTIME_CONTROL_PUBLIC_URL" "${APP_DOMAIN:+https://${APP_DOMAIN}/runtime}"
   upsert_env_line "${env_file}" "BOLT_APP_PUBLIC_URL" "${APP_DOMAIN:+https://${APP_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_ADMIN_PANEL_PUBLIC_URL" "${ADMIN_DOMAIN:+https://${ADMIN_DOMAIN}}"
   upsert_env_line "${env_file}" "BOLT_CREATE_TRIAL_PUBLIC_URL" "${CREATE_DOMAIN:+https://${CREATE_DOMAIN}}"
+  upsert_env_line "${env_file}" "BOLT_FREE_DAILY_TOKEN_LIMIT" "100"
+  upsert_env_line "${env_file}" "BOLT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE" "10000"
+  upsert_env_line "${env_file}" "BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD" "5"
+
+  if [[ -n "${BOLT_STRIPE_PUBLISHABLE_KEY:-}" ]]; then
+    upsert_env_line "${env_file}" "BOLT_STRIPE_PUBLISHABLE_KEY" "${BOLT_STRIPE_PUBLISHABLE_KEY}"
+  fi
+
+  if [[ -n "${BOLT_STRIPE_SECRET_KEY:-}" ]]; then
+    upsert_env_line "${env_file}" "BOLT_STRIPE_SECRET_KEY" "${BOLT_STRIPE_SECRET_KEY}"
+  fi
+
+  if [[ -n "${BOLT_STRIPE_WEBHOOK_SECRET:-}" ]]; then
+    upsert_env_line "${env_file}" "BOLT_STRIPE_WEBHOOK_SECRET" "${BOLT_STRIPE_WEBHOOK_SECRET}"
+  fi
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_HOST" "127.0.0.1"
@@ -735,6 +773,17 @@ prepare_env_file() {
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD" "${POSTGRES_PASSWORD}"
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_SSL" "disable"
   fi
+
+  local stripe_publishable stripe_secret stripe_webhook
+  stripe_publishable="$(read_env_value "${env_file}" "BOLT_STRIPE_PUBLISHABLE_KEY")"
+  stripe_secret="$(read_env_value "${env_file}" "BOLT_STRIPE_SECRET_KEY")"
+  stripe_webhook="$(read_env_value "${env_file}" "BOLT_STRIPE_WEBHOOK_SECRET")"
+
+  if [[ -n "${stripe_publishable}${stripe_secret}${stripe_webhook}" ]] && [[ -z "${stripe_publishable}" || -z "${stripe_secret}" || -z "${stripe_webhook}" ]]; then
+    warn "Stripe billing is only partially configured. Set publishable, secret, and webhook keys together before enabling paid upgrades."
+  fi
+
+  chmod 600 "${env_file}"
 
   mkdir -p "${RUNTIME_WORKSPACE_DIR}"
 }

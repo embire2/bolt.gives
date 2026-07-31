@@ -50,6 +50,13 @@ import {
   upsertManagedInstanceAssignment,
 } from './admin-db.mjs';
 import {
+  findProfileBillingByStripe,
+  getProfileBilling,
+  recordProfileBillingTokens,
+  upsertPendingProfileBilling,
+  updateProfileBillingFromStripe,
+} from '../modules/control-plane/src/server/profile-billing-db.mjs';
+import {
   buildAdminMailSupport,
   resetAdminMailTransporter,
   sendAdminEmail,
@@ -98,6 +105,7 @@ import {
   activatePremiumEntitlement,
   appendPremiumEntitlementEvent,
   buildPremiumCheckoutPayload,
+  buildProfileBillingCheckoutPayload,
   consumePremiumTaskCredits,
   normalizePremiumEntitlementRegistry,
   recordPremiumTaskTokens,
@@ -442,11 +450,31 @@ function normalizeFreeUsageTokens(value) {
   return Number.isFinite(tokens) && tokens > 0 ? tokens : 0;
 }
 
+const FREE_AGENT_TOKEN_WINDOW_MS = 30 * 60 * 1000;
+
+export function calculateFreeAgentTokenCharge({ activeDurationMs, providerTokens } = {}) {
+  const rawProviderTokens = normalizeFreeUsageTokens(providerTokens);
+  const durationMs = Number(activeDurationMs);
+
+  if (Number.isFinite(durationMs) && durationMs >= 0) {
+    return Math.min(
+      rawProviderTokens,
+      (Math.min(durationMs, FREE_AGENT_TOKEN_WINDOW_MS) * 100) / FREE_AGENT_TOKEN_WINDOW_MS,
+    );
+  }
+
+  /*
+   * Older clients do not report duration. Normalize their provider usage instead of
+   * allowing one normal generation to consume the full daily Agent allowance.
+   */
+  return Math.min(rawProviderTokens, rawProviderTokens / 1000);
+}
+
 export function normalizeFreeUsageQuotaLedger(input) {
   const days = {};
 
   if (!input || typeof input !== 'object' || !input.days || typeof input.days !== 'object') {
-    return { version: 1, days };
+    return { version: 2, days };
   }
 
   for (const [dayKey, rawSubjects] of Object.entries(input.days)) {
@@ -467,6 +495,10 @@ export function normalizeFreeUsageQuotaLedger(input) {
         promptTokens: normalizeFreeUsageTokens(rawEntry.promptTokens),
         completionTokens: normalizeFreeUsageTokens(rawEntry.completionTokens),
         totalTokens: normalizeFreeUsageTokens(rawEntry.totalTokens),
+        agentTokens:
+          rawEntry.agentTokens === undefined
+            ? Math.min(100, normalizeFreeUsageTokens(rawEntry.totalTokens) / 1000)
+            : normalizeFreeUsageTokens(rawEntry.agentTokens),
         updatedAt: typeof rawEntry.updatedAt === 'string' ? rawEntry.updatedAt : null,
       };
     }
@@ -474,13 +506,13 @@ export function normalizeFreeUsageQuotaLedger(input) {
     days[dayKey] = subjects;
   }
 
-  return { version: 1, days };
+  return { version: 2, days };
 }
 
 export function buildFreeUsageQuotaDecision(entry = {}, options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const tokenLimit = normalizeFreeUsageTokenLimit(options.tokenLimit);
-  const usedTokens = normalizeFreeUsageTokens(entry?.totalTokens);
+  const usedTokens = normalizeFreeUsageTokens(entry?.agentTokens);
   const remainingTokens = Math.max(0, tokenLimit - usedTokens);
   const limitUsd = normalizeFreeUsageLimitUsd(options.limitUsd);
   const usedUsd = normalizeFreeUsageCostUsd(entry?.costUsd);
@@ -581,6 +613,7 @@ export async function recordFreeUsageQuota({
   tokenLimit,
   limitUsd,
   now = new Date(),
+  activeDurationMs,
 } = {}) {
   const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
   const dayKey = getFreeUsageQuotaDayKey(now);
@@ -594,6 +627,7 @@ export async function recordFreeUsageQuota({
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
+    agentTokens: 0,
     updatedAt: null,
   };
   const normalizedUsage = normalizeFreeUsageQuotaUsage(usage);
@@ -603,6 +637,9 @@ export async function recordFreeUsageQuota({
   entry.promptTokens = normalizeFreeUsageTokens(entry.promptTokens) + normalizedUsage.promptTokens;
   entry.completionTokens = normalizeFreeUsageTokens(entry.completionTokens) + normalizedUsage.completionTokens;
   entry.totalTokens = normalizeFreeUsageTokens(entry.totalTokens) + normalizedUsage.totalTokens;
+  entry.agentTokens =
+    normalizeFreeUsageTokens(entry.agentTokens) +
+    calculateFreeAgentTokenCharge({ activeDurationMs, providerTokens: normalizedUsage.totalTokens });
   entry.updatedAt = now.toISOString();
   day[normalizedSubjectHash] = entry;
   ledger.days[dayKey] = day;
@@ -6006,6 +6043,65 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
   };
 }
 
+async function createStripeProfileBillingCheckout({ profile }) {
+  if (!STRIPE_SECRET_KEY) {
+    throw new Error('Stripe account billing is not configured on this deployment.');
+  }
+
+  const payload = buildProfileBillingCheckoutPayload({
+    /*
+     * Profile billing is proxied through the Remix server, so the runtime request
+     * origin is normally localhost. Always return customers to the configured app.
+     */
+    origin: PROFILE_LOGIN_PUBLIC_ORIGIN,
+    profile,
+    priceUsd: STRIPE_CUSTOM_DOMAIN_PRICE_USD,
+    tokensAllowance: CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
+  });
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(encodeStripeForm(payload)),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data?.url || !data?.id) {
+    throw new Error(data?.error?.message || `Stripe Checkout failed with status ${response.status}`);
+  }
+
+  return {
+    checkoutSessionId: data.id,
+    checkoutUrl: data.url,
+  };
+}
+
+function sanitizeProfileBilling(billing) {
+  if (!billing) {
+    return {
+      plan: 'free',
+      status: 'inactive',
+      tokensAllowance: 100,
+      tokensUsed: 0,
+      tokensRemaining: 100,
+      periodStart: null,
+      periodEnd: null,
+    };
+  }
+
+  return {
+    plan: 'custom-domain',
+    status: billing.status,
+    tokensAllowance: billing.tokensAllowance,
+    tokensUsed: billing.tokensUsed,
+    tokensRemaining: billing.tokensRemaining,
+    periodStart: billing.periodStart,
+    periodEnd: billing.periodEnd,
+  };
+}
+
 function stripeTimestampToIso(value) {
   const seconds = Number(value);
 
@@ -6069,6 +6165,116 @@ async function markPremiumProjectDomainPaid(entitlement) {
     },
   });
   await writeProjectDeploymentRegistry(registry);
+}
+
+async function applyProfileBillingStripeEvent(event) {
+  const object = event?.data?.object || {};
+  const eventType = String(event?.type || '');
+  let subscriptionId =
+    typeof object.subscription === 'string'
+      ? object.subscription
+      : typeof object?.parent?.subscription_details?.subscription === 'string'
+        ? object.parent.subscription_details.subscription
+        : typeof object.id === 'string' && object.object === 'subscription'
+          ? object.id
+          : null;
+  let subscription = object.object === 'subscription' ? object : null;
+  let metadata = {
+    ...(object?.parent?.subscription_details?.metadata || {}),
+    ...(object.metadata || {}),
+  };
+
+  if (subscriptionId && !subscription) {
+    subscription = await retrieveStripeSubscription(subscriptionId);
+    metadata = { ...(subscription?.metadata || {}), ...metadata };
+  }
+
+  const profileId = String(metadata.profileId || object.client_reference_id || '');
+  let billing = await findProfileBillingByStripe({
+    profileId: profileId || null,
+    checkoutSessionId: object.object === 'checkout.session' ? object.id : null,
+    subscriptionId,
+  });
+  const isProfileBillingEvent = metadata.kind === 'bolt-profile-custom-domain' || Boolean(billing);
+
+  if (!isProfileBillingEvent) {
+    return { handled: false, duplicate: false };
+  }
+
+  if (billing?.lastStripeEventId === event.id) {
+    return { handled: true, duplicate: true };
+  }
+
+  if (!billing && profileId && object.object === 'checkout.session') {
+    billing = await upsertPendingProfileBilling({
+      profileId,
+      checkoutSessionId: object.id,
+      tokensAllowance: Number(metadata.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
+    });
+  }
+
+  if (!billing) {
+    throw new Error('Stripe account event could not be matched to an authenticated profile.');
+  }
+
+  let status = billing.status;
+
+  if (['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType)) {
+    status = eventType.startsWith('checkout.') && object.payment_status === 'unpaid' ? 'pending' : 'active';
+  } else {
+    status = resolvePremiumStripeEventStatus(eventType, object.status) || status;
+  }
+
+  subscriptionId = subscriptionId || billing.stripeSubscriptionId;
+  subscription = subscription || (await retrieveStripeSubscription(subscriptionId));
+
+  const period = getStripeSubscriptionPeriod(subscription || object);
+  billing = await updateProfileBillingFromStripe({
+    profileId: billing.profileId,
+    checkoutSessionId: object.object === 'checkout.session' ? object.id : billing.stripeCheckoutSessionId,
+    subscriptionId,
+    customerId:
+      typeof object.customer === 'string'
+        ? object.customer
+        : typeof subscription?.customer === 'string'
+          ? subscription.customer
+          : null,
+    status,
+    tokensAllowance: Number(metadata.tokensAllowance || billing.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
+    eventId: event.id,
+    ...period,
+  });
+
+  if (billing?.stripeSubscriptionId) {
+    const premiumRegistry = await ensurePremiumEntitlementRegistry();
+    const attached = premiumRegistry.entitlements.find(
+      (entry) => entry.stripeSubscriptionId === billing.stripeSubscriptionId,
+    );
+
+    if (attached) {
+      if (status === 'active') {
+        activatePremiumEntitlement(attached, {
+          eventId: event.id,
+          subscriptionId: billing.stripeSubscriptionId,
+          customerId: billing.stripeCustomerId,
+          periodStart: billing.periodStart,
+          periodEnd: billing.periodEnd,
+        });
+      } else {
+        updatePremiumEntitlementStatus(attached, status, event.id);
+      }
+
+      appendPremiumEntitlementEvent(premiumRegistry, {
+        actor: 'stripe-webhook',
+        action: `profile-billing.stripe.${eventType}`,
+        target: attached.id,
+        details: { profileId: billing.profileId, status },
+      });
+      await writePremiumEntitlementRegistry(premiumRegistry);
+    }
+  }
+
+  return { handled: true, duplicate: false, billing: sanitizeProfileBilling(billing) };
 }
 
 async function applyPremiumStripeEvent(event) {
@@ -7410,7 +7616,8 @@ export function createRuntimeServer() {
         }
 
         const event = JSON.parse(rawBody);
-        const result = await applyPremiumStripeEvent(event);
+        const profileResult = await applyProfileBillingStripeEvent(event);
+        const result = profileResult.handled ? profileResult : await applyPremiumStripeEvent(event);
         sendJson(res, 200, { received: true, ...result });
       } catch (error) {
         sendText(res, 400, error instanceof Error ? error.message : 'Stripe webhook processing failed.');
@@ -7429,6 +7636,207 @@ export function createRuntimeServer() {
 
     if (pathname === '/runtime/health') {
       sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/billing/status') {
+      try {
+        const body = await readJsonBody(req);
+        const profile = await readClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+
+        if (!profile) {
+          sendText(res, 401, 'Profile session is invalid or expired.');
+          return;
+        }
+
+        sendJson(res, 200, { ok: true, billing: sanitizeProfileBilling(await getProfileBilling(profile.id)) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to load account billing.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/billing/checkout') {
+      try {
+        const body = await readJsonBody(req);
+        const profile = await readClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+
+        if (!profile) {
+          sendText(res, 401, 'Login before upgrading your account.');
+          return;
+        }
+
+        const current = await getProfileBilling(profile.id);
+
+        if (current?.status === 'active') {
+          sendText(res, 409, 'Custom Domain billing is already active for this account.');
+          return;
+        }
+
+        const checkout = await createStripeProfileBillingCheckout({ profile });
+        const billing = await upsertPendingProfileBilling({
+          profileId: profile.id,
+          checkoutSessionId: checkout.checkoutSessionId,
+          tokensAllowance: CUSTOM_DOMAIN_TOKEN_ALLOWANCE,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          checkoutUrl: checkout.checkoutUrl,
+          billing: sanitizeProfileBilling(billing),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to start secure Stripe Checkout.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/billing/usage') {
+      try {
+        const body = await readJsonBody(req);
+        const profile = await readClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+
+        if (!profile) {
+          sendText(res, 401, 'Profile session is invalid or expired.');
+          return;
+        }
+
+        const billing = await recordProfileBillingTokens({
+          profileId: profile.id,
+          runId: String(body?.runId || ''),
+          totalTokens: body?.totalTokens,
+        });
+        sendJson(res, 200, { ok: true, billing: sanitizeProfileBilling(billing) });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to record account usage.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/billing/attach-domain') {
+      try {
+        const body = await readJsonBody(req);
+        const profile = await readClientProfileSession({
+          id: String(body?.id || ''),
+          tokenHash: hashProfileAuthToken(body?.token),
+        });
+
+        if (!profile) {
+          sendText(res, 401, 'Login before attaching a Custom Domain.');
+          return;
+        }
+
+        const billing = await getProfileBilling(profile.id);
+
+        if (billing?.status !== 'active') {
+          sendJson(res, 402, { ok: false, requiresCheckout: true, message: 'Custom Domain billing is not active.' });
+          return;
+        }
+
+        const requestedSessionId = normalizeSessionId(body?.sessionId);
+        const customDomain = normalizeCustomDomain(body?.customDomain || body?.domain);
+
+        if (!isLikelyValidCustomDomain(customDomain)) {
+          sendText(res, 400, 'Enter a valid custom domain that is not already under bolt.gives.');
+          return;
+        }
+
+        const deploymentRegistry = await ensureProjectDeploymentRegistry();
+        const deployment = deploymentRegistry.deployments.find((entry) => entry.sessionId === requestedSessionId);
+
+        if (!deployment) {
+          sendText(res, 404, 'Publish the project to a bolt.gives subdomain before adding a custom domain.');
+          return;
+        }
+
+        const existingActive = findProjectDeploymentByHost(deploymentRegistry, customDomain);
+
+        if (existingActive && existingActive.id !== deployment.id) {
+          sendText(res, 409, 'That custom domain is already attached to another project.');
+          return;
+        }
+
+        const premiumRegistry = await ensurePremiumEntitlementRegistry();
+        const attachedElsewhere = premiumRegistry.entitlements.find(
+          (entry) =>
+            entry.status === 'active' &&
+            entry.stripeSubscriptionId === billing.stripeSubscriptionId &&
+            entry.sessionId !== requestedSessionId,
+        );
+
+        if (attachedElsewhere) {
+          sendText(res, 409, 'This account subscription is already attached to another Custom Domain project.');
+          return;
+        }
+
+        const now = new Date().toISOString();
+        const existingDomain = deployment.customDomains.find((entry) => entry.domain === customDomain);
+
+        if (existingDomain) {
+          existingDomain.status = 'pending-dns';
+          existingDomain.updatedAt = now;
+        } else {
+          deployment.customDomains.push({
+            domain: customDomain,
+            status: 'pending-dns',
+            stripeCheckoutSessionId: billing.stripeCheckoutSessionId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        deployment.status = 'active';
+        deployment.updatedAt = now;
+        appendProjectDeploymentEvent(deploymentRegistry, {
+          actor: 'profile-billing',
+          action: 'project.custom-domain.attached',
+          target: customDomain,
+          details: { profileId: profile.id, sessionId: requestedSessionId },
+        });
+        await writeProjectDeploymentRegistry(deploymentRegistry);
+
+        const entitlement = upsertPendingPremiumEntitlement(premiumRegistry, {
+          sessionId: requestedSessionId,
+          deploymentId: deployment.id,
+          customDomain,
+          stripeCheckoutSessionId: billing.stripeCheckoutSessionId,
+          creditsAllowance: billing.tokensAllowance,
+        });
+        activatePremiumEntitlement(entitlement, {
+          checkoutSessionId: billing.stripeCheckoutSessionId,
+          subscriptionId: billing.stripeSubscriptionId,
+          customerId: billing.stripeCustomerId,
+          periodStart: billing.periodStart,
+          periodEnd: billing.periodEnd,
+          eventId: billing.lastStripeEventId,
+        });
+        appendPremiumEntitlementEvent(premiumRegistry, {
+          actor: 'profile-billing',
+          action: 'premium.project-attached',
+          target: entitlement.id,
+          details: { profileId: profile.id, sessionId: requestedSessionId, customDomain },
+        });
+        await writePremiumEntitlementRegistry(premiumRegistry);
+
+        sendJson(res, 200, {
+          ok: true,
+          requiresCheckout: false,
+          dnsInstructions: buildCustomDomainDnsInstructions(customDomain, PROJECT_PUBLIC_IP),
+          deployment: sanitizeProjectDeploymentForClient(deployment, { serverIp: PROJECT_PUBLIC_IP }),
+          premium: sanitizePremiumEntitlement(entitlement),
+        });
+      } catch (error) {
+        sendText(res, 500, error instanceof Error ? error.message : 'Unable to attach the Custom Domain.');
+      }
       return;
     }
 
@@ -7688,6 +8096,7 @@ export function createRuntimeServer() {
           usage: body?.usage,
           tokenLimit: body?.tokenLimit,
           limitUsd: body?.limitUsd,
+          activeDurationMs: body?.activeDurationMs,
         });
 
         sendJson(res, 200, {

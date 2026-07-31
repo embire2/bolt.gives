@@ -1,6 +1,7 @@
 import type { MetaFunction } from '@remix-run/cloudflare';
-import { Link } from '@remix-run/react';
+import { Link, useSearchParams } from '@remix-run/react';
 import { APP_VERSION } from '@bolt/core/lib/version';
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
 
 export const meta: MetaFunction = () => [
   { title: `Custom Domain Pricing | bolt.gives v${APP_VERSION}` },
@@ -43,6 +44,9 @@ const WORKFLOW = [
 ];
 
 export default function PricingPage() {
+  const [searchParams] = useSearchParams();
+  const billingResult = searchParams.get('billing');
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f2efe6] text-[#11130f]">
       <div
@@ -66,6 +70,17 @@ export default function PricingPage() {
             Start building
           </Link>
         </header>
+
+        {billingResult === 'success' ? (
+          <div className="border-x border-b border-[#11130f] bg-[#d9ff43] px-5 py-4 font-mono text-sm font-bold">
+            Payment received. Stripe is confirming the signed webhook now; your 10,000-token account balance will appear
+            automatically when activation completes.
+          </div>
+        ) : billingResult === 'cancelled' ? (
+          <div className="border-x border-b border-[#11130f] bg-[#f2efe6] px-5 py-4 font-mono text-sm font-bold">
+            Checkout was cancelled. Your current plan and token balance were not changed.
+          </div>
+        ) : null}
 
         <section className="grid min-h-[650px] items-end gap-10 border-b border-[#11130f] py-16 lg:grid-cols-[1.25fr_0.75fr] lg:py-24">
           <div>
@@ -99,16 +114,13 @@ export default function PricingPage() {
             <p className="font-mono text-sm leading-6">
               10,000 Agent tokens, Deep Build orchestration, custom-domain hosting, and deployment health verification.
             </p>
-            <Link
-              to="/chat"
-              className="mt-8 flex w-full items-center justify-between border border-[#11130f] bg-[#11130f] px-5 py-4 font-mono text-sm font-bold uppercase tracking-[0.12em] text-white transition hover:-translate-y-1"
-            >
-              Build a project
+            <BillingUpgradeButton className="mt-8 flex w-full items-center justify-between border border-[#11130f] bg-[#11130f] px-5 py-4 font-mono text-sm font-bold uppercase tracking-[0.12em] text-white transition hover:-translate-y-1">
+              Upgrade securely
               <span aria-hidden="true">→</span>
-            </Link>
+            </BillingUpgradeButton>
             <p className="mt-4 text-xs leading-5">
-              Publish the project free first, then select <strong>Custom Domain</strong> in Preview to attach your
-              domain and activate secure billing.
+              Stripe activates the account only after a signed payment webhook. Attach the included Custom Domain to a
+              published project from Preview.
             </p>
           </aside>
         </section>
@@ -116,10 +128,11 @@ export default function PricingPage() {
         <section className="grid border-b border-[#11130f] lg:grid-cols-2">
           <article className="border-b border-[#11130f] p-8 lg:border-b-0 lg:border-r sm:p-12">
             <div className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-[#406100]">FREE</div>
-            <h2 className="mt-5 font-serif text-5xl leading-none">100 Agent tokens daily</h2>
+            <h2 className="mt-5 font-serif text-5xl leading-none">At least 30 coding minutes daily</h2>
             <p className="mt-5 max-w-xl leading-7 text-[#34382f]">
-              Build, preview, iterate, and publish to a shareable bolt.gives subdomain. The balance resets every day at
-              00:00 GMT+2, or use your own provider key without this hosted allowance.
+              The 100 Agent-token allowance is calibrated to active generation time so it covers at least 30 minutes of
+              coding. Build, preview, iterate, and publish to a shareable bolt.gives subdomain; the balance resets every
+              day at 00:00 GMT+2, or use your own provider key without this hosted allowance.
             </p>
           </article>
           <article className="bg-[#11130f] p-8 text-white sm:p-12">

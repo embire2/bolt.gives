@@ -10,7 +10,6 @@ import {
   fetchHostedRuntimePreviewStatus,
   isHostedRuntimeEnabled,
   publishHostedRuntimeProject,
-  createHostedRuntimeCustomDomainCheckout,
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   subscribeHostedRuntimePreview,
@@ -32,6 +31,7 @@ import {
   shouldSyncHostedPreviewTransition,
 } from './preview-url';
 import { usePremiumDomainVerification } from './usePremiumDomainVerification';
+import { startCustomDomainBilling } from '@bolt/project/lib/runtime/custom-domain-account';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -1138,21 +1138,23 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       return;
     }
 
-    setPublishStatus('Creating secure Stripe Checkout for Custom Domain...');
+    setPublishStatus('Checking your account billing and Custom Domain entitlement...');
 
     try {
-      const result = await createHostedRuntimeCustomDomainCheckout({
+      const result = await startCustomDomainBilling({
         sessionId: previewSessionId,
         customDomain,
       });
-      setPublishStatus(result.dnsInstructions.note);
-      window.location.href = result.checkoutUrl;
+      setPublishStatus(result.status);
+
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      }
     } catch (error) {
       setPublishStatus(error instanceof Error ? error.message : 'Unable to start custom-domain checkout.');
     }
   };
 
-  // Function to get the correct frame padding based on orientation
   const getFramePadding = useCallback(() => {
     if (!selectedWindowSize) {
       return '40px 20px';
@@ -1161,14 +1163,12 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     const isMobile = selectedWindowSize.frameType === 'mobile';
 
     if (isLandscape) {
-      // Increase horizontal padding in landscape mode to ensure full device frame is visible
       return isMobile ? '40px 60px' : '30px 50px';
     }
 
     return isMobile ? '40px 20px' : '50px 30px';
   }, [isLandscape, selectedWindowSize]);
 
-  // Function to get the scale factor for the device frame
   const getDeviceScale = useCallback(() => {
     // Always return 1 to ensure the device frame is shown at its exact size
     return 1;

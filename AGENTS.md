@@ -6,7 +6,7 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.4.1`
+- Stable: `v3.4.2`
 - In progress: `v3.5.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
@@ -57,7 +57,9 @@ The current hosted product baseline is:
 - Dedicated runtime-node Live Workspaces at `/workspace-setup` for per-project Ubuntu CLI users, private workspace directories, and per-project PostgreSQL databases
 - Hosted chat-created projects auto-provision dedicated runtime-node CLI/database workspaces and inject the project database into server-side commands/Preview through an isolated SSH tunnel.
 - Preview can deploy projects to OpenWeb.Software FREE `https://{subdomain}.bolt.gives`, the protected OpenWeb Cloudflare Pages account, or Custom Domain hosting at the `$5/month` launch price.
-- Hosted FREE profiles receive 100 Agent tokens per GMT+2 day. Custom Domain projects receive 10,000 provider-reported Agent tokens per successfully paid month; access and resets are controlled by signed Stripe webhooks, never browser redirects.
+- Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to at least 30 active coding minutes. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month; access and resets are controlled by signed Stripe webhooks, never browser redirects.
+- Browser project history is scoped to the authenticated profile. Guest and other-account projects must not appear after login on a shared browser.
+- Compiled hosted Desktop clients may be distributed from GitHub Releases, but their proprietary source, build tree, and dependencies remain outside this public repository and must contain no operator credentials.
 
 Do not regress any of the above without an explicit user request.
 

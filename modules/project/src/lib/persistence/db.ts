@@ -22,7 +22,7 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   }
 
   return new Promise((resolve) => {
-    const request = indexedDB.open('boltHistory', 2);
+    const request = indexedDB.open('boltHistory', 3);
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -41,6 +41,15 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
           db.createObjectStore('snapshots', { keyPath: 'chatId' });
         }
       }
+
+      if (oldVersion < 3 && db.objectStoreNames.contains('chats')) {
+        const transaction = (event.target as IDBOpenDBRequest).transaction;
+        const store = transaction?.objectStore('chats');
+
+        if (store && !store.indexNames.contains('ownerId')) {
+          store.createIndex('ownerId', 'ownerId', { unique: false });
+        }
+      }
     };
 
     request.onsuccess = (event: Event) => {
@@ -54,13 +63,20 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   });
 }
 
-export async function getAll(db: IDBDatabase): Promise<ChatHistoryItem[]> {
+export function chatBelongsToOwner(chat: Pick<ChatHistoryItem, 'ownerId'>, ownerId: string | null) {
+  return ownerId ? chat.ownerId === ownerId : !chat.ownerId;
+}
+
+export async function getAll(db: IDBDatabase, ownerId?: string | null): Promise<ChatHistoryItem[]> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
     const store = transaction.objectStore('chats');
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem[]);
+    request.onsuccess = () => {
+      const chats = request.result as ChatHistoryItem[];
+      resolve(ownerId === undefined ? chats : chats.filter((chat) => chatBelongsToOwner(chat, ownerId)));
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -73,6 +89,7 @@ export async function setMessages(
   description?: string,
   timestamp?: string,
   metadata?: IChatMetadata,
+  ownerId?: string | null,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readwrite');
@@ -90,6 +107,7 @@ export async function setMessages(
       description,
       timestamp: timestamp ?? new Date().toISOString(),
       metadata,
+      ownerId: ownerId || undefined,
     });
 
     request.onsuccess = () => resolve();
@@ -97,11 +115,21 @@ export async function setMessages(
   });
 }
 
-export async function getMessages(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return (await getMessagesById(db, id)) || (await getMessagesByUrlId(db, id));
+export async function getMessages(
+  db: IDBDatabase,
+  id: string,
+  ownerId?: string | null,
+): Promise<ChatHistoryItem | undefined> {
+  const chat = (await getMessagesById(db, id)) || (await getMessagesByUrlId(db, id));
+
+  if (!chat || ownerId === undefined) {
+    return chat;
+  }
+
+  return chatBelongsToOwner(chat, ownerId) ? chat : undefined;
 }
 
-export async function getMessagesByUrlId(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
+export async function getMessagesByUrlId(db: IDBDatabase, id: string): Promise<ChatHistoryItem | undefined> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
     const store = transaction.objectStore('chats');
@@ -113,7 +141,7 @@ export async function getMessagesByUrlId(db: IDBDatabase, id: string): Promise<C
   });
 }
 
-export async function getMessagesById(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
+export async function getMessagesById(db: IDBDatabase, id: string): Promise<ChatHistoryItem | undefined> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readonly');
     const store = transaction.objectStore('chats');
@@ -124,7 +152,11 @@ export async function getMessagesById(db: IDBDatabase, id: string): Promise<Chat
   });
 }
 
-export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
+export async function deleteById(db: IDBDatabase, id: string, ownerId?: string | null): Promise<void> {
+  if (ownerId !== undefined && !(await getMessages(db, id, ownerId))) {
+    throw new Error('Chat not found for this profile');
+  }
+
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chats', 'snapshots'], 'readwrite'); // Add snapshots store to transaction
     const chatStore = transaction.objectStore('chats');
@@ -225,8 +257,13 @@ async function getUrlIds(db: IDBDatabase): Promise<string[]> {
   });
 }
 
-export async function forkChat(db: IDBDatabase, chatId: string, messageId: string): Promise<string> {
-  const chat = await getMessages(db, chatId);
+export async function forkChat(
+  db: IDBDatabase,
+  chatId: string,
+  messageId: string,
+  ownerId?: string | null,
+): Promise<string> {
+  const chat = await getMessages(db, chatId, ownerId);
 
   if (!chat) {
     throw new Error('Chat not found');
@@ -242,17 +279,23 @@ export async function forkChat(db: IDBDatabase, chatId: string, messageId: strin
   // Get messages up to and including the selected message
   const messages = chat.messages.slice(0, messageIndex + 1);
 
-  return createChatFromMessages(db, chat.description ? `${chat.description} (fork)` : 'Forked chat', messages);
+  return createChatFromMessages(
+    db,
+    chat.description ? `${chat.description} (fork)` : 'Forked chat',
+    messages,
+    chat.metadata,
+    ownerId,
+  );
 }
 
-export async function duplicateChat(db: IDBDatabase, id: string): Promise<string> {
-  const chat = await getMessages(db, id);
+export async function duplicateChat(db: IDBDatabase, id: string, ownerId?: string | null): Promise<string> {
+  const chat = await getMessages(db, id, ownerId);
 
   if (!chat) {
     throw new Error('Chat not found');
   }
 
-  return createChatFromMessages(db, `${chat.description || 'Chat'} (copy)`, chat.messages);
+  return createChatFromMessages(db, `${chat.description || 'Chat'} (copy)`, chat.messages, chat.metadata, ownerId);
 }
 
 export async function createChatFromMessages(
@@ -260,6 +303,7 @@ export async function createChatFromMessages(
   description: string,
   messages: Message[],
   metadata?: IChatMetadata,
+  ownerId?: string | null,
 ): Promise<string> {
   const newId = await getNextId(db);
   const newUrlId = await getUrlId(db, newId); // Get a new urlId for the duplicated chat
@@ -272,13 +316,19 @@ export async function createChatFromMessages(
     description,
     undefined, // Use the current timestamp
     metadata,
+    ownerId,
   );
 
   return newUrlId; // Return the urlId instead of id for navigation
 }
 
-export async function updateChatDescription(db: IDBDatabase, id: string, description: string): Promise<void> {
-  const chat = await getMessages(db, id);
+export async function updateChatDescription(
+  db: IDBDatabase,
+  id: string,
+  description: string,
+  ownerId?: string | null,
+): Promise<void> {
+  const chat = await getMessages(db, id, ownerId);
 
   if (!chat) {
     throw new Error('Chat not found');
@@ -288,21 +338,22 @@ export async function updateChatDescription(db: IDBDatabase, id: string, descrip
     throw new Error('Description cannot be empty');
   }
 
-  await setMessages(db, id, chat.messages, chat.urlId, description, chat.timestamp, chat.metadata);
+  await setMessages(db, id, chat.messages, chat.urlId, description, chat.timestamp, chat.metadata, chat.ownerId);
 }
 
 export async function updateChatMetadata(
   db: IDBDatabase,
   id: string,
   metadata: IChatMetadata | undefined,
+  ownerId?: string | null,
 ): Promise<void> {
-  const chat = await getMessages(db, id);
+  const chat = await getMessages(db, id, ownerId);
 
   if (!chat) {
     throw new Error('Chat not found');
   }
 
-  await setMessages(db, id, chat.messages, chat.urlId, chat.description, chat.timestamp, metadata);
+  await setMessages(db, id, chat.messages, chat.urlId, chat.description, chat.timestamp, metadata, chat.ownerId);
 }
 
 export async function getSnapshot(db: IDBDatabase, chatId: string): Promise<Snapshot | undefined> {

@@ -4,6 +4,39 @@
 
 No unreleased changes.
 
+## v3.4.2 (2026-07-31)
+
+### Added
+
+- Added authenticated account billing for Custom Domain through server-created Stripe Checkout sessions. Access activates only from signed Stripe webhooks, renewals reset the 10,000-token monthly allowance, usage is idempotent per run, and one paid account subscription can be attached to one published project/domain.
+- Added private-source bolt.gives Desktop packages for Windows (`.exe`), Ubuntu/Debian (`.deb`), and portable Linux (`.AppImage`). The compiled client connects to the hosted bolt.gives workspace, uses the same authenticated profile and 100-token FREE plan, embeds no operator keys, and is distributed separately from the MIT-licensed web repository.
+- Added checkout-route regression coverage for cross-origin rejection, login enforcement, and delivery of the Stripe-hosted payment URL.
+
+### Changed
+
+- Recalibrated the 100 daily FREE Agent tokens around active generation time: 100 tokens now covers at least 30 minutes of active coding each GMT+2 day instead of being consumed directly by raw provider-token volume. Raw provider usage remains recorded for operational accounting.
+- Bound IndexedDB chat history, snapshots reached through chats, duplicate/fork/export actions, and sidebar listings to the authenticated profile ID. Guest and signed-in histories no longer leak into one another on a shared browser.
+- Updated `/pricing`, header Upgrade actions, and the exhausted-plan modal to start authenticated Stripe Checkout instead of linking back to Chat.
+- Hardened the Ubuntu/Linux installer so it generates independent relay, quota, profile, and billing secrets; writes local runtime-control settings; applies the FREE and Custom Domain allowances; warns on partial Stripe configuration; and protects `.env.local` with mode `0600`.
+
+### Fixed
+
+- Fixed paid account usage being ignored by `/api/llmcall` planning/template requests, which could incorrectly apply the FREE daily limit during a paid coding session.
+- Fixed server-proxied account Checkout sessions using the internal runtime origin for success/cancel URLs; customers now return to the configured public app URL.
+- Normalized PostgreSQL billing timestamps before monthly-period comparison so repeated Stripe events cannot falsely reset token usage.
+- Fixed the self-host installer smoke harness after extending it with generated-secret and file-permission assertions.
+
+### Security
+
+- Re-audited the tracked tree, reachable Git history, current configured-secret values, and existing GitHub release assets. No current configured operator key is present in the repository or release files, and GitHub secret scanning reports no open alerts.
+- Kept all Stripe, hosted-model, runtime-node, and profile-session secrets server-side. The public repository and Desktop packages contain no operator-funded credentials.
+
+### Validation
+
+- Focused profile-history, quota, account-billing, installer, and runtime regression suites.
+- Full `pnpm run typecheck`, `pnpm run lint`, `pnpm test`, `pnpm run check:boundaries:strict`, and `pnpm run build`.
+- Linux Desktop launch smoke against the hosted `/chat` surface plus package-format and checksum verification for Linux and Windows release artifacts.
+
 ## v3.4.1 (2026-07-29)
 
 ### Added

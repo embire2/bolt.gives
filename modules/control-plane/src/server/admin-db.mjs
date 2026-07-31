@@ -135,6 +135,32 @@ export async function ensureAdminDatabaseSchema() {
         `);
 
         await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_billing (
+            profile_id TEXT PRIMARY KEY REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            stripe_checkout_session_id TEXT NULL UNIQUE,
+            stripe_subscription_id TEXT NULL UNIQUE,
+            stripe_customer_id TEXT NULL,
+            tokens_allowance NUMERIC NOT NULL DEFAULT 10000,
+            tokens_used NUMERIC NOT NULL DEFAULT 0,
+            period_start TIMESTAMPTZ NULL,
+            period_end TIMESTAMPTZ NULL,
+            last_stripe_event_id TEXT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL
+          );
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_billing_usage (
+            run_id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            tokens NUMERIC NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL
+          );
+        `);
+
+        await client.query(`
           CREATE TABLE IF NOT EXISTS bolt_admin_managed_instances (
             instance_id TEXT PRIMARY KEY,
             profile_email TEXT NOT NULL,
@@ -216,6 +242,12 @@ export async function ensureAdminDatabaseSchema() {
         );
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_links_expiry_idx ON bolt_user_profile_login_links (expires_at);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_billing_subscription_idx ON bolt_user_profile_billing (stripe_subscription_id);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_billing_usage_profile_idx ON bolt_user_profile_billing_usage (profile_id, created_at DESC);`,
         );
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_admin_managed_instances_profile_email_idx ON bolt_admin_managed_instances (profile_email);`,

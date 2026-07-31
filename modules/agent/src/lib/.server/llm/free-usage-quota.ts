@@ -258,6 +258,7 @@ export async function recordFreeUsageQuotaForRequest(options: {
   usage?: UsageLike | null;
   runId?: string;
   subjectKey?: string | null;
+  activeDurationMs?: number;
 }) {
   if (options.providerName !== FREE_PROVIDER_NAME) {
     return null;
@@ -288,6 +289,7 @@ export async function recordFreeUsageQuotaForRequest(options: {
       modelName: options.modelName || FREE_HOSTED_MODEL,
       usage: normalizedUsage,
       runId: options.runId || null,
+      activeDurationMs: options.activeDurationMs,
     },
   });
 

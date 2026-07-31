@@ -14,6 +14,7 @@ interface HistoryItemProps {
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: (id: string) => void;
+  ownerId?: string | null;
 }
 
 export function HistoryItem({
@@ -24,6 +25,7 @@ export function HistoryItem({
   selectionMode = false,
   isSelected = false,
   onToggleSelection,
+  ownerId,
 }: HistoryItemProps) {
   const { id: urlId } = useParams();
   const isActiveChat = urlId === item.urlId;
@@ -33,6 +35,7 @@ export function HistoryItem({
       initialDescription: item.description,
       customChatId: item.id,
       syncWithGlobalStore: isActiveChat,
+      ownerId,
     });
 
   const handleItemClick = useCallback(

@@ -52,8 +52,8 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.4.1 release with PostgreSQL-backed personal profiles, secure login links, readable deployment controls, and protected project titles.',
-  'FREE includes 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
+  'Stable v3.4.2 release with profile-owned project history, working Stripe account upgrades, hardened Linux installation, and hosted Desktop clients.',
+  'FREE includes at least 30 active coding minutes within 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',

@@ -11,6 +11,7 @@ import { createCommandsMessage, detectProjectCommands, escapeBoltTags } from '@b
 import { generateId } from '@bolt/project/utils/fileUtils';
 import { LoadingOverlay } from '~/components/ui/LoadingOverlay';
 import { toast } from 'react-toastify';
+import { useProfile } from '~/lib/profile-context';
 
 const IGNORE_PATTERNS = [
   'node_modules/**',
@@ -38,8 +39,12 @@ const IGNORE_PATTERNS = [
 ];
 
 export function GitUrlImport() {
+  const profile = useProfile();
   const [searchParams] = useSearchParams();
-  const { ready: historyReady, importChat } = useChatHistory({ loadPersistedChat: false });
+  const { ready: historyReady, importChat } = useChatHistory({
+    loadPersistedChat: false,
+    ownerId: profile?.id ?? null,
+  });
   const { ready: gitReady, gitClone } = useGit();
   const [imported, setImported] = useState(false);
   const [loading, setLoading] = useState(true);

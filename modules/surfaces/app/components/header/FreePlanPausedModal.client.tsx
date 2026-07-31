@@ -1,3 +1,5 @@
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
+
 type FreePlanPausedModalProps = {
   open: boolean;
   resetAt?: string | null;
@@ -44,8 +46,8 @@ export function FreePlanPausedModal({ open, resetAt, onDismiss }: FreePlanPaused
               Today&apos;s Agent tokens are used.
             </h2>
             <p className="mt-5 text-sm leading-6 text-[#52645e]">
-              You have used your daily allocation of 100 Agent tokens. Hosted FREE coding is paused until your balance
-              resets at {formatResetTime(resetAt)}.
+              You have used your daily allocation of 100 Agent tokens, calibrated to cover at least 30 minutes of active
+              coding. Hosted FREE coding is paused until your balance resets at {formatResetTime(resetAt)}.
             </p>
 
             <div className="mt-7 rounded-2xl border border-[#173f32]/20 bg-[#eef2ec] p-5">
@@ -81,13 +83,10 @@ export function FreePlanPausedModal({ open, resetAt, onDismiss }: FreePlanPaused
             </div>
 
             <div className="mt-9 space-y-3">
-              <a
-                href="/pricing"
-                className="flex w-full items-center justify-between rounded-xl border border-[#10231d] bg-[#c9f36a] px-5 py-4 text-sm font-black text-[#10231d] shadow-[4px_4px_0_#fffdf5] transition hover:-translate-y-0.5"
-              >
+              <BillingUpgradeButton className="flex w-full items-center justify-between rounded-xl border border-[#10231d] bg-[#c9f36a] px-5 py-4 text-sm font-black text-[#10231d] shadow-[4px_4px_0_#fffdf5] transition hover:-translate-y-0.5">
                 Upgrade for $5/month
                 <span aria-hidden="true">→</span>
-              </a>
+              </BillingUpgradeButton>
               <button
                 type="button"
                 onClick={onDismiss}

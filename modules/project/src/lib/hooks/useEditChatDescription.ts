@@ -13,6 +13,7 @@ interface EditChatDescriptionOptions {
   initialDescription?: string;
   customChatId?: string;
   syncWithGlobalStore?: boolean;
+  ownerId?: string | null;
 }
 
 type EditChatDescriptionHook = {
@@ -43,6 +44,7 @@ export function useEditChatDescription({
   initialDescription = descriptionStore.get()!,
   customChatId,
   syncWithGlobalStore,
+  ownerId,
 }: EditChatDescriptionOptions): EditChatDescriptionHook {
   const chatIdFromStore = useStore(chatIdStore);
   const [editing, setEditing] = useState(false);
@@ -69,13 +71,13 @@ export function useEditChatDescription({
     }
 
     try {
-      const chat = await getMessages(db, chatId);
+      const chat = await getMessages(db, chatId, ownerId);
       return chat?.description || initialDescription;
     } catch (error) {
       console.error('Failed to fetch latest description:', error);
       return initialDescription;
     }
-  }, [db, chatId, initialDescription]);
+  }, [chatId, initialDescription, ownerId]);
 
   const handleBlur = useCallback(async () => {
     const latestDescription = await fetchLatestDescription();
@@ -128,7 +130,7 @@ export function useEditChatDescription({
           return;
         }
 
-        await updateChatDescription(db, chatId, currentDescription);
+        await updateChatDescription(db, chatId, currentDescription, ownerId);
 
         if (syncWithGlobalStore) {
           descriptionStore.set(currentDescription);
@@ -141,7 +143,7 @@ export function useEditChatDescription({
 
       toggleEditMode();
     },
-    [currentDescription, db, chatId, initialDescription, customChatId],
+    [chatId, currentDescription, isValidDescription, ownerId, syncWithGlobalStore, toggleEditMode],
   );
 
   const handleKeyDown = useCallback(

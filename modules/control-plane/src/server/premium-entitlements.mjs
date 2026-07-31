@@ -108,6 +108,41 @@ export function buildPremiumCheckoutPayload(options) {
   };
 }
 
+export function buildProfileBillingCheckoutPayload(options) {
+  const metadata = {
+    kind: 'bolt-profile-custom-domain',
+    profileId: options.profile.id,
+    tokensAllowance: String(options.tokensAllowance),
+    billingInterval: 'month',
+    launchPromotion: 'true',
+    regularValueUsd: '20',
+  };
+
+  return {
+    mode: 'subscription',
+    success_url: `${options.origin}/pricing?billing=success&checkout_session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${options.origin}/pricing?billing=cancelled`,
+    client_reference_id: options.profile.id,
+    customer_email: options.profile.email,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: Math.round(Number(options.priceUsd) * 100),
+          recurring: { interval: 'month', interval_count: 1 },
+          product_data: {
+            name: 'Custom Domain account',
+            description: `$${options.priceUsd}/month launch price with ${Number(options.tokensAllowance).toLocaleString('en-US')} monthly Agent tokens and one Custom Domain project ($20/month value)`,
+          },
+        },
+      },
+    ],
+    metadata,
+    subscription_data: { metadata },
+  };
+}
+
 export function normalizePremiumEntitlementRegistry(input) {
   const now = new Date().toISOString();
   const sourceVersion = Math.max(1, Number(input?.version || 1));

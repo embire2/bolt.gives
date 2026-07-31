@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { forwardRef } from 'react';
 import type { ForwardedRef } from 'react';
 import type { ProviderInfo } from '@bolt/agent/types/model';
+import { useProfile } from '~/lib/profile-context';
 
 interface MessagesProps {
   id?: string;
@@ -28,6 +29,7 @@ export const Messages = forwardRef<HTMLDivElement, MessagesProps>(
   (props: MessagesProps, ref: ForwardedRef<HTMLDivElement> | undefined) => {
     const { id, isStreaming = false, messages = [] } = props;
     const location = useLocation();
+    const profile = useProfile();
 
     const handleRewind = (messageId: string) => {
       const searchParams = new URLSearchParams(location.search);
@@ -42,7 +44,7 @@ export const Messages = forwardRef<HTMLDivElement, MessagesProps>(
           return;
         }
 
-        const urlId = await forkChat(db, chatId.get()!, messageId);
+        const urlId = await forkChat(db, chatId.get()!, messageId, profile?.id ?? null);
         window.location.href = `/chat/${urlId}`;
       } catch (error) {
         toast.error('Failed to fork chat: ' + (error as Error).message);

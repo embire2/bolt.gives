@@ -8,13 +8,13 @@ Secondary objective: continue the `v3.5.0` platform-hardening track for Custom D
 
 ## Active Release Line
 
-- Stable: `v3.4.1`
+- Stable: `v3.4.2`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.4.1`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.1/install.sh`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.4.2`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.2/install.sh`
 - In progress: `v3.5.0`
 
-`v3.4.1` is the current stable hosted and Linux self-host release. It adds PostgreSQL-backed personal profiles, passwordless login, first-name chat greetings, an opaque Deploy menu, protected project titles, 100 daily FREE Agent tokens with a paused-service upgrade modal, and 10,000 monthly Custom Domain Agent tokens at a `$5/month` launch price against a `$20/month` value while preserving the durable prompt-to-preview, saved-project, runtime, PostgreSQL, and six-module baseline.
+`v3.4.2` is the current stable hosted and Linux self-host release. It makes saved projects profile-specific, calibrates 100 daily FREE Agent tokens to at least 30 active coding minutes, sends Upgrade actions to authenticated Stripe Checkout with signed-webhook fulfillment, strengthens installer secret/runtime defaults, and publishes separately built private-source Desktop binaries that use the same hosted profile and quota without embedding operator keys.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -33,7 +33,7 @@ The runtime-node path provisions per-project Ubuntu CLI users, private workspace
 - `@bolt/runtime`: hosted workspace synchronization, commands, Preview lifecycle, runtime-node provisioning, and execution support.
 - `@bolt/project`: generated-project files, persistence, history, Workbench, editor, terminal, actions, collaboration, and integrations.
 - `@bolt/control-plane`: tenant/admin policy, managed instances, updates, publishing, domains, billing, mail, and audit state.
-- `@bolt/surfaces`: Remix routes, application chrome, Cloudflare integration, desktop/mobile composition, and cross-domain adapters.
+- `@bolt/surfaces`: Remix routes, application chrome, Cloudflare integration, mobile/Tauri composition, and cross-domain adapters. The proprietary Desktop build is maintained outside this public repository.
 
 Use `@bolt/<module>/*` imports and keep the graph in `modules/module-map.json` acyclic. Put reusable browser/server-neutral contracts in `core`. Do not bypass a boundary with long relative paths.
 
@@ -73,6 +73,10 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - OpenWeb.Software FREE publishing to `https://{subdomain}.bolt.gives`, direct Cloudflare Pages deployment, and Custom Domain hosting at the `$5/month` launch price.
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
+- Profile-owned browser history, with guest and other-account projects isolated on shared devices.
+- FREE Agent-token metering calibrated to at least 30 active coding minutes per 100-token GMT+2 day.
+- Account-level Stripe Checkout and signed-webhook Custom Domain activation, with 10,000 provider-reported tokens per paid month.
+- Private-source Windows, Debian, and AppImage Desktop binaries that connect to the hosted service and inherit the same profile/quota rules without embedded server credentials.
 
 ## v3.5.0 Priorities
 

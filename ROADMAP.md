@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-29
+Last updated: 2026-07-31
 
 Status legend:
 
@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.4.1`
+- [x] `v3.4.2`
 
 Next release target:
 
@@ -23,9 +23,20 @@ Release theme: complete Custom Domain account lifecycle, broaden template accept
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- [ ] Add a customer billing portal, subscription cancellation flow, invoices, and operator-visible Custom Domain entitlement search.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.1 initial-route budget.
+- [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.2 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.4.2 - Shipped
+
+Release theme: isolate personal history, make FREE coding time usable, and close the account-upgrade loop.
+
+- [x] Scope browser project history and project actions to the authenticated profile so stale guest or other-account projects cannot appear after login.
+- [x] Make 100 daily Agent tokens cover at least 30 active coding minutes while preserving raw provider usage telemetry.
+- [x] Route every Upgrade action through authenticated, server-created Stripe Checkout and signed-webhook activation.
+- [x] Add account-level monthly usage, renewal resets, idempotent charging, and attachment of one paid Custom Domain subscription to one published project.
+- [x] Harden the Ubuntu/Linux installer with independent generated secrets, local runtime-control configuration, Stripe validation, and `0600` env permissions.
+- [x] Ship separately built, private-source Windows, Debian, and AppImage desktop clients that use the hosted profile and FREE allowance without embedded operator credentials.
 
 ## v3.4.1 - Shipped
 
