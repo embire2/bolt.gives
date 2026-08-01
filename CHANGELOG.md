@@ -11,6 +11,7 @@
 ### Changed
 
 - Superseded the temporary Electron hosted-UI wrapper and its Linux packages. The open-source web and Linux self-host product remains `v3.4.2`; Windows Desktop now follows an independent `desktop-v*` release channel with proprietary source outside this repository.
+- Existing Electron wrapper installations require one manual migration because that retired binary never contained update code. Native `Desktop v1.0.0` and later releases check and apply the independent update channel automatically.
 
 ### Security
 
