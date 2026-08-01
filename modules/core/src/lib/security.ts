@@ -439,7 +439,7 @@ const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const HOSTED_FREE_RELAY_HEADER = 'x-bolt-hosted-free-relay';
 const HOSTED_FREE_RELAY_SECRET_HEADER = 'x-bolt-hosted-free-relay-secret';
 const HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
-const DESKTOP_PROFILE_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
+const DESKTOP_PROFILE_CSRF_EXEMPT_PATHS = new Set(['/api/chat']);
 const DESKTOP_PROFILE_AUTHORIZATION_RE = /^BoltProfile\s+[0-9a-f-]{20,64}\.[A-Za-z0-9_-]{32,128}$/i;
 
 function safeDecodeURIComponent(value: string): string | null {

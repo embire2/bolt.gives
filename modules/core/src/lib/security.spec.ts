@@ -100,7 +100,7 @@ describe('enforceCsrf', () => {
       { NODE_ENV: 'production' },
     );
     const unrelatedResponse = enforceCsrf(
-      new Request('https://bolt.gives/api/update', {
+      new Request('https://bolt.gives/api/llmcall', {
         method: 'POST',
         headers: { Authorization: authorization },
       }),
