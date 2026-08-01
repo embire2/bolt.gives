@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 
 export const PROFILE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 export const PROFILE_LOGIN_LINK_TTL_MS = 15 * 60 * 1000;
+export const PROFILE_LOGIN_CODE_TTL_MS = 10 * 60 * 1000;
+export const PROFILE_LOGIN_CODE_MAX_ATTEMPTS = 5;
 
 export function normalizeUserProfileInput(input = {}) {
   return {
@@ -74,6 +76,21 @@ export function hashProfileAuthToken(value) {
     .digest('hex');
 }
 
+export function hashProfileLoginCode({ challengeId, code, secret } = {}) {
+  const normalizedChallengeId = String(challengeId || '').trim();
+  const normalizedCode = String(code || '').trim();
+  const normalizedSecret = String(secret || '').trim();
+
+  if (!normalizedChallengeId || !/^\d{6}$/.test(normalizedCode) || normalizedSecret.length < 16) {
+    throw new Error('Login code hashing is not configured securely.');
+  }
+
+  return crypto
+    .createHmac('sha256', normalizedSecret)
+    .update(`${normalizedChallengeId}:${normalizedCode}`)
+    .digest('hex');
+}
+
 export function createProfileAuthToken(randomBytes = crypto.randomBytes) {
   return randomBytes(32).toString('base64url');
 }
@@ -101,6 +118,22 @@ export function createProfileLoginCredentials(options = {}) {
     id: crypto.randomUUID(),
     token,
     tokenHash: hashProfileAuthToken(token),
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+  };
+}
+
+export function createProfileLoginCodeCredentials(options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const ttlMs = Math.max(60_000, Number(options.ttlMs || PROFILE_LOGIN_CODE_TTL_MS));
+  const randomInt = options.randomInt || crypto.randomInt;
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  const id = crypto.randomUUID();
+
+  return {
+    id,
+    code,
+    codeHash: hashProfileLoginCode({ challengeId: id, code, secret: options.secret }),
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
   };

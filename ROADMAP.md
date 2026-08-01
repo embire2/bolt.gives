@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 Status legend:
 
@@ -15,6 +15,21 @@ Current stable release:
 Next release target:
 
 - [~] `v3.5.0`
+
+Independent Desktop release:
+
+- [x] `Desktop v1.0.0`
+
+## Desktop v1.0.0 - Shipped Separately
+
+Release theme: replace the temporary hosted-UI wrapper with a native, proprietary Windows product while preserving the open-source web/server boundary.
+
+- [x] Build Chat, Workspace, projects, editor, terminal, deployments, settings, model selection, token balance, authentication, and updates with C#/.NET 8 WPF/XAML controls.
+- [x] Restrict WebView2 to generated project Preview; never load the hosted bolt.gives product UI.
+- [x] Add in-app six-digit email-code sign-in and Windows current-user encrypted session storage.
+- [x] Create Start Menu and Desktop shortcuts and ask the user to approve a taskbar pin on first launch.
+- [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, and SHA-256 installer verification.
+- [ ] Add trusted Windows Authenticode signing to private CI to remove the initial unknown-publisher warning.
 
 ## v3.5.0 - In Progress
 

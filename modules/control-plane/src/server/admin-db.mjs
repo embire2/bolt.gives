@@ -135,6 +135,18 @@ export async function ensureAdminDatabaseSchema() {
         `);
 
         await client.query(`
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_login_codes (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ NULL,
+            failed_attempts INTEGER NOT NULL DEFAULT 0
+          );
+        `);
+
+        await client.query(`
           CREATE TABLE IF NOT EXISTS bolt_user_profile_billing (
             profile_id TEXT PRIMARY KEY REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -242,6 +254,12 @@ export async function ensureAdminDatabaseSchema() {
         );
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_links_expiry_idx ON bolt_user_profile_login_links (expires_at);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_codes_profile_idx ON bolt_user_profile_login_codes (profile_id);`,
+        );
+        await client.query(
+          `CREATE INDEX IF NOT EXISTS bolt_user_profile_login_codes_expiry_idx ON bolt_user_profile_login_codes (expires_at);`,
         );
         await client.query(
           `CREATE INDEX IF NOT EXISTS bolt_user_profile_billing_subscription_idx ON bolt_user_profile_billing (stripe_subscription_id);`,

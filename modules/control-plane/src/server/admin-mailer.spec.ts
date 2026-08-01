@@ -97,6 +97,28 @@ describe('admin-mailer', () => {
     expect(recordAdminEmailMessageMock).not.toHaveBeenCalled();
   });
 
+  it('sends a six-digit Desktop login code without placing it in a URL', async () => {
+    readMergedRuntimeEnvMock.mockReturnValue({
+      BOLT_ADMIN_SMTP_HOST: 'smtp.example.com',
+      BOLT_ADMIN_SMTP_PORT: '587',
+      BOLT_ADMIN_SMTP_USER: 'mailer',
+      BOLT_ADMIN_SMTP_PASSWORD: 'secret',
+      BOLT_ADMIN_SMTP_FROM: 'hello@example.com',
+    });
+
+    const { sendProfileLoginCode } = await import('./admin-mailer.mjs');
+    await sendProfileLoginCode({ profileEmail: 'ada@example.com', name: 'Ada Lovelace', code: '104928' });
+
+    expect(sendMailMock).toHaveBeenCalledOnce();
+    expect((sendMailMock.mock.calls as Array<Array<Record<string, unknown>>>)[0]?.[0]).toMatchObject({
+      to: 'ada@example.com',
+      subject: '104928 is your bolt.gives Desktop sign-in code',
+    });
+    expect(String((sendMailMock.mock.calls as Array<Array<Record<string, unknown>>>)[0]?.[0]?.html)).not.toContain(
+      'href=',
+    );
+  });
+
   it('returns a draft bug-report notification when smtp is not configured', async () => {
     const { sendBugReportNotification } = await import('./admin-mailer.mjs');
     const result = await sendBugReportNotification({

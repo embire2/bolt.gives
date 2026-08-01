@@ -27,7 +27,7 @@
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
 - [Compare FREE and Custom Domain](https://bolt.gives/pricing)
-- [Download the hosted Desktop client](https://github.com/embire2/bolt.gives/releases/tag/v3.4.2)
+- [Download the native Windows Desktop client](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0)
 - [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Understand the six-module architecture](docs/architecture/modules.md)
@@ -60,7 +60,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ## Current Release (`v3.4.2`)
 
-`v3.4.2` makes personal projects account-aware, recalibrates the FREE allowance to provide at least 30 active coding minutes per GMT+2 day, closes the Stripe account-upgrade loop, hardens Linux installation, and introduces separately distributed Desktop clients for Windows, Debian/Ubuntu, and AppImage-based Linux systems.
+`v3.4.2` makes personal projects account-aware, recalibrates the FREE allowance to provide at least 30 active coding minutes per GMT+2 day, closes the Stripe account-upgrade loop, and hardens Linux installation. The separately versioned proprietary Windows client is now available as `Desktop v1.0.0`.
 
 ### v3.4.2 personal history, usable FREE time, and account billing
 
@@ -69,9 +69,8 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Every Upgrade button starts authenticated, server-created Stripe Checkout. Payment state is activated only by a signed Stripe webhook; monthly renewal resets the 10,000-token allowance, usage writes are idempotent, and one active subscription can be attached to one published Custom Domain project.
 - Planning and template calls through `/api/llmcall` honor paid account balances, so a Custom Domain customer cannot be stopped by the FREE daily allowance during the same coding session.
 - The self-host installer generates separate relay, quota, profile, admin-cookie, and billing secrets, writes runtime-control configuration, validates partial Stripe setup, and protects `.env.local` with `0600` permissions.
-- The compiled bolt.gives Desktop client loads the hosted workspace with hardened Electron isolation and the same profile-backed 100-token FREE plan. Desktop source is private and is not part of this MIT-licensed repository; release binaries contain no hosted-provider or Stripe secret.
-
-![bolt.gives Desktop connected to the hosted workspace](docs/screenshots/desktop-v3.4.2.png)
+- The old Electron hosted-UI wrapper is superseded by a native C#/.NET 8 WPF/XAML Windows client. Chat, Workspace, projects, code editing, terminal controls, deployments, model selection, token balance, settings, authentication, and updates are native controls; WebView2 is restricted to the generated project Preview.
+- Desktop sign-in emails a six-digit, ten-minute, one-time code for entry inside the app. The resulting profile session is encrypted for the current Windows user, and no hosted-provider, Stripe, SMTP, Cloudflare, database, or runtime-node secret is compiled into the client.
 
 ### v3.4.1 profiles, token balances, and Custom Domain release
 
@@ -104,7 +103,7 @@ The open-source core remains available under `bolt.gives`; hosted Custom Domain 
 - Added regression coverage that fails if Electron scripts, dependencies, source, packaging configuration, or tag workflow return.
 - GitHub releases continue to provide the supported Linux installer; `v3.3.1` does not include an Electron or Windows desktop binary.
 
-We are working on a brand-new native Windows application as a future paid offering. It will use a separate architecture, installer, update channel, security review, and release process rather than carrying forward the retired Electron code.
+The retired Electron implementation has now been replaced by the separately versioned `Desktop v1.0.0` native Windows application. Its proprietary source and build dependencies remain outside this MIT-licensed repository; only compiled Windows release artifacts, checksums, release notes, and update metadata are published here.
 
 ### v3.3.0 modular workspace architecture
 
@@ -310,16 +309,17 @@ BRANCH=v3.4.2 ./install-bolt-gives.sh
 
 Run the installer as a normal sudo-capable user, not as `root`; it invokes `sudo` only for the system changes that require it. The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
 
-### Desktop release packages
+### Native Windows Desktop
 
-`v3.4.2` also provides compiled hosted clients on the [GitHub Releases page](https://github.com/embire2/bolt.gives/releases/tag/v3.4.2):
+The native Windows client has its own release line. [`Desktop v1.0.0`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0) provides:
 
-- Windows x64 installer: `bolt.gives-Desktop-Setup-3.4.2-x64.exe`
-- Ubuntu/Debian x64 package: `bolt.gives-Desktop-3.4.2-amd64.deb`
-- Portable Linux x64 package: `bolt.gives-Desktop-3.4.2-x86_64.AppImage`
-- Integrity file: `bolt.gives-Desktop-3.4.2-SHA256SUMS.txt`
+- Windows x64 installer: `bolt.gives-Desktop-Setup-1.0.0-x64.exe`
+- Integrity file: `bolt.gives-Desktop-1.0.0-SHA256SUMS.txt`
+- Auto-update contract: `bolt.gives-Desktop-update.json`
 
-The Desktop client connects to `https://bolt.gives`, uses the same login, saved-project isolation, hosted runtime, and 100-token FREE allowance as the browser, and does not contain a model-provider, Stripe, Cloudflare, SMTP, database, or runtime-node credential. The Desktop implementation is proprietary and distributed as compiled, unlicensed binaries; the web application and Linux self-host installer remain open source. The `v3.4.2` installers are not code-signed, so operating systems may show their normal unverified-publisher warning.
+The installer creates Start Menu and Desktop shortcuts. First launch asks the user to pin the running app to the taskbar because Windows requires user approval for taskbar pins. The client checks the independent `desktop-v*` channel, streams update progress, verifies the installer SHA-256, and supports optional or mandatory releases.
+
+The Windows UI is native C#/.NET 8 WPF/XAML and does not load the hosted bolt.gives interface. WebView2 is used only for generated project Preview. Project metadata and chat history persist locally, while the coding runtime remains hosted and account-aware. Desktop source is proprietary and excluded from this repository. The initial installer is not code-signed, so Windows SmartScreen may show an unknown-publisher warning until a trusted code-signing certificate is added to private CI.
 
 `v3.0.9.19` fixed the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
 
@@ -523,7 +523,7 @@ The `create` domain is optional. If it is omitted, the registration flow still w
 
 Windows/macOS note:
 
-- Windows users can use bolt.gives in the browser or install the hosted Desktop client from the `v3.4.2` GitHub release.
+- Windows users can use bolt.gives in the browser or install the native client from the independent [`Desktop v1.0.0`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0) release.
 - macOS users should use the browser in this release; no macOS Desktop package is published yet.
 - You should install/self-host bolt.gives on Ubuntu 18.04+.
 

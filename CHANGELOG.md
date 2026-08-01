@@ -2,7 +2,24 @@
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- Added six-digit Desktop sign-in codes with HMAC-hashed challenges, ten-minute expiry, one-time consumption, five-attempt lockout, generic anti-enumeration responses, request throttling, and a dedicated formatted email.
+- Added a narrowly scoped `BoltProfile` native authorization transport for chat and usage requests. Browser CSRF behavior remains unchanged, and the chat action validates the profile session before model or quota work.
+- Added the separately versioned proprietary `Desktop v1.0.0` native Windows client release. Its C#/.NET 8 WPF/XAML interface provides native projects, Chat, Workspace, code editor, terminal, deployments, settings, model switching, token balance, encrypted session storage, Start Menu/Desktop shortcuts, taskbar pin guidance, and SHA-256-verified updates. WebView2 is restricted to generated project Preview.
+
+### Changed
+
+- Superseded the temporary Electron hosted-UI wrapper and its Linux packages. The open-source web and Linux self-host product remains `v3.4.2`; Windows Desktop now follows an independent `desktop-v*` release channel with proprietary source outside this repository.
+
+### Security
+
+- Desktop profile tokens are never placed in URLs. Windows stores the session with current-user DPAPI, and no provider-funded, SMTP, Stripe, Cloudflare, database, or runtime-node secret is compiled into the client.
+
+### Validation
+
+- Added profile-code, formatted-email, native-authorization, CSRF-scope, and AI data-stream parser regression coverage.
+- Compiled and published the self-contained Windows x64 PE from the private source tree; the executable test and installer gates run on `windows-latest` before release artifacts are uploaded.
 
 ## v3.4.2 (2026-07-31)
 

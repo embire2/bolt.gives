@@ -7,6 +7,22 @@ type ProfileCookieValue = {
   token: string;
 };
 
+const PROFILE_AUTHORIZATION_SCHEME = 'BoltProfile';
+
+export function parseProfileAuthorizationHeader(value: string | null): ProfileCookieValue | null {
+  const match = String(value || '').match(/^BoltProfile\s+([0-9a-f-]{20,64})\.([A-Za-z0-9_-]{32,128})$/i);
+
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  return { id: match[1], token: match[2] };
+}
+
+export function serializeProfileAuthorization(credentials: ProfileCookieValue) {
+  return `${PROFILE_AUTHORIZATION_SCHEME} ${credentials.id}.${credentials.token}`;
+}
+
 type ProfileSessionPayload = {
   ok: true;
   profile: UserProfile;
@@ -80,11 +96,17 @@ export async function readProfileCookie(request: Request, runtimeEnv: RuntimeEnv
   return value;
 }
 
+export async function readProfileCredentials(request: Request, runtimeEnv: RuntimeEnv = {}) {
+  return (
+    parseProfileAuthorizationHeader(request.headers.get('Authorization')) || readProfileCookie(request, runtimeEnv)
+  );
+}
+
 export async function resolveProfileSession(
   request: Request,
   runtimeEnv: RuntimeEnv = {},
 ): Promise<UserProfile | null> {
-  const value = await readProfileCookie(request, runtimeEnv);
+  const value = await readProfileCredentials(request, runtimeEnv);
 
   if (!value) {
     return null;
@@ -146,7 +168,7 @@ export async function consumeProfileLogin(token: string, runtimeEnv: RuntimeEnv 
 }
 
 export async function revokeProfileSession(request: Request, runtimeEnv: RuntimeEnv = {}) {
-  const value = await readProfileCookie(request, runtimeEnv);
+  const value = await readProfileCredentials(request, runtimeEnv);
 
   if (!value) {
     return;
@@ -175,7 +197,7 @@ export async function clearProfileSession(runtimeEnv: RuntimeEnv = {}) {
 }
 
 export async function getProfileBillingStatus(request: Request, runtimeEnv: RuntimeEnv = {}) {
-  const credentials = await readProfileCookie(request, runtimeEnv);
+  const credentials = await readProfileCredentials(request, runtimeEnv);
 
   if (!credentials) {
     return null;
@@ -195,7 +217,7 @@ export async function getProfileBillingStatus(request: Request, runtimeEnv: Runt
 }
 
 export async function createProfileBillingCheckout(request: Request, runtimeEnv: RuntimeEnv = {}) {
-  const credentials = await readProfileCookie(request, runtimeEnv);
+  const credentials = await readProfileCredentials(request, runtimeEnv);
 
   if (!credentials) {
     return null;
@@ -217,7 +239,7 @@ export async function recordProfileBillingUsage(
   input: { runId: string; totalTokens: number },
   runtimeEnv: RuntimeEnv = {},
 ) {
-  const credentials = await readProfileCookie(request, runtimeEnv);
+  const credentials = await readProfileCredentials(request, runtimeEnv);
 
   if (!credentials) {
     return null;

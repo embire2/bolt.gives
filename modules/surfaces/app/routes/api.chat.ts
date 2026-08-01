@@ -81,6 +81,7 @@ import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
 import { parseCookies } from '~/lib/api/cookies';
 import { scheduleBackgroundTask } from '~/lib/.server/background-task';
+import { parseProfileAuthorizationHeader, resolveProfileSession } from '~/lib/.server/profile-session';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -1032,6 +1033,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const selectedModel = selectedModelBody || selectedModelCookie;
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
   const runtimeEnv = resolveRuntimeEnvFromContext(context);
+  const desktopProfileCredentials = parseProfileAuthorizationHeader(request.headers.get('Authorization'));
+
+  if (desktopProfileCredentials && !(await resolveProfileSession(request, runtimeEnv))) {
+    return new Response('Desktop profile session is invalid or expired.', { status: 401 });
+  }
+
   const llmManager = LLMManager.getInstance(runtimeEnv as any);
   const serverManagedProviderNames = llmManager
     .getAllProviders()

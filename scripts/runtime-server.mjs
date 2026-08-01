@@ -49,6 +49,7 @@ import {
   upsertClientProfile,
   upsertManagedInstanceAssignment,
 } from './admin-db.mjs';
+import { consumeClientProfileLoginCode, createClientProfileLoginCode } from './profile-login-code-db.mjs';
 import {
   findProfileBillingByStripe,
   getProfileBilling,
@@ -63,6 +64,7 @@ import {
   sendAdminEmailBatch,
   sendBugReportNotification,
   sendContributorApplicationEmails,
+  sendProfileLoginCode,
   sendProfileLoginLink,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
@@ -117,9 +119,12 @@ import {
 } from './premium-entitlements.mjs';
 import {
   createProfileAuthRateLimitKey,
+  createProfileLoginCodeCredentials,
   createProfileLoginCredentials,
   createProfileSessionCredentials,
   hashProfileAuthToken,
+  hashProfileLoginCode,
+  PROFILE_LOGIN_CODE_MAX_ATTEMPTS,
   normalizeProfileReturnTo,
   sanitizeUserProfile,
   validateUserProfileInput,
@@ -267,6 +272,12 @@ const FREE_USAGE_DAILY_LIMIT_USD = Number(
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
 const PROFILE_LOGIN_PUBLIC_ORIGIN = process.env.BOLT_APP_PUBLIC_URL || 'https://bolt.gives';
+const PROFILE_LOGIN_CODE_SECRET =
+  process.env.BOLT_PROFILE_LOGIN_CODE_SECRET ||
+  process.env.BOLT_PROFILE_COOKIE_SECRET ||
+  process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET ||
+  process.env.BOLT_HOSTED_FREE_RELAY_SECRET ||
+  '';
 const SHOUTBOX_MESSAGES_PATH =
   process.env.RUNTIME_SHOUTBOX_MESSAGES_PATH || path.join(PERSIST_ROOT, 'shout-messages.json');
 const MAX_SHOUTBOX_MESSAGES = Number(process.env.RUNTIME_SHOUTBOX_MAX_MESSAGES || '250');
@@ -7969,6 +7980,129 @@ export function createRuntimeServer() {
         });
       } catch {
         sendText(res, 503, 'Secure profile email is temporarily unavailable. Try again shortly.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/login/code/request') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Desktop profile login is not configured on this server.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const email = String(body?.email || '')
+          .trim()
+          .toLowerCase();
+
+        if (!isLikelyValidEmail(email)) {
+          sendText(res, 400, 'Enter a valid email address.');
+          return;
+        }
+
+        if (
+          !consumeProfileAuthRateLimit(
+            createProfileAuthRateLimitKey({
+              scope: 'desktop-login-code-request',
+              requestKey: deriveBugReporterKey(req),
+              email,
+            }),
+          )
+        ) {
+          sendText(res, 429, 'Too many sign-in code requests. Try again in 30 minutes.');
+          return;
+        }
+
+        const credentials = createProfileLoginCodeCredentials({ secret: PROFILE_LOGIN_CODE_SECRET });
+        const profile = await createClientProfileLoginCode({
+          email,
+          id: credentials.id,
+          codeHash: credentials.codeHash,
+          createdAt: credentials.createdAt,
+          expiresAt: credentials.expiresAt,
+        });
+
+        if (profile) {
+          await sendProfileLoginCode({
+            profileEmail: profile.email,
+            name: profile.name,
+            code: credentials.code,
+          });
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          challengeId: credentials.id,
+          expiresAt: credentials.expiresAt,
+          message: 'If that profile exists, a six-digit sign-in code is on its way.',
+        });
+      } catch {
+        sendText(res, 503, 'Secure Desktop sign-in email is temporarily unavailable. Try again shortly.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/profile/login/code/verify') {
+      try {
+        if (!ADMIN_DB_CONFIG.enabled) {
+          sendText(res, 503, 'Desktop profile login is not configured on this server.');
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const challengeId = String(body?.challengeId || '').trim();
+        const code = String(body?.code || '').trim();
+
+        if (!/^[0-9a-f-]{20,64}$/i.test(challengeId) || !/^\d{6}$/.test(code)) {
+          sendText(res, 400, 'That sign-in code is invalid or expired. Request a new code.');
+          return;
+        }
+
+        if (
+          !consumeProfileAuthRateLimit(
+            createProfileAuthRateLimitKey({
+              scope: 'desktop-login-code-verify',
+              requestKey: deriveBugReporterKey(req),
+              email: challengeId,
+            }),
+          )
+        ) {
+          sendText(res, 429, 'Too many code attempts. Request a new code in 30 minutes.');
+          return;
+        }
+
+        const profile = await consumeClientProfileLoginCode({
+          id: challengeId,
+          codeHash: hashProfileLoginCode({ challengeId, code, secret: PROFILE_LOGIN_CODE_SECRET }),
+          maxAttempts: PROFILE_LOGIN_CODE_MAX_ATTEMPTS,
+        });
+
+        if (!profile) {
+          sendText(res, 400, 'That sign-in code is invalid or expired. Request a new code.');
+          return;
+        }
+
+        const credentials = createProfileSessionCredentials();
+        await createClientProfileSession({
+          profileId: profile.id,
+          id: credentials.id,
+          tokenHash: credentials.tokenHash,
+          createdAt: credentials.createdAt,
+          expiresAt: credentials.expiresAt,
+        });
+
+        sendJson(res, 200, {
+          ok: true,
+          profile: sanitizeUserProfile(profile),
+          session: {
+            id: credentials.id,
+            token: credentials.token,
+            expiresAt: credentials.expiresAt,
+          },
+        });
+      } catch {
+        sendText(res, 400, 'That sign-in code is invalid or expired. Request a new code.');
       }
       return;
     }

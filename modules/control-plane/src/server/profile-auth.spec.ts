@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   createProfileAuthRateLimitKey,
   createProfileLoginCredentials,
+  createProfileLoginCodeCredentials,
   createProfileSessionCredentials,
   hashProfileAuthToken,
+  hashProfileLoginCode,
   normalizeProfileReturnTo,
   sanitizeUserProfile,
   validateUserProfileInput,
@@ -38,6 +40,23 @@ describe('profile authentication contracts', () => {
     expect(session.tokenHash).toBe(hashProfileAuthToken(session.token));
     expect(session.expiresAt).toBe('2026-07-29T10:01:00.000Z');
     expect(login.expiresAt).toBe('2026-07-29T10:02:00.000Z');
+  });
+
+  it('creates a six-digit desktop login code and binds its hash to the challenge', () => {
+    const now = new Date('2026-08-01T10:00:00.000Z');
+    const secret = 'desktop-login-secret-long-enough';
+    const login = createProfileLoginCodeCredentials({
+      now,
+      secret,
+      randomInt: () => 42,
+    });
+
+    expect(login.code).toBe('000042');
+    expect(login.codeHash).toBe(hashProfileLoginCode({ challengeId: login.id, code: login.code, secret }));
+    expect(login.expiresAt).toBe('2026-08-01T10:10:00.000Z');
+    expect(() => hashProfileLoginCode({ challengeId: login.id, code: login.code, secret: 'short' })).toThrow(
+      'configured securely',
+    );
   });
 
   it('accepts only same-site relative return paths', () => {

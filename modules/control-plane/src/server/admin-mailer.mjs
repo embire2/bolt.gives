@@ -160,6 +160,62 @@ export async function sendProfileLoginLink({ profileEmail, name, loginUrl } = {}
   };
 }
 
+export function buildProfileLoginCodeEmail({ name, code, expiresMinutes = 10 } = {}) {
+  const normalizedName = String(name || '').trim() || 'there';
+  const normalizedCode = String(code || '').trim();
+  const expiry = Math.max(1, Math.round(Number(expiresMinutes) || 10));
+
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    throw new Error('A six-digit sign-in code is required.');
+  }
+
+  const text = `Hi ${normalizedName},\n\nEnter this code in the bolt.gives Desktop app:\n\n${normalizedCode}\n\nThe code expires in ${expiry} minutes and can be used only once. If you did not request it, you can ignore this email.`;
+  const html = `
+    <div style="margin:0;background:#eef2ec;padding:32px 16px;color:#10231d;font-family:Manrope,Segoe UI,sans-serif;">
+      <div style="margin:0 auto;max-width:620px;overflow:hidden;border:1px solid #173f32;border-radius:28px;background:#fffdf5;box-shadow:12px 12px 0 #c9f36a;">
+        <div style="padding:28px 32px;border-bottom:1px solid #173f32;background:#173f32;color:#fffdf5;">
+          <div style="font-size:12px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#c9f36a;">bolt.gives Desktop</div>
+          <h1 style="margin:12px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.05;">Your Windows sign-in code</h1>
+        </div>
+        <div style="padding:32px;">
+          <p style="margin:0 0 20px;font-size:16px;line-height:1.7;">Hi ${escapeHtml(normalizedName)}, enter this one-time code in the Desktop app:</p>
+          <div style="display:inline-block;border:1px solid #173f32;border-radius:16px;background:#c9f36a;padding:16px 24px;color:#10231d;font-family:Consolas,monospace;font-size:32px;font-weight:900;letter-spacing:.25em;">${normalizedCode}</div>
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#52645e;">This code expires in ${expiry} minutes and works once. bolt.gives will never ask you to send this code to another person.</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return { text, html };
+}
+
+export async function sendProfileLoginCode({ profileEmail, name, code } = {}) {
+  const support = buildAdminMailSupport();
+  const normalizedEmail = String(profileEmail || '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedEmail || !/^\d{6}$/.test(String(code || '').trim())) {
+    throw new Error('Profile email and a six-digit code are required.');
+  }
+
+  if (!support.configured) {
+    throw new Error(support.reason || 'Desktop profile email login is unavailable.');
+  }
+
+  const transporter = await getTransporter();
+  const message = buildProfileLoginCodeEmail({ name, code });
+  await transporter.sendMail({
+    from: support.fromAddress,
+    to: normalizedEmail,
+    subject: `${String(code).trim()} is your bolt.gives Desktop sign-in code`,
+    text: message.text,
+    html: message.html,
+  });
+
+  return { status: 'sent', transport: support.transportLabel };
+}
+
 export async function sendAdminEmail({ profileEmail, subject, body, actor = 'admin' } = {}) {
   const support = buildAdminMailSupport();
   const normalizedEmail = String(profileEmail || '')

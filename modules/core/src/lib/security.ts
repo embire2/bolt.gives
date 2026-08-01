@@ -439,6 +439,8 @@ const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const HOSTED_FREE_RELAY_HEADER = 'x-bolt-hosted-free-relay';
 const HOSTED_FREE_RELAY_SECRET_HEADER = 'x-bolt-hosted-free-relay-secret';
 const HOSTED_FREE_RELAY_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
+const DESKTOP_PROFILE_CSRF_EXEMPT_PATHS = new Set(['/api/chat', '/api/llmcall']);
+const DESKTOP_PROFILE_AUTHORIZATION_RE = /^BoltProfile\s+[0-9a-f-]{20,64}\.[A-Za-z0-9_-]{32,128}$/i;
 
 function safeDecodeURIComponent(value: string): string | null {
   try {
@@ -509,6 +511,10 @@ export function enforceCsrf(request: Request, env?: EnvLike): Response | null {
     return null;
   }
 
+  if (!sameOrigin && isDesktopProfileCsrfExemptRequest(request, url.pathname)) {
+    return null;
+  }
+
   if (!sameOrigin) {
     return new Response(JSON.stringify({ error: 'Cross-origin request blocked' }), {
       status: 403,
@@ -568,6 +574,14 @@ function isHostedFreeRelayCsrfExemptRequest(request: Request, pathname: string) 
    * runtime verifier before any model call is allowed.
    */
   return Boolean(providedSecret);
+}
+
+function isDesktopProfileCsrfExemptRequest(request: Request, pathname: string) {
+  if (!DESKTOP_PROFILE_CSRF_EXEMPT_PATHS.has(pathname)) {
+    return false;
+  }
+
+  return DESKTOP_PROFILE_AUTHORIZATION_RE.test(String(request.headers.get('authorization') || '').trim());
 }
 
 function tryHost(urlish: string): string | null {

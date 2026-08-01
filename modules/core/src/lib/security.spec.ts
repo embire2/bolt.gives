@@ -89,4 +89,37 @@ describe('enforceCsrf', () => {
 
     expect(response?.status).toBe(403);
   });
+
+  it('allows a well-formed Desktop profile credential only on native chat routes', () => {
+    const authorization = `BoltProfile 01f00000-0000-4000-8000-000000000001.${'a'.repeat(43)}`;
+    const chatResponse = enforceCsrf(
+      new Request('https://bolt.gives/api/chat', {
+        method: 'POST',
+        headers: { Authorization: authorization },
+      }),
+      { NODE_ENV: 'production' },
+    );
+    const unrelatedResponse = enforceCsrf(
+      new Request('https://bolt.gives/api/update', {
+        method: 'POST',
+        headers: { Authorization: authorization },
+      }),
+      { NODE_ENV: 'production' },
+    );
+
+    expect(chatResponse).toBeNull();
+    expect(unrelatedResponse?.status).toBe(403);
+  });
+
+  it('rejects malformed Desktop authorization before route handling', () => {
+    const response = enforceCsrf(
+      new Request('https://bolt.gives/api/chat', {
+        method: 'POST',
+        headers: { Authorization: 'BoltProfile not-a-real-session' },
+      }),
+      { NODE_ENV: 'production' },
+    );
+
+    expect(response?.status).toBe(403);
+  });
 });
