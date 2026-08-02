@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 Status legend:
 
@@ -18,9 +18,9 @@ Next release target:
 
 Independent Desktop release:
 
-- [x] `Desktop v1.0.0`
+- [x] `Desktop v1.0.1`
 
-## Desktop v1.0.0 - Shipped Separately
+## Desktop v1.0.1 - Shipped Separately
 
 Release theme: replace the temporary hosted-UI wrapper with a native, proprietary Windows product while preserving the open-source web/server boundary.
 
@@ -29,7 +29,8 @@ Release theme: replace the temporary hosted-UI wrapper with a native, proprietar
 - [x] Add in-app six-digit email-code sign-in and Windows current-user encrypted session storage.
 - [x] Create Start Menu and Desktop shortcuts and ask the user to approve a taskbar pin on first launch.
 - [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, and SHA-256 installer verification.
-- [ ] Add trusted Windows Authenticode signing to private CI to remove the initial unknown-publisher warning.
+- [x] Add fail-closed Azure Artifact Signing, RFC3161 timestamps, and pinned Private Trust chain verification to private CI.
+- [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
 ## v3.5.0 - In Progress
 

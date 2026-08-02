@@ -27,7 +27,7 @@
 
 - [Create a managed Cloudflare instance](https://create.bolt.gives)
 - [Compare FREE and Custom Domain](https://bolt.gives/pricing)
-- [Download the native Windows Desktop client](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0)
+- [Download the native Windows Desktop client](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.1)
 - [Create a live Ubuntu CLI workspace](/workspace-setup)
 - [Contribute through GitHub](https://github.com/embire2/bolt.gives)
 - [Understand the six-module architecture](docs/architecture/modules.md)
@@ -60,7 +60,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 
 ## Current Release (`v3.4.2`)
 
-`v3.4.2` makes personal projects account-aware, recalibrates the FREE allowance to provide at least 30 active coding minutes per GMT+2 day, closes the Stripe account-upgrade loop, and hardens Linux installation. The separately versioned proprietary Windows client is now available as `Desktop v1.0.0`.
+`v3.4.2` makes personal projects account-aware, recalibrates the FREE allowance to provide at least 30 active coding minutes per GMT+2 day, closes the Stripe account-upgrade loop, and hardens Linux installation. The separately versioned proprietary Windows client is now available as `Desktop v1.0.1`.
 
 ### v3.4.2 personal history, usable FREE time, and account billing
 
@@ -103,7 +103,7 @@ The open-source core remains available under `bolt.gives`; hosted Custom Domain 
 - Added regression coverage that fails if Electron scripts, dependencies, source, packaging configuration, or tag workflow return.
 - GitHub releases continue to provide the supported Linux installer; `v3.3.1` does not include an Electron or Windows desktop binary.
 
-The retired Electron implementation has now been replaced by the separately versioned `Desktop v1.0.0` native Windows application. Its proprietary source and build dependencies remain outside this MIT-licensed repository; only compiled Windows release artifacts, checksums, release notes, and update metadata are published here.
+The retired Electron implementation has now been replaced by the separately versioned `Desktop v1.0.1` native Windows application. Its proprietary source and build dependencies remain outside this MIT-licensed repository; only compiled Windows release artifacts, checksums, release notes, and update metadata are published here.
 
 ### v3.3.0 modular workspace architecture
 
@@ -311,17 +311,17 @@ Run the installer as a normal sudo-capable user, not as `root`; it invokes `sudo
 
 ### Native Windows Desktop
 
-The native Windows client has its own release line. [`Desktop v1.0.0`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0) provides:
+The native Windows client has its own release line. [`Desktop v1.0.1`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.1) provides:
 
-- Windows x64 installer: `bolt.gives-Desktop-Setup-1.0.0-x64.exe`
-- Integrity file: `bolt.gives-Desktop-1.0.0-SHA256SUMS.txt`
+- Windows x64 installer: `bolt.gives-Desktop-Setup-1.0.1-x64.exe`
+- Integrity file: `bolt.gives-Desktop-1.0.1-SHA256SUMS.txt`
 - Auto-update contract: `bolt.gives-Desktop-update.json`
 
 The installer creates Start Menu and Desktop shortcuts. First launch asks the user to pin the running app to the taskbar because Windows requires user approval for taskbar pins. The client checks the independent `desktop-v*` channel, streams update progress, verifies the installer SHA-256, and supports optional or mandatory releases.
 
-The retired Electron `v3.4.2` wrapper did not contain an updater, so an existing copy cannot be silently replaced from the server. Those users must install native `Desktop v1.0.0` once. After that migration, the native updater handles future `desktop-v*` releases automatically, including mandatory updates that block further coding until integrity-verified installation begins.
+The retired Electron `v3.4.2` wrapper did not contain an updater, so an existing copy cannot be silently replaced from the server. Those users must install the latest native Desktop release once. Native `Desktop v1.0.0` clients discover v1.0.1 as a mandatory update at startup and block further coding until the checksum-verified installer begins.
 
-The Windows UI is native C#/.NET 8 WPF/XAML and does not load the hosted bolt.gives interface. WebView2 is used only for generated project Preview. Project metadata and chat history persist locally, while the coding runtime remains hosted and account-aware. Desktop source is proprietary and excluded from this repository. The initial installer is not code-signed, so Windows SmartScreen may show an unknown-publisher warning until a trusted code-signing certificate is added to private CI.
+The Windows UI is native C#/.NET 8 WPF/XAML and does not load the hosted bolt.gives interface. WebView2 is used only for generated project Preview. Project metadata and chat history persist locally, while the coding runtime remains hosted and account-aware. Desktop source is proprietary and excluded from this repository. Desktop v1.0.1 signs the app and installer through Azure Artifact Signing and verifies the pinned certificate chain plus RFC3161 timestamp in private CI. The active profile is `PrivateTrust`, whose root is not trusted by Windows by default, so unmanaged devices may still show an unknown-publisher or SmartScreen warning until a `PublicTrust` profile is approved.
 
 `v3.0.9.19` fixed the Google Calendar follow-up race where the preview could become usable while hidden starter or recovery prompts were still running in the background. The chat prompt now stays visible and accepts typed follow-ups during active work; if the agent is still streaming or running hidden recovery, the visible follow-up is queued with an on-screen status and is sent automatically when the current run becomes idle. This prevents user follow-ups from being shadowed by automatic continuation prompts and keeps improvement requests attached to the current project.
 
@@ -525,7 +525,7 @@ The `create` domain is optional. If it is omitted, the registration flow still w
 
 Windows/macOS note:
 
-- Windows users can use bolt.gives in the browser or install the native client from the independent [`Desktop v1.0.0`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.0) release.
+- Windows users can use bolt.gives in the browser or install the native client from the independent [`Desktop v1.0.1`](https://github.com/embire2/bolt.gives/releases/tag/desktop-v1.0.1) release.
 - macOS users should use the browser in this release; no macOS Desktop package is published yet.
 - You should install/self-host bolt.gives on Ubuntu 18.04+.
 
