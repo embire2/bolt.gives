@@ -9,6 +9,7 @@ import { FREE_HOSTED_MODEL, FREE_PROVIDER_NAME } from '@bolt/agent/lib/modules/l
 describe('ensureFreeProviderAvailability', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     resetFreeProviderPreflightCache();
   });
 
@@ -108,6 +109,44 @@ describe('ensureFreeProviderAvailability', () => {
     );
     expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain(FREE_HOSTED_MODEL);
     expect(String(fetchSpy.mock.calls[0]?.[1]?.body)).toContain('max_output_tokens');
+  });
+
+  it('expires transient upstream failures quickly so automatic repair can retry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-30T18:00:00.000Z'));
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ detail: 'The configured provider accounts are temporarily unavailable.' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'magnet-real-secret',
+      }),
+    ).rejects.toThrow('FREE_PROVIDER_UNAVAILABLE');
+
+    vi.advanceTimersByTime(5_001);
+
+    await expect(
+      ensureFreeProviderAvailability({
+        providerName: FREE_PROVIDER_NAME,
+        modelName: FREE_HOSTED_MODEL,
+        apiKey: 'magnet-real-secret',
+      }),
+    ).resolves.toMatchObject({ resolvedModelName: FREE_HOSTED_MODEL });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it('preserves actionable top-level upstream errors', async () => {

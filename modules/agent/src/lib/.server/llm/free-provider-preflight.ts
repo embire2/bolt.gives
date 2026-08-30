@@ -20,6 +20,7 @@ const logger = createScopedLogger('free-provider-preflight');
 
 const SUCCESS_TTL_MS = 60_000;
 const RATE_LIMIT_TTL_MS = 30_000;
+const TRANSIENT_FAILURE_TTL_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function fingerprintToken(token: string): string {
@@ -200,7 +201,8 @@ export async function ensureFreeProviderAvailability(options: {
 
   cachedResult = {
     ok: false,
-    expiresAt: now + (upstreamRateLimited ? RATE_LIMIT_TTL_MS : SUCCESS_TTL_MS),
+    expiresAt:
+      now + (creditsExhausted ? SUCCESS_TTL_MS : upstreamRateLimited ? RATE_LIMIT_TTL_MS : TRANSIENT_FAILURE_TTL_MS),
     fingerprint,
     modelName: resolvedModelName,
     message: errorMessage,
