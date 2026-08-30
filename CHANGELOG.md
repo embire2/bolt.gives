@@ -50,6 +50,7 @@
 - Fixed managed Cloudflare quota checks calling the localhost runtime fallback from the edge, which Cloudflare rejected with `403`. Pages hostnames now use the canonical protected runtime when no public binding is available, and refreshes upload both generation and quota credentials.
 - Fixed hosted FREE repair/follow-up calls exhausting managed Pages Worker resources before reaching the relay. Managed `/api/chat` and `/api/llmcall` requests now take a lightweight authenticated edge path, and profile-cookie signing remains consistent with the central runtime.
 - Reduced the preflight cache for transient MagnetAPI availability failures from one minute to five seconds, allowing automatic Preview repair to resume promptly when the upstream recovers while preserving longer backoff for rate limits and exhausted credits.
+- Removed the two extra hosted FREE model calls previously used to summarize history and select project files before every follow-up. FREE builds now use bounded persisted project memory plus deterministic files from the authoritative runtime snapshot, preventing upstream helper timeouts and oversized error transcripts from trapping healthy projects in continuation loops.
 
 ### Validation
 

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  resolveDefaultStreamTimeoutMs,
-  resolveStreamMaxDurationMs,
   shouldAttemptHostedPreviewVerification,
   shouldContinuePendingHostedPreviewVerification,
+} from '~/routes/api.chat';
+import {
+  resolveDefaultStreamTimeoutMs,
+  resolveStreamMaxDurationMs,
   shouldTrackCommentaryRunActivity,
   shouldTrackModelStreamChunkActivity,
-} from '~/routes/api.chat';
+} from '@bolt/agent/lib/runtime/api-chat-stream-policy';
 
 describe('api.chat hosted preview continuation policy', () => {
   it('does not attempt hosted preview verification without a hosted runtime session', () => {

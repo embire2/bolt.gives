@@ -54,6 +54,10 @@ import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '@bolt/age
 import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
 import { hydrateWebsiteSourceContext } from '@bolt/agent/lib/.server/llm/web-context';
 import {
+  buildDeterministicHostedFreeSummary,
+  shouldUseDeterministicHostedFreeContext,
+} from '@bolt/agent/lib/.server/llm/hosted-free-context';
+import {
   isHostedFreeRelayRequest,
   relayHostedFreeRequest,
   resolveHostedFreeRelayOrigin,
@@ -79,6 +83,13 @@ import { createUsageLimitResponse } from '~/lib/.server/profile-billing-response
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
 import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
+import {
+  isLongThinkModel,
+  resolveDefaultStreamTimeoutMs,
+  resolveStreamMaxDurationMs,
+  shouldTrackCommentaryRunActivity,
+  shouldTrackModelStreamChunkActivity,
+} from '@bolt/agent/lib/runtime/api-chat-stream-policy';
 import { parseCookies } from '~/lib/api/cookies';
 import { scheduleBackgroundTask } from '~/lib/.server/background-task';
 import { parseProfileAuthorizationHeader, resolveProfileSession } from '~/lib/.server/profile-session';
@@ -89,11 +100,6 @@ export async function action(args: ActionFunctionArgs) {
 
 const logger = createScopedLogger('api.chat');
 const MAX_RUN_CONTINUATION_ATTEMPTS = 5;
-const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
-const HOSTED_FREE_STREAM_TIMEOUT_MS = 120000;
-const HOSTED_FREE_STREAM_MAX_DURATION_MS = 150000;
-const LONG_THINK_STREAM_TIMEOUT_MS = 300000;
-const DEFAULT_STREAM_TIMEOUT_MS = 180000;
 const BOLT_ACTION_RE = /<boltAction\b/i;
 const FILE_ACTION_RE = /<boltAction[^>]*type=(["'])file\1/i;
 const PLAN_ONLY_RESPONSE_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:the\s+plan|implementation\s+plan|plan:|next\s+steps)\b/i;
@@ -108,34 +114,6 @@ const FILE_PATH_LITERAL_RE =
   /(?:^|\/)[\w.-]+\.(?:tsx?|jsx?|css|scss|json|html?|mdx?|vue|svelte|astro|svg|png|jpe?g|gif|webp)$/i;
 const PROJECT_OBJECTIVE_CANDIDATES_KEY = '__bolt_project_objective_candidates_v1';
 const MAX_PROJECT_OBJECTIVE_KEYS = 200;
-
-export function resolveDefaultStreamTimeoutMs(provider?: string, model?: string) {
-  if (provider?.trim().toUpperCase() === 'FREE') {
-    return HOSTED_FREE_STREAM_TIMEOUT_MS;
-  }
-
-  return LONG_THINK_MODEL_RE.test(model || '') ? LONG_THINK_STREAM_TIMEOUT_MS : DEFAULT_STREAM_TIMEOUT_MS;
-}
-
-export function shouldTrackCommentaryRunActivity(options?: { trackRunActivity?: boolean }) {
-  return options?.trackRunActivity !== false;
-}
-
-export function shouldTrackModelStreamChunkActivity(chunk?: { type?: string }) {
-  return Boolean(chunk?.type && chunk.type !== 'reasoning');
-}
-
-export function resolveStreamMaxDurationMs(provider?: string, configuredMaxDuration?: unknown) {
-  if (provider?.trim().toUpperCase() !== 'FREE') {
-    return undefined;
-  }
-
-  const parsedMaxDuration = Number(configuredMaxDuration);
-
-  return Number.isFinite(parsedMaxDuration) && parsedMaxDuration >= 10_000
-    ? parsedMaxDuration
-    : HOSTED_FREE_STREAM_MAX_DURATION_MS;
-}
 
 const MAX_PROJECT_OBJECTIVE_CANDIDATES = 18;
 
@@ -1582,12 +1560,26 @@ Next: I will continue and can still use any URL details present in the prompt.`,
 
         ensureLatestUserMessageSelectionEnvelope(processedMessages, sanitizedSelection);
 
+        const useDeterministicHostedFreeContext = shouldUseDeterministicHostedFreeContext({
+          provider: sanitizedSelection.provider,
+          contextOptimization,
+          chatMode: effectiveChatMode,
+        });
+
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
         }
 
+        if (useDeterministicHostedFreeContext) {
+          /*
+           * The latest request plus persisted project memory and the live workspace are sufficient.
+           * Avoid sending old runtime overlays or invoking two extra upstream helper calls before coding.
+           */
+          messageSliceId = Math.max(0, processedMessages.length - 1);
+        }
+
         if (filePaths.length > 0) {
-          if (contextOptimization) {
+          if (contextOptimization && !useDeterministicHostedFreeContext) {
             logger.debug('Generating Chat Summary');
             writeCommentary(
               'plan',
@@ -1682,6 +1674,14 @@ Next: I will continue and can still use any URL details present in the prompt.`,
             filteredFiles = selectDeterministicContextFiles(files, {
               latestGoal: latestUserGoal,
             });
+
+            if (useDeterministicHostedFreeContext) {
+              summary = buildDeterministicHostedFreeSummary({
+                latestUserGoal,
+                projectMemory: effectiveProjectMemory,
+              });
+            }
+
             lastVisibleResultForHeartbeat = 'Current project snapshot loaded for follow-up work.';
           }
 
@@ -1738,7 +1738,7 @@ Next: I will continue and can still use any URL details present in the prompt.`,
           );
           const effectivePlannerModel = plannerModel || selectedModel || '';
           const effectivePlannerProvider = plannerProvider || selectedProvider || '';
-          const isLongThinkModel = LONG_THINK_MODEL_RE.test(effectivePlannerModel);
+          const longThinkModel = isLongThinkModel(effectivePlannerModel);
           const shouldSkipPlannerForHostedFree = effectivePlannerProvider === 'FREE';
           const shouldSkipPlannerForRecovery = shouldSkipPlannerForRecoveryPrompt(
             plannerSelection?.content || latestPlannerSourceMessage?.content,
@@ -1747,7 +1747,7 @@ Next: I will continue and can still use any URL details present in the prompt.`,
             plannerFeatureEnabled &&
             !shouldSkipPlannerForHostedFree &&
             !shouldSkipPlannerForRecovery &&
-            (plannerAllowedForLongThink || !isLongThinkModel);
+            (plannerAllowedForLongThink || !longThinkModel);
 
           if (!shouldRunPlanner) {
             const reason = !plannerFeatureEnabled

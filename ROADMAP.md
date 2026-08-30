@@ -55,6 +55,7 @@ Release theme: make first-pass Preview reliable, isolate generated runtimes, and
 - [x] Synchronize server-only FREE generation/quota credentials and route Pages quota checks to the canonical runtime instead of an edge-localhost fallback.
 - [x] Move managed hosted FREE chat/planning relay work into the lightweight Pages entrypoint so long generations and repair retries stay below edge resource limits.
 - [x] Keep transient hosted-provider health failures short-lived so automatic Preview repair can resume quickly after upstream recovery without weakening rate-limit or funding backoff.
+- [x] Replace hosted FREE model-based history summarization and file selection with bounded project memory and deterministic runtime-snapshot context so follow-ups start coding without preparatory upstream stalls.
 - [x] Ship Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs with real Vite/Chromium Preview smoke coverage.
 - [x] Verify first generation, app interaction, follow-up editing, full reload, runtime restart, saved history, files, runtime identity, and Preview recovery on `alpha1.bolt.gives`.
 
