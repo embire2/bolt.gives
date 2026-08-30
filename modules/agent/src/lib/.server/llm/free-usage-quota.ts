@@ -10,6 +10,7 @@ import { normalizeCredential, normalizeHttpUrl } from '@bolt/core/lib/runtime/cr
 import { getHostedFreeRelaySecret, HOSTED_FREE_RELAY_SECRET_HEADER } from './hosted-free-relay';
 
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'http://127.0.0.1:4321/runtime';
+const CANONICAL_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
 const DEFAULT_FREE_DAILY_LIMIT_USD = 1;
 const DEFAULT_FREE_DAILY_TOKEN_LIMIT = 100;
 const FREE_QUOTA_RESET_LABEL = '00:00 GMT+2';
@@ -56,12 +57,24 @@ export function buildFreeUsageQuotaLimitMessage() {
   return `The hosted FREE service has been paused because you have used all 100 Agent tokens for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at ${FREE_QUOTA_RESET_LABEL}.`;
 }
 
-function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}) {
-  return (
+function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}, requestUrl = '') {
+  const configuredUrl =
     normalizeHttpUrl(runtimeEnv.BOLT_RUNTIME_CONTROL_PUBLIC_URL) ||
-    normalizeHttpUrl(runtimeEnv.BOLT_RUNTIME_CONTROL_URL) ||
-    DEFAULT_RUNTIME_CONTROL_BASE_URL
-  ).replace(/\/$/, '');
+    normalizeHttpUrl(runtimeEnv.BOLT_RUNTIME_CONTROL_URL);
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  try {
+    if (new URL(requestUrl).hostname.endsWith('.pages.dev')) {
+      return CANONICAL_RUNTIME_CONTROL_BASE_URL;
+    }
+  } catch {
+    // A malformed or absent request URL is handled by the local runtime fallback.
+  }
+
+  return DEFAULT_RUNTIME_CONTROL_BASE_URL;
 }
 
 function getFreeUsageQuotaSecret(runtimeEnv: RuntimeEnv = {}) {
@@ -140,11 +153,12 @@ function normalizeDailyTokenLimit(runtimeEnv: RuntimeEnv = {}) {
     : DEFAULT_FREE_DAILY_TOKEN_LIMIT;
 }
 
-function buildQuotaRuntimeUrl(runtimeEnv: RuntimeEnv, pathname: string) {
-  return `${getRuntimeControlBaseUrl(runtimeEnv)}${pathname}`;
+function buildQuotaRuntimeUrl(runtimeEnv: RuntimeEnv, requestUrl: string, pathname: string) {
+  return `${getRuntimeControlBaseUrl(runtimeEnv, requestUrl)}${pathname}`;
 }
 
 async function fetchFreeUsageQuota<T>(options: {
+  request: Request;
   runtimeEnv: RuntimeEnv;
   pathname: string;
   body: Record<string, unknown>;
@@ -155,7 +169,7 @@ async function fetchFreeUsageQuota<T>(options: {
     throw new Error('FREE_PROVIDER_DAILY_LIMIT_UNAVAILABLE: Hosted FREE quota secret is not configured.');
   }
 
-  const response = await fetch(buildQuotaRuntimeUrl(options.runtimeEnv, options.pathname), {
+  const response = await fetch(buildQuotaRuntimeUrl(options.runtimeEnv, options.request.url, options.pathname), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -224,6 +238,7 @@ export async function getFreeUsageQuotaForRequest(options: {
     subjectKey: options.subjectKey,
   });
   const payload = await fetchFreeUsageQuota<FreeUsageQuotaCheckResponse>({
+    request: options.request,
     runtimeEnv,
     pathname: '/internal/free-usage-quota/check',
     body: {
@@ -278,6 +293,7 @@ export async function recordFreeUsageQuotaForRequest(options: {
     subjectKey: options.subjectKey,
   });
   const payload = await fetchFreeUsageQuota<FreeUsageQuotaRecordResponse>({
+    request: options.request,
     runtimeEnv,
     pathname: '/internal/free-usage-quota/record',
     body: {

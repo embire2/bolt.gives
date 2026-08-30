@@ -52,7 +52,7 @@ Release theme: make first-pass Preview reliable, isolate generated runtimes, and
 - [x] Pin generated hosted workspaces to the repository package-manager release for reproducible builds.
 - [x] Reduce idle usage and Preview reconciliation polling while preserving event-triggered health checks.
 - [x] Keep managed-instance release metadata tied to the live checkout and make provisioning results hydrate deterministically.
-- [x] Synchronize distinct server-only FREE generation and quota credentials on every managed Cloudflare provision/refresh.
+- [x] Synchronize server-only FREE generation/quota credentials and route Pages quota checks to the canonical runtime instead of an edge-localhost fallback.
 - [x] Ship Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs with real Vite/Chromium Preview smoke coverage.
 - [x] Verify first generation, app interaction, follow-up editing, full reload, runtime restart, saved history, files, runtime identity, and Preview recovery on `alpha1.bolt.gives`.
 

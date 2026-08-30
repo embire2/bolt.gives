@@ -113,6 +113,33 @@ describe('hosted FREE usage quota client', () => {
     });
   });
 
+  it('uses the canonical quota service from Cloudflare Pages when no public runtime URL is bound', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        ok: true,
+        quota: {
+          allowed: true,
+          usedTokens: 0,
+          remainingTokens: 100,
+          tokenLimit: 100,
+          usedUsd: 0,
+          remainingUsd: 1,
+          limitUsd: 1,
+          resetAt: '2026-06-26T22:00:00.000Z',
+          resetTimezone: 'GMT+2',
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getFreeUsageQuotaForRequest({
+      request: new Request('https://client-project.pages.dev/api/usage-balance'),
+      runtimeEnv: { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' },
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://bolt.gives/runtime/internal/free-usage-quota/check');
+  });
+
   it('records estimated selected-model usage cost against the runtime quota ledger', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
