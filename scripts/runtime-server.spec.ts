@@ -12,6 +12,7 @@ import {
   authorizeHostedFreeRelaySecret,
   bumpSessionPreviewRevision,
   buildHostedWorkspaceBootstrapAlert,
+  buildHostedWorkspaceProcessEnvironment,
   buildPreviewRedirectHeaders,
   buildPreviewRepairHeaders,
   buildPreviewRepairPage,
@@ -54,6 +55,7 @@ import {
   releaseRuntimeNodeDatabasePorts,
   retainSessionPreviewPortForRecovery,
   resolveManagedInstanceProcessCwd,
+  resolveRuntimeNodeDatabaseEnvironmentForCommand,
   resolveRuntimeWorkspaceRoot,
   resolvePublishedProjectUpgradeTarget,
   resolveSessionSnapshotFiles,
@@ -102,6 +104,39 @@ afterEach(async () => {
 });
 
 describe('runtime server workspace isolation', () => {
+  it('does not expose operator secrets to generated project processes', () => {
+    const environment = buildHostedWorkspaceProcessEnvironment({
+      workspaceDir: '/tmp/bolt-project-test',
+      processEnv: {
+        PATH: '/usr/bin:/bin',
+        LANG: 'en_US.UTF-8',
+        BOLT_HOSTED_FREE_API_KEY: 'operator-funded-secret',
+        BOLT_STRIPE_SECRET_KEY: 'billing-secret',
+        CLOUDFLARE_API_TOKEN: 'cloudflare-secret',
+        DATABASE_URL: 'postgres://admin:secret@primary/internal',
+      },
+      projectEnv: {
+        DATABASE_URL: 'postgres://project:isolated@127.0.0.1/project',
+        PGUSER: 'project',
+      },
+      port: 4321,
+      host: '127.0.0.1',
+    });
+
+    expect(environment).toMatchObject({
+      LANG: 'en_US.UTF-8',
+      HOME: '/tmp/bolt-project-test',
+      DATABASE_URL: 'postgres://project:isolated@127.0.0.1/project',
+      PGUSER: 'project',
+      PORT: '4321',
+      HOST: '127.0.0.1',
+    });
+    expect(environment.PATH).toMatch(/node_modules\/\.bin:.*\/usr\/bin:\/bin/);
+    expect(environment).not.toHaveProperty('BOLT_HOSTED_FREE_API_KEY');
+    expect(environment).not.toHaveProperty('BOLT_STRIPE_SECRET_KEY');
+    expect(environment).not.toHaveProperty('CLOUDFLARE_API_TOKEN');
+  });
+
   it('authorizes hosted FREE relay secrets only on exact match', () => {
     expect(authorizeHostedFreeRelaySecret('expected-secret', 'expected-secret')).toBe(true);
     expect(authorizeHostedFreeRelaySecret('wrong-secret', 'expected-secret')).toBe(false);
@@ -805,6 +840,73 @@ describe('runtime server workspace isolation', () => {
     releaseRuntimeNodeDatabasePorts(secondSession);
     expect(isRuntimeNodeDatabasePortReserved(firstPort)).toBe(false);
     expect(isRuntimeNodeDatabasePortReserved(secondPort)).toBe(false);
+  });
+
+  it('continues hosted commands while the dedicated database provisions in the background', async () => {
+    let resolveProvisioning = () => {};
+    const ensureWorkspaceFn = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveProvisioning = resolve;
+        }),
+    );
+    const events: Array<{ type: string; message?: string }> = [];
+    const session = {
+      id: 'database-background-session',
+      runtimeNodeDatabase: null,
+      runtimeNodeRetryAt: 0,
+    };
+
+    await expect(
+      resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
+        config: { supported: true },
+        ensureWorkspaceFn,
+        writeEvent: (event: { type: string; message?: string }) => events.push(event),
+        now: 1_000,
+      }),
+    ).resolves.toEqual({});
+
+    expect(ensureWorkspaceFn).toHaveBeenCalledOnce();
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'status',
+        message: expect.stringContaining('Coding will continue'),
+      }),
+    ]);
+    resolveProvisioning();
+  });
+
+  it('degrades a failed database tunnel without failing the hosted command', async () => {
+    const events: Array<{ type: string; message?: string }> = [];
+    const session = {
+      id: 'database-degraded-session',
+      runtimeNodeDatabase: {
+        workspaceId: 'workspace-degraded',
+        databaseName: 'bolt_degraded',
+        databaseUser: 'degraded_user',
+        databasePassword: 'private-password',
+      },
+      runtimeNodeRetryAt: 0,
+      runtimeNodeLastError: null as string | null,
+      previewSubscribers: new Set(),
+    };
+
+    await expect(
+      resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
+        config: { supported: true },
+        connectDatabaseFn: async () => {
+          throw new Error('ssh: connect timed out for private-password');
+        },
+        writeEvent: (event: { type: string; message?: string }) => events.push(event),
+        now: 5_000,
+        retryCooldownMs: 60_000,
+      }),
+    ).resolves.toEqual({});
+
+    expect(session.runtimeNodeRetryAt).toBe(65_000);
+    expect(session.runtimeNodeLastError).not.toContain('private-password');
+    expect(events.map((event) => event.type)).toEqual(['status', 'status']);
+    expect(events.at(-1)?.message).toContain('Coding will continue');
   });
 
   it('requires both preview metadata and reservation ownership before proxying a session port', () => {

@@ -1,3 +1,5 @@
+import { PRODUCT_TEMPLATE_SPECS } from './productTemplateSpecs';
+
 export type FirstPartyTemplatePack = {
   id: string;
   label: string;
@@ -72,9 +74,22 @@ export function selectFirstPartyTemplatePack(prompt: string): FirstPartyTemplate
     return null;
   }
 
-  return (
-    FIRST_PARTY_TEMPLATE_PACKS.find((pack) => pack.match.some((pattern) => pattern.test(normalizedPrompt))) || null
-  );
+  let selected: FirstPartyTemplatePack | null = null;
+  let selectedScore = 0;
+
+  for (const pack of FIRST_PARTY_TEMPLATE_PACKS) {
+    const score = pack.match.reduce(
+      (total, pattern, index) => total + (pattern.test(normalizedPrompt) ? (index === 0 ? 2 : 1) : 0),
+      0,
+    );
+
+    if (score > selectedScore) {
+      selected = pack;
+      selectedScore = score;
+    }
+  }
+
+  return selected;
 }
 
 export function buildFirstPartyTemplatePackInstructions(pack: FirstPartyTemplatePack | null): string {
@@ -124,6 +139,8 @@ function buildAppointmentSchedulerFiles(originalRequest: string): FirstPartyTemp
       path: 'src/App.tsx',
       content: `import './App.css';
 
+const pageHeading = ${JSON.stringify(heading)};
+
 const doctors = ['Dr. Amina Patel', 'Dr. Lucas Meyer', 'Dr. Sofia Chen'];
 const slots = ['09:00', '10:30', '13:00', '15:30'];
 
@@ -132,7 +149,7 @@ export default function App() {
     <main className="clinic-shell">
       <section className="hero">
         <p className="eyebrow">Doctor appointment scheduling</p>
-        <h1>${heading}</h1>
+        <h1>{pageHeading}</h1>
         <p>
           Book patient visits, assign doctors, manage calendar slots, and configure SMTP reminder settings from one
           previewable clinic dashboard.
@@ -145,7 +162,7 @@ export default function App() {
 
       <section className="grid">
         <div className="panel" id="booking">
-          <h2>Patient booking form</h2>
+          <h2>Schedule patient visits</h2>
           <label>
             Patient name
             <input placeholder="Jane Patient" />
@@ -369,6 +386,7 @@ function buildCalendarPlannerFiles(originalRequest: string): FirstPartyTemplateP
       content: `import { useState } from 'react';
 import './App.css';
 
+const pageHeading = ${JSON.stringify(displayHeading)};
 const days = ['Mon 24', 'Tue 25', 'Wed 26', 'Thu 27', 'Fri 28', 'Sat 29', 'Sun 30'];
 const hours = ['8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM'];
 const calendars = ['Personal', 'Team', 'Launch', 'Focus'];
@@ -418,7 +436,7 @@ export default function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Google Calendar style planner</p>
-            <h1>${displayHeading}</h1>
+            <h1>{pageHeading}</h1>
           </div>
           <div className="topbar-actions">
             <button>Today</button>
@@ -774,6 +792,107 @@ h1 {
   ];
 }
 
+function buildProductTemplateFiles(packId: string, originalRequest: string): FirstPartyTemplatePackFile[] {
+  const spec = PRODUCT_TEMPLATE_SPECS[packId];
+
+  if (!spec) {
+    return [];
+  }
+
+  const heading = extractVisibleHeading(originalRequest, spec.fallbackHeading);
+
+  return [
+    {
+      name: 'App.tsx',
+      path: 'src/App.tsx',
+      content: `import { useState } from 'react';
+import './App.css';
+
+const pageHeading = ${JSON.stringify(heading)};
+const pack = ${JSON.stringify(spec, null, 2)};
+
+export default function App() {
+  const [activeFilter, setActiveFilter] = useState('All');
+  const visibleCards = activeFilter === 'All' ? pack.cards : pack.cards.filter((card) => card.category === activeFilter);
+
+  return (
+    <main className="site-shell">
+      <header className="site-header">
+        <a className="wordmark" href="#top">B/G</a>
+        <nav aria-label="Primary navigation">
+          {pack.nav.map((item) => <a key={item} href={'#' + item.toLowerCase().replaceAll(' ', '-')}>{item}</a>)}
+        </nav>
+        <button className="header-action" type="button">{pack.primaryAction}</button>
+      </header>
+
+      <section className="hero" id="top">
+        <div>
+          <p className="eyebrow">{pack.eyebrow}</p>
+          <h1>{pageHeading}</h1>
+          <p className="hero-copy">{pack.intro}</p>
+          <div className="hero-actions">
+            <button className="primary" type="button">{pack.primaryAction}</button>
+            <button className="secondary" type="button">{pack.secondaryAction}</button>
+          </div>
+        </div>
+        <aside className="signal-card" aria-label="Project signal">
+          <span>Live signal</span>
+          <strong>{pack.metrics[0].value}</strong>
+          <p>{pack.metrics[0].note}</p>
+          <div className="signal-line" />
+        </aside>
+      </section>
+
+      <section className="metrics" aria-label="Key metrics">
+        {pack.metrics.map((metric, index) => (
+          <article key={metric.label}>
+            <span>0{index + 1}</span>
+            <p>{metric.label}</p>
+            <strong>{metric.value}</strong>
+            <small>{metric.note}</small>
+          </article>
+        ))}
+      </section>
+
+      <section className="collection" id={pack.nav[1]?.toLowerCase() || 'collection'}>
+        <div className="section-heading">
+          <div><p className="eyebrow">{pack.sectionKicker}</p><h2>{pack.sectionTitle}</h2></div>
+          <div className="filters" aria-label="Filter collection">
+            {pack.filters.map((filter) => (
+              <button type="button" key={filter} className={activeFilter === filter ? 'active' : ''} onClick={() => setActiveFilter(filter)}>{filter}</button>
+            ))}
+          </div>
+        </div>
+        <div className="card-grid">
+          {visibleCards.map((card, index) => (
+            <article className="feature-card" key={card.title}>
+              <div className={'card-art art-' + index}><span>{card.category}</span></div>
+              <div className="card-content"><small>{card.meta}</small><h3>{card.title}</h3><p>{card.description}</p><button type="button">View details <span aria-hidden="true">-&gt;</span></button></div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="action-panel" id={pack.nav.at(-1)?.toLowerCase() || 'contact'}>
+        <div><p className="eyebrow">Next step</p><h2>{pack.panelTitle}</h2><p>{pack.panelCopy}</p></div>
+        <button className="primary light" type="button">{pack.panelAction}</button>
+      </section>
+
+      <footer><strong>{pack.footer}</strong><span>Built with a deterministic first-party Preview pack.</span></footer>
+    </main>
+  );
+}
+`,
+    },
+    {
+      name: 'App.css',
+      path: 'src/App.css',
+      content: `:root{font-family:"Trebuchet MS",Verdana,sans-serif;color:#17332d;background:#f5f0e6}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-width:320px;background:#f5f0e6}button,a{font:inherit}.site-shell{min-height:100vh;overflow:hidden;background:radial-gradient(circle at 82% 8%,#f3a56f55,transparent 27rem),linear-gradient(180deg,#fffaf0 0,#f3eddf 72%,#e7dfce 100%)}.site-header{min-height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:28px;padding:16px clamp(20px,5vw,72px);border-bottom:1px solid #17332d24}.wordmark{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:#17332d;color:#fff;text-decoration:none;font-weight:900}.site-header nav{display:flex;gap:30px}.site-header nav a{color:#38564f;text-decoration:none;font-size:14px;font-weight:700}.header-action{justify-self:end;border:1px solid #17332d;border-radius:999px;background:transparent;color:#17332d;padding:10px 18px;font-weight:800}.hero{max-width:1400px;margin:auto;min-height:590px;padding:clamp(60px,9vw,130px) clamp(20px,7vw,104px);display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,.6fr);align-items:center;gap:9vw}.eyebrow{margin:0 0 14px;color:#b54c2f;font-size:12px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.hero h1,.section-heading h2,.action-panel h2{font-family:Georgia,serif;font-weight:500;letter-spacing:-.055em}.hero h1{max-width:900px;margin:0;font-size:clamp(48px,7.6vw,118px);line-height:.88}.hero-copy{max-width:690px;margin:28px 0;color:#52665f;font-size:clamp(17px,2vw,22px);line-height:1.6}.hero-actions{display:flex;flex-wrap:wrap;gap:12px}.primary,.secondary{border-radius:999px;padding:14px 22px;font-weight:900;cursor:pointer}.primary{border:1px solid #17332d;background:#17332d;color:#fff}.secondary{border:1px solid #17332d55;background:#fff9;color:#17332d}.signal-card{position:relative;min-height:310px;padding:32px;border-radius:180px 180px 24px 24px;background:#ef875a;color:#301f18;display:flex;flex-direction:column;justify-content:flex-end;box-shadow:0 30px 70px #8f4e3030}.signal-card span{position:absolute;top:34px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.signal-card strong{font:500 clamp(50px,7vw,94px)/1 Georgia,serif}.signal-card p{margin:8px 0 20px}.signal-line{height:54px;border-top:3px solid #301f18;border-radius:50%}.metrics{max-width:1250px;margin:0 auto 100px;padding:0 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#17332d35;border:1px solid #17332d35}.metrics article{min-height:190px;padding:24px;background:#fbf7ed;display:flex;flex-direction:column}.metrics article>span{font-size:11px;font-weight:900;color:#b54c2f}.metrics p{margin:20px 0 5px;color:#52665f}.metrics strong{font:500 clamp(32px,4vw,54px)/1 Georgia,serif}.metrics small{margin-top:auto;color:#62756f}.collection{max-width:1250px;margin:auto;padding:0 28px 110px}.section-heading{display:flex;align-items:end;justify-content:space-between;gap:30px;margin-bottom:34px}.section-heading h2,.action-panel h2{max-width:720px;margin:0;font-size:clamp(36px,5vw,68px);line-height:.98}.filters{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}.filters button{border:1px solid #17332d38;background:transparent;border-radius:999px;padding:9px 14px;color:#38564f;cursor:pointer}.filters button.active{background:#17332d;color:#fff}.card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.feature-card{overflow:hidden;border:1px solid #17332d25;border-radius:22px;background:#fffaf2;box-shadow:0 18px 40px #52665f12}.card-art{height:190px;padding:18px;display:flex;align-items:flex-start;background:linear-gradient(145deg,#ed8d62,#e8bd78)}.art-1{background:linear-gradient(145deg,#89a98b,#d8d19b)}.art-2{background:linear-gradient(145deg,#799ca3,#d9b9a4)}.card-art span{border-radius:999px;background:#fffbe8;padding:7px 11px;font-size:11px;font-weight:900;text-transform:uppercase}.card-content{padding:24px}.card-content small{color:#b54c2f;font-weight:800}.card-content h3{margin:10px 0;font:500 29px/1.05 Georgia,serif}.card-content p{min-height:76px;color:#60716c;line-height:1.55}.card-content button{border:0;background:transparent;padding:0;color:#17332d;font-weight:900;cursor:pointer}.action-panel{max-width:1194px;margin:0 auto 80px;border-radius:34px;background:#17332d;color:#fdf7e9;padding:clamp(30px,6vw,70px);display:flex;align-items:end;justify-content:space-between;gap:40px}.action-panel .eyebrow{color:#f3a56f}.action-panel p:not(.eyebrow){max-width:680px;color:#c8d5d0;line-height:1.6}.primary.light{flex:0 0 auto;border-color:#fff4df;background:#fff4df;color:#17332d}footer{padding:30px clamp(20px,7vw,104px);display:flex;justify-content:space-between;gap:20px;border-top:1px solid #17332d24;color:#52665f}button:focus-visible,a:focus-visible{outline:3px solid #e66f46;outline-offset:3px}@media(max-width:860px){.site-header{grid-template-columns:1fr auto}.site-header nav{display:none}.hero{grid-template-columns:1fr;min-height:auto}.signal-card{min-height:250px;border-radius:24px}.metrics,.card-grid{grid-template-columns:1fr}.section-heading,.action-panel{align-items:flex-start;flex-direction:column}.filters{justify-content:flex-start}.metrics article{min-height:150px}.card-content p{min-height:0}}@media(max-width:520px){.site-header{padding:12px 16px}.header-action{padding:9px 12px}.hero{padding:54px 20px}.collection{padding-left:20px;padding-right:20px}.hero-actions{align-items:stretch;flex-direction:column}.hero-actions button{width:100%}footer{flex-direction:column}}
+`,
+    },
+  ];
+}
+
 export function buildFirstPartyTemplatePackFiles(
   pack: FirstPartyTemplatePack | null,
   originalRequest: string,
@@ -790,5 +909,5 @@ export function buildFirstPartyTemplatePackFiles(
     return buildCalendarPlannerFiles(originalRequest);
   }
 
-  return [];
+  return buildProductTemplateFiles(pack.id, originalRequest);
 }

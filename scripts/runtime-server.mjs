@@ -137,6 +137,57 @@ const HOST = process.env.RUNTIME_HOST || '127.0.0.1';
 const PORT = Number(process.env.RUNTIME_PORT || '4321');
 const WORK_DIR = process.env.RUNTIME_WORK_DIR || '/home/project';
 
+const HOSTED_WORKSPACE_ENV_ALLOWLIST = [
+  'PATH',
+  'LANG',
+  'LC_ALL',
+  'TZ',
+  'TERM',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+];
+
+export function buildHostedWorkspaceProcessEnvironment(options = {}) {
+  const workspaceDir = path.resolve(String(options.workspaceDir || WORK_DIR));
+  const source = options.processEnv || process.env;
+  const environment = {};
+
+  for (const key of HOSTED_WORKSPACE_ENV_ALLOWLIST) {
+    const value = source[key];
+
+    if (typeof value === 'string' && value.length > 0) {
+      environment[key] = value;
+    }
+  }
+
+  return {
+    ...environment,
+    ...(options.projectEnv || {}),
+    PATH: `${path.join(REPO_ROOT, 'node_modules', '.bin')}:${environment.PATH || '/usr/local/bin:/usr/bin:/bin'}`,
+    HOME: workspaceDir,
+    USER: 'bolt-project',
+    LOGNAME: 'bolt-project',
+    SHELL: '/bin/bash',
+    XDG_CACHE_HOME: path.join(workspaceDir, '.cache'),
+    npm_config_cache: path.join(workspaceDir, '.cache', 'npm'),
+    npm_config_update_notifier: 'false',
+    npm_config_fund: 'false',
+    COREPACK_DEFAULT_TO_LATEST: '0',
+    BROWSER: 'none',
+    CI: options.ci ?? '1',
+    FORCE_COLOR: options.forceColor ?? '0',
+    NODE_OPTIONS: options.nodeOptions || NODE_OPTIONS,
+    ...(options.port ? { PORT: String(options.port) } : {}),
+    ...(options.host ? { HOST: String(options.host) } : {}),
+  };
+}
+
 export function resolveRuntimeWorkspaceRoot(
   env = /** @type {Record<string, string | undefined>} */ (process.env),
   repoRoot = REPO_ROOT,
@@ -168,6 +219,10 @@ const RUNTIME_NODE_DATABASE_PORT_RANGE_START = Number(process.env.RUNTIME_NODE_D
 const RUNTIME_NODE_DATABASE_PORT_RANGE_END = Number(process.env.RUNTIME_NODE_DATABASE_PORT_END || '5499');
 const RUNTIME_NODE_DATABASE_TUNNEL_READY_TIMEOUT_MS = Number(
   process.env.RUNTIME_NODE_DATABASE_TUNNEL_READY_TIMEOUT_MS || '15000',
+);
+const RUNTIME_NODE_RETRY_COOLDOWN_MS = Math.max(
+  5_000,
+  Number(process.env.RUNTIME_NODE_RETRY_COOLDOWN_MS || '60000') || 60_000,
 );
 const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
 const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
@@ -1333,6 +1388,10 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
     return session.runtimeNodeWorkspace || null;
   }
 
+  if (Number(session.runtimeNodeRetryAt || 0) > Date.now()) {
+    return session.runtimeNodeWorkspace || null;
+  }
+
   const config = buildRuntimeNodeConfig();
 
   if (!config.supported) {
@@ -1364,6 +1423,8 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
 
         const databasePassword = await readRuntimeNodeDatabasePassword(existing, config);
         attachRuntimeNodeDatabaseToSession(session, existing, databasePassword);
+        session.runtimeNodeRetryAt = 0;
+        session.runtimeNodeLastError = null;
         broadcastPreviewState(session);
 
         return existing;
@@ -1383,6 +1444,8 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
       stagedWorkspace = record;
       stagedSecrets = secrets;
       session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(record);
+      session.runtimeNodeRetryAt = 0;
+      session.runtimeNodeLastError = null;
       registry.workspaces.unshift(record);
       appendRuntimeNodeWorkspaceEvent(registry, {
         actor: 'runtime-session',
@@ -1454,6 +1517,8 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
 
       session.runtimeNodeWorkspaceRecord = null;
       session.runtimeNodeDatabase = null;
+      session.runtimeNodeRetryAt = Date.now() + RUNTIME_NODE_RETRY_COOLDOWN_MS;
+      session.runtimeNodeLastError = message;
       broadcastPreviewState(session);
 
       return null;
@@ -3396,6 +3461,8 @@ function getSession(sessionId) {
       runtimeNodeProvisionPromise: null,
       runtimeNodeDatabase: null,
       runtimeNodeDatabaseTunnel: null,
+      runtimeNodeRetryAt: 0,
+      runtimeNodeLastError: null,
       publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
@@ -3601,12 +3668,10 @@ async function resolveLatestPackageVersion(packageName, options = {}) {
   return await new Promise((resolve) => {
     const child = spawn('bash', ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`], {
       cwd,
-      env: {
-        ...process.env,
-        CI: '0',
-        FORCE_COLOR: '0',
-        NODE_OPTIONS,
-      },
+      env: buildHostedWorkspaceProcessEnvironment({
+        workspaceDir: cwd,
+        ci: '0',
+      }),
     });
 
     let stdout = '';
@@ -4424,12 +4489,10 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
         await new Promise((resolve, reject) => {
           const child = spawn('bash', ['-lc', dependencyInstallCommand], {
             cwd: session.dir,
-            env: {
-              ...process.env,
-              CI: '0',
-              FORCE_COLOR: '0',
-              NODE_OPTIONS,
-            },
+            env: buildHostedWorkspaceProcessEnvironment({
+              workspaceDir: session.dir,
+              ci: '0',
+            }),
           });
 
           let stdout = '';
@@ -4525,12 +4588,10 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     await new Promise((resolve, reject) => {
       const child = spawn('bash', ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`], {
         cwd: session.dir,
-        env: {
-          ...process.env,
-          CI: '0',
-          FORCE_COLOR: '0',
-          NODE_OPTIONS,
-        },
+        env: buildHostedWorkspaceProcessEnvironment({
+          workspaceDir: session.dir,
+          ci: '0',
+        }),
       });
 
       let stderr = '';
@@ -5457,12 +5518,9 @@ function runProjectBuildCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: {
-        ...process.env,
-        CI: '1',
-        FORCE_COLOR: '0',
-        NODE_OPTIONS,
-      },
+      env: buildHostedWorkspaceProcessEnvironment({
+        workspaceDir: options.cwd,
+      }),
     });
     const timeoutMs = Number(options.timeoutMs || COMMAND_TIMEOUT_MS);
     const maxOutputChars = 120_000;
@@ -6780,6 +6838,80 @@ async function ensureRuntimeNodeDatabaseEnvironmentForSession(session) {
   return buildRuntimeNodeDatabaseEnvironment(session.runtimeNodeDatabase, tunnel.localPort);
 }
 
+function runtimeNodeDatabaseFallbackMessage(session, now = Date.now()) {
+  const retryAt = Number(session.runtimeNodeRetryAt || 0);
+
+  if (retryAt > now) {
+    const retrySeconds = Math.max(1, Math.ceil((retryAt - now) / 1000));
+    return `Dedicated PostgreSQL is temporarily unavailable. Coding will continue on the hosted runtime and the database connection will retry in ${retrySeconds} seconds.`;
+  }
+
+  return 'Dedicated PostgreSQL is provisioning in the background. Coding will continue on the hosted runtime while the database connection is prepared.';
+}
+
+export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, options = {}) {
+  const config = options.config || buildRuntimeNodeConfig();
+  const writeEvent = typeof options.writeEvent === 'function' ? options.writeEvent : () => {};
+  const ensureWorkspaceFn = options.ensureWorkspaceFn || ensureRuntimeNodeWorkspaceForSession;
+  const connectDatabaseFn = options.connectDatabaseFn || ensureRuntimeNodeDatabaseEnvironmentForSession;
+  const now = Number(options.now ?? Date.now());
+  const retryCooldownMs = Math.max(
+    5_000,
+    Number(options.retryCooldownMs || RUNTIME_NODE_RETRY_COOLDOWN_MS) || RUNTIME_NODE_RETRY_COOLDOWN_MS,
+  );
+
+  if (!config.supported) {
+    return {};
+  }
+
+  if (Number(session.runtimeNodeRetryAt || 0) > now) {
+    writeEvent({ type: 'status', message: runtimeNodeDatabaseFallbackMessage(session, now) });
+    return {};
+  }
+
+  if (!session.runtimeNodeDatabase) {
+    void Promise.resolve(ensureWorkspaceFn(session)).catch((error) => {
+      const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error));
+      session.runtimeNodeRetryAt = Date.now() + retryCooldownMs;
+      session.runtimeNodeLastError = message;
+      console.warn(`[runtime-node] background database provisioning failed for ${session.id}: ${message}`);
+      broadcastPreviewState(session);
+    });
+    writeEvent({ type: 'status', message: runtimeNodeDatabaseFallbackMessage(session, now) });
+
+    return {};
+  }
+
+  writeEvent({
+    type: 'status',
+    message: 'Connecting this project to its dedicated PostgreSQL database',
+  });
+
+  try {
+    const env = await connectDatabaseFn(session, config);
+    session.runtimeNodeRetryAt = 0;
+    session.runtimeNodeLastError = null;
+    writeEvent({
+      type: 'status',
+      message: 'Dedicated PostgreSQL database connected to the hosted runtime',
+    });
+    broadcastPreviewState(session);
+
+    return env;
+  } catch (error) {
+    const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error), {
+      databasePassword: session.runtimeNodeDatabase?.databasePassword,
+    });
+    session.runtimeNodeRetryAt = now + retryCooldownMs;
+    session.runtimeNodeLastError = message;
+    console.warn(`[runtime-node] database connection degraded for ${session.id}: ${message}`);
+    writeEvent({ type: 'status', message: runtimeNodeDatabaseFallbackMessage(session, now) });
+    broadcastPreviewState(session);
+
+    return {};
+  }
+}
+
 async function waitForPreview(port) {
   const deadline = Date.now() + PREVIEW_READY_TIMEOUT_MS;
   const target = `http://${HOST}:${port}/`;
@@ -7018,48 +7150,16 @@ async function handleRunCommand(req, res, session, body) {
     }
   }
 
-  let runtimeNodeDatabaseEnv = {};
-
-  try {
-    const runtimeNodeConfig = buildRuntimeNodeConfig();
-
-    if (runtimeNodeConfig.supported) {
-      writeEvent({
-        type: 'status',
-        message: 'Connecting this project to its dedicated PostgreSQL database',
-      });
-      runtimeNodeDatabaseEnv = await ensureRuntimeNodeDatabaseEnvironmentForSession(session);
-      writeEvent({
-        type: 'status',
-        message: 'Dedicated PostgreSQL database connected to the hosted runtime',
-      });
-    }
-  } catch (error) {
-    const message = redactRuntimeNodeError(error instanceof Error ? error.message : String(error), {
-      databasePassword: session.runtimeNodeDatabase?.databasePassword,
-    });
-    writeEvent({
-      type: 'stderr',
-      chunk: `${message || 'The dedicated project database could not be connected.'}\n`,
-    });
-    writeEvent({ type: 'exit', exitCode: 1 });
-    releaseNewPreviewPortReservation();
-    res.end();
-
-    return;
-  }
+  const runtimeNodeDatabaseEnv = await resolveRuntimeNodeDatabaseEnvironmentForCommand(session, { writeEvent });
 
   markSessionMutationStart(session);
 
-  const env = {
-    ...process.env,
-    ...runtimeNodeDatabaseEnv,
-    CI: '1',
-    FORCE_COLOR: '0',
-    NODE_OPTIONS,
-    PORT: previewPort ? String(previewPort) : process.env.PORT,
-    HOST,
-  };
+  const env = buildHostedWorkspaceProcessEnvironment({
+    workspaceDir: session.dir,
+    projectEnv: runtimeNodeDatabaseEnv,
+    port: previewPort || undefined,
+    host: HOST,
+  });
 
   if (kind === 'start') {
     await terminateSessionProcesses(session, { preservePreviewPort: previewPort });

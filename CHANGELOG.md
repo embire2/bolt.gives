@@ -26,6 +26,33 @@
 - Compiled and published the self-contained Windows x64 PE from the private source tree; the executable test and installer gates run on `windows-latest` before release artifacts are uploaded.
 - Verified the v1.0.1 app, assembly, and installer against pinned Private Trust certificates and a public timestamp chain before producing the checksum and mandatory update manifest.
 
+## v3.5.0 (2026-08-30)
+
+### Added
+
+- Added deterministic Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio template packs with a release-gating browser smoke that boots each project in Vite and verifies its rendered Chromium Preview.
+- Added regression coverage for MagnetAPI completed-response translation, runtime-node SSH bounds, non-blocking database fallback, generated-process environment isolation, Preview reconciliation timing, and visibility-aware usage polling.
+
+### Changed
+
+- Reduced steady-state browser work by making token-balance refresh visibility-aware, spacing fallback entitlement refreshes, and relying on runtime events instead of five-second Preview polling.
+- Pinned hosted generated projects to the repository package-manager version and isolated their HOME/cache directories for repeatable installs.
+- Moved unfinished account/RBAC, billing portal, runtime audit, installer recovery, and legacy-source decomposition work to the v3.6.0 roadmap.
+
+### Fixed
+
+- Fixed hosted FREE ChatGPT-5.6 SOL requests that could leave project generation waiting indefinitely when MagnetAPI returned a completed Responses payload instead of the stream requested by the SDK.
+- Fixed runtime-node PostgreSQL or SSH outages blocking otherwise valid project installs, commands, builds, and Preview startup. Database provisioning now runs in the background with bounded connection attempts and a retry cooldown.
+- Fixed first-party template selection allowing generic website matches to outrank more specific portfolio, commerce, or calendar prompts.
+- Fixed generated project processes inheriting unrelated operator and infrastructure secrets from the runtime service environment.
+- Fixed a paid project's Custom Domain balance remaining visible after navigating to a new session while low-frequency reconciliation was active.
+
+### Validation
+
+- Generated a hosted habit tracker on `alpha1.bolt.gives`, submitted its form, applied a follow-up prompt, reloaded the browser, restarted the runtime service, and recovered the same history, files, runtime identity, and healthy Preview.
+- Verified all four managed FREE model routes directly through the configured server-side MagnetAPI credential without exposing it to the browser or generated project.
+- Passed typecheck, lint, the complete test suite, strict module boundaries, production build and bundle budgets, and all six real-browser template smokes.
+
 ## v3.4.2 (2026-07-31)
 
 ### Added

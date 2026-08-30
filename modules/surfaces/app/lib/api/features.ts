@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v3.5.0',
+    name: 'v3.5.0 reliable FREE generation and first-pass Preview packs',
+    description:
+      'MagnetAPI ChatGPT-5.6 SOL now completes through the protected Responses adapter, unavailable project databases no longer block coding, saved follow-ups restore with their Preview, idle runtime polling is sharply reduced, and every first-party template family has a browser-rendered CI smoke.',
+    releaseDate: '2026-08-30',
+  },
+  {
     id: 'release-v3.4.2',
     name: 'v3.4.2 personal history and working account upgrades',
     description:

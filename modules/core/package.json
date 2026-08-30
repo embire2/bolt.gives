@@ -1,6 +1,6 @@
 {
   "name": "@bolt/core",
-  "version": "3.4.2",
+  "version": "3.5.0",
   "private": true,
   "type": "module",
   "sideEffects": false,

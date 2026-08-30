@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.4.2`
-- In progress: `v3.5.0`
+- Stable: `v3.5.0`
+- In progress: `v3.6.0`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
 
@@ -49,6 +49,7 @@ The current hosted product baseline is:
   - models: `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`
   - upstream: MagnetAPI.org Responses API for ChatGPT-5.6 SOL and Messages API for Claude models
   - users may switch models during a session without resetting project history or runtime context
+- First-party Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs are smoke-tested through real Vite/Chromium Preview in CI.
 - Managed Cloudflare trial-instance flow at `/managed-instances`
 - Private operator/admin control plane at `admin.bolt.gives`
 - Operator profile filtering/export plus audience-based outbound email from `admin.bolt.gives`
@@ -97,11 +98,11 @@ When changing hosted runtime behavior, validate both the app service and the run
 - Keep behavior changes explicit in commit messages and docs.
 - If you encounter unexpected unrelated file modifications while editing, stop and assess before overwriting them.
 
-## v3.5.0 Priorities
+## v3.6.0 Priorities
 
 These are the current release priorities:
 
-- Prompt-to-preview reliability
+- Continue prompt-to-preview reliability measurement across model and template combinations
 - Saved-project continuity across full chat history, source snapshots, hosted runtime identity, Preview, and the project database
 - Clear execution state in both `Chat` and `Workspace`
 - Commentary derived from actual runtime events, not filler
@@ -110,7 +111,7 @@ These are the current release priorities:
 - Admin/operator segmentation and broadcast tooling without secret leakage
 - Tenant/account/RBAC hardening
 - Self-host installer resilience
-- First-party template packs and smoke coverage
+- Broaden first-party template acceptance criteria and record first-pass success rates
 - Runtime-node isolation hardening: move from root bootstrap/password auth toward SSH keys, a non-root agent account, stronger quotas, and auditable per-project operations
 - Project publishing hardening: Stripe webhook activation, domain verification, and operator-visible deployment/domain state
 

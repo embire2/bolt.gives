@@ -138,6 +138,8 @@ describe('runtime-node workspace provisioning helpers', () => {
     expect(invocation.command).toBe('ssh');
     expect(serializedArgs).toContain('127.0.0.1:5107:127.0.0.1:5432');
     expect(serializedArgs).toContain('ExitOnForwardFailure=yes');
+    expect(serializedArgs).toContain('ConnectTimeout=5');
+    expect(serializedArgs).toContain('ConnectionAttempts=1');
     expect(serializedArgs).toContain('bolt-runtime-agent@runtime.internal');
     expect(serializedArgs).not.toContain('runtime.example.com');
   });

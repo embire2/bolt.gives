@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-02
+Last updated: 2026-08-30
 
 Status legend:
 
@@ -10,11 +10,11 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.4.2`
+- [x] `v3.5.0`
 
 Next release target:
 
-- [~] `v3.5.0`
+- [~] `v3.6.0`
 
 Independent Desktop release:
 
@@ -32,16 +32,27 @@ Release theme: replace the temporary hosted-UI wrapper with a native, proprietar
 - [x] Add fail-closed Azure Artifact Signing, RFC3161 timestamps, and pinned Private Trust chain verification to private CI.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
-## v3.5.0 - In Progress
+## v3.6.0 - In Progress
 
-Release theme: complete Custom Domain account lifecycle, broaden template acceptance, and deepen operator-visible resource controls.
+Release theme: complete Custom Domain account lifecycle, deepen operator-visible resource controls, and continue runtime and installer hardening.
 
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
-- [ ] Expand first-party template CI smoke to every supported template family and measure first-pass preview success.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.4.2 initial-route budget.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.5.0 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v3.5.0 - Shipped
+
+Release theme: make first-pass Preview reliable, isolate generated runtimes, and add browser-verified first-party template packs.
+
+- [x] Adapt MagnetAPI completed Responses payloads into the agent SDK streaming contract so hosted FREE generation settles instead of hanging.
+- [x] Keep runtime-node database provisioning in the background with bounded SSH attempts, clear fallback state, and retry cooldowns.
+- [x] Isolate generated package, build, command, and dev-server environments from operator/provider/infrastructure secrets.
+- [x] Pin generated hosted workspaces to the repository package-manager release for reproducible builds.
+- [x] Reduce idle usage and Preview reconciliation polling while preserving event-triggered health checks.
+- [x] Ship Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs with real Vite/Chromium Preview smoke coverage.
+- [x] Verify first generation, app interaction, follow-up editing, full reload, runtime restart, saved history, files, runtime identity, and Preview recovery on `alpha1.bolt.gives`.
 
 ## v3.4.2 - Shipped
 

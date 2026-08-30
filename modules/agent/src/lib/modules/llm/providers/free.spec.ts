@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FreeProvider, {
+  buildHostedFreeResponseStreamEvents,
   clearHostedFreeModelResolution,
   isHostedFreeClaudeModel,
   normalizeHostedFreeClaudeRequest,
@@ -540,5 +541,90 @@ describe('FreeProvider', () => {
         },
       ],
     });
+  });
+
+  it('converts completed Magnet Responses JSON into SDK-compatible stream events', () => {
+    const events = buildHostedFreeResponseStreamEvents({
+      id: 'resp-1',
+      created_at: 1_788_108_608,
+      model: 'gpt-5.6-sol',
+      status: 'completed',
+      incomplete_details: null,
+      output: [
+        {
+          id: 'message-1',
+          type: 'message',
+          content: [{ type: 'output_text', text: '<boltArtifact>ready</boltArtifact>', annotations: [] }],
+        },
+        {
+          id: 'function-1',
+          type: 'function_call',
+          call_id: 'call-1',
+          name: 'write_file',
+          arguments: '{"path":"src/App.tsx"}',
+        },
+      ],
+      usage: { input_tokens: 40, output_tokens: 20 },
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'response.created',
+      'response.output_text.delta',
+      'response.output_item.added',
+      'response.function_call_arguments.delta',
+      'response.output_item.done',
+      'response.completed',
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      response: { usage: { input_tokens: 40, output_tokens: 20 } },
+    });
+  });
+
+  it('uses completed JSON mode when Magnet Responses streaming is requested', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'resp-stream-shim',
+            created_at: 1_788_108_608,
+            model: 'gpt-5.6-sol',
+            status: 'completed',
+            incomplete_details: null,
+            output: [
+              {
+                id: 'message-stream-shim',
+                type: 'message',
+                content: [{ type: 'output_text', text: 'streamed through shim', annotations: [] }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 4 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    responsesSpy.mockReturnValue({ id: 'free-model-instance' });
+    provider.getModelInstance({
+      model: FREE_HOSTED_MODEL,
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createOpenAISpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-5.6-sol', input: 'Build it', stream: true }),
+    });
+    const forwardedBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    const body = await response?.text();
+
+    expect(forwardedBody.stream).toBe(false);
+    expect(response?.headers.get('content-type')).toContain('text/event-stream');
+    expect(body).toContain('response.output_text.delta');
+    expect(body).toContain('streamed through shim');
+    expect(body).toContain('response.completed');
+    expect(body).toContain('data: [DONE]');
   });
 });

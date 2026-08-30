@@ -5,6 +5,7 @@ import {
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { FreePlanPausedModal } from './FreePlanPausedModal.client';
 import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
+import { shouldRefreshProjectEntitlement, USAGE_BALANCE_REFRESH_INTERVAL_MS } from './usage-balance-refresh';
 
 type FreeUsageBalance = {
   plan: 'free' | 'custom-domain';
@@ -40,30 +41,77 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
 
   useEffect(() => {
     let cancelled = false;
+    let refreshInFlight = false;
+    let lastProjectRefreshAt = 0;
+    let lastProjectSessionId: string | null = null;
 
-    const refresh = async () => {
-      const [freeResponse, workbenchModule] = await Promise.all([
-        fetch('/api/usage-balance', { headers: { Accept: 'application/json' } }).catch(() => null),
-        import('@bolt/project/lib/stores/workbench'),
-      ]);
-      const nextFree =
-        freeResponse?.ok === true ? ((await freeResponse.json().catch(() => null)) as FreeUsageBalance | null) : null;
-      const sessionId = workbenchModule.workbenchStore.hostedRuntimeSessionId;
-      const nextCustomDomain = sessionId ? await fetchHostedRuntimePremiumStatus(sessionId).catch(() => null) : null;
+    const refresh = async (forceProject = false) => {
+      if (refreshInFlight) {
+        return;
+      }
 
-      if (!cancelled) {
-        setFreeBalance(nextFree);
-        setCustomDomain(nextCustomDomain);
+      refreshInFlight = true;
+
+      try {
+        const [freeResponse, workbenchModule] = await Promise.all([
+          fetch('/api/usage-balance', { headers: { Accept: 'application/json' } }).catch(() => null),
+          import('@bolt/project/lib/stores/workbench'),
+        ]);
+        const nextFree =
+          freeResponse?.ok === true ? ((await freeResponse.json().catch(() => null)) as FreeUsageBalance | null) : null;
+        const sessionId = workbenchModule.workbenchStore.hostedRuntimeSessionId || null;
+        let nextCustomDomain: HostedPremiumStatus | null | undefined;
+
+        if (
+          shouldRefreshProjectEntitlement({
+            sessionId,
+            previousSessionId: lastProjectSessionId,
+            lastRefreshedAt: lastProjectRefreshAt,
+            force: forceProject,
+          })
+        ) {
+          nextCustomDomain = sessionId ? await fetchHostedRuntimePremiumStatus(sessionId).catch(() => null) : null;
+          lastProjectRefreshAt = Date.now();
+          lastProjectSessionId = sessionId;
+        }
+
+        if (!cancelled) {
+          setFreeBalance(nextFree);
+
+          if (nextCustomDomain !== undefined) {
+            setCustomDomain(nextCustomDomain);
+          }
+        }
+      } finally {
+        refreshInFlight = false;
       }
     };
 
-    void refresh();
+    const refreshWhenVisible = () => {
+      if (document.hidden) {
+        return;
+      }
 
-    const timer = window.setInterval(refresh, 10_000);
+      void refresh(true);
+    };
+
+    void refresh(true);
+
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        void refresh(false);
+      }
+    }, USAGE_BALANCE_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', refreshWhenVisible);
+    window.addEventListener('bolt-usage-balance-refresh', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      window.removeEventListener('focus', refreshWhenVisible);
+      window.removeEventListener('bolt-usage-balance-refresh', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, []);
 

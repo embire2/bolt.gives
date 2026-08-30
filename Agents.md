@@ -4,17 +4,17 @@
 
 Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is visible, understandable, and verifiable while it happens. Users must be able to start a project, see files and Preview, send follow-up prompts, and understand what changed.
 
-Secondary objective: continue the `v3.5.0` platform-hardening track for Custom Domain lifecycle, managed instances, tenant/RBAC controls, prompt-to-preview reliability, rollout observability, and self-host resilience.
+Secondary objective: continue the `v3.6.0` platform-hardening track for Custom Domain lifecycle, managed instances, tenant/RBAC controls, prompt-to-preview measurement, rollout observability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v3.4.2`
+- Stable: `v3.5.0`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.4.2`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.4.2/install.sh`
-- In progress: `v3.5.0`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.5.0`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.5.0/install.sh`
+- In progress: `v3.6.0`
 
-`v3.4.2` is the current stable hosted and Linux self-host release. It makes saved projects profile-specific, calibrates 100 daily FREE Agent tokens to at least 30 active coding minutes, sends Upgrade actions to authenticated Stripe Checkout with signed-webhook fulfillment, strengthens installer secret/runtime defaults, and publishes separately built private-source Desktop binaries that use the same hosted profile and quota without embedding operator keys.
+`v3.5.0` is the current stable hosted and Linux self-host release. It adapts hosted FREE responses into a reliable agent stream, makes runtime-node database outages non-blocking, isolates generated process environments, reduces idle polling, and browser-smoke-tests six first-party template packs. The separately built private-source Desktop binaries continue to use the hosted profile and quota without embedding operator keys.
 
 The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
@@ -67,6 +67,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Server-first hosted runtime for install, build, test, preview, and file sync.
 - Preview auto-recovery via server-side health checks.
 - Managed `FREE` provider restricted to server-side MagnetAPI.org models `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`.
+- First-party Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs verified through real Vite/Chromium Preview in CI.
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
 - Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
@@ -78,14 +79,14 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Account-level Stripe Checkout and signed-webhook Custom Domain activation, with 10,000 provider-reported tokens per paid month.
 - Private-source Windows, Debian, and AppImage Desktop binaries that connect to the hosted service and inherit the same profile/quota rules without embedded server credentials.
 
-## v3.5.0 Priorities
+## v3.6.0 Priorities
 
-- Prompt-to-preview reliability for first generation and follow-up prompts.
+- Continue prompt-to-preview reliability measurement for first generation and follow-up prompts.
 - History-aware project continuation using runtime snapshots and current workspace state.
 - Commentary derived from actual runtime, file, and command events, not filler.
 - Managed Cloudflare deployment history, last-good SHA, rollback outcomes, and fleet summaries.
 - Tenant/account/RBAC hardening.
-- First-party template packs with smoke coverage.
+- Broaden first-party template acceptance and publish first-pass success measurements.
 - Continued browser-weight reduction on editor, PDF, git, and terminal surfaces.
 - Self-host installer resilience for apt, build, Caddy, PostgreSQL, and service failures.
 - Runtime-node hardening: non-root agent bootstrap, SSH-key auth, stronger quotas, audit visibility, and clean recovery paths.

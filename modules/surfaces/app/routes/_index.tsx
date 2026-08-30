@@ -52,7 +52,7 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v3.4.2 release with profile-owned project history, working Stripe account upgrades, hardened Linux installation, and hosted Desktop clients.',
+  'Stable v3.5.0 release with reliable MagnetAPI generation, non-blocking runtime recovery, lower idle load, and six browser-smoked first-party Preview packs.',
   'FREE includes at least 30 active coding minutes within 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
   'Follow-up prompts stay visible across Chat, Workspace, files, and Preview after a project starts.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',

@@ -78,8 +78,7 @@ const WINDOW_SIZES: WindowSize[] = [
 ];
 const DEFAULT_WINDOW_SIZE = WINDOW_SIZES.find((size) => size.name === 'Desktop') ?? WINDOW_SIZES[0];
 const DEFAULT_DEVICE_WIDTH_PERCENT = 100;
-const HOSTED_PREVIEW_RECONCILE_INTERVAL_MS = 5000;
-const HOSTED_PREVIEW_RECONCILE_GRACE_MS = 3500;
+const [HOSTED_PREVIEW_RECONCILE_INTERVAL_MS, HOSTED_PREVIEW_RECONCILE_GRACE_MS] = [30_000, 60_000];
 const LOCAL_PREVIEW_INSPECT_INTERVAL_MS = 6000;
 
 function findPreferredHostedPreviewIndex(previews: PreviewInfo[], hostedSessionId: string | null) {
@@ -516,6 +515,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         },
         onError: () => {
           hostedPreviewSubscriptionHealthyRef.current = false;
+          void inspectHostedPreview();
         },
       });
 

@@ -125,12 +125,154 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
   };
 }
 
+function normalizeHostedFreeUsage(usage: unknown) {
+  const record = isJsonRecord(usage) ? usage : {};
+
+  return {
+    input_tokens: Number(record.input_tokens || 0),
+    input_tokens_details: isJsonRecord(record.input_tokens_details)
+      ? record.input_tokens_details
+      : { cached_tokens: 0 },
+    output_tokens: Number(record.output_tokens || 0),
+    output_tokens_details: isJsonRecord(record.output_tokens_details)
+      ? record.output_tokens_details
+      : { reasoning_tokens: 0 },
+  };
+}
+
+export function buildHostedFreeResponseStreamEvents(payload: unknown): JsonRecord[] {
+  if (!isJsonRecord(payload)) {
+    return [];
+  }
+
+  const responseId = String(payload.id || `resp_${Date.now()}`);
+  const createdAt = Number(payload.created_at || Math.floor(Date.now() / 1000));
+  const model = String(payload.model || 'gpt-5.6-sol');
+  const events: JsonRecord[] = [
+    {
+      type: 'response.created',
+      response: { id: responseId, created_at: createdAt, model },
+    },
+  ];
+
+  if (isJsonRecord(payload.error)) {
+    events.push({
+      type: 'error',
+      code: String(payload.error.code || 'upstream_error'),
+      message: String(payload.error.message || 'The hosted FREE provider returned an error.'),
+      param: typeof payload.error.param === 'string' ? payload.error.param : null,
+      sequence_number: events.length,
+    });
+  }
+
+  for (const [outputIndex, item] of (Array.isArray(payload.output) ? payload.output : []).entries()) {
+    if (!isJsonRecord(item)) {
+      continue;
+    }
+
+    if (item.type === 'message' && Array.isArray(item.content)) {
+      for (const part of item.content) {
+        if (!isJsonRecord(part) || part.type !== 'output_text' || typeof part.text !== 'string') {
+          continue;
+        }
+
+        events.push({ type: 'response.output_text.delta', delta: part.text });
+
+        for (const annotation of Array.isArray(part.annotations) ? part.annotations : []) {
+          if (
+            isJsonRecord(annotation) &&
+            annotation.type === 'url_citation' &&
+            typeof annotation.url === 'string' &&
+            typeof annotation.title === 'string'
+          ) {
+            events.push({ type: 'response.output_text.annotation.added', annotation });
+          }
+        }
+      }
+    } else if (item.type === 'function_call') {
+      const id = String(item.id || `fc_${outputIndex}`);
+      const callId = String(item.call_id || id);
+      const name = String(item.name || 'tool');
+      const args = typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {});
+
+      events.push({
+        type: 'response.output_item.added',
+        output_index: outputIndex,
+        item: { type: 'function_call', id, call_id: callId, name, arguments: '' },
+      });
+      events.push({
+        type: 'response.function_call_arguments.delta',
+        item_id: id,
+        output_index: outputIndex,
+        delta: args,
+      });
+      events.push({
+        type: 'response.output_item.done',
+        output_index: outputIndex,
+        item: { type: 'function_call', id, call_id: callId, name, arguments: args, status: 'completed' },
+      });
+    } else if (item.type === 'reasoning' && Array.isArray(item.summary)) {
+      for (const [summaryIndex, summary] of item.summary.entries()) {
+        if (isJsonRecord(summary) && typeof summary.text === 'string') {
+          events.push({
+            type: 'response.reasoning_summary_text.delta',
+            item_id: String(item.id || `reasoning_${outputIndex}`),
+            output_index: outputIndex,
+            summary_index: summaryIndex,
+            delta: summary.text,
+          });
+        }
+      }
+    }
+  }
+
+  events.push({
+    type: payload.status === 'incomplete' ? 'response.incomplete' : 'response.completed',
+    response: {
+      incomplete_details: isJsonRecord(payload.incomplete_details) ? payload.incomplete_details : null,
+      usage: normalizeHostedFreeUsage(payload.usage),
+    },
+  });
+
+  return events;
+}
+
+function createHostedFreeResponseEventStream(payload: unknown, response: Response): Response {
+  const body = `${buildHostedFreeResponseStreamEvents(payload)
+    .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+    .join('')}data: [DONE]\n\n`;
+  const headers = new Headers(response.headers);
+  headers.set('content-type', 'text/event-stream; charset=utf-8');
+  headers.set('cache-control', 'no-cache');
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  headers.delete('transfer-encoding');
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 const hostedFreeFetch: typeof fetch = async (input, init) => {
   let requestInit = init;
+  let requestedStream = false;
 
   if (typeof init?.body === 'string') {
     try {
-      requestInit = { ...init, body: JSON.stringify(normalizeHostedFreeRequest(JSON.parse(init.body))) };
+      const payload = JSON.parse(init.body);
+      requestedStream = isJsonRecord(payload) && payload.stream === true;
+
+      const normalizedPayload = normalizeHostedFreeRequest(payload);
+      requestInit = {
+        ...init,
+        body: JSON.stringify(
+          requestedStream && isJsonRecord(normalizedPayload)
+            ? { ...normalizedPayload, stream: false }
+            : normalizedPayload,
+        ),
+      };
     } catch {
       // Leave non-JSON request bodies untouched.
     }
@@ -150,12 +292,18 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
     return response;
   }
 
+  const normalizedPayload = normalizeHostedFreeResponse(payload);
+
+  if (requestedStream && response.ok) {
+    return createHostedFreeResponseEventStream(normalizedPayload, response);
+  }
+
   const headers = new Headers(response.headers);
   headers.delete('content-encoding');
   headers.delete('content-length');
   headers.delete('transfer-encoding');
 
-  return new Response(JSON.stringify(normalizeHostedFreeResponse(payload)), {
+  return new Response(JSON.stringify(normalizedPayload), {
     status: response.status,
     statusText: response.statusText,
     headers,

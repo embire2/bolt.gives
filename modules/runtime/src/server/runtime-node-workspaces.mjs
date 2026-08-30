@@ -107,6 +107,10 @@ export function buildRuntimeNodeConfig(env = /** @type {Record<string, string | 
       .toLowerCase(),
   );
   const authMode = identityFile ? 'ssh-key' : sshPassword ? 'password' : 'none';
+  const connectTimeoutSeconds = Math.max(
+    2,
+    Math.min(30, Number(env.BOLT_RUNTIME_NODE_CONNECT_TIMEOUT_SECONDS || '5') || 5),
+  );
 
   return {
     enabled,
@@ -128,6 +132,7 @@ export function buildRuntimeNodeConfig(env = /** @type {Record<string, string | 
     identityFile,
     authMode,
     baseDir,
+    connectTimeoutSeconds,
   };
 }
 
@@ -298,6 +303,10 @@ function buildRuntimeNodeSshInvocation(config, optionArgs = [], remoteCommand = 
     'StrictHostKeyChecking=accept-new',
     '-o',
     'BatchMode=no',
+    '-o',
+    `ConnectTimeout=${Math.max(2, Number(config.connectTimeoutSeconds || 5))}`,
+    '-o',
+    'ConnectionAttempts=1',
     '-p',
     String(config.port || 22),
     ...optionArgs,
