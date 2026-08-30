@@ -33,6 +33,7 @@ import {
   rewritePythonCommands,
 } from '@bolt/agent/lib/runtime/shell-command-utils';
 import { getBlockedShellMutationReason, shouldRunZombieCleanup } from '@bolt/agent/lib/runtime/shell-interceptor';
+import { normalizePreviewStartCommand } from '@bolt/agent/lib/runtime/preview-start-command';
 import { normalizeArtifactFilePath, resolvePreferredArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
 import { extractPreviewAlertFromText } from '@bolt/core/lib/runtime/preview-error';
 import type { FileMap } from '@bolt/core/types/files';
@@ -590,7 +591,6 @@ export class ActionRunner {
     const action = actions[actionId];
 
     if (action) {
-      // action already added
       return;
     }
 
@@ -773,7 +773,7 @@ export class ActionRunner {
       await this.#runHostedShellLikeCommand({
         action,
         description: `Run shell command: ${action.content}`,
-        kind: 'shell',
+        kind: normalizePreviewStartCommand(action.content).isPreviewStart ? 'start' : 'shell',
       });
 
       return;

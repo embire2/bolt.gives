@@ -1,4 +1,5 @@
 import type { BoltAction } from '@bolt/core/types/actions';
+import { normalizePreviewStartCommand } from './preview-start-command';
 
 export type AutonomyMode = 'read-only' | 'review-required' | 'auto-apply-safe' | 'full-auto';
 
@@ -119,6 +120,10 @@ export function isSafeAutoShellCommand(command: string): boolean {
 
   if (!normalized) {
     return false;
+  }
+
+  if (normalizePreviewStartCommand(normalized).isPreviewStart) {
+    return true;
   }
 
   if (/[;|]/.test(normalized)) {

@@ -1,3 +1,4 @@
+import { normalizePreviewStartCommand } from './preview-start-command';
 export type ShellCommandRewrite = {
   shouldModify: boolean;
   modifiedCommand?: string;
@@ -447,15 +448,7 @@ function rewriteNpmInstallSegment(segment: string): { segment: string; modified:
   return { segment, modified: false };
 }
 
-/**
- * Make create-vite scaffolding non-interactive and compatible with WebContainer execution.
- *
- * Common LLM output:
- *   npm create vite@latest . -- --template react && npm install
- *
- * This is interactive and typically fails in Bolt's command runner. We rewrite to:
- *   pnpm dlx create-vite@latest . --template react --no-interactive && pnpm install
- */
+// Keep create-vite scaffolding non-interactive and compatible with WebContainer execution.
 export function makeCreateViteNonInteractive(command: string): ShellCommandRewrite {
   const delimiterNormalization = decodeHtmlCommandDelimiters(command);
   const normalizedCommand = delimiterNormalization.modifiedCommand || command;
@@ -996,6 +989,12 @@ export function makePreviewStartCommandsWebContainerFriendly(
 ): ShellCommandRewrite {
   const delimiterNormalization = decodeHtmlCommandDelimiters(command);
   let normalizedCommand = delimiterNormalization.modifiedCommand || command;
+  const previewStart = normalizePreviewStartCommand(normalizedCommand);
+
+  if (previewStart.isPreviewStart) {
+    normalizedCommand = previewStart.command;
+  }
+
   const foregroundRewrite = makeStartCommandsForeground(normalizedCommand);
 
   if (foregroundRewrite.shouldModify && foregroundRewrite.modifiedCommand) {
@@ -1012,7 +1011,7 @@ export function makePreviewStartCommandsWebContainerFriendly(
   const scripts = extractPackageScripts(packageJsonContent);
   const fallbackFramework = inferFrameworkFromFiles(options?.filesSnapshot);
   const parts = trimmed.split(/\s*&&\s*/);
-  let modifiedAny = Boolean(foregroundRewrite.shouldModify);
+  let modifiedAny = Boolean(foregroundRewrite.shouldModify || previewStart.command !== command.trim());
 
   const rewrittenParts = parts.map((part) => {
     const segment = part.trim();

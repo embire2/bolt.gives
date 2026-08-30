@@ -212,6 +212,24 @@ describe('makeStartCommandsForeground', () => {
 });
 
 describe('makePreviewStartCommandsWebContainerFriendly', () => {
+  it('removes model-authored background verification before adding preview flags', () => {
+    const res = makePreviewStartCommandsWebContainerFriendly(
+      'pnpm run dev & sleep 4 curl -s http://localhost:5173 | head -100',
+      {
+        filesSnapshot: {
+          '/home/project/package.json': {
+            type: 'file',
+            isBinary: false,
+            content: JSON.stringify({ scripts: { dev: 'vite' } }),
+          },
+        },
+      },
+    );
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('pnpm run dev --host 0.0.0.0 --port 5173');
+  });
+
   it('adds host flags for Vite package scripts and removes detached backgrounding', () => {
     const input = 'pnpm run dev &';
     const res = makePreviewStartCommandsWebContainerFriendly(input, {
