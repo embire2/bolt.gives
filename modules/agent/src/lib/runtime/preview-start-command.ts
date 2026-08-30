@@ -9,6 +9,7 @@ const DIRECT_PREVIEW_START_RE = /^(?:vite(?:\s|$)|next\s+(?:dev|start)\b|astro\s
 const SHELL_CONTROL_RE = /[;&|\r\n]/;
 const BACKGROUND_VERIFICATION_RE = /^(.*?)\s+&\s+((?:sleep|curl|wget|wait|until|while|for)\b[\s\S]*)$/i;
 const TRAILING_BACKGROUND_RE = /^(.*?)\s+&\s*$/;
+const HOSTED_PROJECT_CD_PREFIX_RE = /^cd\s+(?:\/home\/project\/?|"\/home\/project\/?"|'\/home\/project\/?')\s*&&\s*/i;
 
 function isStandalonePreviewStart(command: string): boolean {
   return (
@@ -18,7 +19,9 @@ function isStandalonePreviewStart(command: string): boolean {
 
 export function normalizePreviewStartCommand(command: string): PreviewStartCommand {
   const trimmed = command.trim();
-  const backgroundMatch = trimmed.match(BACKGROUND_VERIFICATION_RE) || trimmed.match(TRAILING_BACKGROUND_RE);
+  const projectCommand = trimmed.replace(HOSTED_PROJECT_CD_PREFIX_RE, '').trim();
+  const backgroundMatch =
+    projectCommand.match(BACKGROUND_VERIFICATION_RE) || projectCommand.match(TRAILING_BACKGROUND_RE);
 
   if (backgroundMatch) {
     const startCommand = backgroundMatch[1].trim();
@@ -32,9 +35,11 @@ export function normalizePreviewStartCommand(command: string): PreviewStartComma
     }
   }
 
+  const isPreviewStart = isStandalonePreviewStart(projectCommand);
+
   return {
-    command: trimmed,
+    command: isPreviewStart ? projectCommand : trimmed,
     discardedVerification: false,
-    isPreviewStart: isStandalonePreviewStart(trimmed),
+    isPreviewStart,
   };
 }

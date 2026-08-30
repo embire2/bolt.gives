@@ -66,7 +66,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Live commentary feed plus technical execution transparency.
 - Server-first hosted runtime for install, build, test, preview, and file sync.
 - Preview auto-recovery via server-side health checks.
-- Generated dev-server commands are normalized into managed Preview starts; model-authored background polling never replaces runtime health verification.
+- Generated dev-server commands are normalized into managed Preview starts; fixed `/home/project` prefixes and model-authored background polling never replace runtime health verification or open hidden approvals.
 - Managed `FREE` provider restricted to server-side MagnetAPI.org models `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`.
 - First-party Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs verified through real Vite/Chromium Preview in CI.
 - One-client / one-instance managed Cloudflare trial flow.

@@ -44,7 +44,7 @@ The current hosted product baseline is:
 - Technical feed / execution transparency
 - Hosted server-first runtime for install/build/dev/test/preview on managed instances
 - Preview auto-recovery via server-side health checks
-- Generated dev-server commands use managed Preview starts; model-authored background polling must not replace runtime health verification.
+- Generated dev-server commands use managed Preview starts; fixed `/home/project` prefixes and model-authored background polling must not bypass runtime health verification or open hidden approvals.
 - Managed `FREE` provider restricted to four hosted coding models with ChatGPT-5.6 SOL as default:
   - provider: `FREE`
   - models: `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`
