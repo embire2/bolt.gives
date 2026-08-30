@@ -393,14 +393,17 @@ describe('runtime server workspace isolation', () => {
       buildManagedInstanceSecretValues({
         hostedFreeRelaySecret: 'relay-secret',
         freeUsageQuotaSecret: 'quota-secret',
+        profileCookieSecret: 'profile-secret',
       }),
     ).toEqual([
       { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: 'relay-secret' },
       { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: 'quota-secret' },
+      { name: 'BOLT_PROFILE_COOKIE_SECRET', value: 'profile-secret' },
     ]);
     expect(buildManagedInstanceSecretValues({ hostedFreeRelaySecret: 'shared-secret' })).toEqual([
       { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: 'shared-secret' },
       { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: 'shared-secret' },
+      { name: 'BOLT_PROFILE_COOKIE_SECRET', value: 'shared-secret' },
     ]);
   });
 

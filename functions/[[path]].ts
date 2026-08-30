@@ -32,12 +32,15 @@ interface PagesEnv {
   RATE_LIMIT_KV?: unknown;
   BOLT_RUNTIME_CONTROL_PUBLIC_URL?: string;
   BOLT_RUNTIME_CONTROL_URL?: string;
+  BOLT_HOSTED_FREE_RELAY_SECRET?: string;
   NODE_ENV?: string;
   [key: string]: unknown;
 }
 
 const WEBCONTAINER_PREFIXES = ['/webcontainer.connect', '/webcontainer.preview'];
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
+const DEFAULT_HOSTED_FREE_RELAY_ORIGIN = 'https://bolt.gives';
+const HOSTED_FREE_API_PATHS = new Set(['/api/chat', '/api/llmcall']);
 const STATIC_ASSET_EXTENSION_RE =
   /\.(?:avif|css|eot|gif|ico|jpe?g|js|map|mjs|mp3|mp4|ogg|otf|pdf|png|svg|ttf|wasm|webm|webp|woff2?)$/i;
 
@@ -101,6 +104,61 @@ export function buildRuntimeProxyHeaders(request: Request) {
   return headers;
 }
 
+function readRequestCookie(request: Request, name: string) {
+  for (const segment of String(request.headers.get('Cookie') || '').split(';')) {
+    const [rawName, ...rawValue] = segment.trim().split('=');
+
+    if (rawName === name) {
+      try {
+        return decodeURIComponent(rawValue.join('='));
+      } catch {
+        return rawValue.join('=');
+      }
+    }
+  }
+
+  return '';
+}
+
+export function shouldProxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
+  const url = new URL(request.url);
+  const selectedProvider =
+    request.headers.get('X-Bolt-Selected-Provider') || readRequestCookie(request, 'selectedProvider');
+
+  return (
+    request.method === 'POST' &&
+    url.hostname.endsWith('.pages.dev') &&
+    HOSTED_FREE_API_PATHS.has(url.pathname) &&
+    selectedProvider.trim().toUpperCase() === 'FREE' &&
+    Boolean(env.BOLT_HOSTED_FREE_RELAY_SECRET?.trim())
+  );
+}
+
+export function buildHostedFreeApiProxyHeaders(request: Request, relaySecret: string) {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+
+  headers.delete('host');
+  headers.delete('content-length');
+  headers.set('X-Bolt-Hosted-Free-Relay', '1');
+  headers.set('X-Bolt-Hosted-Free-Relay-Secret', relaySecret);
+  headers.set('X-Bolt-Forwarded-Host', url.host);
+
+  return headers;
+}
+
+async function proxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
+  const requestUrl = new URL(request.url);
+  const relayUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, DEFAULT_HOSTED_FREE_RELAY_ORIGIN);
+
+  return fetch(relayUrl, {
+    method: request.method,
+    headers: buildHostedFreeApiProxyHeaders(request, String(env.BOLT_HOSTED_FREE_RELAY_SECRET || '')),
+    body: request.body,
+    redirect: 'manual',
+  });
+}
+
 async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
   const runtimeControlBaseUrl =
     typeof env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL === 'string' && env.BOLT_RUNTIME_CONTROL_PUBLIC_URL.trim()
@@ -135,6 +193,10 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
 
   if (shouldProxyRuntimeRequest(url.pathname)) {
     return proxyRuntimeRequest(request, env);
+  }
+
+  if (shouldProxyHostedFreeApiRequest(request, env)) {
+    return proxyHostedFreeApiRequest(request, env);
   }
 
   /*

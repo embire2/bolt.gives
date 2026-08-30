@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRuntimeProxyHeaders,
   buildRuntimeProxyTargetUrl,
+  buildHostedFreeApiProxyHeaders,
   fetchPagesStaticAsset,
   isStaticAssetRequest,
   normalizeRuntimeControlBaseUrl,
   shouldProxyRuntimeRequest,
+  shouldProxyHostedFreeApiRequest,
 } from '../functions/[[path]]';
 
 describe('Cloudflare Pages runtime proxy helpers', () => {
@@ -41,6 +43,46 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
     expect(headers.get('x-forwarded-host')).toBe('clinic-one.pages.dev');
     expect(headers.get('x-forwarded-proto')).toBe('https');
     expect(headers.get('x-test')).toBe('kept');
+    expect(headers.has('host')).toBe(false);
+    expect(headers.has('content-length')).toBe(false);
+  });
+
+  it('relays managed hosted FREE requests before loading the full Pages route', () => {
+    const request = new Request('https://clinic-one.pages.dev/api/chat', {
+      method: 'POST',
+      headers: {
+        Cookie: 'selectedProvider=FREE; csrf_token=test',
+        Host: 'clinic-one.pages.dev',
+        'Content-Length': '123',
+      },
+      body: '{}',
+    });
+    const env = { BOLT_HOSTED_FREE_RELAY_SECRET: 'relay-secret' };
+
+    expect(shouldProxyHostedFreeApiRequest(request, env)).toBe(true);
+    expect(
+      shouldProxyHostedFreeApiRequest(
+        new Request('https://clinic-one.pages.dev/api/chat', {
+          method: 'POST',
+          headers: { Cookie: 'selectedProvider=OpenAI' },
+        }),
+        env,
+      ),
+    ).toBe(false);
+    expect(
+      shouldProxyHostedFreeApiRequest(
+        new Request('https://bolt.gives/api/chat', {
+          method: 'POST',
+          headers: { Cookie: 'selectedProvider=FREE' },
+        }),
+        env,
+      ),
+    ).toBe(false);
+
+    const headers = buildHostedFreeApiProxyHeaders(request, 'relay-secret');
+    expect(headers.get('x-bolt-hosted-free-relay')).toBe('1');
+    expect(headers.get('x-bolt-hosted-free-relay-secret')).toBe('relay-secret');
+    expect(headers.get('x-bolt-forwarded-host')).toBe('clinic-one.pages.dev');
     expect(headers.has('host')).toBe(false);
     expect(headers.has('content-length')).toBe(false);
   });

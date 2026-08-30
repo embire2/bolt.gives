@@ -311,6 +311,10 @@ const MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL =
   'https://bolt.gives/runtime';
 const MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET =
   process.env.BOLT_HOSTED_FREE_RELAY_SECRET || process.env.HOSTED_FREE_RELAY_SECRET || '';
+const MANAGED_INSTANCE_PROFILE_COOKIE_SECRET =
+  process.env.BOLT_PROFILE_COOKIE_SECRET ||
+  process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET ||
+  MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET;
 const FREE_USAGE_QUOTA_SECRET =
   process.env.BOLT_FREE_USAGE_QUOTA_SECRET ||
   process.env.FREE_USAGE_QUOTA_SECRET ||
@@ -1669,13 +1673,19 @@ export function selectManagedInstanceReleaseSha({ cloudflareSha, githubSha, gitS
     .find(Boolean);
 }
 
-export function buildManagedInstanceSecretValues({ hostedFreeRelaySecret, freeUsageQuotaSecret } = {}) {
+export function buildManagedInstanceSecretValues({
+  hostedFreeRelaySecret,
+  freeUsageQuotaSecret,
+  profileCookieSecret,
+} = {}) {
   const relaySecret = String(hostedFreeRelaySecret || '').trim();
   const quotaSecret = String(freeUsageQuotaSecret || relaySecret).trim();
+  const profileSecret = String(profileCookieSecret || relaySecret).trim();
 
   return [
     { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: relaySecret },
     { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: quotaSecret },
+    { name: 'BOLT_PROFILE_COOKIE_SECRET', value: profileSecret },
   ].filter((entry) => entry.value);
 }
 
@@ -1876,6 +1886,7 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
   for (const secret of buildManagedInstanceSecretValues({
     hostedFreeRelaySecret: MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
     freeUsageQuotaSecret: FREE_USAGE_QUOTA_SECRET,
+    profileCookieSecret: MANAGED_INSTANCE_PROFILE_COOKIE_SECRET,
   })) {
     await upsertManagedInstanceProjectSecret(instance, secret.name, secret.value);
   }

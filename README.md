@@ -73,6 +73,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Idle usage and Preview reconciliation polling is visibility-aware and substantially less frequent. Runtime events still trigger immediate health checks when the state actually changes.
 - Managed provisioning records the authoritative live checkout SHA and renders deployment times in deterministic UTC, preventing stale fleet metadata and post-provision hydration errors.
 - Managed refreshes synchronize both protected FREE generation and quota credentials. If Cloudflare omits dashboard plain-text bindings from a Wrangler-driven deployment, Pages quota checks fall back to the canonical protected runtime instead of trying localhost at the edge.
+- Managed Pages forwards hosted FREE generation and repair calls before loading the full edge route, avoiding Worker resource-limit failures while preserving central quota and signed-in profile identity.
 - Deterministic Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs render complete React/CSS projects. The release gate starts every pack in Vite and verifies its visible Preview in Chromium.
 - The alpha browser E2E generated a working habit tracker, exercised its form, applied a follow-up improvement, reloaded the page and runtime service, and restored the same chat, files, project identity, and healthy Preview.
 

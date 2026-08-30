@@ -48,6 +48,7 @@
 - Fixed a paid project's Custom Domain balance remaining visible after navigating to a new session while low-frequency reconciliation was active.
 - Fixed managed-instance deployments recording a stale environment SHA instead of the authoritative live Git checkout, and removed locale-dependent timestamps that caused post-provision hydration failures.
 - Fixed managed Cloudflare quota checks calling the localhost runtime fallback from the edge, which Cloudflare rejected with `403`. Pages hostnames now use the canonical protected runtime when no public binding is available, and refreshes upload both generation and quota credentials.
+- Fixed hosted FREE repair/follow-up calls exhausting managed Pages Worker resources before reaching the relay. Managed `/api/chat` and `/api/llmcall` requests now take a lightweight authenticated edge path, and profile-cookie signing remains consistent with the central runtime.
 
 ### Validation
 

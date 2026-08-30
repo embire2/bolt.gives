@@ -53,6 +53,7 @@ Release theme: make first-pass Preview reliable, isolate generated runtimes, and
 - [x] Reduce idle usage and Preview reconciliation polling while preserving event-triggered health checks.
 - [x] Keep managed-instance release metadata tied to the live checkout and make provisioning results hydrate deterministically.
 - [x] Synchronize server-only FREE generation/quota credentials and route Pages quota checks to the canonical runtime instead of an edge-localhost fallback.
+- [x] Move managed hosted FREE chat/planning relay work into the lightweight Pages entrypoint so long generations and repair retries stay below edge resource limits.
 - [x] Ship Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs with real Vite/Chromium Preview smoke coverage.
 - [x] Verify first generation, app interaction, follow-up editing, full reload, runtime restart, saved history, files, runtime identity, and Preview recovery on `alpha1.bolt.gives`.
 
