@@ -1669,6 +1669,16 @@ export function selectManagedInstanceReleaseSha({ cloudflareSha, githubSha, gitS
     .find(Boolean);
 }
 
+export function buildManagedInstanceSecretValues({ hostedFreeRelaySecret, freeUsageQuotaSecret } = {}) {
+  const relaySecret = String(hostedFreeRelaySecret || '').trim();
+  const quotaSecret = String(freeUsageQuotaSecret || relaySecret).trim();
+
+  return [
+    { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: relaySecret },
+    { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: quotaSecret },
+  ].filter((entry) => entry.value);
+}
+
 async function resolveCurrentGitSha() {
   const now = Date.now();
 
@@ -1862,11 +1872,13 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
 
   await assertManagedInstanceDeployArtifactReady();
   await ensureManagedInstanceProjectExists(instance);
-  await upsertManagedInstanceProjectSecret(
-    instance,
-    'BOLT_HOSTED_FREE_RELAY_SECRET',
-    MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
-  );
+
+  for (const secret of buildManagedInstanceSecretValues({
+    hostedFreeRelaySecret: MANAGED_INSTANCE_HOSTED_FREE_RELAY_SECRET,
+    freeUsageQuotaSecret: FREE_USAGE_QUOTA_SECRET,
+  })) {
+    await upsertManagedInstanceProjectSecret(instance, secret.name, secret.value);
+  }
   await configureManagedInstanceProject(instance);
 
   const result = await runManagedInstanceProcess(

@@ -20,6 +20,7 @@ import {
   calculateFreeAgentTokenCharge,
   buildManagedInstanceDeployArgs,
   buildManagedInstanceDeployArtifactDecision,
+  buildManagedInstanceSecretValues,
   buildManagedInstanceRolloutGuardDecision,
   buildManagedInstanceRegistryFromAssignments,
   buildRuntimeNodeDatabaseStateForClient,
@@ -385,6 +386,22 @@ describe('runtime server workspace isolation', () => {
         gitSha: 'current-live-sha',
       }),
     ).toBe('cloudflare-build-sha');
+  });
+
+  it('uploads the distinct quota credential with every managed instance release', () => {
+    expect(
+      buildManagedInstanceSecretValues({
+        hostedFreeRelaySecret: 'relay-secret',
+        freeUsageQuotaSecret: 'quota-secret',
+      }),
+    ).toEqual([
+      { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: 'relay-secret' },
+      { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: 'quota-secret' },
+    ]);
+    expect(buildManagedInstanceSecretValues({ hostedFreeRelaySecret: 'shared-secret' })).toEqual([
+      { name: 'BOLT_HOSTED_FREE_RELAY_SECRET', value: 'shared-secret' },
+      { name: 'BOLT_FREE_USAGE_QUOTA_SECRET', value: 'shared-secret' },
+    ]);
   });
 
   it('allows managed Cloudflare deploys from the live rsync checkout', () => {

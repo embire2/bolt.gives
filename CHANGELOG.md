@@ -47,6 +47,7 @@
 - Fixed generated project processes inheriting unrelated operator and infrastructure secrets from the runtime service environment.
 - Fixed a paid project's Custom Domain balance remaining visible after navigating to a new session while low-frequency reconciliation was active.
 - Fixed managed-instance deployments recording a stale environment SHA instead of the authoritative live Git checkout, and removed locale-dependent timestamps that caused post-provision hydration failures.
+- Fixed newly provisioned Cloudflare instances using the FREE generation relay credential for a separately protected quota endpoint. Every refresh now uploads both server-only credentials, preventing false `quota service returned 403` failures.
 
 ### Validation
 
