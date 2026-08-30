@@ -63,6 +63,7 @@ import {
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
+  selectManagedInstanceReleaseSha,
   shouldPauseManagedInstanceRolloutForSessions,
   shouldRefreshManagedInstanceForRollout,
   shouldRetryPreviewOwnershipMismatch,
@@ -368,6 +369,22 @@ describe('runtime server workspace isolation', () => {
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain('behind origin/main');
     expect(decision.behindCount).toBe(3);
+  });
+
+  it('uses the live git SHA before a stale operator release override', () => {
+    expect(
+      selectManagedInstanceReleaseSha({
+        gitSha: 'current-live-sha',
+        releaseSha: 'stale-release-sha',
+      }),
+    ).toBe('current-live-sha');
+    expect(
+      selectManagedInstanceReleaseSha({
+        cloudflareSha: 'cloudflare-build-sha',
+        githubSha: 'github-build-sha',
+        gitSha: 'current-live-sha',
+      }),
+    ).toBe('cloudflare-build-sha');
   });
 
   it('allows managed Cloudflare deploys from the live rsync checkout', () => {

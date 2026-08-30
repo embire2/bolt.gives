@@ -1663,6 +1663,12 @@ let cachedManagedGitSha = {
   expiresAt: 0,
 };
 
+export function selectManagedInstanceReleaseSha({ cloudflareSha, githubSha, gitSha, releaseSha } = {}) {
+  return [cloudflareSha, githubSha, gitSha, releaseSha]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find(Boolean);
+}
+
 async function resolveCurrentGitSha() {
   const now = Date.now();
 
@@ -1670,25 +1676,31 @@ async function resolveCurrentGitSha() {
     return cachedManagedGitSha.value;
   }
 
-  const envSha =
-    process.env.CF_PAGES_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || process.env.BOLT_RELEASE_SHA?.trim();
+  const platformSha = selectManagedInstanceReleaseSha({
+    cloudflareSha: process.env.CF_PAGES_COMMIT_SHA,
+    githubSha: process.env.GITHUB_SHA,
+  });
 
-  if (envSha) {
+  if (platformSha) {
     cachedManagedGitSha = {
-      value: envSha,
+      value: platformSha,
       expiresAt: now + 30000,
     };
-    return envSha;
+    return platformSha;
   }
 
   const result = await runManagedInstanceProcess('git', ['rev-parse', 'HEAD']);
+  const resolvedSha = selectManagedInstanceReleaseSha({
+    gitSha: result.code === 0 ? result.stdout : null,
+    releaseSha: process.env.BOLT_RELEASE_SHA,
+  });
 
-  if (result.code !== 0) {
+  if (!resolvedSha) {
     throw new Error(result.stderr.trim() || 'Unable to resolve current git SHA.');
   }
 
   cachedManagedGitSha = {
-    value: result.stdout.trim(),
+    value: resolvedSha,
     expiresAt: now + 30000,
   };
 

@@ -46,6 +46,7 @@
 - Fixed first-party template selection allowing generic website matches to outrank more specific portfolio, commerce, or calendar prompts.
 - Fixed generated project processes inheriting unrelated operator and infrastructure secrets from the runtime service environment.
 - Fixed a paid project's Custom Domain balance remaining visible after navigating to a new session while low-frequency reconciliation was active.
+- Fixed managed-instance deployments recording a stale environment SHA instead of the authoritative live Git checkout, and removed locale-dependent timestamps that caused post-provision hydration failures.
 
 ### Validation
 

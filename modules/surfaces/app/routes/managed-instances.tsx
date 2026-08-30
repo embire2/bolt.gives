@@ -45,6 +45,16 @@ function createManagedInstanceCookie() {
 
 export const meta: MetaFunction = () => [{ title: `Managed Cloudflare Instances | bolt.gives v${APP_VERSION}` }];
 
+export function formatManagedInstanceDateTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'unknown time';
+  }
+
+  return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const sessionCookie = createManagedInstanceCookie();
   const session = (await sessionCookie.parse(request.headers.get('Cookie'))) as ManagedInstanceSession | undefined;
@@ -286,7 +296,7 @@ export default function ManagedInstancesPage() {
         {
           label: 'Availability',
           value: instance.trialEndsAt
-            ? `Until ${new Date(instance.trialEndsAt).toLocaleString()}`
+            ? `Until ${formatManagedInstanceDateTime(instance.trialEndsAt)}`
             : 'Indefinite for now',
         },
         { label: 'Current git SHA', value: instance.currentGitSha || 'pending first rollout' },
@@ -294,7 +304,7 @@ export default function ManagedInstancesPage() {
         {
           label: 'Health',
           value: `${instance.lastHealthcheckStatus || 'unknown'}${
-            instance.lastHealthcheckAt ? ` at ${new Date(instance.lastHealthcheckAt).toLocaleString()}` : ''
+            instance.lastHealthcheckAt ? ` at ${formatManagedInstanceDateTime(instance.lastHealthcheckAt)}` : ''
           }`,
         },
         { label: 'Support email', value: instance.email },

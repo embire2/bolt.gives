@@ -71,6 +71,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Generated package, build, command, and dev-server processes receive only a minimal project environment plus that project's database tunnel variables. Provider, Cloudflare, Stripe, SMTP, operator, and runtime-node administration secrets are not inherited.
 - Hosted workspaces use the repository-pinned pnpm release instead of allowing a generated HOME directory to download an incompatible package-manager version.
 - Idle usage and Preview reconciliation polling is visibility-aware and substantially less frequent. Runtime events still trigger immediate health checks when the state actually changes.
+- Managed provisioning records the authoritative live checkout SHA and renders deployment times in deterministic UTC, preventing stale fleet metadata and post-provision hydration errors.
 - Deterministic Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs render complete React/CSS projects. The release gate starts every pack in Vite and verifies its visible Preview in Chromium.
 - The alpha browser E2E generated a working habit tracker, exercised its form, applied a follow-up improvement, reloaded the page and runtime service, and restored the same chat, files, project identity, and healthy Preview.
 

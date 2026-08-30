@@ -19,6 +19,11 @@ describe('managed instances route', () => {
     vi.clearAllMocks();
   });
 
+  it('formats deployment timestamps identically on the server and browser', () => {
+    expect(route.formatManagedInstanceDateTime('2026-08-30T17:42:31.987Z')).toBe('2026-08-30 17:42 UTC');
+    expect(route.formatManagedInstanceDateTime('invalid')).toBe('unknown time');
+  });
+
   it('falls back to the signed session cookie instance when runtime session lookup fails', async () => {
     runtimeControlMocks.fetchRuntimeControlJson.mockImplementation(async (pathname: string) => {
       if (pathname === '/managed-instances/spawn') {
