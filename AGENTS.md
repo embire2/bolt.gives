@@ -8,6 +8,7 @@ Current release line:
 
 - Stable: `v3.5.0`
 - In progress: `v3.6.0`
+- Desktop stable: `v1.10.2`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
 
@@ -61,7 +62,7 @@ The current hosted product baseline is:
 - Preview can deploy projects to OpenWeb.Software FREE `https://{subdomain}.bolt.gives`, the protected OpenWeb Cloudflare Pages account, or Custom Domain hosting at the `$5/month` launch price.
 - Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to at least 30 active coding minutes. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month; access and resets are controlled by signed Stripe webhooks, never browser redirects.
 - Browser project history is scoped to the authenticated profile. Guest and other-account projects must not appear after login on a shared browser.
-- The proprietary native Windows client follows an independent `Desktop v*` release line. Its C#/.NET 8 WPF/XAML source, private CI tree, and dependencies remain outside this public repository; only compiled Windows artifacts, checksums, release notes, and update metadata may be distributed from public GitHub Releases.
+- The proprietary native Windows client follows an independent `Desktop v*` release line; current stable is `Desktop v1.10.2`. Its C#/.NET 8 WPF/XAML source, private CI tree, and dependencies remain outside this public repository; only compiled Windows artifacts, checksums, release notes, and update metadata may be distributed from public GitHub Releases.
 - The Windows client must never load the hosted bolt.gives interface. WebView2 is permitted only for generated project Preview; projects, Chat, Workspace, editor, terminal, deployments, settings, authentication, and updates must remain native controls.
 - Desktop sign-in uses an emailed six-digit one-time code entered inside the app. Profile sessions must be protected for the current Windows user, and no operator credential may enter the binary.
 

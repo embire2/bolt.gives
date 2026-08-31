@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 Status legend:
 
@@ -18,18 +18,23 @@ Next release target:
 
 Independent Desktop release:
 
-- [x] `Desktop v1.0.1`
+- [x] `Desktop v1.10.2`
 
-## Desktop v1.0.1 - Shipped Separately
+## Desktop v1.10.2 - Shipped Separately
 
-Release theme: replace the temporary hosted-UI wrapper with a native, proprietary Windows product while preserving the open-source web/server boundary.
+Release theme: complete the project-aware native coding workflow and make mandatory self-update recoverable without weakening the open-source web/server boundary.
 
 - [x] Build Chat, Workspace, projects, editor, terminal, deployments, settings, model selection, token balance, authentication, and updates with C#/.NET 8 WPF/XAML controls.
 - [x] Restrict WebView2 to generated project Preview; never load the hosted bolt.gives product UI.
 - [x] Add in-app six-digit email-code sign-in and Windows current-user encrypted session storage.
+- [x] Persist profile-isolated project history, full conversations, selected model, runtime identity, source state, and project memory across restarts.
+- [x] Keep long-lived Chat, terminal, and Preview streams off the WPF dispatcher and add an async-only stream regression test.
+- [x] Add native health-driven Preview recovery, queued follow-ups, FREE/Cloudflare/Custom Domain deployment, and per-project Live CLI provisioning.
 - [x] Create Start Menu and Desktop shortcuts and ask the user to approve a taskbar pin on first launch.
-- [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, and SHA-256 installer verification.
+- [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, release-size and SHA-256 verification, and mandatory coding lockout.
+- [x] Add a separately signed updater with UAC elevation, requesting-process validation, old-process shutdown, disk-capacity checks, installed-version verification, and automatic rollback.
 - [x] Add fail-closed Azure Artifact Signing, RFC3161 timestamps, and pinned Private Trust chain verification to private CI.
+- [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
 ## v3.6.0 - In Progress

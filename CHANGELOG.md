@@ -8,23 +8,34 @@
 - Added a narrowly scoped `BoltProfile` native authorization transport for chat and usage requests. Browser CSRF behavior remains unchanged, and the chat action validates the profile session before model or quota work.
 - Added the separately versioned proprietary `Desktop v1.0.0` native Windows client release. Its C#/.NET 8 WPF/XAML interface provides native projects, Chat, Workspace, code editor, terminal, deployments, settings, model switching, token balance, encrypted session storage, Start Menu/Desktop shortcuts, taskbar pin guidance, and SHA-256-verified updates. WebView2 is restricted to generated project Preview.
 - Added `Desktop v1.0.1` with fail-closed Azure Artifact Signing for the native executable, assembly, and installer; RFC3161 timestamps; and pinned in-memory verification of the Microsoft Private Trust chain.
+- Added `Desktop v1.10.2` with project-aware native Chat and Workspace, complete profile-isolated history, switchable hosted models, queued follow-ups, source editing, diff, terminal, health-driven Preview, three deployment paths, Live CLI provisioning, account state, and settings. WebView2 remains restricted to the generated app Preview.
 
 ### Changed
 
 - Superseded the temporary Electron hosted-UI wrapper and its Linux packages. The open-source web and Linux self-host product remains `v3.4.2`; Windows Desktop now follows an independent `desktop-v*` release channel with proprietary source outside this repository.
 - Existing Electron wrapper installations require one manual migration because that retired binary never contained update code. Native `Desktop v1.0.0` and later releases check and apply the independent update channel automatically.
 - Marked Desktop v1.0.1 mandatory so v1.0.0 clients pause coding, display the signed-release features, verify the installer SHA-256, and launch the update from the startup update check.
+- Marked Desktop v1.10.2 mandatory for supported native clients. Older clients block coding until the update starts or the user exits.
+- Replaced direct installer launch with a separately signed, administrator-approved updater that closes the old app, validates the installed version, and restores a verified backup after failed replacement or validation.
+
+### Fixed
+
+- Preserved MagnetAPI's live Responses SSE for ChatGPT-5.6 SOL instead of forcing every coding request into completed-JSON mode, which could withhold all generated files until the hosted FREE deadline.
+- Removed synchronous network reads from long-lived Desktop Chat, terminal, and Preview streams so an idle server stream cannot freeze the WPF dispatcher or leave project creation permanently unresponsive.
+- Kept background-project output from replacing the selected project's conversation, files, Preview, or runtime state, and retained queued follow-ups against the project that accepted them.
 
 ### Security
 
 - Desktop profile tokens are never placed in URLs. Windows stores the session with current-user DPAPI, and no provider-funded, SMTP, Stripe, Cloudflare, database, or runtime-node secret is compiled into the client.
 - Kept Azure credentials in private GitHub Actions secrets and granted the build identity only the certificate-profile signer role. The public release contains binaries and verification metadata, never private Desktop source or signing credentials.
+- The v1.10.2 updater hash-binds the privileged handoff, validates the installed requesting process, accepts only exact versioned GitHub release assets, enforces a size ceiling, and verifies SHA-256 plus the pinned Authenticode hierarchy before elevation.
 
 ### Validation
 
 - Added profile-code, formatted-email, native-authorization, CSRF-scope, and AI data-stream parser regression coverage.
 - Compiled and published the self-contained Windows x64 PE from the private source tree; the executable test and installer gates run on `windows-latest` before release artifacts are uploaded.
 - Verified the v1.0.1 app, assembly, and installer against pinned Private Trust certificates and a public timestamp chain before producing the checksum and mandatory update manifest.
+- Added 21 native policy, persistence, streaming, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, and verifies automatic rollback before publishing v1.10.2 artifacts.
 
 ## v3.5.0 (2026-08-30)
 
