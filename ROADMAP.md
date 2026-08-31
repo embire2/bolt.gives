@@ -58,7 +58,7 @@ Release theme: make first-pass Preview reliable, isolate generated runtimes, and
 - [x] Pin generated hosted workspaces to the repository package-manager release for reproducible builds.
 - [x] Reduce idle usage and Preview reconciliation polling while preserving event-triggered health checks.
 - [x] Keep managed-instance release metadata tied to the live checkout and make provisioning results hydrate deterministically.
-- [x] Keep automatic managed-instance refreshes moving past idle healthy Preview servers while still yielding to foreground commands, recovery work, and runtime-node provisioning; serialize registry mutations so concurrent registration cannot be overwritten by a stale fleet snapshot.
+- [x] Keep automatic managed-instance refreshes moving past idle healthy Preview servers while still yielding to foreground commands, recovery work, and runtime-node provisioning; serialize registry mutations so concurrent registration cannot be overwritten by a stale fleet snapshot, and reconcile missing private database assignments at startup.
 - [x] Synchronize server-only FREE generation/quota credentials and route Pages quota checks to the canonical runtime instead of an edge-localhost fallback.
 - [x] Move managed hosted FREE chat/planning relay work into the lightweight Pages entrypoint so long generations and repair retries stay below edge resource limits.
 - [x] Keep transient hosted-provider health failures short-lived so automatic Preview repair can resume quickly after upstream recovery without weakening rate-limit or funding backoff.

@@ -433,6 +433,7 @@ const reservedRuntimeNodeDatabasePorts = new Map();
 let managedInstanceSyncTimer = null;
 let managedInstanceRolloutPromise = null;
 let managedInstanceRegistryOperationQueue = Promise.resolve();
+let managedInstanceRegistryAdminRecoveryComplete = false;
 let managedRolloutGuardState = {
   allowed: true,
   reason: null,
@@ -1552,6 +1553,46 @@ export function buildManagedInstanceRegistryFromAssignments(assignments = []) {
   );
 }
 
+export function mergeManagedInstanceRegistryWithAssignments(registry, assignments = []) {
+  const recoveredRegistry = buildManagedInstanceRegistryFromAssignments(assignments);
+
+  if (!recoveredRegistry) {
+    return null;
+  }
+
+  const instanceIds = new Set(registry.instances.map((instance) => instance.id));
+  const projectNames = new Set(registry.instances.map((instance) => instance.projectName));
+  const clientKeyHashes = new Set(registry.instances.map((instance) => instance.clientKeyHash));
+  const missingInstances = [];
+
+  for (const instance of recoveredRegistry.instances) {
+    if (
+      instanceIds.has(instance.id) ||
+      projectNames.has(instance.projectName) ||
+      clientKeyHashes.has(instance.clientKeyHash)
+    ) {
+      continue;
+    }
+
+    missingInstances.push(instance);
+    instanceIds.add(instance.id);
+    projectNames.add(instance.projectName);
+    clientKeyHashes.add(instance.clientKeyHash);
+  }
+
+  if (missingInstances.length === 0) {
+    return null;
+  }
+
+  return normalizeManagedInstanceRegistry(
+    {
+      ...registry,
+      instances: [...registry.instances, ...missingInstances],
+    },
+    { defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN, defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS },
+  );
+}
+
 export async function buildManagedInstanceRegistryFromAdminAssignments() {
   if (!ADMIN_DB_CONFIG.enabled) {
     return null;
@@ -1561,11 +1602,24 @@ export async function buildManagedInstanceRegistryFromAdminAssignments() {
 }
 
 async function maybeRecoverManagedInstanceRegistryFromAdminAssignments(registry) {
-  if (!ADMIN_DB_CONFIG.enabled || registry.instances.length > 0) {
+  if (!ADMIN_DB_CONFIG.enabled || managedInstanceRegistryAdminRecoveryComplete) {
     return null;
   }
 
-  return await buildManagedInstanceRegistryFromAdminAssignments();
+  try {
+    const recovered = mergeManagedInstanceRegistryWithAssignments(registry, await listManagedInstanceAssignments());
+    managedInstanceRegistryAdminRecoveryComplete = true;
+
+    return recovered;
+  } catch (error) {
+    managedInstanceRegistryAdminRecoveryComplete = true;
+    console.warn(
+      '[runtime] managed instance registry reconciliation with the admin database failed; preserving the file registry.',
+      error,
+    );
+
+    return null;
+  }
 }
 
 export function resolveManagedInstanceProcessCwd(

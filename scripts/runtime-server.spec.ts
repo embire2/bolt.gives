@@ -40,6 +40,7 @@ import {
   isRuntimeNodeDatabasePortReserved,
   mergeWorkspaceFileMap,
   markSessionMutationStart,
+  mergeManagedInstanceRegistryWithAssignments,
   normalizeSessionId,
   normalizeIncomingPreviewAlert,
   normalizeFreeUsageQuotaLedger,
@@ -358,6 +359,51 @@ describe('runtime server workspace isolation', () => {
       clientSessionSecretHash: null,
     });
     expect(registry?.instances[0].clientKeyHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('restores only assignments missing from the managed instance file registry', () => {
+    const existingAssignments = [
+      {
+        id: 'instance-existing',
+        email: 'existing@example.com',
+        name: 'Existing Trial',
+        projectName: 'existing-trial',
+        routeHostname: 'existing-trial.pages.dev',
+        pagesUrl: 'https://existing-trial.pages.dev',
+        plan: 'experimental-free-indefinite',
+        status: 'active',
+        createdAt: '2026-04-08T12:00:00.000Z',
+        updatedAt: '2026-04-08T12:01:00.000Z',
+        sourceBranch: 'main',
+      },
+    ];
+    const registry = buildManagedInstanceRegistryFromAssignments(existingAssignments)!;
+    registry.instances[0].clientSessionSecretHash = 'preserved-session-hash';
+
+    const merged = mergeManagedInstanceRegistryWithAssignments(registry, [
+      { ...existingAssignments[0], name: 'Stale Database Name' },
+      {
+        ...existingAssignments[0],
+        id: 'instance-recovered',
+        email: 'recovered@example.com',
+        name: 'Recovered Trial',
+        projectName: 'recovered-trial',
+        routeHostname: 'recovered-trial.pages.dev',
+        pagesUrl: 'https://recovered-trial.pages.dev',
+      },
+    ]);
+
+    expect(merged?.instances).toHaveLength(2);
+    expect(merged?.instances[0]).toMatchObject({
+      id: 'instance-existing',
+      name: 'Existing Trial',
+      clientSessionSecretHash: 'preserved-session-hash',
+    });
+    expect(merged?.instances[1]).toMatchObject({
+      id: 'instance-recovered',
+      projectName: 'recovered-trial',
+      clientSessionSecretHash: null,
+    });
   });
 
   it('refuses managed-instance rollout when the live checkout is behind origin/main', () => {
