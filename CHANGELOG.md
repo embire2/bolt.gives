@@ -21,7 +21,9 @@
 ### Fixed
 
 - Preserved MagnetAPI's live Responses SSE for ChatGPT-5.6 SOL instead of forcing every coding request into completed-JSON mode, which could withhold all generated files until the hosted FREE deadline.
+- Extended the hosted FREE hard stream ceiling from 150 to 300 seconds so an actively streaming, long-think coding response is not cut off after already producing a complete artifact; the independent inactivity watchdog remains in place.
 - Removed synchronous network reads from long-lived Desktop Chat, terminal, and Preview streams so an idle server stream cannot freeze the WPF dispatcher or leave project creation permanently unresponsive.
+- Fixed Desktop's hosted-FREE prompt selection and added a native ordered executor for generated file, shell, and Preview-start actions. Unsafe paths and shell file mutations fail closed, command failures remain visible, and a Build cannot report success without a ready Preview.
 - Kept background-project output from replacing the selected project's conversation, files, Preview, or runtime state, and retained queued follow-ups against the project that accepted them.
 
 ### Security
@@ -35,7 +37,7 @@
 - Added profile-code, formatted-email, native-authorization, CSRF-scope, and AI data-stream parser regression coverage.
 - Compiled and published the self-contained Windows x64 PE from the private source tree; the executable test and installer gates run on `windows-latest` before release artifacts are uploaded.
 - Verified the v1.0.1 app, assembly, and installer against pinned Private Trust certificates and a public timestamp chain before producing the checksum and mandatory update manifest.
-- Added 21 native policy, persistence, streaming, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, and verifies automatic rollback before publishing v1.10.2 artifacts.
+- Added 38 native action, policy, persistence, streaming, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, and verifies automatic rollback before publishing v1.10.2 artifacts.
 
 ## v3.5.0 (2026-08-30)
 

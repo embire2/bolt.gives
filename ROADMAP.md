@@ -29,6 +29,7 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Add in-app six-digit email-code sign-in and Windows current-user encrypted session storage.
 - [x] Persist profile-isolated project history, full conversations, selected model, runtime identity, source state, and project memory across restarts.
 - [x] Keep long-lived Chat, terminal, and Preview streams off the WPF dispatcher and add an async-only stream regression test.
+- [x] Select the compact hosted-FREE prompt and execute generated file, shell, and Preview-start actions natively with path, command, exit-code, and ready-state guards.
 - [x] Add native health-driven Preview recovery, queued follow-ups, FREE/Cloudflare/Custom Domain deployment, and per-project Live CLI provisioning.
 - [x] Create Start Menu and Desktop shortcuts and ask the user to approve a taskbar pin on first launch.
 - [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, release-size and SHA-256 verification, and mandatory coding lockout.
