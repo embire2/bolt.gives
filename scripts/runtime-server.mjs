@@ -432,6 +432,7 @@ const reservedPreviewPorts = new Map();
 const reservedRuntimeNodeDatabasePorts = new Map();
 let managedInstanceSyncTimer = null;
 let managedInstanceRolloutPromise = null;
+let managedInstanceRegistryOperationQueue = Promise.resolve();
 let managedRolloutGuardState = {
   allowed: true,
   reason: null,
@@ -2019,6 +2020,13 @@ export function runSerializedManagedInstanceRollout(operation, { reason = 'auto-
   return managedInstanceRolloutPromise;
 }
 
+export function runSerializedManagedInstanceRegistryOperation(operation) {
+  const next = managedInstanceRegistryOperationQueue.catch(() => undefined).then(operation);
+  managedInstanceRegistryOperationQueue = next.catch(() => undefined);
+
+  return next;
+}
+
 async function expireManagedInstanceIfRequired(registry, instance, { actor = 'system' } = {}) {
   if (!instance?.trialEndsAt || !['active', 'failed', 'provisioning', 'updating'].includes(instance.status)) {
     return false;
@@ -2254,12 +2262,16 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
     return;
   }
 
-  const registry = await ensureManagedInstanceRegistry();
-  await maybeExpireManagedInstances(registry, { actor });
+  const projectNames = await runSerializedManagedInstanceRegistryOperation(async () => {
+    const registry = await ensureManagedInstanceRegistry();
+    await maybeExpireManagedInstances(registry, { actor });
+
+    return registry.instances.map((instance) => instance.projectName);
+  });
 
   const gitSha = await resolveCurrentGitSha();
 
-  for (const instance of registry.instances) {
+  for (const projectName of projectNames) {
     if (shouldPauseManagedInstanceRolloutForSessions(sessions.values())) {
       console.warn(
         '[runtime] managed rollout yielded to active coding sessions; remaining instances will resume later.',
@@ -2267,16 +2279,20 @@ async function rolloutManagedInstancesToCurrentBuild({ reason = 'auto-rollout', 
       break;
     }
 
-    if (!shouldRefreshManagedInstanceForRollout(instance, gitSha)) {
-      continue;
-    }
-
     try {
-      await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
+      await runSerializedManagedInstanceRegistryOperation(async () => {
+        const registry = await ensureManagedInstanceRegistry();
+        const instance = findManagedInstanceBySlug(registry, projectName);
+
+        if (!instance || !shouldRefreshManagedInstanceForRollout(instance, gitSha)) {
+          return;
+        }
+
+        await refreshManagedInstanceFromCurrentBuild(registry, instance, { actor, reason });
+      });
     } catch (error) {
-      const target = instance.routeHostname || instance.projectName || instance.id || 'unknown-instance';
       console.error(
-        `[runtime] managed instance rollout failed for ${target}; continuing with remaining instances.`,
+        `[runtime] managed instance rollout failed for ${projectName || 'unknown-instance'}; continuing with remaining instances.`,
         error,
       );
     }
@@ -8550,19 +8566,21 @@ export function createRuntimeServer() {
     if (req.method === 'GET' && pathname === '/runtime/managed-instances/session') {
       try {
         const sessionToken = String(searchParams.get('sessionToken') || '').trim();
-        const registry = await ensureManagedInstanceRegistry();
-        await maybeExpireManagedInstances(registry, { actor: 'system' });
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          await maybeExpireManagedInstances(registry, { actor: 'system' });
 
-        const instance = getManagedInstanceBySessionSecret(registry, sessionToken);
+          const instance = getManagedInstanceBySessionSecret(registry, sessionToken);
 
-        if (!instance) {
-          sendText(res, 404, 'Managed instance session not found.');
-          return;
-        }
+          if (!instance) {
+            sendText(res, 404, 'Managed instance session not found.');
+            return;
+          }
 
-        sendJson(res, 200, {
-          ok: true,
-          instance: sanitizeManagedInstanceForClient(instance),
+          sendJson(res, 200, {
+            ok: true,
+            instance: sanitizeManagedInstanceForClient(instance),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect managed instance session');
@@ -8620,56 +8638,58 @@ export function createRuntimeServer() {
           await upsertClientProfile(clientProfile);
         }
 
-        const registry = await ensureManagedInstanceRegistry();
-        await maybeExpireManagedInstances(registry, { actor: email });
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          await maybeExpireManagedInstances(registry, { actor: email });
 
-        const existingCloudflareProject = await fetchCloudflarePagesProject(requestedSubdomain);
+          const existingCloudflareProject = await fetchCloudflarePagesProject(requestedSubdomain);
 
-        if (
-          existingCloudflareProject &&
-          !registry.instances.some((instance) => instance.projectName === requestedSubdomain)
-        ) {
-          sendText(res, 409, 'That subdomain is already in use. Choose another subdomain.');
-          return;
-        }
-
-        const claim = claimManagedInstanceTrial(registry, {
-          name,
-          email,
-          requestedSubdomain,
-          rootDomain: support.rootDomain,
-          trialDays: support.trialDays,
-          sessionSecret: sessionToken || undefined,
-        });
-
-        if (claim.kind === 'conflict') {
-          if (claim.code === 'subdomain-unavailable') {
-            sendText(res, 409, 'That subdomain is already assigned to another trial instance.');
+          if (
+            existingCloudflareProject &&
+            !registry.instances.some((instance) => instance.projectName === requestedSubdomain)
+          ) {
+            sendText(res, 409, 'That subdomain is already in use. Choose another subdomain.');
             return;
           }
 
-          sendText(
-            res,
-            409,
-            'This client already has a managed trial instance. Reuse the original browser session to manage it.',
-          );
+          const claim = claimManagedInstanceTrial(registry, {
+            name,
+            email,
+            requestedSubdomain,
+            rootDomain: support.rootDomain,
+            trialDays: support.trialDays,
+            sessionSecret: sessionToken || undefined,
+          });
 
-          return;
-        }
+          if (claim.kind === 'conflict') {
+            if (claim.code === 'subdomain-unavailable') {
+              sendText(res, 409, 'That subdomain is already assigned to another trial instance.');
+              return;
+            }
 
-        await writeManagedInstanceRegistry(registry);
+            sendText(
+              res,
+              409,
+              'This client already has a managed trial instance. Reuse the original browser session to manage it.',
+            );
 
-        const instance = await refreshManagedInstanceFromCurrentBuild(registry, claim.instance, {
-          actor: email,
-          reason: claim.kind === 'created' ? 'initial-trial-spawn' : 'resume-existing-trial',
-        });
-        await syncManagedInstanceToAdminDatabase(instance);
+            return;
+          }
 
-        sendJson(res, 200, {
-          ok: true,
-          existing: claim.kind === 'existing',
-          sessionToken: claim.sessionSecret,
-          instance: sanitizeManagedInstanceForClient(instance),
+          await writeManagedInstanceRegistry(registry);
+
+          const instance = await refreshManagedInstanceFromCurrentBuild(registry, claim.instance, {
+            actor: email,
+            reason: claim.kind === 'created' ? 'initial-trial-spawn' : 'resume-existing-trial',
+          });
+          await syncManagedInstanceToAdminDatabase(instance);
+
+          sendJson(res, 200, {
+            ok: true,
+            existing: claim.kind === 'existing',
+            sessionToken: claim.sessionSecret,
+            instance: sanitizeManagedInstanceForClient(instance),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to provision the managed trial instance.');
@@ -8691,34 +8711,36 @@ export function createRuntimeServer() {
         const slug = decodeURIComponent(managedInstanceRefreshMatch[1] || '');
         const body = await readJsonBody(req);
         const sessionToken = String(body.sessionToken || '').trim();
-        const registry = await ensureManagedInstanceRegistry();
-        await maybeExpireManagedInstances(registry, { actor: 'system' });
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          await maybeExpireManagedInstances(registry, { actor: 'system' });
 
-        const instance = findManagedInstanceBySlug(registry, slug);
+          const instance = findManagedInstanceBySlug(registry, slug);
 
-        if (!instance) {
-          sendText(res, 404, 'Managed instance not found.');
-          return;
-        }
+          if (!instance) {
+            sendText(res, 404, 'Managed instance not found.');
+            return;
+          }
 
-        if (!managedInstanceSessionMatches(instance, sessionToken)) {
-          sendText(res, 401, 'Managed instance session is invalid.');
-          return;
-        }
+          if (!managedInstanceSessionMatches(instance, sessionToken)) {
+            sendText(res, 401, 'Managed instance session is invalid.');
+            return;
+          }
 
-        if (instance.status === 'expired' || instance.status === 'suspended') {
-          sendText(res, 400, 'This managed trial instance can no longer be refreshed.');
-          return;
-        }
+          if (instance.status === 'expired' || instance.status === 'suspended') {
+            sendText(res, 400, 'This managed trial instance can no longer be refreshed.');
+            return;
+          }
 
-        const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
-          actor: instance.email,
-          reason: 'manual-trial-refresh',
-        });
+          const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
+            actor: instance.email,
+            reason: 'manual-trial-refresh',
+          });
 
-        sendJson(res, 200, {
-          ok: true,
-          instance: sanitizeManagedInstanceForClient(refreshed),
+          sendJson(res, 200, {
+            ok: true,
+            instance: sanitizeManagedInstanceForClient(refreshed),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to refresh the managed instance.');
@@ -8733,26 +8755,28 @@ export function createRuntimeServer() {
         const slug = decodeURIComponent(managedInstanceSuspendMatch[1] || '');
         const body = await readJsonBody(req);
         const sessionToken = String(body.sessionToken || '').trim();
-        const registry = await ensureManagedInstanceRegistry();
-        const instance = findManagedInstanceBySlug(registry, slug);
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          const instance = findManagedInstanceBySlug(registry, slug);
 
-        if (!instance) {
-          sendText(res, 404, 'Managed instance not found.');
-          return;
-        }
+          if (!instance) {
+            sendText(res, 404, 'Managed instance not found.');
+            return;
+          }
 
-        if (!managedInstanceSessionMatches(instance, sessionToken)) {
-          sendText(res, 401, 'Managed instance session is invalid.');
-          return;
-        }
+          if (!managedInstanceSessionMatches(instance, sessionToken)) {
+            sendText(res, 401, 'Managed instance session is invalid.');
+            return;
+          }
 
-        await suspendManagedInstanceRecord(registry, instance, {
-          actor: instance.email,
-          reason: 'Managed trial instance suspended by the client.',
-        });
-        sendJson(res, 200, {
-          ok: true,
-          instance: sanitizeManagedInstanceForClient(instance),
+          await suspendManagedInstanceRecord(registry, instance, {
+            actor: instance.email,
+            reason: 'Managed trial instance suspended by the client.',
+          });
+          sendJson(res, 200, {
+            ok: true,
+            instance: sanitizeManagedInstanceForClient(instance),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');
@@ -8785,17 +8809,19 @@ export function createRuntimeServer() {
         const mailSupport = buildAdminMailSupport();
 
         if (managedSupport.supported) {
-          const managedRegistry = await ensureManagedInstanceRegistry();
-          await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
-          await syncManagedRegistryToAdminDatabase(managedRegistry);
-          managedFleetSummary = buildManagedInstanceFleetSummary(managedRegistry.instances);
-          managedInstances = managedRegistry.instances
-            .slice()
-            .sort(
-              (left, right) =>
-                Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt),
-            )
-            .map((instance) => sanitizeManagedInstanceForOperator(instance));
+          await runSerializedManagedInstanceRegistryOperation(async () => {
+            const managedRegistry = await ensureManagedInstanceRegistry();
+            await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
+            await syncManagedRegistryToAdminDatabase(managedRegistry);
+            managedFleetSummary = buildManagedInstanceFleetSummary(managedRegistry.instances);
+            managedInstances = managedRegistry.instances
+              .slice()
+              .sort(
+                (left, right) =>
+                  Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt),
+              )
+              .map((instance) => sanitizeManagedInstanceForOperator(instance));
+          });
         }
 
         if (ADMIN_DB_CONFIG.enabled) {
@@ -8845,31 +8871,33 @@ export function createRuntimeServer() {
         }
 
         const slug = decodeURIComponent(tenantManagedInstanceRefreshMatch[1] || '');
-        const registry = await ensureManagedInstanceRegistry();
-        await maybeExpireManagedInstances(registry, { actor: 'admin' });
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          await maybeExpireManagedInstances(registry, { actor: 'admin' });
 
-        const instance = findManagedInstanceBySlug(registry, slug);
+          const instance = findManagedInstanceBySlug(registry, slug);
 
-        if (!instance) {
-          sendText(res, 404, 'Managed instance not found.');
-          return;
-        }
+          if (!instance) {
+            sendText(res, 404, 'Managed instance not found.');
+            return;
+          }
 
-        if (instance.status === 'expired') {
-          sendText(res, 400, 'Expired managed trial instances cannot be refreshed.');
-          return;
-        }
+          if (instance.status === 'expired') {
+            sendText(res, 400, 'Expired managed trial instances cannot be refreshed.');
+            return;
+          }
 
-        instance.suspendedAt = null;
+          instance.suspendedAt = null;
 
-        const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
-          actor: 'admin',
-          reason: 'tenant-admin-refresh',
-        });
+          const refreshed = await refreshManagedInstanceFromCurrentBuild(registry, instance, {
+            actor: 'admin',
+            reason: 'tenant-admin-refresh',
+          });
 
-        sendJson(res, 200, {
-          ok: true,
-          instance: sanitizeManagedInstanceForOperator(refreshed),
+          sendJson(res, 200, {
+            ok: true,
+            instance: sanitizeManagedInstanceForOperator(refreshed),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to refresh the managed instance.');
@@ -8884,22 +8912,24 @@ export function createRuntimeServer() {
     if (req.method === 'POST' && tenantManagedInstanceSuspendMatch) {
       try {
         const slug = decodeURIComponent(tenantManagedInstanceSuspendMatch[1] || '');
-        const registry = await ensureManagedInstanceRegistry();
-        const instance = findManagedInstanceBySlug(registry, slug);
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          const instance = findManagedInstanceBySlug(registry, slug);
 
-        if (!instance) {
-          sendText(res, 404, 'Managed instance not found.');
-          return;
-        }
+          if (!instance) {
+            sendText(res, 404, 'Managed instance not found.');
+            return;
+          }
 
-        await suspendManagedInstanceRecord(registry, instance, {
-          actor: 'admin',
-          reason: 'Managed trial instance suspended by the operator.',
-        });
+          await suspendManagedInstanceRecord(registry, instance, {
+            actor: 'admin',
+            reason: 'Managed trial instance suspended by the operator.',
+          });
 
-        sendJson(res, 200, {
-          ok: true,
-          instance: sanitizeManagedInstanceForOperator(instance),
+          sendJson(res, 200, {
+            ok: true,
+            instance: sanitizeManagedInstanceForOperator(instance),
+          });
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');

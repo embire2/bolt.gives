@@ -61,6 +61,7 @@ import {
   resolvePublishedProjectUpgradeTarget,
   resolveSessionSnapshotFiles,
   runSerializedManagedInstanceRollout,
+  runSerializedManagedInstanceRegistryOperation,
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
@@ -3048,6 +3049,23 @@ The latest release of react-calendar is "6.0.1".`),
     }
 
     expect(events).toEqual(['first:start', 'first:end']);
+  });
+
+  it('serializes managed registry operations so stale snapshots cannot overwrite new assignments', async () => {
+    const assignments = ['existing'];
+
+    const fleetRefresh = runSerializedManagedInstanceRegistryOperation(async () => {
+      const snapshot = [...assignments];
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assignments.splice(0, assignments.length, ...snapshot, 'refreshed');
+    });
+    const registration = runSerializedManagedInstanceRegistryOperation(async () => {
+      assignments.push('new-client');
+    });
+
+    await Promise.all([fleetRefresh, registration]);
+
+    expect(assignments).toEqual(['existing', 'refreshed', 'new-client']);
   });
 
   it('writes synced files atomically without leaving temporary artifacts behind', async () => {
