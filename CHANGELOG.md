@@ -17,6 +17,7 @@
 - Marked Desktop v1.0.1 mandatory so v1.0.0 clients pause coding, display the signed-release features, verify the installer SHA-256, and launch the update from the startup update check.
 - Marked Desktop v1.10.2 mandatory for supported native clients. Older clients block coding until the update starts or the user exits.
 - Replaced direct installer launch with a separately signed, administrator-approved updater that closes the old app, validates the installed version, and restores a verified backup after failed replacement or validation.
+- Added a legacy-update compatibility handoff so supported 1.0.x clients relaunch the installed 1.10.2 app, while the new updater retains its verify-first relaunch sequence.
 
 ### Fixed
 
@@ -25,6 +26,9 @@
 - Removed synchronous network reads from long-lived Desktop Chat, terminal, and Preview streams so an idle server stream cannot freeze the WPF dispatcher or leave project creation permanently unresponsive.
 - Fixed Desktop's hosted-FREE prompt selection and added a native ordered executor for generated file, shell, and Preview-start actions. Unsafe paths and shell file mutations fail closed, command failures remain visible, and a Build cannot report success without a ready Preview.
 - Kept background-project output from replacing the selected project's conversation, files, Preview, or runtime state, and retained queued follow-ups against the project that accepted them.
+- Deferred native Preview starts until the hosted generation stream settles, reusing a server-verified healthy process instead of launching a conflicting duplicate that could report a false start failure.
+- Initialized WebView2 before navigation and moved its browser data from the protected install directory to the current user's local application data, preventing blank installed Previews with `E_ACCESSDENIED`.
+- Filtered runtime caches, dependencies, build output, and VCS metadata from the native project file tree while retaining all editable sources.
 
 ### Security
 
@@ -37,7 +41,8 @@
 - Added profile-code, formatted-email, native-authorization, CSRF-scope, and AI data-stream parser regression coverage.
 - Compiled and published the self-contained Windows x64 PE from the private source tree; the executable test and installer gates run on `windows-latest` before release artifacts are uploaded.
 - Verified the v1.0.1 app, assembly, and installer against pinned Private Trust certificates and a public timestamp chain before producing the checksum and mandatory update manifest.
-- Added 38 native action, policy, persistence, streaming, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, and verifies automatic rollback before publishing v1.10.2 artifacts.
+- Passed 49 native action, policy, persistence, streaming, Preview, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, verifies automatic rollback, and proves the legacy updater relaunches a native top-level window before publishing v1.10.2 artifacts.
+- On a Windows Server RDP host, created and improved a focus-timer project with ChatGPT-5.6 SOL, verified interactive embedded Preview and terminal behavior, switched models without losing history, restarted with the same chat/files/runtime, and deployed the result through both FREE subdomain and protected Cloudflare paths.
 
 ## v3.5.0 (2026-08-30)
 
