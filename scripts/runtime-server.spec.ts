@@ -492,13 +492,28 @@ describe('runtime server workspace isolation', () => {
     expect(shouldRefreshManagedInstanceForRollout({ status: 'provisioning', currentGitSha: null }, gitSha)).toBe(true);
   });
 
-  it('yields automatic fleet rollout capacity to active coding sessions', () => {
+  it('yields automatic fleet rollout capacity to active work without being starved by idle previews', () => {
     expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map([['preview', { pid: 123 }]]) }])).toBe(
-      true,
+      false,
     );
+    expect(
+      shouldPauseManagedInstanceRolloutForSessions([
+        {
+          processes: new Map([
+            ['preview', { pid: 123 }],
+            ['command-456', { pid: 456 }],
+          ]),
+        },
+      ]),
+    ).toBe(true);
     expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map(), autoRestoreInFlight: true }])).toBe(
       true,
     );
+    expect(
+      shouldPauseManagedInstanceRolloutForSessions([
+        { processes: new Map(), runtimeNodeProvisionPromise: Promise.resolve() },
+      ]),
+    ).toBe(true);
     expect(shouldPauseManagedInstanceRolloutForSessions([{ processes: new Map() }])).toBe(false);
   });
 

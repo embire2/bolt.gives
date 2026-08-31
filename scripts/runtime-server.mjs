@@ -2241,7 +2241,7 @@ export function shouldRefreshManagedInstanceForRollout(instance, gitSha) {
 export function shouldPauseManagedInstanceRolloutForSessions(sessionValues) {
   return Array.from(sessionValues || []).some(
     (session) =>
-      Number(session?.processes?.size || 0) > 0 ||
+      Array.from(session?.processes?.keys?.() || []).some((processKey) => processKey !== 'preview') ||
       session?.autoRestoreInFlight === true ||
       Boolean(session?.runtimeNodeProvisionPromise),
   );
