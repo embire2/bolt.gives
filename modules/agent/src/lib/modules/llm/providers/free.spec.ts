@@ -580,7 +580,7 @@ describe('FreeProvider', () => {
     });
   });
 
-  it('uses completed JSON mode when Magnet Responses streaming is requested', async () => {
+  it('keeps streaming enabled and converts completed JSON responses into stream events', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -620,7 +620,7 @@ describe('FreeProvider', () => {
     const forwardedBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
     const body = await response?.text();
 
-    expect(forwardedBody.stream).toBe(false);
+    expect(forwardedBody.stream).toBe(true);
     expect(response?.headers.get('content-type')).toContain('text/event-stream');
     expect(body).toContain('response.output_text.delta');
     expect(body).toContain('streamed through shim');

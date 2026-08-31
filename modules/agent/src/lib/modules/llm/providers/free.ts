@@ -267,11 +267,7 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
       const normalizedPayload = normalizeHostedFreeRequest(payload);
       requestInit = {
         ...init,
-        body: JSON.stringify(
-          requestedStream && isJsonRecord(normalizedPayload)
-            ? { ...normalizedPayload, stream: false }
-            : normalizedPayload,
-        ),
+        body: JSON.stringify(normalizedPayload),
       };
     } catch {
       // Leave non-JSON request bodies untouched.
