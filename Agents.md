@@ -4,19 +4,19 @@
 
 Build and maintain `bolt.gives` as a production-ready agentic coding platform where agent work is visible, understandable, and verifiable while it happens. Users must be able to start a project, see files and Preview, send follow-up prompts, and understand what changed.
 
-Secondary objective: continue the `v3.6.0` platform-hardening track for Custom Domain lifecycle, managed instances, tenant/RBAC controls, prompt-to-preview measurement, rollout observability, and self-host resilience.
+Secondary objective: continue the `v4.1.0` platform-hardening track for Custom Domain lifecycle, managed instances, tenant/RBAC controls, prompt-to-preview measurement, rollout observability, and self-host resilience.
 
 ## Active Release Line
 
-- Stable: `v3.5.0`
+- Stable: `v4.0.0`
 - Release commit: current `main`
-- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v3.5.0`
-- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v3.5.0/install.sh`
-- In progress: `v3.6.0`
+- GitHub release: `https://github.com/embire2/bolt.gives/releases/tag/v4.0.0`
+- Linux installer: `https://raw.githubusercontent.com/embire2/bolt.gives/v4.0.0/install.sh`
+- In progress: `v4.1.0`
 
-`v3.5.0` is the current stable hosted and Linux self-host release. It adapts hosted FREE responses into a reliable agent stream, makes runtime-node database outages non-blocking, isolates generated process environments, reduces idle polling, and browser-smoke-tests six first-party template packs. The separately built private-source Desktop binaries continue to use the hosted profile and quota without embedding operator keys.
+`v4.0.0` is the current stable hosted and Linux self-host release. It replaces the competing Chat/Workspace navigation model with a unified Agent Mode that keeps conversation, a compact follow-up prompt, and a dominant Code/Preview workspace together. User-selected Code remains selected during Preview health events, technical detail is available on demand, and the separately built private-source Desktop binaries continue to use the hosted profile and quota without embedding operator keys.
 
-The runtime-node path provisions per-project Ubuntu CLI users, private workspace directories, and PostgreSQL databases from `/workspace-setup`. Treat this as server-side infrastructure, not a browser shortcut. Steady-state provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
+The local runtime provisions a restricted PostgreSQL role/database for every project before its first command. `/workspace-setup` additionally provisions per-project Ubuntu CLI users and private workspace directories on an optional runtime node. Treat both paths as server-side infrastructure, not browser shortcuts. Steady-state remote provisioning must use the non-root `bolt-runtime-agent` SSH key path; root/password access is bootstrap-only and should be rotated after verification.
 
 ## Operating Principles
 
@@ -60,9 +60,10 @@ Never force-push shared branches unless explicitly approved.
 
 Preserve these behaviors unless the user explicitly asks to change them:
 
-- Separate `Chat` and `Workspace` tabs.
-- Full chat composer in `Chat`.
-- Compact follow-up prompt in `Workspace`.
+- Chat-first landing that transitions into one persistent Agent Mode after the first prompt.
+- Desktop Agent Mode keeps conversation and the compact follow-up prompt beside a dominant Code/Preview workspace.
+- Mobile Agent Mode has an explicit Agent/App view switch and keeps the prompt mounted.
+- Agent state changes never force navigation between conversation, Code, or Preview.
 - Live commentary feed plus technical execution transparency.
 - Server-first hosted runtime for install, build, test, preview, and file sync.
 - Preview auto-recovery via server-side health checks.
@@ -71,8 +72,8 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - First-party Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs verified through real Vite/Chromium Preview in CI.
 - One-client / one-instance managed Cloudflare trial flow.
 - Dedicated runtime-node Live Workspaces setup flow at `/workspace-setup`.
-- Automatic runtime-node CLI/database workspaces for normal hosted chat-created projects.
-- OpenWeb.Software FREE publishing to `https://{subdomain}.bolt.gives`, direct Cloudflare Pages deployment, and Custom Domain hosting at the `$5/month` launch price.
+- Automatic local PostgreSQL isolation for every hosted project plus optional runtime-node CLI workspaces.
+- Cloudflare Pages/Worker publishing to `https://{subdomain}.instances.bolt.gives` and Custom Domain hosting at the `$5/month` launch price.
 - Private operator panel with client profiles, fleet state, email activity, and bug reports.
 - Interactive Linux self-host installer with local PostgreSQL and Caddy HTTPS support.
 - Profile-owned browser history, with guest and other-account projects isolated on shared devices.
@@ -80,7 +81,7 @@ Preserve these behaviors unless the user explicitly asks to change them:
 - Account-level Stripe Checkout and signed-webhook Custom Domain activation, with 10,000 provider-reported tokens per paid month.
 - Private-source Windows, Debian, and AppImage Desktop binaries that connect to the hosted service and inherit the same profile/quota rules without embedded server credentials.
 
-## v3.6.0 Priorities
+## v4.1.0 Priorities
 
 - Continue prompt-to-preview reliability measurement for first generation and follow-up prompts.
 - History-aware project continuation using runtime snapshots and current workspace state.
@@ -130,11 +131,12 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 - Client runtime-node CLI/database passwords are one-time handoff values; store only hashes/metadata.
 - Stripe secret keys must stay server-side only; browsers may receive Checkout URLs and publishable-key metadata only.
 - Redact sensitive values from screenshots, logs, commits, release notes, and issue comments.
+- Keep local project-database passwords in mode-`0600` server records only; never copy them into browser state, generated source, or Cloudflare artifacts.
 
 ## Runtime Node Rules
 
-- `/workspace-setup` must create one Unix user, one private workspace directory, and one PostgreSQL database/role per project.
-- Normal hosted projects must auto-provision the same per-project runtime-node workspace in the background.
+- Every normal hosted project must receive one restricted local PostgreSQL database/role before its first command.
+- `/workspace-setup` must create one Unix user and private workspace directory per remote project; normal hosted projects may provision the same optional runtime-node CLI workspace in the background.
 - Client-selected usernames must be safe Linux usernames and must not collide with reserved system accounts.
 - The provisioning path must run on the server side through runtime-control; never call SSH from the browser.
 - Prefer SSH keys and a non-root `bolt-runtime` agent after initial bootstrap. Root/password access is only for setup or approved emergency repair.
@@ -142,7 +144,7 @@ For docs-only release work, validate the changed Markdown, confirm the tag/relea
 
 ## Project Publishing Rules
 
-- Free publishing uses `https://{subdomain}.bolt.gives`.
+- Free publishing uses a persistent Cloudflare Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`.
 - Reserved operational subdomains such as `admin`, `create`, `alpha1`, and `ahmad` must not be assigned to users.
 - Custom Domain hosting uses a `$5/month` launch promotion, presented as a `$20/month` value, through server-side Stripe Checkout and signed webhook fulfillment.
 - Users must receive clear DNS guidance: create an `A` record pointing to the configured bolt.gives server IP.

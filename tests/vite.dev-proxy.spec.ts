@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeProductVersion, shouldEnableCloudflareDevProxy } from '../vite.config';
+import packageJson from '../package.json';
 
 describe('shouldEnableCloudflareDevProxy', () => {
   it('enables the Cloudflare dev proxy only for non-test serve sessions', () => {
@@ -13,5 +14,12 @@ describe('normalizeProductVersion', () => {
   it('renders package prerelease patch versions as product release versions', () => {
     expect(normalizeProductVersion('3.0.9-24')).toBe('3.0.9.24');
     expect(normalizeProductVersion('3.1.0')).toBe('3.1.0');
+  });
+
+  it('uses the checked-in release when deployment metadata is stale', () => {
+    const staleDeploymentVersion = '1.0.1';
+
+    expect(normalizeProductVersion()).toBe(packageJson.version);
+    expect(normalizeProductVersion()).not.toBe(staleDeploymentVersion);
   });
 });

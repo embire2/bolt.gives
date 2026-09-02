@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-31
+Last updated: 2026-09-02
 
 Status legend:
 
@@ -10,11 +10,11 @@ Status legend:
 
 Current stable release:
 
-- [x] `v3.5.0`
+- [x] `v4.0.0`
 
 Next release target:
 
-- [~] `v3.6.0`
+- [~] `v4.1.0`
 
 Independent Desktop release:
 
@@ -38,15 +38,31 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
-## v3.6.0 - In Progress
+## v4.1.0 - In Progress
 
-Release theme: complete Custom Domain account lifecycle, deepen operator-visible resource controls, and continue runtime and installer hardening.
+Release theme: continue the previously planned v3.6 hardening track after the v4 Agent Mode release, complete Custom Domain account lifecycle, deepen operator-visible resource controls, and continue runtime and installer hardening.
 
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v3.5.0 initial-route budget.
+- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v4.0.0 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v4.0.0 - Shipped
+
+Release theme: replace competing Chat and Workspace navigation with one focused Agent Mode for planning, building, inspecting, and iterating.
+
+- [x] Enter Agent Mode automatically after the first prompt on both new and restored projects.
+- [x] Keep the conversation and compact follow-up composer beside a dominant Code/Preview workspace on desktop.
+- [x] Keep the prompt mounted while mobile users switch explicitly between Agent and App views.
+- [x] Let users choose Agent, Plan first, or Run plan and switch hosted FREE models without losing project context.
+- [x] Preserve a user's Code selection while Preview health and recovery state changes in the background.
+- [x] Keep commentary visible and place verbose technical execution details behind an on-demand disclosure.
+- [x] Remove pulsing loading treatments and automatic surface switching that made active runs flash or jump.
+- [x] Fix production SSR startup when the profile-auth module is imported, keep the checked-in release version authoritative, and prefer the managed FREE provider for new profiles.
+- [x] Provision one restricted local PostgreSQL role/database per hosted project before its first command without exposing credentials to the browser or Cloudflare artifact.
+- [x] Publish generated production builds through Cloudflare Pages advanced-mode Workers at `*.instances.bolt.gives`, with deep-link, asset, public-host, and restart-persistence verification.
+- [x] Repair safe Vite entry assets omitted from build output, reject private/missing deployment assets, and preserve deterministic Cloudflare project identity across runtime restarts.
 
 ## v3.5.0 - Shipped
 

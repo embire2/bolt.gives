@@ -161,22 +161,17 @@ class ActionCommandError extends Error {
   readonly _header: string;
 
   constructor(message: string, output: string) {
-    // Create a formatted message that includes both the error message and output
     const formattedMessage = `Failed To Execute Shell Command: ${message}\n\nOutput:\n${output}`;
     super(formattedMessage);
 
-    // Set the output separately so it can be accessed programmatically
     this._header = message;
     this._output = output;
 
-    // Maintain proper prototype chain
     Object.setPrototypeOf(this, ActionCommandError.prototype);
 
-    // Set the name of the error for better debugging
     this.name = 'ActionCommandError';
   }
 
-  // Optional: Add a method to get just the terminal output
   get output() {
     return this._output;
   }
@@ -226,6 +221,7 @@ export class ActionRunner {
     onDeployAlert?: (alert: DeployAlert) => void,
     onStepRunnerEvent?: (event: InteractiveStepRunnerEvent) => void,
     getRuntimeShellTerminal?: () => BoltShell,
+    private readonly _hasReadyPreview?: () => boolean,
   ) {
     this.#webcontainer = webcontainerPromise;
     this.#shellTerminal = getShellTerminal;
@@ -665,7 +661,6 @@ export class ActionRunner {
           try {
             await this.handleSupabaseAction(action as SupabaseAction);
           } catch (error: any) {
-            // Update action status
             this.#updateAction(actionId, {
               status: 'failed',
               error: error instanceof Error ? error.message : 'Supabase action failed',
@@ -679,17 +674,25 @@ export class ActionRunner {
         case 'build': {
           const buildOutput = await this.#runBuildAction(action);
 
-          // Store build output for deployment
           this.buildOutput = buildOutput;
           break;
         }
         case 'start': {
+          if (!isHostedRuntimeEnabled() && this._hasReadyPreview?.()) {
+            this.onStepRunnerEvent?.({
+              type: 'telemetry',
+              timestamp: new Date().toISOString(),
+              description: 'Healthy Preview reused',
+              output: `Skipped duplicate local start: ${action.content}`,
+            });
+            break;
+          }
+
           if (isHostedRuntimeEnabled()) {
             await this.#runStartAction(actionId, action);
             break;
           }
 
-          // making the local start app non blocking
           this.#runStartAction(actionId, action)
             .then(() => this.#updateAction(actionId, { status: 'complete' }))
             .catch((err: Error) => {
@@ -713,10 +716,6 @@ export class ActionRunner {
               });
             });
 
-          /*
-           * adding a delay to avoid any race condition between 2 start actions
-           * i am up for a better approach
-           */
           await new Promise((resolve) => setTimeout(resolve, 2000));
 
           return;

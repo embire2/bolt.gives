@@ -497,6 +497,36 @@ describe('workbenchStore file actions', () => {
     expect(workbenchStore.showWorkbench.get()).toBe(true);
   });
 
+  it('reuses a healthy Preview instead of dispatching a duplicate runtime handoff', async () => {
+    const addArtifact = vi.spyOn(workbenchStore, 'addArtifact');
+    workbenchStore.currentView.set('code');
+    workbenchStore.previews.set([
+      {
+        port: 5173,
+        ready: true,
+        baseUrl: 'https://preview.localhost',
+      },
+    ]);
+
+    await workbenchStore.dispatchSyntheticRuntimeHandoff({
+      handoffId: 'handoff-ready',
+      messageId: 'message-ready',
+      setupCommand: 'pnpm install',
+      startCommand: 'pnpm run dev',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(addArtifact).not.toHaveBeenCalled();
+    expect(workbenchStore.currentView.get()).toBe('code');
+    expect(workbenchStore.showWorkbench.get()).toBe(true);
+    expect(workbenchStore.interactiveStepEvents.get()).toContainEqual(
+      expect.objectContaining({
+        type: 'telemetry',
+        description: 'Workspace runtime handoff reused healthy Preview',
+      }),
+    );
+  });
+
   it('bootstraps missing Vite manifest files before a synthetic runtime handoff starts a React app', async () => {
     const runnerActions: Record<string, any> = {};
     const addAction = vi.fn().mockImplementation(async (data: ActionCallbackData) => {

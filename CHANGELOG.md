@@ -45,6 +45,44 @@
 - Passed 49 native action, policy, persistence, streaming, Preview, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, verifies automatic rollback, and proves the legacy updater relaunches a native top-level window before publishing v1.10.2 artifacts.
 - On a Windows Server RDP host, created and improved a focus-timer project with ChatGPT-5.6 SOL, verified interactive embedded Preview and terminal behavior, switched models without losing history, restarted with the same chat/files/runtime, and deployed the result through both FREE subdomain and protected Cloudflare paths.
 
+## v4.0.0 (2026-09-02)
+
+### Added
+
+- Added unified Agent Mode after the first prompt, with a persistent conversation, compact follow-up composer, and dominant Code/Preview workspace on desktop.
+- Added an explicit mobile Agent/App switch that keeps the follow-up composer mounted and reserves its measured height as queued prompts expand.
+- Added compact Agent, Plan first, and Run plan controls plus in-session hosted FREE model switching without resetting project context.
+- Added automatic first-command PostgreSQL provisioning for every hosted project. Each runtime session receives a deterministic database and restricted login, while credentials remain in mode-`0600` server storage and are injected only into project commands and Preview processes.
+- Added durable project publishing through Cloudflare Pages advanced-mode Workers at `https://{subdomain}.instances.bolt.gives`, including production builds, deep-link fallback, DNS/Caddy activation, health verification, and project-database metadata.
+
+### Changed
+
+- Replaced competing Chat and Workspace product tabs with one continuous project surface. Landing remains chat-first; active and restored projects enter Agent Mode automatically.
+- Kept runtime commentary in the conversation while moving verbose execution diagnostics behind an on-demand technical-details disclosure.
+- Made the checked-in package version the authoritative build version so stale deployment environment metadata cannot mislabel the running UI.
+- Extended the interactive Linux installer to create a non-superuser PostgreSQL provisioner with only `CREATEDB`/`CREATEROLE`, lock down the application database, and configure isolated project databases automatically.
+
+### Fixed
+
+- Prevented streaming, recovery, or Preview-ready transitions from remounting the project surface or navigating users away from Code.
+- Removed pulsing loading behavior from the active project path and kept repair state as stable plain-language status instead of a flashing surface transition.
+- Removed an executable shebang from the importable profile-auth module, fixing a production SSR `Invalid or unexpected token` failure that returned HTTP 500 on `/chat`.
+- Preferred the managed FREE provider for a new profile even when local relay discovery is unavailable, instead of unexpectedly selecting a configured personal provider.
+- Reused a healthy Preview instead of dispatching duplicate setup/start actions, and normalized environment-prefixed npm/npx/yarn commands without losing their environment assignments.
+- Accepted valid static Vite applications instead of inventing a missing React `src/main.tsx` error during first-pass Preview validation.
+- Recovered safe entry assets omitted by a static Vite build, rejected missing/private referenced assets, and limited Worker SPA fallback to HTML navigation so JavaScript can never be returned with an HTML MIME type.
+- Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
+
+### Security
+
+- Kept application and project-database administrator credentials out of browser payloads, generated source, deployment artifacts, logs, and Cloudflare Pages. Project clients receive only redacted connection status; build-time database access stays server-side.
+
+### Validation
+
+- Added Agent Mode layout, compact composer, model-switching, mobile navigation, Code-selection, profile-auth SSR, release-version, FREE-provider-selection, PostgreSQL isolation, static-build asset, Worker fallback, and restart-identity regression coverage.
+- Passed typecheck, lint, 1,133 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
+- Published the generated Pulseboard app to a real Cloudflare Pages Worker, verified root and deep-link HTTP 200 responses, JavaScript MIME correctness, zero browser-console errors, dedicated PostgreSQL persistence, and continued availability after Preview and runtime shutdown.
+
 ## v3.5.0 (2026-08-30)
 
 ### Added

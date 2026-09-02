@@ -96,6 +96,18 @@ describe('model-selection utilities', () => {
     expect(preferred).toBe('FREE');
   });
 
+  it('treats a credential-free hosted provider as usable when its relay metadata is unavailable', () => {
+    const preferred = pickPreferredProviderName({
+      activeProviderNames: ['FREE', 'Anthropic'],
+      apiKeys: {},
+      configuredProviderNames: ['Anthropic'],
+      credentialFreeProviderNames: ['FREE'],
+      fallbackProviderName: 'FREE',
+    });
+
+    expect(preferred).toBe('FREE');
+  });
+
   it('prefers an env-configured provider over local fallback during bootstrap', () => {
     const preferred = pickPreferredProviderName({
       activeProviderNames: ['OpenAI', 'LMStudio'],

@@ -18,6 +18,7 @@ import {
   buildPreviewRepairPage,
   buildFreeUsageQuotaDecision,
   calculateFreeAgentTokenCharge,
+  caddySnippetForProjectHost,
   buildManagedInstanceDeployArgs,
   buildManagedInstanceDeployArtifactDecision,
   buildManagedInstanceSecretValues,
@@ -53,6 +54,7 @@ import {
   repairUnsafeJsxTextEntities,
   resolveStalePreviewRedirectPath,
   recordPreviewResponse,
+  recoverMissingCloudflareEntryAssets,
   releaseReservedPreviewPorts,
   releaseRuntimeNodeDatabasePorts,
   retainSessionPreviewPortForRecovery,
@@ -151,6 +153,55 @@ describe('runtime server workspace isolation', () => {
     expect(authorizeFreeUsageQuotaSecret('quota-secret', 'quota-secret')).toBe(true);
     expect(authorizeFreeUsageQuotaSecret('relay-secret', 'quota-secret')).toBe(false);
     expect(authorizeFreeUsageQuotaSecret('', 'quota-secret')).toBe(false);
+  });
+
+  it('routes durable project hostnames to Cloudflare Pages without accepting arbitrary upstreams', () => {
+    const cloudflare = caddySnippetForProjectHost('calendar.instances.bolt.gives', {
+      upstreamUrl: 'https://bolt-calendar.pages.dev',
+    });
+    const rejected = caddySnippetForProjectHost('calendar.instances.bolt.gives', {
+      upstreamUrl: 'https://attacker.example/internal',
+    });
+
+    expect(cloudflare).toContain('reverse_proxy https://bolt-calendar.pages.dev');
+    expect(cloudflare).toContain('header_up Host bolt-calendar.pages.dev');
+    expect(cloudflare).not.toContain('no-store');
+    expect(rejected).toContain('reverse_proxy 127.0.0.1:4321');
+    expect(rejected).not.toContain('attacker.example');
+  });
+
+  it('recovers entry assets omitted by a static Vite build without copying secrets', async () => {
+    const workspaceDirectory = await makeTempDir('bolt-cloudflare-assets-');
+    const sourceDirectory = path.join(workspaceDirectory, 'dist');
+    const stagingDirectory = path.join(workspaceDirectory, 'staging');
+    await fs.mkdir(sourceDirectory, { recursive: true });
+    await fs.mkdir(stagingDirectory, { recursive: true });
+    await fs.writeFile(path.join(workspaceDirectory, 'app.js'), 'window.ready = true;');
+    await fs.writeFile(path.join(stagingDirectory, 'index.html'), '<script src="/app.js"></script>');
+
+    const recovered = await recoverMissingCloudflareEntryAssets({
+      workspaceDirectory,
+      sourceDirectory,
+      stagingDirectory,
+    });
+
+    expect(recovered).toEqual({ entryAssetPaths: ['app.js'], recoveredAssets: ['app.js'] });
+    expect(await fs.readFile(path.join(stagingDirectory, 'app.js'), 'utf8')).toContain('ready');
+  });
+
+  it('refuses to publish an entry point that references a private asset', async () => {
+    const workspaceDirectory = await makeTempDir('bolt-cloudflare-private-assets-');
+    const sourceDirectory = path.join(workspaceDirectory, 'dist');
+    const stagingDirectory = path.join(workspaceDirectory, 'staging');
+    await fs.mkdir(sourceDirectory, { recursive: true });
+    await fs.mkdir(stagingDirectory, { recursive: true });
+    await fs.writeFile(path.join(workspaceDirectory, '.env.local'), 'SECRET=hidden');
+    await fs.writeFile(path.join(stagingDirectory, 'index.html'), '<script src="/.env.local"></script>');
+
+    await expect(
+      recoverMissingCloudflareEntryAssets({ workspaceDirectory, sourceDirectory, stagingDirectory }),
+    ).rejects.toThrow('references blocked private assets');
+    await expect(fs.stat(path.join(stagingDirectory, '.env.local'))).rejects.toThrow();
   });
 
   it('resets hosted FREE usage at midnight GMT+2', () => {
@@ -975,6 +1026,46 @@ describe('runtime server workspace isolation', () => {
     resolveProvisioning();
   });
 
+  it('waits for the local project database on the first command and injects only project credentials', async () => {
+    const events: Array<{ type: string; message?: string }> = [];
+    const projectDatabase = {
+      databaseName: 'bolt_project_1234567890abcdef1234',
+      databaseUser: 'bp_1234567890abcdef1234',
+      databasePassword: 'project-only-secret',
+      host: '127.0.0.1',
+      port: 5432,
+      sslMode: 'disable',
+    };
+    const ensureProjectDatabaseFn = vi.fn(async () => projectDatabase);
+    const session = {
+      id: 'first-command-database-session',
+      projectDatabase: null,
+      projectDatabaseRetryAt: 0,
+      projectDatabaseLastError: null as string | null,
+      previewSubscribers: new Set(),
+    };
+
+    const environment = await resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
+      projectDatabaseConfig: { supported: true },
+      ensureProjectDatabaseFn,
+      config: { supported: false },
+      writeEvent: (event: { type: string; message?: string }) => events.push(event),
+    });
+
+    expect(ensureProjectDatabaseFn).toHaveBeenCalledOnce();
+    expect(environment).toMatchObject({
+      PGDATABASE: projectDatabase.databaseName,
+      PGUSER: projectDatabase.databaseUser,
+      PGPASSWORD: projectDatabase.databasePassword,
+      PGHOST: '127.0.0.1',
+    });
+    expect(environment.DATABASE_URL).toContain('project-only-secret');
+    expect(events.map((event) => event.message)).toEqual([
+      "Creating this project's dedicated PostgreSQL database",
+      'Dedicated PostgreSQL database connected to this project',
+    ]);
+  });
+
   it('degrades a failed database tunnel without failing the hosted command', async () => {
     const events: Array<{ type: string; message?: string }> = [];
     const session = {
@@ -1235,6 +1326,29 @@ describe('runtime server workspace isolation', () => {
     });
     expect(JSON.stringify(state)).not.toContain('private-database-password');
     expect(JSON.stringify(state)).not.toContain('5100');
+  });
+
+  it('prefers the durable local project database in client-visible state', () => {
+    const state = buildRuntimeNodeDatabaseStateForClient({
+      projectDatabase: {
+        databaseName: 'bolt_project_local',
+        databaseUser: 'bp_local',
+        databasePassword: 'server-only-local-password',
+      },
+      runtimeNodeDatabase: {
+        databaseName: 'remote_fallback',
+        databaseUser: 'remote_user',
+        databasePassword: 'server-only-remote-password',
+      },
+    });
+
+    expect(state).toEqual({
+      status: 'connected',
+      databaseName: 'bolt_project_local',
+      databaseUser: 'bp_local',
+      persistence: 'durable',
+    });
+    expect(JSON.stringify(state)).not.toContain('server-only');
   });
 
   it('treats repeated hosted workspace snapshots as no-op mutations', () => {
@@ -1745,6 +1859,28 @@ describe('runtime server workspace isolation', () => {
 
     expect(result.healthy).toBe(false);
     expect(result.alert?.description).toContain('src/main.tsx');
+  });
+
+  it('accepts a valid static Vite entry without inventing a React main.tsx requirement', () => {
+    const alert = buildHostedWorkspaceBootstrapAlert({
+      '/home/project/package.json': {
+        type: 'file',
+        content: JSON.stringify({ scripts: { dev: 'vite' }, devDependencies: { vite: '5.4.21' } }),
+        isBinary: false,
+      },
+      '/home/project/index.html': {
+        type: 'file',
+        content: '<!doctype html><html><body><main>Ready</main><script src="/app.js"></script></body></html>',
+        isBinary: false,
+      },
+      '/home/project/app.js': {
+        type: 'file',
+        content: 'document.body.dataset.ready = "true";',
+        isBinary: false,
+      },
+    });
+
+    expect(alert).toBeNull();
   });
 
   it('probes the Vite entry module before treating the preview as healthy', async () => {

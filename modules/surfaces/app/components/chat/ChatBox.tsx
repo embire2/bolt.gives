@@ -27,6 +27,7 @@ const LazyApiKeyManager = lazy(() => import('./APIKeyManager').then((module) => 
 const LazyWebSearch = lazy(() => import('./WebSearch.client').then((module) => ({ default: module.WebSearch })));
 
 interface ChatBoxProps {
+  variant?: 'full' | 'agent';
   isModelSettingsCollapsed: boolean;
   setIsModelSettingsCollapsed: (collapsed: boolean) => void;
   provider: any;
@@ -79,6 +80,305 @@ interface ChatBoxProps {
   setAutonomyMode?: (mode: AutonomyMode) => void;
 }
 
+function AgentChatBox(props: ChatBoxProps) {
+  const hasPromptDraft = props.input.trim().length > 0 || props.uploadedFiles.length > 0;
+  const freeModels = props.provider?.name === 'FREE' ? props.provider.staticModels || [] : [];
+  const selectedFreeModel = freeModels.some((entry: { name: string }) => entry.name === props.model)
+    ? props.model
+    : freeModels[0]?.name;
+  const selectedModelLabel =
+    props.modelList.find(
+      (entry: { name: string; provider: string }) =>
+        entry.name === props.model && entry.provider === props.provider?.name,
+    )?.label ||
+    props.provider?.staticModels?.find((entry: { name: string }) => entry.name === props.model)?.label ||
+    props.model ||
+    'Model';
+  const mode = props.agentMode || 'chat';
+  const autonomyLabel = getAutonomyModeLabel(props.autonomyMode || 'auto-apply-safe');
+
+  const cycleAutonomyMode = () => {
+    const next = getNextAutonomyMode(props.autonomyMode || 'auto-apply-safe');
+    props.setAutonomyMode?.(next);
+    toast.info(`Autonomy mode: ${getAutonomyModeLabel(next)}`);
+  };
+
+  return (
+    <div
+      data-testid="agent-compact-composer"
+      className="relative mx-auto w-full rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-2 shadow-lg"
+    >
+      <FilePreview
+        files={props.uploadedFiles}
+        imageDataList={props.imageDataList}
+        onRemove={(index) => {
+          props.setUploadedFiles?.(props.uploadedFiles.filter((_, fileIndex) => fileIndex !== index));
+          props.setImageDataList?.(props.imageDataList.filter((_, fileIndex) => fileIndex !== index));
+        }}
+      />
+      <ClientOnly>
+        {() => (
+          <ScreenshotStateManager
+            setUploadedFiles={props.setUploadedFiles}
+            setImageDataList={props.setImageDataList}
+            uploadedFiles={props.uploadedFiles}
+            imageDataList={props.imageDataList}
+          />
+        )}
+      </ClientOnly>
+
+      {props.selectedElement ? (
+        <div className="mb-1.5 flex items-center justify-between gap-2 rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 py-1 text-[11px] text-bolt-elements-textSecondary">
+          <span className="truncate">
+            Editing <code className="text-bolt-elements-textPrimary">{props.selectedElement.tagName}</code>
+          </span>
+          <button
+            type="button"
+            className="shrink-0 text-bolt-elements-textPrimary hover:text-accent-500"
+            onClick={() => props.setSelectedElement?.(null)}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
+
+      <div className="modern-scrollbar mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+        <label className="shrink-0">
+          <span className="sr-only">Agent behavior</span>
+          <select
+            aria-label="Agent behavior"
+            className="h-8 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 text-xs font-medium text-bolt-elements-textPrimary outline-none focus:border-bolt-elements-focus"
+            value={mode}
+            disabled={props.isStreaming}
+            onChange={(event) => props.setAgentMode?.(event.target.value as 'chat' | 'plan' | 'act')}
+          >
+            <option value="chat">Agent</option>
+            <option value="plan">Plan first</option>
+            <option value="act">Run plan</option>
+          </select>
+        </label>
+
+        {freeModels.length > 1 ? (
+          <label className="min-w-[132px] flex-1">
+            <span className="sr-only">FREE coding model</span>
+            <select
+              aria-label="FREE coding model"
+              title="Change the model for the next prompt without losing project context"
+              className="h-8 w-full rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 text-xs font-medium text-bolt-elements-textPrimary outline-none focus:border-bolt-elements-focus"
+              value={selectedFreeModel}
+              onChange={(event) => props.setModel?.(event.target.value)}
+            >
+              {freeModels.map((freeModel: { name: string; label: string }) => (
+                <option key={freeModel.name} value={freeModel.name}>
+                  {freeModel.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span
+            className="min-w-0 flex-1 truncate rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 py-1.5 text-xs text-bolt-elements-textSecondary"
+            title={`${props.provider?.label || props.provider?.name || 'Provider'} / ${selectedModelLabel}`}
+          >
+            {props.provider?.label || props.provider?.name || 'Provider'} / {selectedModelLabel}
+          </span>
+        )}
+
+        <IconButton title="Upload file" className="shrink-0 transition-all" onClick={props.handleFileUpload}>
+          <div className="i-ph:paperclip text-lg" />
+        </IconButton>
+
+        <ClientOnly>
+          {() => (
+            <Suspense fallback={null}>
+              <LazyWebSearch
+                onSearchResult={(result) => props.onWebSearchResult?.(result)}
+                disabled={props.isStreaming}
+              />
+            </Suspense>
+          )}
+        </ClientOnly>
+
+        <details className="group relative shrink-0">
+          <summary
+            aria-label="Open agent tools"
+            title="Agent tools and provider settings"
+            className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 text-bolt-elements-textSecondary hover:border-bolt-elements-focus hover:text-bolt-elements-textPrimary [&::-webkit-details-marker]:hidden"
+          >
+            <span className="i-ph:dots-three-outline-fill text-lg" aria-hidden="true" />
+          </summary>
+          <div className="absolute bottom-10 right-0 z-[260] max-h-[55vh] w-[min(26rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-3 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold text-bolt-elements-textPrimary">Agent tools</div>
+                <div className="text-[11px] text-bolt-elements-textTertiary">
+                  Secondary controls stay out of the workspace.
+                </div>
+              </div>
+              <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-[10px] text-bolt-elements-textSecondary">
+                {autonomyLabel}
+              </span>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-1 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-2">
+              <ColorSchemeDialog designScheme={props.designScheme} setDesignScheme={props.setDesignScheme} />
+              <McpTools />
+              <SketchCanvas onChange={props.onSketchChange} />
+              <IconButton
+                title="Enhance prompt"
+                disabled={props.input.length === 0 || props.enhancingPrompt}
+                onClick={() => {
+                  props.enhancePrompt?.();
+                  toast.success('Prompt enhanced!');
+                }}
+              >
+                <div
+                  className={
+                    props.enhancingPrompt
+                      ? 'i-svg-spinners:90-ring-with-bg animate-spin text-lg'
+                      : 'i-bolt:stars text-lg'
+                  }
+                />
+              </IconButton>
+              <SpeechRecognitionButton
+                isListening={props.isListening}
+                onStart={props.startListening}
+                onStop={props.stopListening}
+                disabled={props.isStreaming}
+              />
+              <IconButton title={`Autonomy: ${autonomyLabel}`} disabled={props.isStreaming} onClick={cycleAutonomyMode}>
+                <div className="i-ph:shield-check text-lg" />
+              </IconButton>
+              <IconButton
+                title={props.chatMode === 'discuss' ? 'Return to build prompts' : 'Discuss without changing files'}
+                disabled={props.isStreaming}
+                onClick={() => props.setChatMode?.(props.chatMode === 'discuss' ? 'build' : 'discuss')}
+              >
+                <div className="i-ph:chats text-lg" />
+              </IconButton>
+              <IconButton title="Save session" disabled={props.isStreaming} onClick={() => props.onSaveSession?.()}>
+                <div className="i-ph:floppy-disk text-lg" />
+              </IconButton>
+              <IconButton title="Resume session" disabled={props.isStreaming} onClick={() => props.onResumeSession?.()}>
+                <div className="i-ph:clock-counter-clockwise text-lg" />
+              </IconButton>
+              <IconButton title="Share session" disabled={props.isStreaming} onClick={() => props.onShareSession?.()}>
+                <div className="i-ph:share-network text-lg" />
+              </IconButton>
+            </div>
+
+            <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-2">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-bolt-elements-textSecondary">
+                Provider and model
+              </div>
+              <Suspense
+                fallback={<div className="py-2 text-xs text-bolt-elements-textTertiary">Loading model controls...</div>}
+              >
+                <LazyModelSelector
+                  key={`${props.provider?.name}:${props.modelList.length}:agent`}
+                  model={props.model}
+                  setModel={props.setModel}
+                  modelList={props.modelList}
+                  provider={props.provider}
+                  setProvider={props.setProvider}
+                  onProviderSelection={props.onProviderSelection}
+                  providerList={props.providerList || (PROVIDER_LIST as ProviderInfo[])}
+                  apiKeys={props.apiKeys}
+                  modelLoading={props.isModelLoading}
+                />
+              </Suspense>
+              {(props.providerList || []).length > 0 &&
+              props.provider &&
+              !LOCAL_PROVIDERS.includes(props.provider.name) &&
+              props.provider.allowsUserApiKey !== false ? (
+                <Suspense fallback={null}>
+                  <LazyApiKeyManager
+                    provider={props.provider}
+                    apiKey={props.apiKeys[props.provider.name] || ''}
+                    setApiKey={(key) => props.onApiKeysChange(props.provider.name, key)}
+                  />
+                </Suspense>
+              ) : null}
+            </div>
+            <div className="mt-2">
+              <SupabaseConnection />
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div className="relative flex items-end gap-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-1.5 focus-within:border-bolt-elements-focus">
+        <textarea
+          ref={props.textareaRef}
+          className="modern-scrollbar block max-h-24 min-h-[40px] min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-bolt-elements-textPrimary outline-none placeholder:text-bolt-elements-textTertiary"
+          value={props.input}
+          onChange={(event) => props.handleInputChange?.(event)}
+          onPaste={props.handlePaste}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey) {
+              return;
+            }
+
+            event.preventDefault();
+
+            if (event.nativeEvent.isComposing) {
+              return;
+            }
+
+            if (props.isStreaming && !hasPromptDraft) {
+              props.handleStop?.();
+              return;
+            }
+
+            if (hasPromptDraft) {
+              props.handleSendMessage(event);
+            }
+          }}
+          placeholder={
+            mode === 'plan'
+              ? 'Describe what the agent should plan...'
+              : mode === 'act'
+                ? 'Run or refine the approved plan...'
+                : 'Ask the agent to build or change anything...'
+          }
+          rows={1}
+          translate="no"
+        />
+        <button
+          type="button"
+          aria-label={props.isStreaming && !hasPromptDraft ? 'Stop generation' : 'Send prompt'}
+          title={props.isStreaming && !hasPromptDraft ? 'Stop generation' : 'Send prompt'}
+          className={classNames(
+            'mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors',
+            hasPromptDraft
+              ? 'border-accent-500 bg-accent-500 text-white hover:brightness-95'
+              : props.isStreaming
+                ? 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary'
+                : 'border-bolt-elements-borderColor text-bolt-elements-textTertiary',
+          )}
+          disabled={!hasPromptDraft && !props.isStreaming}
+          onClick={(event) => {
+            if (props.isStreaming && !hasPromptDraft) {
+              props.handleStop?.();
+              return;
+            }
+
+            if (hasPromptDraft) {
+              props.handleSendMessage(event);
+            }
+          }}
+        >
+          <span
+            className={props.isStreaming && !hasPromptDraft ? 'i-ph:stop-fill' : 'i-ph:arrow-up-bold'}
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+      <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} />
+    </div>
+  );
+}
+
 export const ChatBox: React.FC<ChatBoxProps> = (props) => {
   const hasPromptDraft = props.input.trim().length > 0 || props.uploadedFiles.length > 0;
   const freeModels = props.provider?.name === 'FREE' ? props.provider.staticModels || [] : [];
@@ -92,6 +392,10 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
     )?.label ||
     props.provider?.staticModels?.find((entry: { name: string }) => entry.name === props.model)?.label ||
     props.model;
+
+  if (props.variant === 'agent') {
+    return <AgentChatBox {...props} />;
+  }
 
   return (
     <div

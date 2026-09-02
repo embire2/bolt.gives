@@ -32,24 +32,24 @@ export function useOpenWebDeploy() {
   const handleOpenWebDeploy = async () => {
     try {
       const sessionId = requireHostedRuntimeSession();
-      const subdomain = window.prompt('Choose a free shareable bolt.gives subdomain:', defaultProjectName());
+      const subdomain = window.prompt('Choose a free shareable instances.bolt.gives subdomain:', defaultProjectName());
 
       if (!subdomain) {
         return false;
       }
 
       setIsDeploying(true);
-      toast.info('OpenWeb.Software is publishing your project and preparing HTTPS.');
+      toast.info('Building your production app on Cloudflare Pages & Workers and preparing HTTPS.');
 
       const result = await publishHostedRuntimeProject({ sessionId, subdomain });
       const url = result.deployment.url || `https://${result.deployment.hostname}`;
 
-      toast.success(`Published to ${url}`);
+      toast.success(`Cloudflare Pages & Workers published your app to ${url}`);
       window.open(url, '_blank', 'noopener,noreferrer');
 
       return result;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'OpenWeb.Software deployment failed.');
+      toast.error(error instanceof Error ? error.message : 'Cloudflare FREE deployment failed.');
       return false;
     } finally {
       setIsDeploying(false);
@@ -78,13 +78,13 @@ export function useCloudflareDeploy() {
       toast.info('Building the production artifact and deploying it to Cloudflare Pages.');
 
       const result = await deployHostedRuntimeProjectToCloudflare({ sessionId, projectName });
-      const url = result.deployment.deploymentUrl || result.deployment.pagesUrl;
+      const url = result.deployment.url || result.deployment.deploymentUrl || result.deployment.pagesUrl;
 
       if (!url) {
         throw new Error('Cloudflare completed without returning a deployment URL.');
       }
 
-      toast.success(`Cloudflare deployment is live at ${url}`);
+      toast.success(`Cloudflare Pages & Workers is live at ${url}`);
       window.open(url, '_blank', 'noopener,noreferrer');
 
       return result;

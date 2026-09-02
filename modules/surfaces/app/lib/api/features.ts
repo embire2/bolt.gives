@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v4.0.0',
+    name: 'v4.0.0 unified Agent Mode',
+    description:
+      'Every project prompt now opens one persistent Agent Mode with the conversation and compact composer beside a dominant Code/Preview workspace. Build, Plan first, Run plan, and FREE model switching stay available without losing project context, while repair and technical activity remain visible without taking over the workspace.',
+    releaseDate: '2026-09-02',
+  },
+  {
     id: 'release-v3.5.0',
     name: 'v3.5.0 reliable FREE generation and first-pass Preview packs',
     description:

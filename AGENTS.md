@@ -6,8 +6,8 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v3.5.0`
-- In progress: `v3.6.0`
+- Stable: `v4.0.0`
+- In progress: `v4.1.0`
 - Desktop stable: `v1.10.2`
 
 Core rule: do not ship hidden behavior. If the agent takes action, the user must be able to see what happened, why it happened, and what the next step is.
@@ -39,8 +39,9 @@ Branch policy:
 
 The current hosted product baseline is:
 
-- Chat-first landing surface
-- Separate `Chat` and `Workspace` tabs
+- Chat-first landing surface that transitions into one persistent `Agent Mode` after the first prompt
+- Agent Mode keeps conversation, a compact follow-up composer, and the active Code/Preview workspace visible together on desktop
+- Mobile Agent Mode uses an explicit Agent/App view switch while keeping the composer mounted
 - Live commentary feed
 - Technical feed / execution transparency
 - Hosted server-first runtime for install/build/dev/test/preview on managed instances
@@ -58,8 +59,8 @@ The current hosted product baseline is:
 - Header-level `Report Bug` action that opens the public `embire2/bolt.gives` GitHub Issues page; the former Shout Out Box is retired
 - Interactive self-host installer with local PostgreSQL and Caddy HTTPS support
 - Dedicated runtime-node Live Workspaces at `/workspace-setup` for per-project Ubuntu CLI users, private workspace directories, and per-project PostgreSQL databases
-- Hosted chat-created projects auto-provision dedicated runtime-node CLI/database workspaces and inject the project database into server-side commands/Preview through an isolated SSH tunnel.
-- Preview can deploy projects to OpenWeb.Software FREE `https://{subdomain}.bolt.gives`, the protected OpenWeb Cloudflare Pages account, or Custom Domain hosting at the `$5/month` launch price.
+- Hosted chat-created projects provision a restricted local PostgreSQL role/database before their first command and inject it only into server-side commands/Preview. Optional runtime-node CLI provisioning continues independently in the background.
+- Preview publishes production builds through the protected Cloudflare Pages account and an advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`, or uses Custom Domain hosting at the `$5/month` launch price.
 - Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to at least 30 active coding minutes. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month; access and resets are controlled by signed Stripe webhooks, never browser redirects.
 - Browser project history is scoped to the authenticated profile. Guest and other-account projects must not appear after login on a shared browser.
 - The proprietary native Windows client follows an independent `Desktop v*` release line; current stable is `Desktop v1.10.2`. Its C#/.NET 8 WPF/XAML source, private CI tree, and dependencies remain outside this public repository; only compiled Windows artifacts, checksums, release notes, and update metadata may be distributed from public GitHub Releases.
@@ -82,6 +83,7 @@ Do not regress any of the above without an explicit user request.
 
 - `/srv/bolt-gives` is the live deployed tree on this server.
 - `/srv/bolt-gives-runtime-workspaces` holds hosted runtime workspaces.
+- Local PostgreSQL holds the application/control-plane databases and deterministic per-project `bolt_project_*` databases; each project credential record is mode `0600` under the configured runtime secret root.
 - Dedicated runtime-node client projects default to `/srv/bolt-live-workspaces` on the configured Ubuntu node; each project must have its own Unix user and PostgreSQL role/database.
 - Runtime-node steady state must use a non-root `bolt-runtime-agent` SSH key with server-side `sudo`; root/password is bootstrap-only and must be rotated after setup.
 - Deployments are often done by syncing repo contents into `/srv/bolt-gives` without `.git`; do not assume the live `.git` SHA reflects the running code unless you verified the deploy method.
@@ -100,13 +102,13 @@ When changing hosted runtime behavior, validate both the app service and the run
 - Keep behavior changes explicit in commit messages and docs.
 - If you encounter unexpected unrelated file modifications while editing, stop and assess before overwriting them.
 
-## v3.6.0 Priorities
+## v4.1.0 Priorities
 
 These are the current release priorities:
 
 - Continue prompt-to-preview reliability measurement across model and template combinations
 - Saved-project continuity across full chat history, source snapshots, hosted runtime identity, Preview, and the project database
-- Clear execution state in both `Chat` and `Workspace`
+- Clear execution state throughout `Agent Mode`
 - Commentary derived from actual runtime events, not filler
 - Remaining browser-weight reduction on editor/PDF/git/terminal surfaces
 - Managed Cloudflare rollout/refresh/rollback observability
@@ -196,9 +198,9 @@ If deployment fails:
 
 - `/workspace-setup` is client-facing and must never reveal admin/root SSH credentials.
 - Provisioning is server-side only through runtime-control endpoints.
-- One project gets one Unix user, one private workspace directory, one PostgreSQL database, and one PostgreSQL role.
-- Normal hosted chat-created projects must auto-provision the same per-project runtime-node CLI/database workspace in the background.
-- Hosted project commands and Preview must receive that project's `DATABASE_URL`/`PG*` values server-side through an isolated tunnel; never persist those credentials in browser history or generated source.
+- Every normal hosted project gets one local PostgreSQL database and restricted role before its first command. Credentials are injected server-side into only that project's commands/Preview and never persisted in browser history, generated source, or deployment assets.
+- `/workspace-setup` additionally gives a project one remote Unix user and private workspace directory; normal hosted projects may provision that optional runtime-node CLI workspace in the background without making local coding/database availability depend on SSH.
+- If a runtime-node database is also provisioned, its `DATABASE_URL`/`PG*` values remain server-side behind the isolated tunnel and must never replace a healthy local project database unexpectedly.
 - Client-selected CLI usernames must be validated as safe Linux usernames and must not collide with system users.
 - Client passwords and generated database passwords are shown once, then stored only as hashes/metadata.
 - Prefer SSH keys and the non-root `bolt-runtime-agent` after bootstrap. Root/password access is acceptable only for initial setup or explicitly approved emergency repair, and must be removed from service runtime env once the key path is verified.
@@ -206,7 +208,7 @@ If deployment fails:
 
 ## Project Publishing Rules
 
-- Free project publishing uses `https://{subdomain}.bolt.gives`.
+- Free project publishing uses a persistent Cloudflare Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`.
 - Reserved operational subdomains such as `admin`, `create`, `alpha1`, and `ahmad` must never be assigned to user projects.
 - Custom-domain hosting is part of the `$5/month` launch-price Custom Domain project subscription through server-side Stripe Checkout and signed webhook fulfillment. The package is presented as a `$20/month` value.
 - Stripe secret keys must stay only in ignored server env/service files; browsers may receive Checkout URLs and publishable-key metadata only.

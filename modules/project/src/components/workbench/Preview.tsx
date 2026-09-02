@@ -1095,7 +1095,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
 
     const requestedSubdomain = window.prompt(
-      'Choose your public bolt.gives subdomain, for example "acme-dashboard":',
+      'Choose your public instances.bolt.gives subdomain, for example "acme-dashboard":',
       previewSessionId
         .replace(/[^a-z0-9-]+/gi, '-')
         .slice(0, 24)
@@ -1106,7 +1106,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       return;
     }
 
-    setPublishStatus('Publishing project and setting up the subdomain...');
+    setPublishStatus('Building on Cloudflare Pages & Workers and setting up the subdomain...');
 
     try {
       const result = await publishHostedRuntimeProject({
@@ -1319,9 +1319,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                 onClick={publishProject}
                 disabled={!activePreview}
                 className="hidden rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 md:inline-flex dark:text-emerald-200"
-                title="Deploy free to OpenWeb.Software with a shareable bolt.gives subdomain"
+                title="Deploy free to Cloudflare Pages & Workers with a shareable instances.bolt.gives subdomain"
               >
-                OpenWeb FREE
+                Cloudflare FREE
               </button>
               <button
                 type="button"

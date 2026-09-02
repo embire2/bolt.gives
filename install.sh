@@ -19,10 +19,13 @@ CREATE_DOMAIN="${CREATE_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 DEFAULT_POSTGRES_DB="bolt_gives_admin"
 DEFAULT_POSTGRES_USER="bolt_gives_admin"
+DEFAULT_PROJECT_DATABASE_PROVISIONER_USER="bolt_project_provisioner"
 DEFAULT_OPERATOR_USERNAME="admin"
 POSTGRES_DB="${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}"
 POSTGRES_USER="${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
+PROJECT_DATABASE_PROVISIONER_USER="${PROJECT_DATABASE_PROVISIONER_USER:-${DEFAULT_PROJECT_DATABASE_PROVISIONER_USER}}"
+PROJECT_DATABASE_PROVISIONER_PASSWORD="${PROJECT_DATABASE_PROVISIONER_PASSWORD:-}"
 OPERATOR_USERNAME="${OPERATOR_USERNAME:-${DEFAULT_OPERATOR_USERNAME}}"
 OPERATOR_PASSWORD="${OPERATOR_PASSWORD:-}"
 INSTALL_DEPS=1
@@ -470,6 +473,11 @@ normalize_config_inputs() {
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     validate_sql_identifier "${POSTGRES_DB}"
     validate_sql_identifier "${POSTGRES_USER}"
+    validate_sql_identifier "${PROJECT_DATABASE_PROVISIONER_USER}"
+
+    if [[ "${PROJECT_DATABASE_PROVISIONER_USER}" == "${POSTGRES_USER}" ]]; then
+      fail "The project database provisioner must use a separate PostgreSQL role."
+    fi
   fi
 
   validate_operator_username "${OPERATOR_USERNAME}"
@@ -736,6 +744,10 @@ prepare_env_file() {
     fi
   fi
 
+  if [[ "${INSTALL_POSTGRES}" -eq 1 && -z "${PROJECT_DATABASE_PROVISIONER_PASSWORD}" ]]; then
+    PROJECT_DATABASE_PROVISIONER_PASSWORD="$(generate_secret)"
+  fi
+
   upsert_env_line "${env_file}" "NODE_OPTIONS" "--max-old-space-size=${NODE_HEAP_MB}"
   upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
@@ -772,6 +784,13 @@ prepare_env_file() {
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_USER" "${POSTGRES_USER}"
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD" "${POSTGRES_PASSWORD}"
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_SSL" "disable"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ENABLED" "true"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ADMIN_URL" "postgresql://${PROJECT_DATABASE_PROVISIONER_USER}:${PROJECT_DATABASE_PROVISIONER_PASSWORD}@127.0.0.1:5432/postgres"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_HOST" "127.0.0.1"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_PORT" "5432"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_SSL" "disable"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_SECRET_ROOT" "${RUNTIME_WORKSPACE_DIR}/project-databases"
+    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_CONNECTION_LIMIT" "10"
   fi
 
   local stripe_publishable stripe_secret stripe_webhook
@@ -888,6 +907,7 @@ setup_local_postgres() {
   retry_command 3 3 "postgresql startup" sudo systemctl enable --now postgresql \
     || fail "Unable to start PostgreSQL."
   local postgres_password_sql="${POSTGRES_PASSWORD//\'/\'\'}"
+  local project_provisioner_password_sql="${PROJECT_DATABASE_PROVISIONER_PASSWORD//\'/\'\'}"
 
   if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'" | grep -q 1; then
     sudo -u postgres psql -c "ALTER ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
@@ -899,9 +919,21 @@ setup_local_postgres() {
     sudo -u postgres createdb -O "${POSTGRES_USER}" "${POSTGRES_DB}"
   fi
 
+  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${PROJECT_DATABASE_PROVISIONER_USER}'" | grep -q 1; then
+    sudo -u postgres psql -c "ALTER ROLE \"${PROJECT_DATABASE_PROVISIONER_USER}\" WITH LOGIN PASSWORD '${project_provisioner_password_sql}' NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION;" >/dev/null
+  else
+    sudo -u postgres psql -c "CREATE ROLE \"${PROJECT_DATABASE_PROVISIONER_USER}\" WITH LOGIN PASSWORD '${project_provisioner_password_sql}' NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION;" >/dev/null
+  fi
+
+  sudo -u postgres psql -c "REVOKE CONNECT ON DATABASE \"${POSTGRES_DB}\" FROM PUBLIC; GRANT CONNECT ON DATABASE \"${POSTGRES_DB}\" TO \"${POSTGRES_USER}\";" >/dev/null
+
   retry_command 3 2 "postgresql verification" \
     env PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'SELECT 1' >/dev/null \
     || fail "PostgreSQL was installed but the configured database credentials did not verify."
+
+  retry_command 3 2 "project database provisioner verification" \
+    env PGPASSWORD="${PROJECT_DATABASE_PROVISIONER_PASSWORD}" psql -h 127.0.0.1 -U "${PROJECT_DATABASE_PROVISIONER_USER}" -d postgres -c 'SELECT 1' >/dev/null \
+    || fail "PostgreSQL was installed but the project database provisioner did not verify."
 }
 
 install_dependencies() {

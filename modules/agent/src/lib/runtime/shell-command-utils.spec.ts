@@ -363,6 +363,15 @@ describe('makeScaffoldCommandsProjectAware', () => {
 });
 
 describe('rewriteAllPackageManagersToPnpm', () => {
+  it('preserves environment assignments while rewriting inferred npm setup commands', () => {
+    const input =
+      'CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0 npm install --yes --no-audit --no-fund --silent';
+    const res = rewriteAllPackageManagersToPnpm(input);
+
+    expect(res.shouldModify).toBe(true);
+    expect(res.modifiedCommand).toBe('CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0 pnpm install');
+  });
+
   it('rewrites bare npm install with npm-only quiet flags to pnpm install', () => {
     const input = 'npm install --no-progress --silent && npm run dev';
     const res = rewriteAllPackageManagersToPnpm(input);

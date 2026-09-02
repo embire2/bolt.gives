@@ -45,59 +45,5 @@
   mix-blend-mode: overlay;
 }
 
-.SurfaceRail {
-  position: relative;
-  isolation: isolate;
-}
-
-.SurfaceRail::before {
-  content: '';
-  position: absolute;
-  inset: -10px -8px auto -8px;
-  height: 74px;
-  pointer-events: none;
-  background:
-    radial-gradient(55% 120% at 8% 0%, color-mix(in srgb, var(--bolt-gradient-red), transparent 92%), transparent 72%),
-    radial-gradient(55% 120% at 92% 0%, color-mix(in srgb, var(--bolt-gradient-blue), transparent 92%), transparent 72%);
-  filter: blur(var(--bolt-surface-glow-blur));
-  z-index: -1;
-}
-
-.SurfaceTab {
-  background: transparent;
-  border: 0;
-  backdrop-filter: blur(10px) saturate(125%);
-  -webkit-backdrop-filter: blur(10px) saturate(125%);
-  transition: color 0.2s ease, filter 0.2s ease, background-color 0.2s ease;
-}
-
-.SurfaceTab:hover {
-  background-color: color-mix(in srgb, var(--bolt-elements-bg-depth-1), transparent 95%);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bolt-gradient-blue), transparent 80%));
-}
-
-.SurfaceTabActive {
-  color: #fff;
-  background-color: color-mix(in srgb, var(--bolt-elements-bg-depth-1), transparent 94%);
-  text-shadow:
-    0 0 8px color-mix(in srgb, var(--bolt-gradient-blue), transparent 58%),
-    0 0 6px color-mix(in srgb, var(--bolt-gradient-red), transparent 68%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .SurfaceRail::before {
-    filter: none;
-    opacity: 0.5;
-  }
-
-  .SurfaceTab:hover {
-    filter: none;
-  }
-
-  .SurfaceTabActive {
-    text-shadow: none;
-  }
-}
-
 @media (prefers-contrast: more) {
 }

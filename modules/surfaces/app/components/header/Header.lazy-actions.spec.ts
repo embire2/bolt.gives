@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 
 describe('Header workbench boot boundary', () => {
   it('keeps preview and deploy actions out of the initial header chunk', () => {
-    const source = readFileSync(resolve(process.cwd(), 'modules/surfaces/app/components/header/Header.tsx'), 'utf8');
-    const usageBadgeSource = readFileSync(
-      resolve(process.cwd(), 'modules/surfaces/app/components/header/UsageBalanceBadge.client.tsx'),
-      'utf8',
-    );
+    const source = readFileSync(resolve(TEST_DIR, 'Header.tsx'), 'utf8');
+    const usageBadgeSource = readFileSync(resolve(TEST_DIR, 'UsageBalanceBadge.client.tsx'), 'utf8');
 
     expect(source).not.toMatch(
       /import\s+\{\s*HeaderActionButtons\s*\}\s+from\s+['"]\.\/HeaderActionButtons\.client['"]/,
@@ -21,7 +21,7 @@ describe('Header workbench boot boundary', () => {
   });
 
   it('keeps operator links out of the public menu and protects the project title', () => {
-    const source = readFileSync(resolve(process.cwd(), 'modules/surfaces/app/components/header/Header.tsx'), 'utf8');
+    const source = readFileSync(resolve(TEST_DIR, 'Header.tsx'), 'utf8');
 
     expect(source).not.toContain('Admin Panel');
     expect(source).not.toContain('WebCoder Premium');

@@ -19,6 +19,7 @@ interface PickPreferredProviderNameOptions {
   apiKeys: Record<string, string>;
   localProviderNames?: string[];
   configuredProviderNames?: string[];
+  credentialFreeProviderNames?: string[];
   savedProviderName?: string;
   lastConfiguredProviderName?: string;
   fallbackProviderName?: string;
@@ -286,6 +287,7 @@ export function pickPreferredProviderName(options: PickPreferredProviderNameOpti
     apiKeys,
     localProviderNames = [],
     configuredProviderNames = [],
+    credentialFreeProviderNames = [],
     savedProviderName,
     lastConfiguredProviderName,
     fallbackProviderName,
@@ -298,8 +300,12 @@ export function pickPreferredProviderName(options: PickPreferredProviderNameOpti
   const activeSet = new Set(activeProviderNames);
   const localSet = new Set(localProviderNames);
   const configuredSet = new Set(configuredProviderNames);
+  const credentialFreeSet = new Set(credentialFreeProviderNames);
   const hasUsableProvider = (providerName: string): boolean =>
-    localSet.has(providerName) || configuredSet.has(providerName) || hasUsableApiKey(apiKeys, providerName);
+    credentialFreeSet.has(providerName) ||
+    localSet.has(providerName) ||
+    configuredSet.has(providerName) ||
+    hasUsableApiKey(apiKeys, providerName);
   const hasAnyUsableProvider = activeProviderNames.some((providerName) => hasUsableProvider(providerName));
 
   const candidates = [lastConfiguredProviderName, savedProviderName, fallbackProviderName].filter(

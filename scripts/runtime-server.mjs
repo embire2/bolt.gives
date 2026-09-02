@@ -82,6 +82,12 @@ import {
   validateRuntimeNodeUsername,
 } from './runtime-node-workspaces.mjs';
 import {
+  buildProjectDatabaseConfig,
+  buildProjectDatabaseEnvironment,
+  ensureProjectDatabase,
+  sanitizeProjectDatabase,
+} from './project-databases.mjs';
+import {
   appendProjectDeploymentEvent,
   buildCustomDomainDnsInstructions,
   buildProjectHostname,
@@ -96,8 +102,10 @@ import {
 } from './project-deployments.mjs';
 import {
   appendCloudflareProjectDeploymentEvent,
+  buildCloudflarePagesWorkerScript,
   buildCloudflareProjectName,
   inferCloudflareBuildCommand,
+  listCloudflareEntryAssetPaths,
   normalizeCloudflareProjectDeploymentRegistry,
   sanitizeCloudflareProjectDeployment,
   selectCloudflareBuildOutput,
@@ -224,6 +232,7 @@ const RUNTIME_NODE_RETRY_COOLDOWN_MS = Math.max(
   5_000,
   Number(process.env.RUNTIME_NODE_RETRY_COOLDOWN_MS || '60000') || 60_000,
 );
+const PROJECT_DATABASE_CONFIG = buildProjectDatabaseConfig();
 const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
 const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
 const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_DELAY_MS || '1200');
@@ -264,6 +273,7 @@ const CLOUDFLARE_PROJECT_DEPLOYMENT_REGISTRY_PATH =
 const PREMIUM_ENTITLEMENT_REGISTRY_PATH =
   process.env.RUNTIME_PREMIUM_ENTITLEMENT_REGISTRY_PATH || path.join(PERSIST_ROOT, 'premium-entitlements.json');
 const PROJECT_DOMAIN_ROOT = process.env.BOLT_PROJECT_DOMAIN_ROOT || 'bolt.gives';
+const CLOUDFLARE_PROJECT_DOMAIN_ROOT = process.env.BOLT_CLOUDFLARE_PROJECT_DOMAIN_ROOT || 'instances.bolt.gives';
 const PROJECT_PUBLIC_IP =
   process.env.BOLT_PROJECT_PUBLIC_IP ||
   process.env.BOLT_RUNTIME_NODE_PUBLIC_HOST ||
@@ -1367,6 +1377,85 @@ function buildAutoRuntimeNodeUsername(sessionId) {
 
 function createStrongRuntimeNodePassword() {
   return `Bolt-${crypto.randomBytes(18).toString('base64url')}9a`;
+}
+
+function redactProjectDatabaseError(error, config = PROJECT_DATABASE_CONFIG) {
+  let message = error instanceof Error ? error.message : String(error || 'Project database provisioning failed.');
+
+  if (config?.adminUrl) {
+    message = message.replaceAll(config.adminUrl, '[redacted database connection]');
+
+    try {
+      const password = decodeURIComponent(new URL(config.adminUrl).password || '');
+
+      if (password) {
+        message = message.replaceAll(password, '[redacted]');
+      }
+    } catch {
+      // The configuration validator reports malformed connection URLs separately.
+    }
+  }
+
+  return message.replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[redacted database connection]').slice(0, 1000);
+}
+
+export async function ensureProjectDatabaseForSession(session, options = {}) {
+  const config = options.config || PROJECT_DATABASE_CONFIG;
+
+  if (!config.supported) {
+    return null;
+  }
+
+  if (session.projectDatabase) {
+    return session.projectDatabase;
+  }
+
+  if (session.projectDatabaseProvisionPromise) {
+    return await session.projectDatabaseProvisionPromise;
+  }
+
+  if (Number(session.projectDatabaseRetryAt || 0) > Date.now()) {
+    throw new Error(session.projectDatabaseLastError || 'Project database provisioning is cooling down before retry.');
+  }
+
+  const ensureDatabaseFn = options.ensureDatabaseFn || ensureProjectDatabase;
+  session.projectDatabaseProvisionPromise = Promise.resolve(ensureDatabaseFn(session.id, config))
+    .then((database) => {
+      session.projectDatabase = database;
+      session.projectDatabaseRetryAt = 0;
+      session.projectDatabaseLastError = null;
+      broadcastPreviewState(session);
+
+      return database;
+    })
+    .catch((error) => {
+      const message = redactProjectDatabaseError(error, config);
+      session.projectDatabase = null;
+      session.projectDatabaseRetryAt = Date.now() + RUNTIME_NODE_RETRY_COOLDOWN_MS;
+      session.projectDatabaseLastError = message;
+      broadcastPreviewState(session);
+      throw new Error(message);
+    })
+    .finally(() => {
+      session.projectDatabaseProvisionPromise = null;
+    });
+
+  return await session.projectDatabaseProvisionPromise;
+}
+
+function queueProjectDatabaseProvisioning(session) {
+  if (
+    !PROJECT_DATABASE_CONFIG.supported ||
+    session.projectDatabase ||
+    session.projectDatabaseProvisionPromise ||
+    Number(session.projectDatabaseRetryAt || 0) > Date.now()
+  ) {
+    return;
+  }
+
+  void ensureProjectDatabaseForSession(session).catch((error) => {
+    console.warn(`[project-database] provisioning failed for ${session.id}: ${redactProjectDatabaseError(error)}`);
+  });
 }
 
 function attachRuntimeNodeDatabaseToSession(session, workspace, databasePassword) {
@@ -2757,6 +2846,12 @@ function setPreviewRepairingState(session, alert, message = '') {
 }
 
 export function buildRuntimeNodeDatabaseStateForClient(session) {
+  const localDatabase = sanitizeProjectDatabase(session?.projectDatabase);
+
+  if (localDatabase) {
+    return localDatabase;
+  }
+
   const database = session?.runtimeNodeDatabase;
 
   if (!database) {
@@ -2996,8 +3091,12 @@ export function buildHostedWorkspaceBootstrapAlert(fileMap) {
 
   const expectedMainEntryPath = inferExpectedViteMainEntryPath(fileMap);
 
-  if (!expectedMainEntryPath || !hasTextFile(fileMap, expectedMainEntryPath)) {
-    const expectedLabel = expectedMainEntryPath ? expectedMainEntryPath.replace(`${WORK_DIR}/`, '') : 'src/main.tsx';
+  if (!expectedMainEntryPath) {
+    return null;
+  }
+
+  if (!hasTextFile(fileMap, expectedMainEntryPath)) {
+    const expectedLabel = expectedMainEntryPath.replace(`${WORK_DIR}/`, '');
 
     return {
       type: 'error',
@@ -3568,10 +3667,15 @@ function getSession(sessionId) {
       runtimeNodeDatabaseTunnel: null,
       runtimeNodeRetryAt: 0,
       runtimeNodeLastError: null,
+      projectDatabase: null,
+      projectDatabaseProvisionPromise: null,
+      projectDatabaseRetryAt: 0,
+      projectDatabaseLastError: null,
       publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
     sessions.set(normalized, session);
+    queueProjectDatabaseProvisioning(session);
   }
 
   return session;
@@ -5625,6 +5729,7 @@ function runProjectBuildCommand(command, args, options = {}) {
       cwd: options.cwd,
       env: buildHostedWorkspaceProcessEnvironment({
         workspaceDir: options.cwd,
+        projectEnv: options.projectEnv,
       }),
     });
     const timeoutMs = Number(options.timeoutMs || COMMAND_TIMEOUT_MS);
@@ -5731,6 +5836,59 @@ async function copyCloudflareDeploymentTree(sourceRoot, targetRoot) {
   return state;
 }
 
+export async function recoverMissingCloudflareEntryAssets({ workspaceDirectory, sourceDirectory, stagingDirectory }) {
+  const indexHtml = await fs.readFile(path.join(stagingDirectory, 'index.html'), 'utf8');
+  const entryAssetPaths = listCloudflareEntryAssetPaths(indexHtml);
+  const blockedAssets = entryAssetPaths.filter((relativePath) => shouldSkipCloudflareDeploymentPath(relativePath));
+  const recoveredAssets = [];
+
+  if (blockedAssets.length > 0) {
+    throw new Error(`Cloudflare build output references blocked private assets: ${blockedAssets.join(', ')}.`);
+  }
+
+  for (const relativePath of entryAssetPaths) {
+    const targetPath = path.join(stagingDirectory, relativePath);
+
+    if (await exists(targetPath)) {
+      continue;
+    }
+
+    const candidates = [path.join(sourceDirectory, relativePath), path.join(workspaceDirectory, relativePath)];
+
+    const existingSource = (
+      await Promise.all(candidates.map(async (candidate) => ((await exists(candidate)) ? candidate : null)))
+    ).find(Boolean);
+
+    if (!existingSource) {
+      continue;
+    }
+
+    const stats = await fs.lstat(existingSource);
+
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > 25 * 1024 * 1024) {
+      continue;
+    }
+
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(existingSource, targetPath);
+    recoveredAssets.push(relativePath);
+  }
+
+  const missingAssets = [];
+
+  for (const relativePath of entryAssetPaths) {
+    if (!(await exists(path.join(stagingDirectory, relativePath)))) {
+      missingAssets.push(relativePath);
+    }
+  }
+
+  if (missingAssets.length > 0) {
+    throw new Error(`Cloudflare build output is missing referenced assets: ${missingAssets.join(', ')}.`);
+  }
+
+  return { entryAssetPaths, recoveredAssets };
+}
+
 function inferConfiguredBuildOutputDirectory(packageJson = {}) {
   const configured =
     packageJson?.bolt?.build?.outputDirectory ||
@@ -5749,6 +5907,10 @@ function inferConfiguredBuildOutputDirectory(packageJson = {}) {
 }
 
 async function prepareCloudflareProjectDeployment(session, projectName) {
+  const projectDatabase = PROJECT_DATABASE_CONFIG.supported
+    ? await ensureProjectDatabaseForSession(session, { config: PROJECT_DATABASE_CONFIG })
+    : null;
+  const projectEnv = projectDatabase ? buildProjectDatabaseEnvironment(projectDatabase) : {};
   const packageJsonRecord = await readWorkspacePackageJson(session);
   const packageJson = packageJsonRecord?.json || {};
   const buildCommand = inferCloudflareBuildCommand(packageJson, {
@@ -5758,7 +5920,7 @@ async function prepareCloudflareProjectDeployment(session, projectName) {
   });
 
   if (buildCommand) {
-    await runProjectBuildCommand(buildCommand.command, buildCommand.args, { cwd: session.dir });
+    await runProjectBuildCommand(buildCommand.command, buildCommand.args, { cwd: session.dir, projectEnv });
   }
 
   const directoryEntries = await fs.readdir(session.dir, { withFileTypes: true });
@@ -5787,14 +5949,18 @@ async function prepareCloudflareProjectDeployment(session, projectName) {
   await fs.rm(stagingDirectory, { recursive: true, force: true });
   await copyCloudflareDeploymentTree(sourceDirectory, stagingDirectory);
 
-  if (!(await exists(path.join(stagingDirectory, '_redirects')))) {
-    await fs.writeFile(path.join(stagingDirectory, '_redirects'), '/* /index.html 200\n', 'utf8');
-  }
+  const entryAssets = await recoverMissingCloudflareEntryAssets({
+    workspaceDirectory: session.dir,
+    sourceDirectory,
+    stagingDirectory,
+  });
 
-  return { outputDirectory, stagingDirectory };
+  await fs.writeFile(path.join(stagingDirectory, '_worker.js'), buildCloudflarePagesWorkerScript(), 'utf8');
+
+  return { outputDirectory, stagingDirectory, projectDatabase, ...entryAssets };
 }
 
-async function waitForCloudflareDeploymentHealth(urls, timeoutMs = 45_000) {
+async function waitForCloudflareDeploymentHealth(urls, timeoutMs = 45_000, options = {}) {
   const candidates = [...new Set((Array.isArray(urls) ? urls : [urls]).filter(Boolean))];
   const deadline = Date.now() + timeoutMs;
   let lastStatus = null;
@@ -5806,7 +5972,10 @@ async function waitForCloudflareDeploymentHealth(urls, timeoutMs = 45_000) {
         const response = await fetch(url, { redirect: 'manual' });
         lastStatus = response.status;
 
-        if (response.status >= 200 && response.status < 400) {
+        const workerReady =
+          options.expectWorker !== true || response.headers.get('x-bolt-deployment') === 'cloudflare-pages-worker';
+
+        if (response.status >= 200 && response.status < 400 && workerReady) {
           return { ok: true, status: response.status, url };
         }
       } catch (error) {
@@ -5829,15 +5998,27 @@ async function deploySessionProjectToCloudflare(session, requestedName) {
     throw new Error('Cloudflare deployment is unavailable because the server API connection is not configured.');
   }
 
-  const projectName = buildCloudflareProjectName(session.id, requestedName);
   const registry = await ensureCloudflareProjectDeploymentRegistry();
   const now = new Date().toISOString();
   let deployment = registry.deployments.find((entry) => entry.sessionId === session.id);
+  const projectName = deployment?.projectName || buildCloudflareProjectName(session.id, requestedName);
+  const hostnameValidation = validateProjectSubdomain(requestedName);
 
-  if (deployment && deployment.projectName !== projectName) {
-    throw new Error(
-      `This project already deploys to ${deployment.projectName}. Reuse its existing Cloudflare project name.`,
-    );
+  if (!hostnameValidation.ok) {
+    throw new Error(hostnameValidation.reason);
+  }
+
+  const hostname = buildProjectHostname(hostnameValidation.subdomain, CLOUDFLARE_PROJECT_DOMAIN_ROOT);
+  const hostnameOwner = registry.deployments.find(
+    (entry) => entry.hostname === hostname && entry.sessionId !== session.id,
+  );
+
+  if (hostnameOwner) {
+    throw new Error(`The hostname ${hostname} is already assigned to another project.`);
+  }
+
+  if (deployment?.hostname && deployment.hostname !== hostname) {
+    throw new Error(`This project already publishes at ${deployment.hostname}. Reuse its existing hostname.`);
   }
 
   if (!deployment) {
@@ -5848,6 +6029,13 @@ async function deploySessionProjectToCloudflare(session, requestedName) {
       projectName,
       pagesUrl: `https://${projectName}.pages.dev`,
       deploymentUrl: null,
+      hostname,
+      url: `https://${hostname}`,
+      workerEnabled: true,
+      databaseName: null,
+      dnsStatus: 'pending',
+      caddyStatus: 'pending',
+      caddyMessage: null,
       status: 'building',
       buildOutputDirectory: null,
       lastError: null,
@@ -5857,6 +6045,9 @@ async function deploySessionProjectToCloudflare(session, requestedName) {
     registry.deployments.unshift(deployment);
   } else {
     deployment.status = 'building';
+    deployment.hostname = hostname;
+    deployment.url = `https://${hostname}`;
+    deployment.workerEnabled = true;
     deployment.lastError = null;
     deployment.updatedAt = now;
   }
@@ -5905,10 +6096,29 @@ async function deploySessionProjectToCloudflare(session, requestedName) {
         .match(/https:\/\/[a-z0-9.-]+\.pages\.dev/gi)
         ?.at(-1) || `https://${projectName}.pages.dev`;
     const pagesUrl = `https://${projectName}.pages.dev`;
-    const health = await waitForCloudflareDeploymentHealth([deploymentUrl, pagesUrl]);
+    const health = await waitForCloudflareDeploymentHealth([deploymentUrl, pagesUrl], 45_000, {
+      expectWorker: true,
+    });
+    const dns = await ensureProjectSubdomainDnsRecord(hostname);
+    const caddy = await ensureProjectCaddyHost(hostname, { upstreamUrl: pagesUrl });
+
+    if (dns.status !== 'active' || caddy.status !== 'active') {
+      throw new Error(`${dns.message} ${caddy.message}`.trim());
+    }
+
+    const publicHealth = await waitForCloudflareDeploymentHealth([`https://${hostname}`], 45_000, {
+      expectWorker: true,
+    });
 
     deployment.pagesUrl = pagesUrl;
     deployment.deploymentUrl = deploymentUrl;
+    deployment.hostname = hostname;
+    deployment.url = `https://${hostname}`;
+    deployment.workerEnabled = true;
+    deployment.databaseName = prepared.projectDatabase?.databaseName || null;
+    deployment.dnsStatus = dns.status;
+    deployment.caddyStatus = caddy.status;
+    deployment.caddyMessage = caddy.message;
     deployment.status = 'active';
     deployment.buildOutputDirectory = prepared.outputDirectory;
     deployment.lastError = null;
@@ -5921,7 +6131,12 @@ async function deploySessionProjectToCloudflare(session, requestedName) {
         sessionId: session.id,
         deploymentUrl,
         healthcheckUrl: health.url,
+        publicHealthcheckUrl: publicHealth.url,
+        hostname,
+        workerEnabled: true,
+        databaseName: deployment.databaseName,
         buildOutputDirectory: prepared.outputDirectory,
+        recoveredAssets: prepared.recoveredAssets,
       },
     });
     await writeCloudflareProjectDeploymentRegistry(registry);
@@ -6064,7 +6279,40 @@ async function ensureProjectSubdomainDnsRecord(hostname) {
   }
 }
 
-function caddySnippetForProjectHost(hostname) {
+function normalizeCloudflarePagesUpstream(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== 'https:' || !url.hostname.endsWith('.pages.dev') || url.username || url.password) {
+      return null;
+    }
+
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+export function caddySnippetForProjectHost(hostname, options = {}) {
+  const upstream = normalizeCloudflarePagesUpstream(options.upstreamUrl);
+
+  if (upstream) {
+    return `${hostname} {
+\tencode zstd gzip
+
+\thandle {
+\t\treverse_proxy ${upstream.origin} {
+\t\t\theader_up Host ${upstream.hostname}
+\t\t}
+\t}
+}
+`;
+  }
+
   return `${hostname} {
 \tencode zstd gzip
 \theader {
@@ -6139,7 +6387,7 @@ async function waitForProjectHttpsReady(hostname) {
   };
 }
 
-async function ensureProjectCaddyHost(hostname) {
+async function ensureProjectCaddyHost(hostname, options = {}) {
   if (!PROJECT_CADDY_ENABLED) {
     return { status: 'disabled', message: 'Project Caddy automation is disabled.' };
   }
@@ -6149,7 +6397,7 @@ async function ensureProjectCaddyHost(hostname) {
 
     const safeName = hostname.replace(/[^a-z0-9.-]/g, '-');
     const snippetPath = path.join(PROJECT_CADDY_SNIPPET_DIR, `${safeName}.caddy`);
-    await fs.writeFile(snippetPath, caddySnippetForProjectHost(hostname), 'utf8');
+    await fs.writeFile(snippetPath, caddySnippetForProjectHost(hostname, options), 'utf8');
 
     let caddyfile = await fs.readFile(PROJECT_CADDYFILE_PATH, 'utf8').catch(() => '');
     const importLine = `import ${PROJECT_CADDY_SNIPPET_DIR}/*.caddy`;
@@ -6168,7 +6416,12 @@ async function ensureProjectCaddyHost(hostname) {
       return { status: 'pending', message: httpsReady.message };
     }
 
-    return { status: 'active', message: `Caddy route for ${hostname} is active. ${httpsReady.message}` };
+    const originMessage = options.upstreamUrl ? ' Cloudflare Pages is the durable origin.' : '';
+
+    return {
+      status: 'active',
+      message: `Caddy route for ${hostname} is active.${originMessage} ${httpsReady.message}`,
+    };
   } catch (error) {
     return {
       status: 'manual-required',
@@ -6955,8 +7208,48 @@ function runtimeNodeDatabaseFallbackMessage(session, now = Date.now()) {
 }
 
 export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, options = {}) {
-  const config = options.config || buildRuntimeNodeConfig();
+  const projectDatabaseConfig = options.projectDatabaseConfig || PROJECT_DATABASE_CONFIG;
   const writeEvent = typeof options.writeEvent === 'function' ? options.writeEvent : () => {};
+
+  if (projectDatabaseConfig.supported) {
+    writeEvent({
+      type: 'status',
+      message: session.projectDatabase
+        ? 'Connecting this project to its dedicated PostgreSQL database'
+        : "Creating this project's dedicated PostgreSQL database",
+    });
+
+    try {
+      const ensureProjectDatabaseFn =
+        options.ensureProjectDatabaseFn ||
+        ((targetSession) => ensureProjectDatabaseForSession(targetSession, { config: projectDatabaseConfig }));
+      const database = await ensureProjectDatabaseFn(session);
+
+      if (!database) {
+        throw new Error('Project database provisioning returned no database.');
+      }
+
+      session.projectDatabase = database;
+      session.projectDatabaseRetryAt = 0;
+      session.projectDatabaseLastError = null;
+      writeEvent({ type: 'status', message: 'Dedicated PostgreSQL database connected to this project' });
+      broadcastPreviewState(session);
+
+      return buildProjectDatabaseEnvironment(database);
+    } catch (error) {
+      const message = redactProjectDatabaseError(error, projectDatabaseConfig);
+      session.projectDatabaseRetryAt = Date.now() + RUNTIME_NODE_RETRY_COOLDOWN_MS;
+      session.projectDatabaseLastError = message;
+      console.warn(`[project-database] command environment degraded for ${session.id}: ${message}`);
+      writeEvent({
+        type: 'status',
+        message: 'Dedicated PostgreSQL is temporarily unavailable; the coding task will continue while it retries.',
+      });
+      broadcastPreviewState(session);
+    }
+  }
+
+  const config = options.config || buildRuntimeNodeConfig();
   const ensureWorkspaceFn = options.ensureWorkspaceFn || ensureRuntimeNodeWorkspaceForSession;
   const connectDatabaseFn = options.connectDatabaseFn || ensureRuntimeNodeDatabaseEnvironmentForSession;
   const now = Number(options.now ?? Date.now());
@@ -7970,7 +8263,7 @@ export function createRuntimeServer() {
         const deployment = deploymentRegistry.deployments.find((entry) => entry.sessionId === requestedSessionId);
 
         if (!deployment) {
-          sendText(res, 404, 'Publish the project to a bolt.gives subdomain before adding a custom domain.');
+          sendText(res, 404, 'Publish the project to an instances.bolt.gives subdomain before adding a custom domain.');
           return;
         }
 
@@ -10083,7 +10376,9 @@ export function createRuntimeServer() {
           return;
         }
 
-        const caddy = await ensureProjectCaddyHost(entitlement.customDomain);
+        const caddy = await ensureProjectCaddyHost(entitlement.customDomain, {
+          upstreamUrl: deployment.originUrl || undefined,
+        });
         customDomain.status = caddy.status === 'active' ? 'active' : 'pending-dns';
         customDomain.updatedAt = new Date().toISOString();
         deployment.updatedAt = customDomain.updatedAt;
@@ -10124,18 +10419,14 @@ export function createRuntimeServer() {
 
         void ensureRuntimeNodeWorkspaceForSession(session);
 
-        if (!session.preview?.port) {
-          scheduleHostedAutoStartAfterSync(session);
-        }
-
         const registry = await ensureProjectDeploymentRegistry();
-        const hostname = buildProjectHostname(validation.subdomain, PROJECT_DOMAIN_ROOT);
+        const hostname = buildProjectHostname(validation.subdomain, CLOUDFLARE_PROJECT_DOMAIN_ROOT);
         const existingByHost = registry.deployments.find(
           (deployment) => deployment.hostname === hostname && deployment.sessionId !== requestedSessionId,
         );
 
         if (existingByHost) {
-          sendText(res, 409, 'That bolt.gives project subdomain is already in use.');
+          sendText(res, 409, 'That instances.bolt.gives project subdomain is already in use.');
           return;
         }
 
@@ -10143,8 +10434,17 @@ export function createRuntimeServer() {
           (entry) => entry.sessionId === requestedSessionId || entry.hostname === hostname,
         );
         const now = new Date().toISOString();
-        const dns = await ensureProjectSubdomainDnsRecord(hostname);
-        const caddy = await ensureProjectCaddyHost(hostname);
+        const cloudflareDeployment = await runSessionOperation(session, () =>
+          deploySessionProjectToCloudflare(session, validation.subdomain),
+        );
+        const dns = {
+          status: cloudflareDeployment.dnsStatus,
+          message: `${hostname} resolves through the managed project wildcard.`,
+        };
+        const caddy = {
+          status: cloudflareDeployment.caddyStatus,
+          message: cloudflareDeployment.caddyMessage,
+        };
 
         if (!deployment) {
           deployment = {
@@ -10153,7 +10453,12 @@ export function createRuntimeServer() {
             subdomain: validation.subdomain,
             hostname,
             status: 'active',
-            previewPort: Number(session.preview?.port || 0) || null,
+            previewPort: null,
+            originUrl: cloudflareDeployment.pagesUrl,
+            deploymentProvider: 'cloudflare-pages-workers',
+            cloudflareProjectName: cloudflareDeployment.projectName,
+            workerEnabled: cloudflareDeployment.workerEnabled === true,
+            databaseName: cloudflareDeployment.databaseName || null,
             customDomains: [],
             dnsStatus: dns.status,
             caddyStatus: caddy.status,
@@ -10167,7 +10472,12 @@ export function createRuntimeServer() {
           deployment.subdomain = validation.subdomain;
           deployment.hostname = hostname;
           deployment.status = 'active';
-          deployment.previewPort = Number(session.preview?.port || 0) || deployment.previewPort || null;
+          deployment.previewPort = null;
+          deployment.originUrl = cloudflareDeployment.pagesUrl;
+          deployment.deploymentProvider = 'cloudflare-pages-workers';
+          deployment.cloudflareProjectName = cloudflareDeployment.projectName;
+          deployment.workerEnabled = cloudflareDeployment.workerEnabled === true;
+          deployment.databaseName = cloudflareDeployment.databaseName || null;
           deployment.dnsStatus = dns.status;
           deployment.caddyStatus = caddy.status;
           deployment.lastError =
@@ -10183,6 +10493,9 @@ export function createRuntimeServer() {
             sessionId: requestedSessionId,
             dnsStatus: dns.status,
             caddyStatus: caddy.status,
+            cloudflareProjectName: cloudflareDeployment.projectName,
+            workerEnabled: cloudflareDeployment.workerEnabled,
+            databaseName: cloudflareDeployment.databaseName,
           },
         });
         await writeProjectDeploymentRegistry(registry);
@@ -10196,6 +10509,7 @@ export function createRuntimeServer() {
             : {}),
           dns,
           caddy,
+          cloudflare: sanitizeCloudflareProjectDeployment(cloudflareDeployment),
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to publish the project.');
@@ -10238,7 +10552,7 @@ export function createRuntimeServer() {
         const deployment = registry.deployments.find((entry) => entry.sessionId === requestedSessionId);
 
         if (!deployment) {
-          sendText(res, 404, 'Publish the project to a bolt.gives subdomain before adding a custom domain.');
+          sendText(res, 404, 'Publish the project to an instances.bolt.gives subdomain before adding a custom domain.');
           return;
         }
 

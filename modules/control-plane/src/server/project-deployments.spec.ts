@@ -63,6 +63,33 @@ describe('project deployment helpers', () => {
     expect(findProjectDeploymentByHost(registry, 'pending.example')).toBeNull();
   });
 
+  it('retains only safe Cloudflare origin metadata and never deployment credentials', () => {
+    const registry = normalizeProjectDeploymentRegistry({
+      deployments: [
+        {
+          sessionId: 'session-1',
+          subdomain: 'demo',
+          hostname: 'demo.instances.bolt.gives',
+          originUrl: 'https://bolt-demo.pages.dev/',
+          deploymentProvider: 'cloudflare-pages-workers',
+          cloudflareProjectName: 'bolt-demo',
+          workerEnabled: true,
+          databaseName: 'bolt_project_demo',
+          databasePassword: 'must-not-survive',
+        },
+      ],
+    });
+
+    expect(registry.version).toBe(2);
+    expect(registry.deployments[0]).toMatchObject({
+      originUrl: 'https://bolt-demo.pages.dev',
+      deploymentProvider: 'cloudflare-pages-workers',
+      workerEnabled: true,
+      databaseName: 'bolt_project_demo',
+    });
+    expect(JSON.stringify(registry)).not.toContain('must-not-survive');
+  });
+
   it('encodes nested Stripe Checkout payloads as form pairs', () => {
     const pairs = encodeStripeForm({
       mode: 'subscription',

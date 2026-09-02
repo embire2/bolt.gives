@@ -31,7 +31,7 @@ const FEATURES = [
   {
     marker: '04',
     title: 'Ship without leaving the workspace',
-    copy: 'Publish free to a shareable bolt.gives subdomain, deploy static production builds to Cloudflare Pages, or attach your own domain to the project.',
+    copy: 'Publish free to a durable *.instances.bolt.gives Cloudflare Pages Worker, or attach your own domain to the project.',
   },
 ];
 
@@ -40,7 +40,7 @@ const WORKFLOW = [
   'See the live token balance before and after each run.',
   'Watch implementation and verification events.',
   'Open the working Preview.',
-  'Deploy to OpenWeb.Software, Cloudflare, or your own domain.',
+  'Deploy to Cloudflare Pages or your own domain.',
 ];
 
 export default function PricingPage() {
@@ -131,8 +131,9 @@ export default function PricingPage() {
             <h2 className="mt-5 font-serif text-5xl leading-none">At least 30 coding minutes daily</h2>
             <p className="mt-5 max-w-xl leading-7 text-[#34382f]">
               The 100 Agent-token allowance is calibrated to active generation time so it covers at least 30 minutes of
-              coding. Build, preview, iterate, and publish to a shareable bolt.gives subdomain; the balance resets every
-              day at 00:00 GMT+2, or use your own provider key without this hosted allowance.
+              coding. Build, preview, iterate, and publish to a shareable <code>*.instances.bolt.gives</code> Cloudflare
+              Worker; the balance resets every day at 00:00 GMT+2, or use your own provider key without this hosted
+              allowance.
             </p>
           </article>
           <article className="bg-[#11130f] p-8 text-white sm:p-12">

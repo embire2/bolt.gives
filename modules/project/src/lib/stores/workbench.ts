@@ -444,12 +444,10 @@ export class WorkbenchStore {
       hot.data.isRuntimeScannerEnabled = this.isRuntimeScannerEnabled;
       hot.data.hostedRuntimeSessionId = this.#hostedRuntimeSessionId;
 
-      // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
 
       for (const [path, dirent] of Object.entries(filesMap)) {
         if (dirent?.type === 'file' && dirent.isBinary && dirent.content) {
-          // Make sure binary content is preserved
           this.files.setKey(path, { ...dirent });
         }
       }
@@ -820,7 +818,6 @@ export class WorkbenchStore {
     this.#editorStore.setDocuments(files);
 
     if (this.#filesStore.filesCount > 0 && this.currentDocument.get() === undefined) {
-      // we find the first file and select it
       for (const [filePath, dirent] of Object.entries(files)) {
         if (dirent?.type === 'file') {
           this.setSelectedFile(filePath);
@@ -890,12 +887,6 @@ export class WorkbenchStore {
     if (document === undefined) {
       return;
     }
-
-    /*
-     * For scoped locks, we would need to implement diff checking here
-     * to determine if the user is modifying existing code or just adding new code
-     * This is a more complex feature that would be implemented in a future update
-     */
 
     await this.#filesStore.saveFile(filePath, document.value);
 
@@ -1290,6 +1281,7 @@ export class WorkbenchStore {
             this.#appendInteractiveStepEvent(event);
           },
           () => this.runtimeTerminal,
+          () => this.#previewsStore.previews.get().some((preview) => preview.ready && Boolean(preview.baseUrl)),
         ),
       };
 
@@ -1493,6 +1485,18 @@ export class WorkbenchStore {
     startCommand: string;
   }) {
     return this.addToExecutionQueue(async () => {
+      if (this.#previewsStore.previews.get().some((preview) => preview.ready && Boolean(preview.baseUrl))) {
+        this.showWorkbench.set(true);
+        this.#appendInteractiveStepEvent({
+          type: 'telemetry',
+          timestamp: new Date().toISOString(),
+          description: 'Workspace runtime handoff reused healthy Preview',
+          output: `Skipped duplicate setup/start handoff: ${options.startCommand}`,
+        });
+
+        return;
+      }
+
       const artifactId = `${options.messageId}-runtime-handoff`;
       await this.addArtifact({
         messageId: options.messageId,
@@ -1707,12 +1711,6 @@ export class WorkbenchStore {
                 filePath: fullPath,
               },
             };
-
-      /*
-       * For scoped locks, we would need to implement diff checking here
-       * to determine if the AI is modifying existing code or just adding new code
-       * This is a more complex feature that would be implemented in a future update
-       */
 
       if (this.selectedFile.value !== fullPath) {
         this.setSelectedFile(fullPath);

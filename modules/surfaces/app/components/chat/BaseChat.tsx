@@ -32,34 +32,9 @@ import type { SketchElement } from './SketchCanvas';
 import type { AutonomyMode } from '@bolt/agent/lib/runtime/autonomy';
 import { getProfileFirstName, useProfile } from '~/lib/profile-context';
 import { logStore } from '@bolt/project/lib/stores/logs';
-import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { AgentModeShell } from './AgentModeShell';
 
 const TEXTAREA_MIN_HEIGHT = 72;
-const SURFACE_LAYOUT_STORAGE_KEY = 'bolt_surface_layout';
-
-type SurfaceTabId = 'chat' | 'workspace';
-
-interface SurfaceTabDefinition {
-  id: SurfaceTabId;
-  label: string;
-  description: string;
-  closable: boolean;
-}
-
-const SURFACE_TABS: SurfaceTabDefinition[] = [
-  {
-    id: 'chat',
-    label: 'Chat',
-    description: 'Prompt, live commentary, and technical feed',
-    closable: false,
-  },
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    description: 'Files, code, diff, preview, and terminal',
-    closable: true,
-  },
-];
 
 const LazyWorkbench = React.lazy(() =>
   import('@bolt/project/components/workbench/Workbench.client').then((module) => ({ default: module.Workbench })),
@@ -89,61 +64,30 @@ function LazyPanelFallback({ title }: { title: string }) {
   return (
     <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-3 text-xs text-bolt-elements-textSecondary">
       <div className="font-medium text-bolt-elements-textPrimary">{title}</div>
-      <div className="mt-2 animate-pulse text-bolt-elements-textTertiary">Loading…</div>
+      <div className="mt-2 text-bolt-elements-textTertiary">Loading...</div>
     </div>
   );
 }
 
-function readStoredSurfaceLayout(): { openTabs: SurfaceTabId[]; activeTab: SurfaceTabId } | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
+function DeferredTechnicalDetails({ children }: { children: React.ReactNode }) {
+  const [hasOpened, setHasOpened] = useState(false);
 
-  try {
-    const raw = window.localStorage.getItem(SURFACE_LAYOUT_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as {
-      openTabs?: unknown;
-      activeTab?: unknown;
-    };
-
-    const openTabs = Array.isArray(parsed.openTabs)
-      ? parsed.openTabs.filter((tab): tab is SurfaceTabId => tab === 'chat' || tab === 'workspace')
-      : [];
-
-    if (!openTabs.includes('chat')) {
-      openTabs.unshift('chat');
-    }
-
-    return {
-      openTabs,
-      activeTab: 'chat',
-    };
-  } catch {
-    return null;
-  }
-}
-
-function persistSurfaceLayout(openTabs: SurfaceTabId[], activeTab: SurfaceTabId) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(
-      SURFACE_LAYOUT_STORAGE_KEY,
-      JSON.stringify({
-        openTabs,
-        activeTab,
-      }),
-    );
-  } catch {
-    // Persistence failures should never block the shell.
-  }
+  return (
+    <details
+      className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2"
+      onToggle={(event) => {
+        if (event.currentTarget.open) {
+          setHasOpened(true);
+        }
+      }}
+    >
+      <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary [&::-webkit-details-marker]:hidden">
+        <span className="mr-2 i-ph:terminal-window" aria-hidden="true" />
+        Technical details
+      </summary>
+      {hasOpened ? <div className="border-t border-bolt-elements-borderColor p-2">{children}</div> : null}
+    </details>
+  );
 }
 
 interface BaseChatProps {
@@ -223,134 +167,6 @@ interface TechnicalFeedContentProps {
   latestRunMetrics?: AgentRunMetricsDataEvent | null;
   latestUsage?: UsageDataEvent | null;
   technicalFeedRef?: React.Ref<HTMLDivElement>;
-}
-
-interface WorkspaceCompactPromptProps {
-  input: string;
-  textareaRef?: React.RefObject<HTMLTextAreaElement> | undefined;
-  provider?: ProviderInfo;
-  model?: string;
-  setModel?: (model: string) => void;
-  isStreaming: boolean;
-  handleInputChange?: ((event: React.ChangeEvent<HTMLTextAreaElement>) => void) | undefined;
-  handlePaste: (event: React.ClipboardEvent) => void;
-  handleSendMessage: (event: React.UIEvent, messageInput?: string) => void;
-  handleStop?: (() => void) | undefined;
-  queuedVisibleFollowUp?: { content: string; queuedAt: number } | null;
-}
-
-function WorkspaceCompactPrompt({
-  input,
-  textareaRef,
-  provider,
-  model,
-  setModel,
-  isStreaming,
-  handleInputChange,
-  handlePaste,
-  handleSendMessage,
-  handleStop,
-  queuedVisibleFollowUp,
-}: WorkspaceCompactPromptProps) {
-  const hasPromptDraft = input.trim().length > 0;
-  const buttonLabel = isStreaming && !hasPromptDraft ? 'Stop current run' : 'Send workspace prompt';
-  const freeModels = provider?.name === 'FREE' ? provider.staticModels || [] : [];
-  const selectedFreeModel = freeModels.some((entry) => entry.name === model) ? model : freeModels[0]?.name;
-
-  return (
-    <div data-testid="workspace-compact-prompt" className="z-prompt w-full py-1">
-      <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2/95 px-2 py-1.5 shadow-[0_-8px_26px_rgba(15,23,42,0.10)] backdrop-blur">
-        <div className="flex items-center gap-2">
-          <div className="hidden min-w-0 shrink-0 items-center gap-1.5 text-[11px] text-bolt-elements-textTertiary lg:flex">
-            <span className="rounded-full border border-bolt-elements-borderColor px-2 py-0.5 text-bolt-elements-textSecondary">
-              {(provider as any)?.label || provider?.name || 'Provider'}
-            </span>
-            {freeModels.length === 0 && model ? <span className="max-w-[170px] truncate">{model}</span> : null}
-          </div>
-          {freeModels.length > 1 ? (
-            <select
-              aria-label="FREE workspace coding model"
-              title="Change the model for your next prompt"
-              className="w-[126px] shrink-0 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 py-2 text-xs font-medium text-bolt-elements-textPrimary outline-none focus:border-bolt-elements-focus sm:w-[180px]"
-              value={selectedFreeModel}
-              onChange={(event) => setModel?.(event.target.value)}
-            >
-              {freeModels.map((freeModel) => (
-                <option key={freeModel.name} value={freeModel.name}>
-                  {freeModel.label}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <div className="relative min-w-0 flex-1">
-            <textarea
-              ref={textareaRef}
-              className="modern-scrollbar block max-h-16 min-h-[38px] w-full resize-none rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-3 py-2 pr-12 text-sm text-bolt-elements-textPrimary outline-none transition-colors placeholder:text-bolt-elements-textTertiary focus:border-bolt-elements-focus"
-              value={input}
-              onChange={(event) => handleInputChange?.(event)}
-              onPaste={handlePaste}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey) {
-                  return;
-                }
-
-                event.preventDefault();
-
-                if (event.nativeEvent.isComposing) {
-                  return;
-                }
-
-                if (isStreaming && !hasPromptDraft) {
-                  handleStop?.();
-                  return;
-                }
-
-                if (hasPromptDraft) {
-                  handleSendMessage(event);
-                }
-              }}
-              placeholder="Ask Cody to change this project..."
-              rows={1}
-              translate="no"
-            />
-            <button
-              type="button"
-              className={classNames(
-                'absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border text-sm transition-colors',
-                hasPromptDraft
-                  ? 'border-bolt-elements-focus bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover'
-                  : isStreaming
-                    ? 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:border-bolt-elements-focus'
-                    : 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textTertiary',
-              )}
-              aria-label={buttonLabel}
-              title={buttonLabel}
-              disabled={!hasPromptDraft && !isStreaming}
-              onClick={(event) => {
-                if (isStreaming && !hasPromptDraft) {
-                  handleStop?.();
-                  return;
-                }
-
-                if (hasPromptDraft) {
-                  handleSendMessage(event);
-                }
-              }}
-            >
-              <span className={isStreaming && !hasPromptDraft ? 'i-ph:stop-fill' : 'i-ph:paper-plane-tilt-fill'} />
-            </button>
-          </div>
-        </div>
-        {queuedVisibleFollowUp ? (
-          <div className="mt-1 truncate px-1 text-[11px] text-bolt-elements-textTertiary">
-            <span className="font-medium text-bolt-elements-textSecondary">Queued:</span>{' '}
-            {queuedVisibleFollowUp.content.slice(0, 160)}
-            {queuedVisibleFollowUp.content.length > 160 ? '...' : ''}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 function TechnicalFeedContent({
@@ -471,20 +287,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
-    const showWorkbench = useStore(workbenchStore.showWorkbench);
-    const stepRunnerEvents = useStore(workbenchStore.stepRunnerEvents);
     const commentaryFeedRef = useRef<HTMLDivElement | null>(null);
     const technicalFeedRef = useRef<HTMLDivElement | null>(null);
-    const workspaceAutoSurfaceRef = useRef(false);
-    const previousStreamingRef = useRef(isStreaming);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
-    const [openSurfaces, setOpenSurfaces] = useState<SurfaceTabId[]>(['chat', 'workspace']);
-    const [activeSurface, setActiveSurface] = useState<SurfaceTabId>('chat');
-    const [surfaceLayoutHydrated, setSurfaceLayoutHydrated] = useState(false);
     const providerListSignature = (providerList || PROVIDER_LIST).map((item) => item.name).join('|');
     const promptSurfaceMountLoggedRef = useRef(false);
-    const isWorkspaceActivationBlocked = chatStarted && isStreaming && stepRunnerEvents.length === 0;
 
     useEffect(() => {
       if (expoUrl) {
@@ -540,83 +348,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         chatStarted,
       });
     }, [chatStarted, input, model, provider?.name, textareaRef]);
-    useEffect(() => {
-      const storedLayout = readStoredSurfaceLayout();
-
-      if (storedLayout) {
-        setOpenSurfaces(storedLayout.openTabs);
-        setActiveSurface(storedLayout.activeTab);
-      }
-
-      setSurfaceLayoutHydrated(true);
-    }, []);
-
-    useEffect(() => {
-      if (!surfaceLayoutHydrated) {
-        return;
-      }
-
-      persistSurfaceLayout(openSurfaces, activeSurface);
-    }, [activeSurface, openSurfaces, surfaceLayoutHydrated]);
-
-    useEffect(() => {
-      if (openSurfaces.includes(activeSurface)) {
-        return;
-      }
-
-      setActiveSurface('chat');
-    }, [activeSurface, openSurfaces]);
-
-    useEffect(() => {
-      if (!showWorkbench) {
-        return;
-      }
-
-      setOpenSurfaces((currentTabs) =>
-        currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
-      );
-    }, [showWorkbench]);
-
-    useEffect(() => {
-      const hasMeaningfulWorkspaceActivity = stepRunnerEvents.some((event) => event.type !== 'telemetry');
-
-      if (!hasMeaningfulWorkspaceActivity) {
-        workspaceAutoSurfaceRef.current = false;
-        return;
-      }
-
-      if (!isStreaming) {
-        return;
-      }
-
-      if (workspaceAutoSurfaceRef.current) {
-        return;
-      }
-
-      workspaceAutoSurfaceRef.current = true;
-      setOpenSurfaces((currentTabs) =>
-        currentTabs.includes('workspace') ? currentTabs : [...currentTabs, 'workspace'],
-      );
-      setActiveSurface('workspace');
-      workbenchStore.showWorkbench.set(true);
-    }, [isStreaming, stepRunnerEvents]);
-
-    useEffect(() => {
-      const wasStreaming = previousStreamingRef.current;
-      previousStreamingRef.current = isStreaming;
-
-      if (!chatStarted || !wasStreaming || isStreaming) {
-        return;
-      }
-
-      if (!workspaceAutoSurfaceRef.current || activeSurface !== 'workspace') {
-        return;
-      }
-
-      workspaceAutoSurfaceRef.current = false;
-      setActiveSurface('chat');
-    }, [activeSurface, chatStarted, isStreaming]);
-
     useEffect(() => {
       onStreamingChange?.(isStreaming);
     }, [isStreaming, onStreamingChange]);
@@ -828,35 +559,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
-    const openSurface = (surfaceId: SurfaceTabId) => {
-      if (surfaceId === 'workspace' && isWorkspaceActivationBlocked) {
-        return;
-      }
-
-      setOpenSurfaces((currentTabs) => (currentTabs.includes(surfaceId) ? currentTabs : [...currentTabs, surfaceId]));
-      setActiveSurface(surfaceId);
-
-      if (surfaceId === 'workspace') {
-        workbenchStore.showWorkbench.set(true);
-      }
-    };
-
-    const closeSurface = (surfaceId: SurfaceTabId) => {
-      if (surfaceId === 'chat') {
-        return;
-      }
-
-      setOpenSurfaces((currentTabs) => currentTabs.filter((tab) => tab !== surfaceId));
-      setActiveSurface((currentSurface) => (currentSurface === surfaceId ? 'chat' : currentSurface));
-
-      if (surfaceId === 'workspace') {
-        workbenchStore.showWorkbench.set(false);
-      }
-    };
-
-    const visibleSurfaceTabs = SURFACE_TABS.filter((tab) => openSurfaces.includes(tab.id));
-    const hiddenSurfaceTabs = SURFACE_TABS.filter((tab) => tab.closable && !openSurfaces.includes(tab.id));
-
     const alertStack = (
       <div className="flex flex-col gap-2">
         {deployAlert && (
@@ -903,13 +605,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     );
 
     const activityFeeds = chatStarted ? (
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <div className="min-w-0">
-          <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
-            <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
-          </Suspense>
-        </div>
-        <div className="min-w-0">
+      <div className="space-y-2" aria-label="Agent activity">
+        <Suspense fallback={<LazyPanelFallback title="Live Commentary" />}>
+          <LazyCommentaryFeed data={data} scrollRef={commentaryFeedRef} />
+        </Suspense>
+        <DeferredTechnicalDetails>
           <TechnicalFeedContent
             data={data}
             progressAnnotations={progressAnnotations}
@@ -921,13 +621,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             latestUsage={latestUsage}
             technicalFeedRef={technicalFeedRef}
           />
-        </div>
+        </DeferredTechnicalDetails>
       </div>
     ) : null;
 
-    const renderChatInputRegion = () => (
-      <div data-testid="chat-input-region" className="flex flex-col gap-2">
+    const renderChatInputRegion = (variant: 'full' | 'agent' = 'full') => (
+      <div
+        data-testid={variant === 'agent' ? 'agent-composer-region' : 'chat-input-region'}
+        className="flex flex-col gap-2"
+      >
         <ChatBox
+          variant={variant}
           isModelSettingsCollapsed={isModelSettingsCollapsed}
           setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
           provider={provider}
@@ -986,33 +690,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             {queuedVisibleFollowUp.content.length > 180 ? '...' : ''}
           </div>
         ) : null}
-        <div
-          className={classNames(
-            'rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary',
-            chatStarted ? 'px-3 py-1.5 text-[11px]' : 'px-3 py-2 text-xs',
-          )}
-        >
-          <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives can
-          browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code> file with
-          its understanding of the full API environment. No setup is required.
-        </div>
+        {variant === 'full' ? (
+          <div className="rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-3 py-2 text-xs text-bolt-elements-textSecondary">
+            <span className="font-medium text-bolt-elements-textPrimary">Built-in web research:</span> Bolt.gives can
+            browse the web with Playwright, study API documentation from a URL, and generate a <code>.md</code> file
+            with its understanding of the full API environment. No setup is required.
+          </div>
+        ) : null}
       </div>
-    );
-
-    const renderWorkspaceCompactPrompt = () => (
-      <WorkspaceCompactPrompt
-        input={input}
-        textareaRef={textareaRef}
-        provider={provider}
-        model={model}
-        setModel={setModel}
-        isStreaming={isStreaming}
-        handleInputChange={handleInputChange}
-        handlePaste={handlePaste}
-        handleSendMessage={handleSendMessage}
-        handleStop={handleStop}
-        queuedVisibleFollowUp={queuedVisibleFollowUp}
-      />
     );
 
     const renderPromptBlock = (placement: 'intro' | 'persistent') => (
@@ -1125,159 +810,86 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       </div>
     );
 
+    const agentConversation = (
+      <StickToBottom
+        className="modern-scrollbar flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain"
+        resize="smooth"
+        initial="smooth"
+      >
+        <StickToBottom.Content className="relative flex min-h-full flex-col gap-3 px-3 py-3">
+          {alertStack}
+          <ClientOnly>
+            {() => (
+              <Suspense fallback={<LazyPanelFallback title="Conversation" />}>
+                <LazyMessages
+                  className="z-1 flex w-full flex-col"
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  append={append}
+                  chatMode={chatMode}
+                  setChatMode={setChatMode}
+                  provider={provider}
+                  model={model}
+                  addToolResult={addToolResult}
+                />
+              </Suspense>
+            )}
+          </ClientOnly>
+          {activityFeeds}
+          <ScrollToBottom />
+        </StickToBottom.Content>
+      </StickToBottom>
+    );
+
+    const agentWorkspace = (
+      <ClientOnly>
+        {() => (
+          <Suspense fallback={<LazyPanelFallback title="Workspace" />}>
+            <LazyWorkbench
+              embedded
+              forceVisible
+              chatStarted={chatStarted}
+              isStreaming={isStreaming}
+              setSelectedElement={setSelectedElement}
+              data={data}
+              model={model}
+              provider={provider}
+              autonomyMode={autonomyMode}
+              latestRunMetrics={latestRunMetrics}
+              latestUsage={latestUsage}
+            />
+          </Suspense>
+        )}
+      </ClientOnly>
+    );
+
+    const agentStatusLabel = actionAlert
+      ? actionAlertAutoFixState === 'running'
+        ? 'Repairing'
+        : 'Repair queued'
+      : llmErrorAlert
+        ? 'Needs attention'
+        : isStreaming
+          ? 'Working'
+          : 'Ready';
+    const agentModeLabel = agentMode === 'plan' ? 'Plan first' : agentMode === 'act' ? 'Run plan' : 'Build';
+
     const baseChat = (
       <div ref={ref} className={classNames(styles.BaseChat, 'relative flex h-full min-h-0 w-full overflow-hidden')}>
         <ClientOnly>{() => <Menu />}</ClientOnly>
-        <div className="flex h-full w-full min-h-0 flex-col overflow-hidden">
-          <div className="px-2 py-2">
-            <div
-              role="tablist"
-              aria-label="Workspace surfaces"
-              className={classNames(styles.SurfaceRail, 'flex flex-wrap items-center gap-2 pl-12 sm:pl-14')}
-            >
-              {visibleSurfaceTabs.map((tab) => {
-                const isActive = activeSurface === tab.id;
-                const panelId = `${tab.id}-surface-panel`;
-                const tabId = `${tab.id}-surface-tab`;
-                const workspaceTabBlocked = tab.id === 'workspace' && isWorkspaceActivationBlocked;
-
-                return (
-                  <div
-                    key={tab.id}
-                    className={classNames(
-                      styles.SurfaceTab,
-                      'group flex items-center gap-1 rounded-full px-2 py-1 text-sm transition-colors',
-                      isActive
-                        ? classNames(styles.SurfaceTabActive, 'bg-transparent text-bolt-elements-textPrimary')
-                        : 'bg-transparent text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
-                      workspaceTabBlocked ? 'opacity-60' : '',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      id={tabId}
-                      role="tab"
-                      aria-selected={isActive}
-                      aria-disabled={workspaceTabBlocked}
-                      aria-controls={panelId}
-                      className={classNames(
-                        'flex items-center gap-2 rounded-full bg-transparent px-1 py-0.5',
-                        isActive
-                          ? 'text-bolt-elements-textPrimary'
-                          : 'text-bolt-elements-textSecondary group-hover:text-bolt-elements-textPrimary',
-                        workspaceTabBlocked ? 'cursor-not-allowed' : '',
-                      )}
-                      onClick={() => openSurface(tab.id)}
-                      title={workspaceTabBlocked ? 'Workspace opens once setup activity starts.' : tab.description}
-                    >
-                      <span className={tab.id === 'chat' ? 'i-ph:chat-circle-dots' : 'i-ph:stack'} />
-                      <span className="font-medium">{tab.label}</span>
-                    </button>
-                    {tab.closable ? (
-                      <button
-                        type="button"
-                        className="rounded-full bg-transparent p-1 text-bolt-elements-textTertiary transition-colors hover:text-bolt-elements-textPrimary"
-                        onClick={() => closeSurface(tab.id)}
-                        aria-label={`Close ${tab.label} tab`}
-                        title={`Close ${tab.label}`}
-                      >
-                        <span className="i-ph:x" />
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-              {hiddenSurfaceTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={false}
-                  aria-disabled={tab.id === 'workspace' && isWorkspaceActivationBlocked}
-                  aria-controls={`${tab.id}-surface-panel`}
-                  className={classNames(
-                    'flex items-center gap-2 rounded-full border border-dashed border-bolt-elements-borderColor bg-transparent px-3 py-1 text-sm text-bolt-elements-textSecondary transition-colors hover:text-bolt-elements-textPrimary',
-                    tab.id === 'workspace' && isWorkspaceActivationBlocked ? 'cursor-not-allowed opacity-60' : '',
-                  )}
-                  onClick={() => openSurface(tab.id)}
-                  title={
-                    tab.id === 'workspace' && isWorkspaceActivationBlocked
-                      ? 'Workspace opens once setup activity starts.'
-                      : tab.description
-                  }
-                >
-                  <span className="i-ph:plus" />
-                  <span className="text-bolt-elements-textPrimary">Open {tab.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-hidden">
-            {openSurfaces.includes('chat') ? (
-              <div
-                id="chat-surface-panel"
-                role="tabpanel"
-                aria-labelledby="chat-surface-tab"
-                aria-hidden={activeSurface !== 'chat'}
-                className={classNames('h-full min-h-0', {
-                  hidden: activeSurface !== 'chat',
-                })}
-              >
-                {chatSurface}
-              </div>
-            ) : null}
-
-            {openSurfaces.includes('workspace') ? (
-              <div
-                id="workspace-surface-panel"
-                role="tabpanel"
-                aria-labelledby="workspace-surface-tab"
-                aria-hidden={activeSurface !== 'workspace'}
-                className={classNames('h-full min-h-0 overflow-hidden py-1.5', {
-                  hidden: activeSurface !== 'workspace',
-                })}
-              >
-                <ClientOnly>
-                  {() => (
-                    <Suspense fallback={<LazyPanelFallback title="Workspace" />}>
-                      <LazyWorkbench
-                        embedded
-                        forceVisible
-                        chatStarted={chatStarted}
-                        isStreaming={isStreaming}
-                        setSelectedElement={setSelectedElement}
-                        data={data}
-                        model={model}
-                        provider={provider}
-                        autonomyMode={autonomyMode}
-                        latestRunMetrics={latestRunMetrics}
-                        latestUsage={latestUsage}
-                        onRequestClose={() => closeSurface('workspace')}
-                      />
-                    </Suspense>
-                  )}
-                </ClientOnly>
-              </div>
-            ) : null}
-          </div>
+        <div className="h-full min-h-0 w-full overflow-hidden">
           {chatStarted ? (
-            <div
-              data-testid="persistent-chat-composer"
-              className="shrink-0 border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 px-2 shadow-[0_-12px_34px_rgba(15,23,42,0.14)] backdrop-blur sm:px-4"
-            >
-              <div
-                className={classNames(
-                  'mx-auto w-full modern-scrollbar',
-                  activeSurface === 'workspace'
-                    ? 'max-w-none max-h-[74px] overflow-hidden'
-                    : 'max-w-[980px] max-h-[42vh] overflow-y-auto',
-                )}
-              >
-                {activeSurface === 'workspace' ? renderWorkspaceCompactPrompt() : renderPromptBlock('persistent')}
-              </div>
-            </div>
-          ) : null}
+            <AgentModeShell
+              conversation={agentConversation}
+              workspace={agentWorkspace}
+              composer={renderChatInputRegion('agent')}
+              isStreaming={isStreaming}
+              statusLabel={agentStatusLabel}
+              modeLabel={agentModeLabel}
+            />
+          ) : (
+            chatSurface
+          )}
         </div>
       </div>
     );

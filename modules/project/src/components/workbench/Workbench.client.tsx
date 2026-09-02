@@ -651,15 +651,17 @@ export const Workbench = memo(
               focusedWorkspaceView ? 'px-2 py-1.5' : 'px-3 py-2',
             )}
           >
-            <button
-              className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
-              disabled={!canToggleChatSidebar}
-              onClick={() => {
-                if (canToggleChatSidebar) {
-                  chatStore.setKey('showChat', !showChat);
-                }
-              }}
-            />
+            {!embedded ? (
+              <button
+                className={`${showChat ? 'i-ph:sidebar-simple-fill' : 'i-ph:sidebar-simple'} text-lg text-bolt-elements-textSecondary mr-1`}
+                disabled={!canToggleChatSidebar}
+                onClick={() => {
+                  if (canToggleChatSidebar) {
+                    chatStore.setKey('showChat', !showChat);
+                  }
+                }}
+              />
+            ) : null}
             <Slider selected={selectedView} options={sliderOptions} setSelected={setSelectedView} />
             {chatStarted && focusedWorkspaceView ? (
               <div
@@ -808,19 +810,22 @@ export const Workbench = memo(
             {selectedView === 'diff' && (
               <FileModifiedDropdown fileHistory={fileHistory} onSelectFile={handleSelectFile} />
             )}
-            <IconButton
-              icon="i-ph:x-circle"
-              className="-mr-1"
-              size="xl"
-              onClick={() => {
-                if (embedded) {
-                  onRequestClose?.();
-                  return;
-                }
+            {!embedded || onRequestClose ? (
+              <IconButton
+                icon="i-ph:x-circle"
+                title="Close workspace"
+                className="-mr-1"
+                size="xl"
+                onClick={() => {
+                  if (embedded) {
+                    onRequestClose?.();
+                    return;
+                  }
 
-                workbenchStore.showWorkbench.set(false);
-              }}
-            />
+                  workbenchStore.showWorkbench.set(false);
+                }}
+              />
+            ) : null}
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {showExpandedWorkspaceStatus ? (

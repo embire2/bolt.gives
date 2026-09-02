@@ -1,6 +1,6 @@
 {
   "name": "@bolt/runtime",
-  "version": "3.5.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
   "sideEffects": false,
@@ -8,7 +8,8 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@bolt/core": "workspace:*"
+    "@bolt/core": "workspace:*",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "eslint": "9.39.4",

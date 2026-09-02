@@ -44,7 +44,7 @@ export function validateProjectSubdomain(value) {
   }
 
   if (RESERVED_BOLT_SUBDOMAINS.has(subdomain)) {
-    return { ok: false, subdomain, reason: 'That bolt.gives subdomain is reserved.' };
+    return { ok: false, subdomain, reason: 'That project subdomain is reserved.' };
   }
 
   return { ok: true, subdomain, reason: null };
@@ -100,7 +100,7 @@ export function normalizeProjectDeploymentRegistry(input) {
   const deployments = Array.isArray(input?.deployments) ? input.deployments : [];
 
   return {
-    version: 1,
+    version: 2,
     deployments: deployments.map((deployment) => {
       const subdomain = slugifyProjectSubdomain(deployment.subdomain);
       const hostname = String(deployment.hostname || buildProjectHostname(subdomain)).toLowerCase();
@@ -112,6 +112,17 @@ export function normalizeProjectDeploymentRegistry(input) {
         hostname,
         status: PROJECT_DEPLOYMENT_STATUSES.has(deployment.status) ? deployment.status : 'active',
         previewPort: Number(deployment.previewPort || 0) || null,
+        originUrl:
+          typeof deployment.originUrl === 'string' &&
+          /^https:\/\/[a-z0-9.-]+\.pages\.dev\/?$/i.test(deployment.originUrl)
+            ? deployment.originUrl.replace(/\/$/, '')
+            : null,
+        deploymentProvider:
+          deployment.deploymentProvider === 'cloudflare-pages-workers' ? 'cloudflare-pages-workers' : 'hosted-preview',
+        cloudflareProjectName:
+          typeof deployment.cloudflareProjectName === 'string' ? deployment.cloudflareProjectName : null,
+        workerEnabled: deployment.workerEnabled === true,
+        databaseName: typeof deployment.databaseName === 'string' ? deployment.databaseName : null,
         customDomains: Array.isArray(deployment.customDomains)
           ? deployment.customDomains.map(normalizeProjectCustomDomainRecord).filter(Boolean)
           : [],
@@ -192,6 +203,9 @@ export function sanitizeProjectDeploymentForClient(deployment, options = {}) {
     url: deployment.hostname ? `https://${deployment.hostname}` : null,
     status: deployment.status,
     previewPort: deployment.previewPort || null,
+    deploymentProvider: deployment.deploymentProvider || 'hosted-preview',
+    workerEnabled: deployment.workerEnabled === true,
+    databaseName: deployment.databaseName || null,
     dnsStatus: deployment.dnsStatus || 'unknown',
     caddyStatus: deployment.caddyStatus || 'unknown',
     customDomains: deployment.customDomains.map((customDomain) => ({

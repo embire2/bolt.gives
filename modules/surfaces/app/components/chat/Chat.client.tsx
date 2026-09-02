@@ -1881,6 +1881,9 @@ Requirements:
           configuredProviderNames: credentialChecks.filter((providerName): providerName is string =>
             Boolean(providerName),
           ),
+          credentialFreeProviderNames: activeProviders
+            .filter((entry) => !entry.allowsUserApiKey)
+            .map(({ name }) => name),
           localProviderNames: LOCAL_PROVIDERS,
           savedProviderName: instanceSelection?.providerName || Cookies.get('selectedProvider'),
           lastConfiguredProviderName: Cookies.get(LAST_CONFIGURED_PROVIDER_COOKIE_KEY),
@@ -3779,7 +3782,6 @@ CONTINUE IMMEDIATELY:
         const currentInput = input || '';
         const newInput = currentInput.length > 0 ? `${result}\n\n${currentInput}` : result;
 
-        // Update the input via the same mechanism as handleInputChange
         const syntheticEvent = {
           target: { value: newInput },
         } as React.ChangeEvent<HTMLTextAreaElement>;
@@ -3800,9 +3802,7 @@ CONTINUE IMMEDIATELY:
         showChat={showChat}
         chatStarted={chatStarted}
         isStreaming={isLoading || fakeLoading}
-        onStreamingChange={(streaming) => {
-          streamingState.set(streaming);
-        }}
+        onStreamingChange={(streaming) => streamingState.set(streaming)}
         enhancingPrompt={enhancingPrompt}
         promptEnhanced={promptEnhanced}
         sendMessage={sendMessage}

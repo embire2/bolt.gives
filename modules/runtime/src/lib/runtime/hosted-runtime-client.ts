@@ -65,6 +65,7 @@ export interface HostedProjectDatabase {
   status: 'provisioned' | 'connected';
   databaseName: string;
   databaseUser: string;
+  persistence?: 'durable';
 }
 
 export interface HostedRuntimeNodeWorkspace {
@@ -92,6 +93,9 @@ export interface HostedProjectDeployment {
   hostname: string;
   url: string | null;
   status: string;
+  deploymentProvider?: 'hosted-preview' | 'cloudflare-pages-workers';
+  workerEnabled?: boolean;
+  databaseName?: string | null;
   dnsStatus: string;
   caddyStatus: string;
   customDomains: Array<{
@@ -487,6 +491,7 @@ export async function publishHostedRuntimeProject(options: { sessionId: string; 
   ok: true;
   deployment: HostedProjectDeployment;
   runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+  projectDatabase?: HostedProjectDatabase | null;
   dns?: { status: string; message: string };
   caddy?: { status: string; message: string };
 }> {
@@ -498,7 +503,7 @@ export async function publishHostedRuntimeProject(options: { sessionId: string; 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ subdomain: options.subdomain }),
-      timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
+      timeoutMs: Math.max(HOSTED_SYNC_TIMEOUT_MS, 10 * 60 * 1000),
       label: 'hosted-runtime/project-publish',
     },
   );
@@ -512,6 +517,7 @@ export async function publishHostedRuntimeProject(options: { sessionId: string; 
     ok: true;
     deployment: HostedProjectDeployment;
     runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
+    projectDatabase?: HostedProjectDatabase | null;
     dns?: { status: string; message: string };
     caddy?: { status: string; message: string };
   };
@@ -524,6 +530,13 @@ export type HostedCloudflareProjectDeployment = {
   projectName: string;
   pagesUrl: string | null;
   deploymentUrl: string | null;
+  hostname: string | null;
+  url: string | null;
+  workerEnabled: boolean;
+  databaseName: string | null;
+  dnsStatus: string | null;
+  caddyStatus: string | null;
+  caddyMessage: string | null;
   status: 'active' | 'building' | 'failed';
   buildOutputDirectory: string | null;
   lastError: string | null;

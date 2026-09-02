@@ -209,7 +209,7 @@ export const DeployButton = ({
               onClick={handleOpenWebDeployClick}
             >
               <span className="i-ph:globe-hemisphere-west h-5 w-5 text-emerald-500" aria-hidden="true" />
-              <span className="mx-auto">Deploy to OpenWeb.Software (FREE)</span>
+              <span className="mx-auto">Publish FREE (*.instances.bolt.gives)</span>
             </DropdownMenu.Item>
 
             <DropdownMenu.Item
@@ -223,7 +223,7 @@ export const DeployButton = ({
               onClick={handleCloudflareDeployClick}
             >
               <span className="i-ph:cloud-arrow-up h-5 w-5 text-orange-500" aria-hidden="true" />
-              <span className="mx-auto">Deploy to Cloudflare</span>
+              <span className="mx-auto">Deploy to Cloudflare Pages</span>
             </DropdownMenu.Item>
 
             <DropdownMenu.Item

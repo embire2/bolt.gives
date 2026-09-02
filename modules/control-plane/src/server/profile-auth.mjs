@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import crypto from 'node:crypto';
 
 export const PROFILE_SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;

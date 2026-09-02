@@ -7,6 +7,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
 import { execSync } from 'child_process';
 import { getManualChunkName } from './build-utils/manual-chunks';
+import packageJson from './package.json';
 
 // Load environment variables from multiple files
 dotenv.config({ path: '.env.local' });
@@ -22,15 +23,15 @@ const getGitHash = () => {
   }
 };
 
-export function normalizeProductVersion(rawVersion = '1.0.1') {
-  return String(rawVersion || '1.0.1').replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1.$2');
+export function normalizeProductVersion(rawVersion = packageJson.version) {
+  return String(rawVersion || packageJson.version).replace(/^(\d+\.\d+\.\d+)-(\d+)$/, '$1.$2');
 }
 
 export default defineConfig((config) => {
   const nodeEnv = config.mode === 'production' ? 'production' : process.env.NODE_ENV || 'development';
-  const productVersion = normalizeProductVersion(
-    process.env.APP_VERSION || process.env.BOLT_APP_VERSION || process.env.npm_package_version || '1.0.1',
-  );
+
+  // The checked-in package version is the release source of truth. Runtime metadata may be stale.
+  const productVersion = normalizeProductVersion(packageJson.version);
 
   return {
     define: {
@@ -40,6 +41,7 @@ export default defineConfig((config) => {
     },
     build: {
       target: 'esnext',
+
       // Lowers peak memory usage during production builds by skipping gzip/brotli size estimates.
       reportCompressedSize: false,
       rollupOptions: {

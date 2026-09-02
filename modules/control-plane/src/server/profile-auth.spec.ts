@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   createProfileAuthRateLimitKey,
@@ -12,6 +13,12 @@ import {
 } from './profile-auth.mjs';
 
 describe('profile authentication contracts', () => {
+  it('remains importable by the Vite SSR evaluator', () => {
+    const source = readFileSync(new URL('./profile-auth.mjs', import.meta.url), 'utf8');
+
+    expect(source.startsWith('#!')).toBe(false);
+  });
+
   it('requires a full name, valid email, and country', () => {
     expect(
       validateUserProfileInput({

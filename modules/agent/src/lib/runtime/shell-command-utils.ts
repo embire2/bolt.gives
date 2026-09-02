@@ -778,8 +778,6 @@ export function makeScaffoldCommandsProjectAware(
   };
 }
 
-// ─── npm → pnpm Universal Rewriter ──────────────────────────────────────────
-
 const NPM_RUN_RE = /^npm\s+run\s+/i;
 const NPM_START_RE = /^npm\s+start\b/i;
 const NPM_TEST_RE = /^npm\s+test\b/i;
@@ -788,6 +786,7 @@ const NPM_INIT_RE = /^npm\s+init\s+/i;
 const NPM_ADD_RE = /^npm\s+(add|install|i)\s+/i;
 const NPX_RE = /^npx\s+/i;
 const YARN_RE = /^yarn\s+/i;
+const ENV_PREFIXED_COMMAND_RE = /^((?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+))\s+)+)(.+)$/;
 
 function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: boolean } {
   const trimmed = segment.trim();
@@ -798,8 +797,7 @@ function rewriteNpmSegmentToPnpm(segment: string): { segment: string; modified: 
 
   const stripKnownNpmOnlyFlags = (value: string) =>
     value
-      .replace(/(?:^|\s)--no-progress\b/gi, ' ')
-      .replace(/(?:^|\s)--silent\b/gi, ' ')
+      .replace(/(?:^|\s)--(?:yes|no-(?:progress|audit|fund)|silent)\b/gi, ' ')
       .replace(/(?:^|\s)--loglevel(?:=|\s+)silent\b/gi, ' ')
       .replace(NPM_LEGACY_PEER_DEPS_FLAG_RE, ' ')
       .replace(/\s{2,}/g, ' ')
@@ -903,10 +901,6 @@ function rewriteYarnSegmentToPnpm(segment: string): { segment: string; modified:
   return { segment, modified: false };
 }
 
-/**
- * Universally rewrite npm/npx/yarn commands to pnpm equivalents.
- * This ensures commands actually work in WebContainer where npm may not be present.
- */
 export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRewrite {
   const delimiterNormalization = decodeHtmlCommandDelimiters(command);
   const normalizedCommand = delimiterNormalization.modifiedCommand || command;
@@ -920,20 +914,21 @@ export function rewriteAllPackageManagersToPnpm(command: string): ShellCommandRe
   let modifiedAny = false;
 
   const rewrittenParts = parts.map((part) => {
-    // Try npm → pnpm
-    let rewritten = rewriteNpmSegmentToPnpm(part);
+    const envCommand = part.trim().match(ENV_PREFIXED_COMMAND_RE);
+    const envPrefix = envCommand?.[1] || '';
+    const packageCommand = envCommand?.[2] || part;
+    let rewritten = rewriteNpmSegmentToPnpm(packageCommand);
 
     if (rewritten.modified) {
       modifiedAny = true;
-      return rewritten.segment;
+      return `${envPrefix}${rewritten.segment}`;
     }
 
-    // Try yarn → pnpm
-    rewritten = rewriteYarnSegmentToPnpm(part);
+    rewritten = rewriteYarnSegmentToPnpm(packageCommand);
 
     if (rewritten.modified) {
       modifiedAny = true;
-      return rewritten.segment;
+      return `${envPrefix}${rewritten.segment}`;
     }
 
     return part;
