@@ -59,6 +59,7 @@ import {
   releaseRuntimeNodeDatabasePorts,
   retainSessionPreviewPortForRecovery,
   resolveManagedInstanceProcessCwd,
+  resolveRuntimeScopedTempDir,
   resolveRuntimeNodeDatabaseEnvironmentForCommand,
   resolveRuntimeWorkspaceRoot,
   resolvePublishedProjectUpgradeTarget,
@@ -540,6 +541,16 @@ describe('runtime server workspace isolation', () => {
     expect(resolveManagedInstanceProcessCwd('git', ['rev-parse', 'HEAD'], '/srv/bolt-gives', '/tmp/ignored')).toBe(
       '/srv/bolt-gives',
     );
+  });
+
+  it('isolates default Wrangler workspaces between runtime checkouts', () => {
+    const productionDir = resolveRuntimeScopedTempDir('/tmp/bolt-gives-project-cloudflare', '/srv/bolt-gives');
+    const alphaDir = resolveRuntimeScopedTempDir('/tmp/bolt-gives-project-cloudflare', '/srv/bolt-gives-alpha');
+
+    expect(productionDir).toMatch(/^\/tmp\/bolt-gives-project-cloudflare-[a-f0-9]{12}$/);
+    expect(alphaDir).toMatch(/^\/tmp\/bolt-gives-project-cloudflare-[a-f0-9]{12}$/);
+    expect(alphaDir).not.toBe(productionDir);
+    expect(resolveRuntimeScopedTempDir('/tmp/bolt-gives-project-cloudflare', '/srv/bolt-gives')).toBe(productionDir);
   });
 
   it('waits for complete managed deploy artifacts before fleet rollout', () => {

@@ -141,6 +141,13 @@ import {
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.resolve(path.dirname(SCRIPT_PATH));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+
+export function resolveRuntimeScopedTempDir(baseDir, repoRoot = REPO_ROOT) {
+  const scope = crypto.createHash('sha256').update(path.resolve(repoRoot)).digest('hex').slice(0, 12);
+
+  return `${path.resolve(baseDir)}-${scope}`;
+}
+
 const HOST = process.env.RUNTIME_HOST || '127.0.0.1';
 const PORT = Number(process.env.RUNTIME_PORT || '4321');
 const WORK_DIR = process.env.RUNTIME_WORK_DIR || '/home/project';
@@ -214,9 +221,11 @@ const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6
 const MANAGED_INSTANCE_NODE_OPTIONS = process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
 const MANAGED_INSTANCE_WRANGLER_WORK_DIR =
-  process.env.RUNTIME_MANAGED_INSTANCE_WRANGLER_WORK_DIR || '/tmp/bolt-gives-managed-cloudflare';
+  process.env.RUNTIME_MANAGED_INSTANCE_WRANGLER_WORK_DIR ||
+  resolveRuntimeScopedTempDir('/tmp/bolt-gives-managed-cloudflare');
 const CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR =
-  process.env.RUNTIME_CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR || '/tmp/bolt-gives-project-cloudflare';
+  process.env.RUNTIME_CLOUDFLARE_PROJECT_WRANGLER_WORK_DIR ||
+  resolveRuntimeScopedTempDir('/tmp/bolt-gives-project-cloudflare');
 const PREVIEW_READY_TIMEOUT_MS = Number(process.env.RUNTIME_PREVIEW_READY_TIMEOUT_MS || '60000');
 const COMMAND_TIMEOUT_MS = Number(process.env.RUNTIME_COMMAND_TIMEOUT_MS || '900000');
 const PROJECT_MANIFEST_WAIT_MS = Number(process.env.RUNTIME_PROJECT_MANIFEST_WAIT_MS || '12000');

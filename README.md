@@ -43,6 +43,8 @@ Managed Pages instances also use `https://bolt.gives` as the canonical hosted `F
 
 Cloudflare Pages edge functions also retry runtime-control calls through `https://bolt.gives/runtime` when the edge rejects the local loopback fallback, which keeps public Pages previews from surfacing avoidable runtime-control console errors.
 
+Generated-project and managed-fleet Wrangler state is isolated per deployed checkout, so alpha, production, and local verification can publish concurrently without sharing mutable build links.
+
 Every hosted project receives a restricted local PostgreSQL database before its first command. The [`/workspace-setup`](/workspace-setup) wizard additionally provisions dedicated Ubuntu runtime-node projects for clients who need a real server CLI, with an isolated Linux user, private workspace directory, and one-time SSH handoff. Runtime-node admin SSH credentials stay in ignored env/runtime service files and are never sent to the browser.
 
 The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project website. It highlights the current release, managed-instance flow, GitHub contribution path, real product screenshots, crawler-friendly structured data, and a generated search/social image at `/seo/bolt-gives-agentic-coding-platform.png`. The coding workspace is available at [`https://bolt.gives/chat`](https://bolt.gives/chat) and existing project chats continue to load at `/chat/:id`.

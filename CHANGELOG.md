@@ -77,6 +77,7 @@
 - Removed the Vite HMR client from hosted Preview HTML. Runtime-owned revision reloads still show file changes, while the unused cross-proxy WebSocket can no longer add 400/502 console errors to an otherwise healthy app.
 - Recovered safe entry assets omitted by a static Vite build, rejected missing/private referenced assets, and limited Worker SPA fallback to HTML navigation so JavaScript can never be returned with an HTML MIME type.
 - Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
+- Scoped temporary Wrangler workspaces to the active runtime checkout, preventing alpha, production, and local services on one host from rejecting generated-project publishes because another checkout owned the safety symlinks.
 
 ### Security
 
