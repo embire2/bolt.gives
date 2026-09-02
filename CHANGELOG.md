@@ -79,6 +79,7 @@
 - Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
 - Scoped temporary Wrangler workspaces to the active runtime checkout, preventing alpha, production, and local services on one host from rejecting generated-project publishes because another checkout owned the safety symlinks.
 - Returned a cacheable empty favicon response when a generated app does not ship one, keeping otherwise healthy published projects free of implicit browser-console `404` errors.
+- Allowed source-only rsync releases to pass the managed-fleet guard only when their root-controlled `BOLT_RELEASE_SHA` exactly matches the live remote `main` head; stale, malformed, or unverifiable markers still fail closed.
 
 ### Security
 

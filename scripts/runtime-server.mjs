@@ -312,6 +312,8 @@ const MANAGED_INSTANCE_REGISTRY_PATH =
 const MANAGED_INSTANCE_TRIAL_DAYS = Number(process.env.RUNTIME_MANAGED_INSTANCE_TRIAL_DAYS || '0');
 const MANAGED_INSTANCE_ROOT_DOMAIN = process.env.RUNTIME_MANAGED_INSTANCE_ROOT_DOMAIN || 'pages.dev';
 const MANAGED_INSTANCE_SOURCE_BRANCH = process.env.RUNTIME_MANAGED_INSTANCE_SOURCE_BRANCH || 'main';
+const MANAGED_INSTANCE_SOURCE_REPOSITORY =
+  process.env.RUNTIME_MANAGED_INSTANCE_SOURCE_REPOSITORY || 'https://github.com/embire2/bolt.gives.git';
 const MANAGED_INSTANCE_DEPLOY_DIR =
   process.env.RUNTIME_MANAGED_INSTANCE_DEPLOY_DIR || path.join(REPO_ROOT, 'build', 'client');
 const MANAGED_INSTANCE_SERVER_BUILD_PATH =
@@ -985,13 +987,19 @@ function getCloudflareProjectDeploymentConfig() {
 
 export function buildManagedInstanceRolloutGuardDecision(input = {}) {
   const hasGitMetadata = input.hasGitMetadata !== false;
+  const releaseSha = /^[a-f0-9]{40}$/i.test(String(input.releaseSha || '').trim())
+    ? String(input.releaseSha).trim().toLowerCase()
+    : null;
+  const originMainSha = /^[a-f0-9]{40}$/i.test(String(input.originMainSha || '').trim())
+    ? String(input.originMainSha).trim().toLowerCase()
+    : null;
 
-  if (!hasGitMetadata) {
+  if (!hasGitMetadata && !releaseSha) {
     return {
       allowed: false,
-      reason: 'Managed-instance rollout requires a live checkout with git metadata at /srv/bolt-gives/.git.',
+      reason: 'Managed-instance rollout requires git metadata or an exact root-controlled BOLT_RELEASE_SHA.',
       currentSha: null,
-      originMainSha: null,
+      originMainSha,
       behindCount: 0,
       checkedAt: new Date().toISOString(),
     };
@@ -1001,8 +1009,19 @@ export function buildManagedInstanceRolloutGuardDecision(input = {}) {
     return {
       allowed: false,
       reason: `Managed-instance rollout guard could not refresh origin/main: ${input.fetchError}`,
-      currentSha: input.currentSha || null,
-      originMainSha: input.originMainSha || null,
+      currentSha: input.currentSha || releaseSha,
+      originMainSha,
+      behindCount: 0,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!hasGitMetadata && releaseSha !== originMainSha) {
+    return {
+      allowed: false,
+      reason: 'Managed-instance rollout refused because BOLT_RELEASE_SHA does not match origin/main.',
+      currentSha: releaseSha,
+      originMainSha,
       behindCount: 0,
       checkedAt: new Date().toISOString(),
     };
@@ -1015,7 +1034,7 @@ export function buildManagedInstanceRolloutGuardDecision(input = {}) {
       allowed: false,
       reason: `Managed-instance rollout refused because the live checkout is ${behindCount} commit(s) behind origin/main.`,
       currentSha: input.currentSha || null,
-      originMainSha: input.originMainSha || null,
+      originMainSha,
       behindCount,
       checkedAt: new Date().toISOString(),
     };
@@ -1024,8 +1043,8 @@ export function buildManagedInstanceRolloutGuardDecision(input = {}) {
   return {
     allowed: true,
     reason: null,
-    currentSha: input.currentSha || null,
-    originMainSha: input.originMainSha || input.currentSha || null,
+    currentSha: input.currentSha || releaseSha,
+    originMainSha: originMainSha || input.currentSha || releaseSha,
     behindCount: 0,
     checkedAt: new Date().toISOString(),
   };
@@ -1092,10 +1111,27 @@ async function resolveManagedRolloutGuardState({ force = false } = {}) {
   try {
     await fs.access(gitDir, fsConstants.R_OK);
   } catch {
+    const remoteResult = await runManagedInstanceProcess('git', [
+      'ls-remote',
+      MANAGED_INSTANCE_SOURCE_REPOSITORY,
+      `refs/heads/${MANAGED_INSTANCE_SOURCE_BRANCH}`,
+    ]);
+    const originMainSha = remoteResult.code === 0 ? remoteResult.stdout.match(/^[a-f0-9]{40}/i)?.[0] : null;
     managedRolloutGuardState = {
-      ...buildManagedInstanceRolloutGuardDecision({ hasGitMetadata: false }),
+      ...buildManagedInstanceRolloutGuardDecision({
+        hasGitMetadata: false,
+        releaseSha: process.env.BOLT_RELEASE_SHA,
+        originMainSha,
+        fetchError:
+          remoteResult.code === 0
+            ? originMainSha
+              ? null
+              : 'git ls-remote returned no branch head'
+            : remoteResult.stderr.trim() || 'git ls-remote failed',
+      }),
       expiresAt: now + 60000,
     };
+
     return managedRolloutGuardState;
   }
 

@@ -65,6 +65,7 @@ Release theme: replace competing Chat and Workspace navigation with one focused 
 - [x] Repair safe Vite entry assets omitted from build output, reject private/missing deployment assets, and preserve deterministic Cloudflare project identity across runtime restarts.
 - [x] Isolate Wrangler workspaces per deployed checkout so alpha, production, and local verification cannot collide during generated-project or fleet publishing.
 - [x] Keep deployed-app browser consoles clean when generated projects intentionally omit a favicon.
+- [x] Support source-only production releases with an exact remote-verified release SHA while preserving the managed-fleet rollout guard.
 - [x] Force ChatGPT-5.6 SOL builds through one strict MagnetAPI file action and remove the unused Vite HMR client from hosted Preview HTML, eliminating repeated prose artifacts and cross-proxy WebSocket errors.
 
 ## v3.5.0 - Shipped

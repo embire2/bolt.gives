@@ -471,6 +471,35 @@ describe('runtime server workspace isolation', () => {
     expect(decision.behindCount).toBe(3);
   });
 
+  it('allows a source-only live tree only when its release marker matches origin/main', () => {
+    const releaseSha = '3d400050b6d8529edc2a994e9a9bbbf650974029';
+    const matching = buildManagedInstanceRolloutGuardDecision({
+      hasGitMetadata: false,
+      releaseSha,
+      originMainSha: releaseSha,
+    });
+    const stale = buildManagedInstanceRolloutGuardDecision({
+      hasGitMetadata: false,
+      releaseSha: '4d400050b6d8529edc2a994e9a9bbbf650974029',
+      originMainSha: releaseSha,
+    });
+
+    expect(matching).toMatchObject({ allowed: true, currentSha: releaseSha, originMainSha: releaseSha });
+    expect(stale).toMatchObject({ allowed: false, currentSha: '4d400050b6d8529edc2a994e9a9bbbf650974029' });
+    expect(stale.reason).toContain('does not match origin/main');
+  });
+
+  it('rejects a malformed source-only release marker', () => {
+    const decision = buildManagedInstanceRolloutGuardDecision({
+      hasGitMetadata: false,
+      releaseSha: 'not-a-release-sha',
+      originMainSha: '3d400050b6d8529edc2a994e9a9bbbf650974029',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('root-controlled BOLT_RELEASE_SHA');
+  });
+
   it('uses the live git SHA before a stale operator release override', () => {
     expect(
       selectManagedInstanceReleaseSha({
