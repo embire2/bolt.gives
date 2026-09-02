@@ -44,6 +44,7 @@ Managed Pages instances also use `https://bolt.gives` as the canonical hosted `F
 Cloudflare Pages edge functions also retry runtime-control calls through `https://bolt.gives/runtime` when the edge rejects the local loopback fallback, which keeps public Pages previews from surfacing avoidable runtime-control console errors.
 
 Generated-project and managed-fleet Wrangler state is isolated per deployed checkout, so alpha, production, and local verification can publish concurrently without sharing mutable build links.
+Published Workers also handle an omitted browser favicon without logging a false application error.
 
 Every hosted project receives a restricted local PostgreSQL database before its first command. The [`/workspace-setup`](/workspace-setup) wizard additionally provisions dedicated Ubuntu runtime-node projects for clients who need a real server CLI, with an isolated Linux user, private workspace directory, and one-time SSH handoff. Runtime-node admin SSH credentials stay in ignored env/runtime service files and are never sent to the browser.
 

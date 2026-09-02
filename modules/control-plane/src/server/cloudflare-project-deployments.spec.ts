@@ -46,6 +46,8 @@ describe('Cloudflare project deployments', () => {
     const worker = buildCloudflarePagesWorkerScript();
 
     expect(worker).toContain('env.ASSETS.fetch(request)');
+    expect(worker).toContain("requestUrl.pathname === '/favicon.ico'");
+    expect(worker).toContain('status: 204');
     expect(worker).toContain("new URL('/index.html', request.url)");
     expect(worker).toContain('!assetLikePath');
     expect(worker).toContain("response.headers.get('content-type')?.includes('text/html')");

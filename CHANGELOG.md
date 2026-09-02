@@ -78,6 +78,7 @@
 - Recovered safe entry assets omitted by a static Vite build, rejected missing/private referenced assets, and limited Worker SPA fallback to HTML navigation so JavaScript can never be returned with an HTML MIME type.
 - Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
 - Scoped temporary Wrangler workspaces to the active runtime checkout, preventing alpha, production, and local services on one host from rejecting generated-project publishes because another checkout owned the safety symlinks.
+- Returned a cacheable empty favicon response when a generated app does not ship one, keeping otherwise healthy published projects free of implicit browser-console `404` errors.
 
 ### Security
 
