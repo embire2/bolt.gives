@@ -88,8 +88,8 @@
 ### Validation
 
 - Added Agent Mode layout, compact composer, model-switching, mobile navigation, Code-selection, profile-auth SSR, release-version, FREE-provider-selection, structured MagnetAPI file-action streaming, PostgreSQL isolation, hosted Preview HMR suppression, static-build asset, Worker fallback, and restart-identity regression coverage.
-- Passed typecheck, lint, 1,140 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
-- Published the generated Pulseboard app to a real Cloudflare Pages Worker, verified root and deep-link HTTP 200 responses, JavaScript MIME correctness, zero browser-console errors, dedicated PostgreSQL persistence, and continued availability after Preview and runtime shutdown.
+- Passed typecheck, lint, 1,143 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
+- Generated and improved Sprint Board through a history-aware follow-up, restored its chat/files/Preview after reload and runtime restart, then published it to a real Cloudflare Pages Worker. Root and deep links, JavaScript MIME, desktop/mobile interactions, zero browser-console errors, and dedicated PostgreSQL persistence all passed.
 
 ## v3.5.0 (2026-08-30)
 
