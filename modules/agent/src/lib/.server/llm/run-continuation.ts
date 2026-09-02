@@ -62,7 +62,7 @@ const VITE_REACT_STARTER_RE =
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
 const PRIMARY_ENTRY_FILE_RE =
-  /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|pages\/index\.(?:[jt]sx?)|src\/pages\/index\.(?:[jt]sx?)|app\/routes\/(?:index|_index)\.(?:[jt]sx?)|src\/routes\/(?:index|\+page)\.(?:[jt]sx?|vue|svelte))$/i;
+  /(^|\/)(src\/(?:App|main)\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|pages\/index\.(?:[jt]sx?)|src\/pages\/index\.(?:[jt]sx?)|app\/routes\/(?:index|_index)\.(?:[jt]sx?)|src\/routes\/(?:index|\+page)\.(?:[jt]sx?|vue|svelte))$/i;
 const SOURCE_EXTENSION_PRIORITY = ['.tsx', '.ts', '.jsx', '.js'] as const;
 const SOURCE_PATH_HINT_RE = /(?:^|\/)(?:src|app|components?|pages)(?:\/|$)/i;
 const START_ACTION_WITH_CONTENT_RE = /<boltAction[^>]*type="start"[^>]*>([\s\S]*?)<\/boltAction>/gi;

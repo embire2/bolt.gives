@@ -203,6 +203,39 @@ describe('shouldForceRunContinuation', () => {
     expect(decision.reason).toBe('run-intent-without-start');
   });
 
+  it('accepts a concrete Vanilla Vite src/main.js as the primary app entry', () => {
+    const decision = analyzeRunContinuation({
+      chatMode: 'build',
+      alreadyAttempted: false,
+      lastUserContent: 'Build a JavaScript task app and make the preview fully functional.',
+      assistantContent: `
+<boltAction type="file" filePath="src/main.js">
+const tasks = ['Plan', 'Build', 'Verify'];
+document.querySelector('#app').innerHTML = \`<h1>Focus Garden</h1><button>Add task</button><p>\${tasks.length} tasks</p>\`;
+</boltAction>
+<boltAction type="shell">pnpm run build</boltAction>
+<boltAction type="start">pnpm run dev --host 0.0.0.0 --port 5173</boltAction>
+`,
+      currentFiles: {
+        'package.json': {
+          type: 'file',
+          content: '{"scripts":{"dev":"vite","build":"vite build"}}',
+          isBinary: false,
+        },
+        'index.html': {
+          type: 'file',
+          content: '<main id="app"></main><script type="module" src="/src/main.js"></script>',
+          isBinary: false,
+        },
+      } as unknown as FileMap,
+    });
+
+    expect(decision).toEqual({
+      shouldContinue: false,
+      reason: 'continuation-not-required',
+    });
+  });
+
   it('continues when only inspection shell commands were emitted', () => {
     const decision = analyzeRunContinuation({
       chatMode: 'build',
