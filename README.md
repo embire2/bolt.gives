@@ -73,6 +73,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - The Vanilla Vite fallback now begins with a runnable local manifest and entry files, so template-host outages cannot trigger a shell-before-project repair loop before first Preview.
 - Vanilla `src/main.js` applications are treated as complete primary entries after Preview verification, avoiding a false starter-only recovery cycle once the requested app is already visible.
 - ChatGPT-5.6 SOL build requests use one strict MagnetAPI file action that the server converts into a complete file update and managed Preview start. This avoids repeated prose artifacts and produces executable work without waiting for the five-minute stream ceiling.
+- Continuation checks inspect visible user objectives only; assistant starter source and hidden recovery instructions cannot be mistaken for requested UI copy or trigger a redundant repair pass.
 - Hosted Vite Preview HTML omits the unnecessary HMR client. Runtime revision events still refresh the app, without noisy cross-proxy WebSocket 400/502 errors.
 - Every hosted project receives an isolated local PostgreSQL role/database on its first runtime command, even when an optional external runtime node is unavailable.
 - Free publishing now creates a durable Cloudflare Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`; production assets and deep links are health-checked before the URL is reported ready.

@@ -73,6 +73,7 @@
 - Preloaded a complete runnable Vanilla Vite manifest and entry files before install/start actions, preventing remote-template fallback from entering a visible shell-before-manifest repair loop.
 - Recognized `src/main.js` and its typed variants as valid primary app entries, preventing completed Vanilla apps from being mislabeled as starter-only work and sent through a redundant recovery pass.
 - Replaced ChatGPT-5.6 SOL's fragile prose-only build transport with one forced, strict MagnetAPI file action that is converted server-side into a complete Bolt file update plus managed Preview start. First-pass builds no longer wait for repeated free-form artifacts or enter recovery before executable output appears.
+- Restricted requirement tracking to visible user messages, preventing generated starter selectors and hidden recovery instructions from being mistaken for product requirements and reinserted during an unnecessary continuation.
 - Removed the Vite HMR client from hosted Preview HTML. Runtime-owned revision reloads still show file changes, while the unused cross-proxy WebSocket can no longer add 400/502 console errors to an otherwise healthy app.
 - Recovered safe entry assets omitted by a static Vite build, rejected missing/private referenced assets, and limited Worker SPA fallback to HTML navigation so JavaScript can never be returned with an HTML MIME type.
 - Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
@@ -84,7 +85,7 @@
 ### Validation
 
 - Added Agent Mode layout, compact composer, model-switching, mobile navigation, Code-selection, profile-auth SSR, release-version, FREE-provider-selection, structured MagnetAPI file-action streaming, PostgreSQL isolation, hosted Preview HMR suppression, static-build asset, Worker fallback, and restart-identity regression coverage.
-- Passed typecheck, lint, 1,139 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
+- Passed typecheck, lint, 1,140 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
 - Published the generated Pulseboard app to a real Cloudflare Pages Worker, verified root and deep-link HTTP 200 responses, JavaScript MIME correctness, zero browser-console errors, dedicated PostgreSQL persistence, and continued availability after Preview and runtime shutdown.
 
 ## v3.5.0 (2026-08-30)

@@ -604,8 +604,11 @@ export function collectRequestObjectiveCandidatesFromPayload(payload: {
   } | null;
   latestUserGoal?: string;
 }): string[] {
+  const visibleUserMessages = (payload.messages || []).filter((message) =>
+    shouldCollectUserRequestMessage(message, false),
+  );
   const payloadFragments = collectTextFragments({
-    messages: payload.messages,
+    messages: visibleUserMessages,
     projectMemory: payload.projectMemory
       ? {
           summary: payload.projectMemory.summary,
@@ -1103,9 +1106,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const manualInterventionDetected = detectManualIntervention(messages);
   const latestUserGoal = extractLatestUserGoal(messages);
   const visibleUserRequestCandidates = collectUserRequestCandidates(messages, { includeHidden: false });
-  const allInitialUserRequestCandidates = collectUserRequestCandidates(messages);
   const visibleUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(messages, { includeHidden: false });
-  const allInitialUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(messages);
   const rawRequestObjectiveCandidates = collectRequestObjectiveCandidatesFromPayload({
     messages,
     projectMemory,
@@ -2445,23 +2446,25 @@ Next: I am returning the finished result with the verified preview ready for ins
 
             latestProjectMemoryFiles = continuationFiles || files;
 
-            const processedUserRequestCandidates = collectUserRequestCandidates(processedMessages);
-            const processedUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(processedMessages);
+            const processedUserRequestCandidates = collectUserRequestCandidates(processedMessages, {
+              includeHidden: false,
+            });
+            const processedUserRequestEnvelopeCandidates = collectUserRequestEnvelopeCandidates(processedMessages, {
+              includeHidden: false,
+            });
             const latestVisibleUserRequest = latestVisibleUserObjective || latestUserGoal || lastUserContent;
             const latestUserRequestCandidates = [
               lastUserContent,
               latestUserGoal,
               latestVisibleUserObjective,
               ...visibleUserRequestCandidates,
-              ...allInitialUserRequestCandidates,
               ...visibleUserRequestEnvelopeCandidates,
-              ...allInitialUserRequestEnvelopeCandidates,
               ...rawRequestObjectiveCandidates,
               ...cachedProjectObjectiveCandidates,
               ...processedUserRequestCandidates,
               ...processedUserRequestEnvelopeCandidates,
-              ...collectUserRequestCandidates(messages),
-              ...collectUserRequestEnvelopeCandidates(messages),
+              ...collectUserRequestCandidates(messages, { includeHidden: false }),
+              ...collectUserRequestEnvelopeCandidates(messages, { includeHidden: false }),
             ];
             const runContinuationDecision = analyzeRunContinuation({
               chatMode: chatMode || 'build',

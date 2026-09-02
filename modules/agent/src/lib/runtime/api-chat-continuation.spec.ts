@@ -334,6 +334,35 @@ describe('api.chat continuation helpers', () => {
     ).toEqual(['CAL_FUP_123']);
   });
 
+  it('does not treat assistant source or hidden recovery instructions as user objectives', () => {
+    const requests = collectRequestObjectiveCandidatesFromPayload({
+      latestUserGoal: 'Build a focus timer.',
+      messages: [
+        {
+          id: 'visible-user',
+          role: 'user',
+          content: 'Build a focus timer with a visible heading containing the exact text "FOCUS_TARGET".',
+        },
+        {
+          id: 'starter-assistant',
+          role: 'assistant',
+          content:
+            'Render a button with document.querySelector("#starter-action") and label it with the exact text "INTERNAL_STARTER".',
+        },
+        {
+          id: 'hidden-recovery',
+          role: 'user',
+          annotations: ['hidden'],
+          content: 'Recovery helper: render a visible label containing the exact text "INTERNAL_RECOVERY".',
+        },
+      ] as any,
+    });
+
+    expect(requests.some((request) => request.includes('FOCUS_TARGET'))).toBe(true);
+    expect(requests.some((request) => request.includes('INTERNAL_STARTER'))).toBe(false);
+    expect(requests.some((request) => request.includes('INTERNAL_RECOVERY'))).toBe(false);
+  });
+
   it('remembers visible objectives for later hidden continuation requests in the same project', () => {
     resetProjectObjectiveCandidatesForTests();
 
