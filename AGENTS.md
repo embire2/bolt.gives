@@ -6,7 +6,7 @@ Build and maintain `bolt.gives` as a production-ready agentic coding platform. T
 
 Current release line:
 
-- Stable: `v4.0.0`
+- Stable: `v4.0.1`
 - In progress: `v4.1.0`
 - Desktop stable: `v1.10.2`
 

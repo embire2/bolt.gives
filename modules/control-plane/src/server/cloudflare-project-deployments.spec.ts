@@ -55,6 +55,31 @@ describe('Cloudflare project deployments', () => {
     expect(worker).not.toContain('DATABASE_URL');
   });
 
+  it('suppresses Cloudflare HTML fallback responses for a missing favicon', async () => {
+    const workerSource = buildCloudflarePagesWorkerScript();
+    const workerModule = (await import(`data:text/javascript,${encodeURIComponent(workerSource)}`)) as {
+      default: {
+        fetch: (
+          request: Request,
+          env: { ASSETS: { fetch: (request: Request) => Promise<Response> } },
+        ) => Promise<Response>;
+      };
+    };
+    const response = await workerModule.default.fetch(new Request('https://project.example/favicon.ico'), {
+      ASSETS: {
+        fetch: async () =>
+          new Response('<!doctype html><title>App</title>', {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+          }),
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(response.headers.get('x-bolt-deployment')).toBe('cloudflare-pages-worker');
+  });
+
   it('collects safe local entry assets without treating external or traversal URLs as deployable files', () => {
     expect(
       listCloudflareEntryAssetPaths(`

@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [x] `v4.0.0`
+- [x] `v4.0.1`
 
 Next release target:
 
@@ -47,6 +47,13 @@ Release theme: continue the previously planned v3.6 hardening track after the v4
 - [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
 - [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v4.0.0 initial-route budget.
 - [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+
+## v4.0.1 - Shipped
+
+Release theme: keep generated Cloudflare projects console-clean when Pages serves its HTML application fallback for an omitted favicon.
+
+- [x] Detect both HTTP 404 and HTTP 200 HTML fallback responses for a missing `favicon.ico`, while preserving real icon assets.
+- [x] Reproduce the Pages asset-binding behavior in an executable Worker regression test and verify the fix in real Chromium.
 
 ## v4.0.0 - Shipped
 

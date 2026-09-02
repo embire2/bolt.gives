@@ -45,6 +45,16 @@
 - Passed 49 native action, policy, persistence, streaming, Preview, and updater tests. Windows CI installs the signed package, performs a successful self-update, deliberately fails post-install version validation, verifies automatic rollback, and proves the legacy updater relaunches a native top-level window before publishing v1.10.2 artifacts.
 - On a Windows Server RDP host, created and improved a focus-timer project with ChatGPT-5.6 SOL, verified interactive embedded Preview and terminal behavior, switched models without losing history, restarted with the same chat/files/runtime, and deployed the result through both FREE subdomain and protected Cloudflare paths.
 
+## v4.0.1 (2026-09-02)
+
+### Fixed
+
+- Recognized Cloudflare Pages' HTTP 200 HTML application fallback for a missing `favicon.ico`, returning a cacheable empty response instead of converting it into a browser-console 404. Real icon assets remain unchanged.
+
+### Validation
+
+- Added an executable Pages asset-binding regression test and re-ran typecheck, lint, 1,144 tests, the production build, fleet health, and real Chromium against the republished generated project.
+
 ## v4.0.0 (2026-09-02)
 
 ### Added

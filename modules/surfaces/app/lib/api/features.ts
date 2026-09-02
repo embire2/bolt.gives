@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v4.0.1',
+    name: 'v4.0.1 console-clean Cloudflare projects',
+    description:
+      'Published projects now recognize Cloudflare Pages HTML asset fallback when an app omits favicon.ico, returning a cacheable empty icon response instead of a browser-console 404 while preserving real favicon files.',
+    releaseDate: '2026-09-02',
+  },
+  {
     id: 'release-v4.0.0',
     name: 'v4.0.0 unified Agent Mode',
     description:

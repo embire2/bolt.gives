@@ -61,9 +61,9 @@ The public homepage at [`https://bolt.gives`](https://bolt.gives) is the project
 
 Contributors can pick up roadmap-aligned issues and help improve prompt-to-preview reliability, managed deployments, templates, self-hosting, documentation, and the visible execution experience.
 
-## Current Release (`v4.0.0`)
+## Current Release (`v4.0.1`)
 
-`v4.0.0` introduces Agent Mode: a project starts with one prompt and then keeps conversation, guidance, Code, and Preview in one continuous workspace. The compact follow-up prompt remains available throughout the run, the generated app gets most of the screen, and background Preview recovery no longer pulls users away from Code.
+`v4.0.1` carries the unified Agent Mode release forward and fixes Cloudflare Pages' HTML fallback for projects that omit `favicon.ico`. Published projects now remain browser-console clean without replacing real icon assets. A project starts with one prompt and then keeps conversation, guidance, Code, and Preview in one continuous workspace.
 
 ### v4.0.0 unified Agent Mode
 
@@ -334,25 +334,25 @@ or:
 Update policy: mandatory
 ```
 
-Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=4.0.0`.
+Optional updates can be dismissed per version in the browser. Mandatory updates open a blocking modal and prevent further in-app coding until the update is started/completed. Self-host operators can override release policy with `BOLT_UPDATE_POLICY=optional|mandatory` or force a specific version with `BOLT_MANDATORY_UPDATE_VERSION=4.0.1`.
 
 The updater creates a rollback branch, stashes local uncommitted changes, fetches `origin/main`, resets the working tree to the release source, runs `pnpm install --frozen-lockfile`, runs `pnpm run build`, and schedules production service restarts through systemd. Cloudflare Pages/edge runtimes report that in-app self-update is unavailable and should continue through the normal deploy pipeline.
 
 ### Linux release package
 
-The `v4.0.0` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
+The `v4.0.1` Linux release is published for Ubuntu self-hosters through the GitHub Releases page:
 
-- Release: [`v4.0.0`](https://github.com/embire2/bolt.gives/releases/tag/v4.0.0)
+- Release: [`v4.0.1`](https://github.com/embire2/bolt.gives/releases/tag/v4.0.1)
 - Supported server OS: Ubuntu `18.04+` (recommended `22.04+`)
-- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v4.0.0/install.sh)
-- Release commit: see the `v4.0.0` GitHub tag.
+- Installer: [`install.sh`](https://raw.githubusercontent.com/embire2/bolt.gives/v4.0.1/install.sh)
+- Release commit: see the `v4.0.1` GitHub tag.
 
 Pinned Linux install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v4.0.0/install.sh -o install-bolt-gives.sh
+curl -fsSL https://raw.githubusercontent.com/embire2/bolt.gives/v4.0.1/install.sh -o install-bolt-gives.sh
 chmod +x install-bolt-gives.sh
-BRANCH=v4.0.0 ./install-bolt-gives.sh
+BRANCH=v4.0.1 ./install-bolt-gives.sh
 ```
 
 Run the installer as a normal sudo-capable user, not as `root`; it invokes `sudo` only for the system changes that require it. The installer provisions the app, runtime, collaboration, and web browsing services, configures local PostgreSQL for the private operator/control-plane data, and can configure Caddy HTTPS for app/admin/create domains. Keep all provider, Cloudflare, SMTP, and operator secrets on the server in `.env.local` or service environment files.
@@ -451,7 +451,7 @@ The operator surface at `admin.bolt.gives` includes client profile filtering/exp
 - Make runtime quotas, collaboration audit data, and installer recovery visible and repeatable.
 - Keep docs and self-host setup short, direct, and launch-oriented.
 
-## Current Platform Baseline (`v4.0.0`)
+## Current Platform Baseline (`v4.0.1`)
 
 - Open-source AI coding workspace with transparent execution and visible agent actions.
 - Authenticated profiles see only their own browser-saved projects; guest and other-account projects remain isolated.

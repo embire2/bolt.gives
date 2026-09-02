@@ -23,7 +23,12 @@ export function buildCloudflarePagesWorkerScript() {
     const assetLikePath = /\\.[a-z0-9]{1,16}$/i.test(requestUrl.pathname);
     const nonHtmlAssetPath = assetLikePath && !/\\.html?$/i.test(requestUrl.pathname);
 
-    if (request.method === 'GET' && response.status === 404 && requestUrl.pathname === '/favicon.ico') {
+    const missingFavicon =
+      request.method === 'GET' &&
+      requestUrl.pathname === '/favicon.ico' &&
+      (response.status === 404 || response.headers.get('content-type')?.includes('text/html'));
+
+    if (missingFavicon) {
       response = new Response(null, {
         status: 204,
         headers: { 'cache-control': 'public, max-age=86400' },

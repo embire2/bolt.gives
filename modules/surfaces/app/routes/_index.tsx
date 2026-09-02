@@ -52,7 +52,7 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v4.0.0 release with unified Agent Mode: conversation, a persistent prompt, Code, and Preview stay together while the agent works.',
+  'Stable v4.0.1 release with unified Agent Mode and console-clean Cloudflare publishing: conversation, a persistent prompt, Code, and Preview stay together while the agent works.',
   'FREE includes at least 30 active coding minutes within 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
   'Follow-up prompts stay visible beside files and Preview after a project starts, without automatic Chat/Workspace switching.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',

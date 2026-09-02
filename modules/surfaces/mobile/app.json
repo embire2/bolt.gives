@@ -2,7 +2,7 @@
   "expo": {
     "name": "bolt.gives",
     "slug": "bolt-gives",
-    "version": "4.0.0",
+    "version": "4.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
