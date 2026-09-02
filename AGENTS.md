@@ -51,6 +51,7 @@ The current hosted product baseline is:
   - provider: `FREE`
   - models: `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`
   - upstream: MagnetAPI.org Responses API for ChatGPT-5.6 SOL and Messages API for Claude models
+  - ChatGPT-5.6 SOL build output is forced through one strict server-side file-action bridge; do not regress it to unbounded prose artifacts
   - users may switch models during a session without resetting project history or runtime context
 - First-party Appointment, Calendar, SaaS Dashboard, Marketing, Commerce, and Portfolio packs are smoke-tested through real Vite/Chromium Preview in CI.
 - Managed Cloudflare trial-instance flow at `/managed-instances`

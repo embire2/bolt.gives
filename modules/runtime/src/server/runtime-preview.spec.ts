@@ -91,10 +91,16 @@ describe('runtime preview helpers', () => {
 
     const output = rewritePreviewAssetUrls(input, '/runtime/preview/session123/4101');
 
-    expect(output).toContain('src="/runtime/preview/session123/4101/@vite/client"');
+    expect(output).not.toContain('@vite/client');
     expect(output).toContain('src="/runtime/preview/session123/4101/src/main.jsx"');
     expect(output).toContain('url(/runtime/preview/session123/4101/assets/bg.png)');
     expect(output).toContain('sourceMappingURL=/runtime/preview/session123/4101/src/main.jsx.map');
+  });
+
+  it('removes the Vite HMR client from hosted preview HTML', () => {
+    const input = '<head><script type="module" src="/@vite/client?token=abc"></script></head>';
+
+    expect(rewritePreviewAssetUrls(input, '/runtime/preview/session123/4101')).toBe('<head></head>');
   });
 
   it('does not corrupt JavaScript regex literals while rewriting import paths', () => {

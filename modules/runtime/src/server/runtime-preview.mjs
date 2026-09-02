@@ -106,7 +106,12 @@ export function rewritePreviewAssetUrls(content, previewBasePath) {
     return content;
   }
 
+  /*
+   * Hosted previews are revision-reloaded by the runtime, so Vite HMR only adds a
+   * cross-proxy websocket that can fail noisily without improving the experience.
+   */
   let rewritten = content
+    .replace(/<script\b[^>]*\bsrc=(["'])\/@vite\/client(?:\?[^"']*)?\1[^>]*>\s*<\/script>\s*/gi, '')
     .replace(/((?:src|href)=["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/(\bfrom\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)
     .replace(/(\bimport\s*\(\s*["'])\/(?!\/|runtime\/preview\/)/g, `$1${previewBasePath}/`)

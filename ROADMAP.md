@@ -63,6 +63,7 @@ Release theme: replace competing Chat and Workspace navigation with one focused 
 - [x] Provision one restricted local PostgreSQL role/database per hosted project before its first command without exposing credentials to the browser or Cloudflare artifact.
 - [x] Publish generated production builds through Cloudflare Pages advanced-mode Workers at `*.instances.bolt.gives`, with deep-link, asset, public-host, and restart-persistence verification.
 - [x] Repair safe Vite entry assets omitted from build output, reject private/missing deployment assets, and preserve deterministic Cloudflare project identity across runtime restarts.
+- [x] Force ChatGPT-5.6 SOL builds through one strict MagnetAPI file action and remove the unused Vite HMR client from hosted Preview HTML, eliminating repeated prose artifacts and cross-proxy WebSocket errors.
 
 ## v3.5.0 - Shipped
 

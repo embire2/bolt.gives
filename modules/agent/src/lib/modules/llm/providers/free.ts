@@ -13,6 +13,11 @@ import {
   resolveHostedFreeModel,
 } from '@bolt/agent/lib/modules/llm/free-provider-config';
 import type { IProviderSetting } from '@bolt/agent/types/model';
+import {
+  buildBoltArtifactFromHostedFreeResponsesToolInput,
+  HOSTED_FREE_RESPONSES_WRITE_TOOL,
+  normalizeHostedFreeResponsesSse,
+} from './hosted-free-responses-build';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -118,10 +123,53 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     }
   }
 
-  return {
+  const normalizedPayload = {
     ...payload,
     instructions: instructions.filter(Boolean).join('\n\n'),
     input: conversation.join('\n\n'),
+  };
+
+  if (
+    !normalizedPayload.instructions.includes('CRITICAL OUTPUT CONTRACT:') ||
+    !normalizedPayload.instructions.includes('<boltArtifact')
+  ) {
+    return normalizedPayload;
+  }
+
+  const hasWorkspaceFiles = extractHostedFreeClaudeWorkspaceFiles(normalizedPayload.instructions).size > 0;
+
+  return {
+    ...normalizedPayload,
+    tools: [
+      {
+        type: 'function',
+        name: HOSTED_FREE_RESPONSES_WRITE_TOOL,
+        description: hasWorkspaceFiles
+          ? 'Replace exactly one relevant existing project source file. Return its project-relative path and the complete replacement content. Implement the requested UI instead of preserving starter placeholders. The platform applies, builds, and previews the file automatically.'
+          : 'Create exactly one project source file. Return its project-relative path and complete content. The platform applies, builds, and previews the file automatically.',
+        strict: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Project-relative path, for example src/main.js or src/App.tsx.' },
+            content: { type: 'string', description: 'Complete replacement contents for the file.' },
+          },
+          required: ['path', 'content'],
+          additionalProperties: false,
+        },
+      },
+    ],
+    tool_choice: { type: 'function', name: HOSTED_FREE_RESPONSES_WRITE_TOOL },
+    parallel_tool_calls: false,
+    max_tool_calls: 1,
+    reasoning: {
+      ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
+      effort: 'low',
+    },
+    text: {
+      ...(isJsonRecord(payload.text) ? payload.text : {}),
+      verbosity: 'low',
+    },
   };
 }
 
@@ -140,7 +188,10 @@ function normalizeHostedFreeUsage(usage: unknown) {
   };
 }
 
-export function buildHostedFreeResponseStreamEvents(payload: unknown): JsonRecord[] {
+export function buildHostedFreeResponseStreamEvents(
+  payload: unknown,
+  options?: { bridgeBuildActions?: boolean },
+): JsonRecord[] {
   if (!isJsonRecord(payload)) {
     return [];
   }
@@ -195,6 +246,21 @@ export function buildHostedFreeResponseStreamEvents(payload: unknown): JsonRecor
       const name = String(item.name || 'tool');
       const args = typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {});
 
+      if (options?.bridgeBuildActions && name === HOSTED_FREE_RESPONSES_WRITE_TOOL) {
+        let artifact = '';
+
+        try {
+          artifact = buildBoltArtifactFromHostedFreeResponsesToolInput(JSON.parse(args));
+        } catch {
+          artifact = '';
+        }
+
+        if (artifact) {
+          events.push({ type: 'response.output_text.delta', delta: artifact });
+          continue;
+        }
+      }
+
       events.push({
         type: 'response.output_item.added',
         output_index: outputIndex,
@@ -237,8 +303,12 @@ export function buildHostedFreeResponseStreamEvents(payload: unknown): JsonRecor
   return events;
 }
 
-function createHostedFreeResponseEventStream(payload: unknown, response: Response): Response {
-  const body = `${buildHostedFreeResponseStreamEvents(payload)
+function createHostedFreeResponseEventStream(
+  payload: unknown,
+  response: Response,
+  options?: { bridgeBuildActions?: boolean },
+): Response {
+  const body = `${buildHostedFreeResponseStreamEvents(payload, options)
     .map((event) => `data: ${JSON.stringify(event)}\n\n`)
     .join('')}data: [DONE]\n\n`;
   const headers = new Headers(response.headers);
@@ -258,6 +328,7 @@ function createHostedFreeResponseEventStream(payload: unknown, response: Respons
 const hostedFreeFetch: typeof fetch = async (input, init) => {
   let requestInit = init;
   let requestedStream = false;
+  let bridgeBuildActions = false;
 
   if (typeof init?.body === 'string') {
     try {
@@ -265,6 +336,11 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
       requestedStream = isJsonRecord(payload) && payload.stream === true;
 
       const normalizedPayload = normalizeHostedFreeRequest(payload);
+      bridgeBuildActions =
+        isJsonRecord(normalizedPayload) &&
+        typeof normalizedPayload.instructions === 'string' &&
+        normalizedPayload.instructions.includes('CRITICAL OUTPUT CONTRACT:') &&
+        normalizedPayload.instructions.includes('<boltArtifact');
       requestInit = {
         ...init,
         body: JSON.stringify(normalizedPayload),
@@ -275,6 +351,10 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
   }
 
   const response = await fetch(input, requestInit);
+
+  if (bridgeBuildActions && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+    return normalizeHostedFreeResponsesSse(response);
+  }
 
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
     return response;
@@ -291,7 +371,7 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
   const normalizedPayload = normalizeHostedFreeResponse(payload);
 
   if (requestedStream && response.ok) {
-    return createHostedFreeResponseEventStream(normalizedPayload, response);
+    return createHostedFreeResponseEventStream(normalizedPayload, response, { bridgeBuildActions });
   }
 
   const headers = new Headers(response.headers);

@@ -72,6 +72,8 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Production SSR can safely import profile authentication, fresh profiles prefer the managed FREE path, and build metadata always reports the checked-in release version.
 - The Vanilla Vite fallback now begins with a runnable local manifest and entry files, so template-host outages cannot trigger a shell-before-project repair loop before first Preview.
 - Vanilla `src/main.js` applications are treated as complete primary entries after Preview verification, avoiding a false starter-only recovery cycle once the requested app is already visible.
+- ChatGPT-5.6 SOL build requests use one strict MagnetAPI file action that the server converts into a complete file update and managed Preview start. This avoids repeated prose artifacts and produces executable work without waiting for the five-minute stream ceiling.
+- Hosted Vite Preview HTML omits the unnecessary HMR client. Runtime revision events still refresh the app, without noisy cross-proxy WebSocket 400/502 errors.
 - Every hosted project receives an isolated local PostgreSQL role/database on its first runtime command, even when an optional external runtime node is unavailable.
 - Free publishing now creates a durable Cloudflare Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`; production assets and deep links are health-checked before the URL is reported ready.
 
@@ -212,7 +214,7 @@ The header Shout Out Box has been removed. `Report Bug` now opens the public [bo
 - Collaboration documents are isolated by runtime project and file path, so users editing common paths such as `/src/App.tsx` cannot collide with another project’s Yjs state.
 - Hosted preview reconciliation no longer treats an unreadable cross-origin location or an in-flight `about:blank` document as a failed iframe. Healthy previews remain mounted instead of flashing, aborting repeated requests, and consuming avoidable browser/runtime resources.
 - Hidden recovery requests use single-flight dispatch, reducing duplicate model streams and avoiding the CPU, network, and provider usage caused by continuation rerenders.
-- Commentary remains visible during long runs without masking provider stalls. Hosted FREE requests enter recovery after 120 seconds without visible/actionable model output and have a Cloudflare-lifecycle-safe 150-second response deadline that cancels stalled upstream work before single-flight continuation; BYOK long-thinking models keep their longer timeout.
+- Commentary remains visible during long runs without masking provider stalls. Hosted FREE requests enter recovery after 120 seconds without visible/actionable model output and have a 300-second hard response deadline that cancels stalled upstream work before single-flight continuation; BYOK long-thinking models keep their longer timeout.
 - Operators can temporarily lower that FREE response cap with the server-only `BOLT_FREE_STREAM_MAX_DURATION_MS` setting (minimum 10 seconds) for staging diagnostics; it is never read from browser input.
 - Automatic managed-instance rollouts yield to foreground commands, Preview recovery, and runtime-node provisioning, while idle healthy Preview dev servers do not block fleet updates. Rollouts run with deployment-specific resource limits; browser release smokes close their preview subscriptions before tearing down the generated runtime process so cleanup does not emit false transport errors.
 

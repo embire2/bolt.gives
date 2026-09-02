@@ -484,6 +484,150 @@ describe('FreeProvider', () => {
     });
   });
 
+  it('forces hosted Responses builds through one strict file action', () => {
+    const normalized = normalizeHostedFreeRequest({
+      model: 'gpt-5.6-sol',
+      stream: true,
+      input: [
+        {
+          role: 'system',
+          content: 'CRITICAL OUTPUT CONTRACT:\nReturn <boltArtifact with file actions.',
+        },
+        { role: 'user', content: [{ type: 'input_text', text: 'Build a calendar.' }] },
+      ],
+      tools: [{ type: 'function', name: 'unrelated_tool' }],
+    }) as Record<string, unknown>;
+
+    expect(normalized).toMatchObject({
+      stream: true,
+      tool_choice: { type: 'function', name: 'write_file' },
+      parallel_tool_calls: false,
+      max_tool_calls: 1,
+      reasoning: { effort: 'low' },
+      text: { verbosity: 'low' },
+    });
+    expect(normalized.tools).toEqual([
+      expect.objectContaining({
+        type: 'function',
+        name: 'write_file',
+        strict: true,
+        parameters: expect.objectContaining({ required: ['path', 'content'], additionalProperties: false }),
+      }),
+    ]);
+  });
+
+  it('converts a streamed Responses write tool into one executable Bolt artifact', async () => {
+    const encoder = new TextEncoder();
+    const toolArguments = JSON.stringify({
+      path: '/home/project/src/main.js',
+      content: "document.querySelector('#app').textContent = 'Calendar ready';",
+    });
+    const events = [
+      {
+        type: 'response.created',
+        response: { id: 'response-1', created_at: 1_788_108_608, model: 'gpt-5.6-sol' },
+      },
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { id: 'function-1', type: 'function_call', name: 'write_file', arguments: '' },
+      },
+      {
+        type: 'response.function_call_arguments.delta',
+        item_id: 'function-1',
+        output_index: 0,
+        delta: toolArguments.slice(0, 24),
+      },
+      {
+        type: 'response.function_call_arguments.delta',
+        item_id: 'function-1',
+        output_index: 0,
+        delta: toolArguments.slice(24),
+      },
+      {
+        type: 'response.function_call_arguments.done',
+        item_id: 'function-1',
+        output_index: 0,
+        name: 'write_file',
+        arguments: toolArguments,
+      },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          id: 'function-1',
+          type: 'function_call',
+          name: 'write_file',
+          arguments: toolArguments,
+        },
+      },
+      {
+        type: 'response.completed',
+        response: { incomplete_details: null, usage: { input_tokens: 20, output_tokens: 10 } },
+      },
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const body = events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('');
+        controller.enqueue(encoder.encode(body.slice(0, 173)));
+        controller.enqueue(encoder.encode(body.slice(173)));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Content-Encoding': 'gzip',
+            'Content-Length': '999',
+          },
+        }),
+      ),
+    );
+
+    const provider = new FreeProvider();
+    responsesSpy.mockReturnValue({ id: 'free-model-instance' });
+    provider.getModelInstance({
+      model: FREE_HOSTED_MODEL,
+      serverEnv: { MAGNET_API_KEY: 'magnet-test-key' } as unknown as Env,
+    });
+
+    const customFetch = createOpenAISpy.mock.calls[0]?.[0]?.fetch;
+    const response = await customFetch?.('https://api.magnetapi.org/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'gpt-5.6-sol',
+        stream: true,
+        input: [
+          {
+            role: 'system',
+            content: 'CRITICAL OUTPUT CONTRACT:\nReturn <boltArtifact with file actions.',
+          },
+          { role: 'user', content: [{ type: 'input_text', text: 'Build a calendar.' }] },
+        ],
+      }),
+    });
+    const forwardedBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    const responseText = await response?.text();
+    const artifactEvent = responseText
+      ?.split('\n')
+      .find((line) => line.startsWith('data: ') && line.includes('response.output_text.delta'));
+    const artifact = artifactEvent ? JSON.parse(artifactEvent.slice('data: '.length)).delta : '';
+
+    expect(forwardedBody.tool_choice).toEqual({ type: 'function', name: 'write_file' });
+    expect(artifact).toContain('<boltArtifact id="free-responses-file"');
+    expect(artifact).toContain('<boltAction type="file" filePath="src/main.js">');
+    expect(artifact).toContain("document.querySelector('#app').textContent = 'Calendar ready';");
+    expect(artifact).toContain('<boltAction type="start">\npnpm run dev');
+    expect(responseText).not.toContain('response.function_call_arguments');
+    expect(responseText).not.toContain('"type":"function_call"');
+    expect(response?.headers.get('content-encoding')).toBeNull();
+    expect(response?.headers.get('content-length')).toBeNull();
+  });
+
   it('normalizes successful JSON responses before the strict SDK parses them', async () => {
     vi.stubGlobal(
       'fetch',
