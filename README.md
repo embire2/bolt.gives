@@ -70,6 +70,7 @@ Contributors can pick up roadmap-aligned issues and help improve prompt-to-previ
 - Commentary remains visible in plain English, while verbose file/command diagnostics stay available through an on-demand technical-details disclosure.
 - Runtime and Preview state changes no longer remount the workspace, force Preview over a user-selected Code tab, or use pulsing loading treatments that make the interface flash.
 - Production SSR can safely import profile authentication, fresh profiles prefer the managed FREE path, and build metadata always reports the checked-in release version.
+- The Vanilla Vite fallback now begins with a runnable local manifest and entry files, so template-host outages cannot trigger a shell-before-project repair loop before first Preview.
 - Every hosted project receives an isolated local PostgreSQL role/database on its first runtime command, even when an optional external runtime node is unavailable.
 - Free publishing now creates a durable Cloudflare Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`; production assets and deep links are health-checked before the URL is reported ready.
 

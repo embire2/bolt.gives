@@ -37,4 +37,22 @@ describe('local starter template coverage', () => {
     expect(filePaths).toContain('vite.config.ts');
     expect(packageJson.devDependencies?.['@types/node']).toBe('^22.10.0');
   });
+
+  it('includes a runnable Vanilla Vite scaffold before any bootstrap command', () => {
+    const template = STARTER_TEMPLATES.find((item) => item.name === 'Vanilla Vite');
+    expect(template).toBeDefined();
+
+    const files = getLocalStarterTemplateFiles(template!);
+    const fallback = getLocalStarterTemplateFallback(template!);
+    const filePaths = files.map((file) => file.path);
+    const packageJson = JSON.parse(files.find((file) => file.path === 'package.json')?.content || '{}');
+
+    expect(filePaths).toContain('package.json');
+    expect(filePaths).toContain('index.html');
+    expect(filePaths).toContain('src/main.js');
+    expect(packageJson.scripts?.dev).toContain('vite');
+    expect(fallback?.starterFilesPreloaded).toBe(true);
+    expect(fallback?.startCommand).toBe('pnpm run dev');
+    expect(fallback?.scaffoldCommand).not.toContain('create-vite');
+  });
 });

@@ -1,4 +1,5 @@
 import type { Template } from '@bolt/core/types/template';
+import { VITE_VANILLA_FALLBACK_FILES } from './localStarterBundles';
 
 export type LocalTemplateFile = {
   name: string;
@@ -63,9 +64,11 @@ const LOCAL_TEMPLATE_FALLBACKS: Record<string, LocalTemplateFallback> = {
     installCommand: 'pnpm install --reporter=append-only',
   },
   'Vanilla Vite': {
-    scaffoldCommand: 'pnpm dlx create-vite@7.1.0 . --template vanilla',
+    scaffoldCommand: 'echo "Using built-in Vanilla Vite starter files"',
     stackLabel: 'Vite + Vanilla JavaScript',
     installCommand: 'pnpm install --reporter=append-only',
+    startCommand: 'pnpm run dev',
+    starterFilesPreloaded: true,
   },
   'Vite React': {
     scaffoldCommand: 'echo "Using built-in Vite React starter files"',
@@ -327,7 +330,12 @@ export function getLocalStarterTemplateFiles(template: Template): LocalTemplateF
     return [];
   }
 
-  const builtInStarterFiles = template.name === 'Vite React' ? VITE_REACT_FALLBACK_FILES : [];
+  const builtInStarterFiles =
+    template.name === 'Vite React'
+      ? VITE_REACT_FALLBACK_FILES
+      : template.name === 'Vanilla Vite'
+        ? VITE_VANILLA_FALLBACK_FILES
+        : [];
 
   return [
     ...builtInStarterFiles,

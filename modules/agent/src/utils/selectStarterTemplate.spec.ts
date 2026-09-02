@@ -54,6 +54,27 @@ describe('getTemplates', () => {
     expect(result?.userMessage).toContain('Build a todo app with Google Calendar sync');
   });
 
+  it('materializes a Vanilla Vite manifest before install and start actions', async () => {
+    const result = await getTemplates('Vanilla Vite', 'Vanilla Test', 'Build an interactive JavaScript app');
+
+    expect(result).not.toBeNull();
+    expect(result?.assistantMessage).toContain('filePath="package.json"');
+    expect(result?.assistantMessage).toContain('filePath="src/main.js"');
+    expect(result?.assistantMessage).toContain('Using built-in Vanilla Vite starter files');
+    expect(result?.assistantMessage).not.toContain('create-vite');
+    expect(result?.bootstrapCommands).toEqual({
+      installCommand: 'pnpm install --reporter=append-only',
+      startCommand: 'pnpm run dev',
+    });
+
+    const packageIndex = result?.assistantMessage.indexOf('filePath="package.json"') ?? -1;
+    const installIndex = result?.assistantMessage.indexOf('pnpm install') ?? -1;
+    const startIndex = result?.assistantMessage.indexOf('pnpm run dev') ?? -1;
+    expect(packageIndex).toBeGreaterThanOrEqual(0);
+    expect(packageIndex).toBeLessThan(installIndex);
+    expect(installIndex).toBeLessThan(startIndex);
+  });
+
   it('adds first-party template pack acceptance criteria for common app requests', async () => {
     vi.stubGlobal('fetch', vi.fn() as unknown as typeof fetch);
 

@@ -70,6 +70,7 @@
 - Preferred the managed FREE provider for a new profile even when local relay discovery is unavailable, instead of unexpectedly selecting a configured personal provider.
 - Reused a healthy Preview instead of dispatching duplicate setup/start actions, and normalized environment-prefixed npm/npx/yarn commands without losing their environment assignments.
 - Accepted valid static Vite applications instead of inventing a missing React `src/main.tsx` error during first-pass Preview validation.
+- Preloaded a complete runnable Vanilla Vite manifest and entry files before install/start actions, preventing remote-template fallback from entering a visible shell-before-manifest repair loop.
 - Recovered safe entry assets omitted by a static Vite build, rejected missing/private referenced assets, and limited Worker SPA fallback to HTML navigation so JavaScript can never be returned with an HTML MIME type.
 - Preserved full deterministic Cloudflare project names across runtime restarts and repaired records shortened by the previous 32-character registry normalizer.
 
@@ -80,7 +81,7 @@
 ### Validation
 
 - Added Agent Mode layout, compact composer, model-switching, mobile navigation, Code-selection, profile-auth SSR, release-version, FREE-provider-selection, PostgreSQL isolation, static-build asset, Worker fallback, and restart-identity regression coverage.
-- Passed typecheck, lint, 1,133 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
+- Passed typecheck, lint, 1,135 tests with 9 intentional skips, a production build and bundle budgets, plus a real Chromium generation/follow-up/interaction smoke.
 - Published the generated Pulseboard app to a real Cloudflare Pages Worker, verified root and deep-link HTTP 200 responses, JavaScript MIME correctness, zero browser-console errors, dedicated PostgreSQL persistence, and continued availability after Preview and runtime shutdown.
 
 ## v3.5.0 (2026-08-30)
