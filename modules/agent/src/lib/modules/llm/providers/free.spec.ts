@@ -502,10 +502,10 @@ describe('FreeProvider', () => {
       stream: true,
       tool_choice: { type: 'function', name: 'write_file' },
       parallel_tool_calls: false,
-      max_tool_calls: 1,
       reasoning: { effort: 'low' },
       text: { verbosity: 'low' },
     });
+    expect(normalized).not.toHaveProperty('max_tool_calls');
     expect(normalized.tools).toEqual([
       expect.objectContaining({
         type: 'function',

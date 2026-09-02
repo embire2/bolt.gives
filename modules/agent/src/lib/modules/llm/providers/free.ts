@@ -161,7 +161,6 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     ],
     tool_choice: { type: 'function', name: HOSTED_FREE_RESPONSES_WRITE_TOOL },
     parallel_tool_calls: false,
-    max_tool_calls: 1,
     reasoning: {
       ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
       effort: 'low',
