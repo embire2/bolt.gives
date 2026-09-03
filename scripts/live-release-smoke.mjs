@@ -93,8 +93,8 @@ async function waitForPromptSurface(page) {
 }
 
 async function waitForPreviewToRender(page) {
-  await page.getByRole('tab', { name: /^Workspace$/i }).click();
-  logProgress('Switched to workspace tab');
+  await page.getByText('Agent Mode', { exact: true }).first().waitFor({ state: 'visible', timeout: 180000 });
+  logProgress('Agent Mode ready');
 
   const previewButton = page.getByRole('button', { name: /^Preview$/i }).first();
 

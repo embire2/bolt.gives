@@ -14,6 +14,7 @@
 ### Fixed
 
 - Replaced the hosted action runner's process-wide `pkill` cleanup with a session-scoped runtime request. Starting one generated project can no longer terminate Wrangler, esbuild, or another tenant's Preview process.
+- Updated the live release smoke to follow v4 Agent Mode directly instead of waiting for the retired Workspace tab.
 
 ### Security
 
