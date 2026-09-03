@@ -2,6 +2,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import { WORK_DIR } from '@bolt/agent/utils/constants';
 import { allowedHTMLElements } from '@bolt/core/utils/markdown';
 import { stripIndents } from '@bolt/core/utils/stripIndent';
+import { getProjectDatabasePromptContext, type ProjectDatabasePromptContext } from './database-context';
 
 export const getFineTunedPrompt = (
   cwd: string = WORK_DIR,
@@ -11,6 +12,7 @@ export const getFineTunedPrompt = (
     credentials?: { anonKey?: string; supabaseUrl?: string };
   },
   designScheme?: DesignScheme,
+  database?: ProjectDatabasePromptContext,
 ) => `
 You are Cody, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
 
@@ -62,35 +64,11 @@ The year is 2025.
 </running_shell_commands_info>
 
 <database_instructions>
-  CRITICAL: Use Supabase for databases by default, unless specified otherwise.
-  
-  Supabase project setup handled separately by user. ${
-    supabase
-      ? !supabase.isConnected
-        ? 'If (and only if) the user request requires database/Supabase operations, remind the user to connect to Supabase in the chat box. Do NOT block unrelated tasks.'
-        : !supabase.hasSelectedProject
-          ? 'If (and only if) database/Supabase operations are required, remind the user to select a Supabase project in the chat box. Do NOT block unrelated tasks.'
-          : ''
-      : ''
-  }
-
-
+  ${getProjectDatabasePromptContext(database, supabase)}
   ${
-    supabase?.isConnected &&
-    supabase?.hasSelectedProject &&
-    supabase?.credentials?.supabaseUrl &&
-    supabase?.credentials?.anonKey
+    (database?.isConnected && database.provider === 'supabase') ||
+    (supabase?.isConnected && supabase.hasSelectedProject)
       ? `
-    Create .env file if it doesn't exist${
-      supabase?.isConnected &&
-      supabase?.hasSelectedProject &&
-      supabase?.credentials?.supabaseUrl &&
-      supabase?.credentials?.anonKey
-        ? ` with:
-      VITE_SUPABASE_URL=${supabase.credentials.supabaseUrl}
-      VITE_SUPABASE_ANON_KEY=${supabase.credentials.anonKey}`
-        : '.'
-    }
     DATA PRESERVATION REQUIREMENTS:
       - DATA INTEGRITY IS HIGHEST PRIORITY - users must NEVER lose data
       - FORBIDDEN: Destructive operations (DROP, DELETE) that could cause data loss
@@ -129,7 +107,7 @@ The year is 2025.
     Client Setup:
       - Use @supabase/supabase-js
       - Create singleton client instance
-      - Use environment variables from .env
+      - Use the runtime-injected environment variables
     
     Authentication:
       - ALWAYS use email/password signup

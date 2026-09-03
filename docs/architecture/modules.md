@@ -1,17 +1,17 @@
 # Module Architecture
 
-`v3.3.0` divides the production codebase into six pnpm workspace packages. The packages compile into one application, but ownership and validation stay focused so a change does not require loading or checking unrelated domains.
+The v4 codebase is divided into six pnpm workspace packages. The packages compile into one application, but ownership and validation stay focused so a change does not require loading or checking unrelated domains.
 
 ## Ownership
 
-| Module | Package | Owns |
-| --- | --- | --- |
-| Core | `@bolt/core` | Shared contracts, workspace paths, security, logging, URLs, version metadata, and low-level utilities |
-| Agent | `@bolt/agent` | Providers, prompts, context selection, streaming, tools, commentary, continuation, recovery, and web browsing |
-| Runtime | `@bolt/runtime` | Hosted runtime clients, workspace synchronization, Preview health/recovery, runtime-node provisioning, and command support |
-| Project | `@bolt/project` | Files, history, persistence, Workbench, editor, terminal, actions, collaboration, and project integrations |
-| Control plane | `@bolt/control-plane` | Tenant/admin policy, managed instances, updates, publishing, domains, billing, mail, and audit state |
-| Surfaces | `@bolt/surfaces` | Remix routes, application chrome, Cloudflare adapters, mobile, Tauri, and cross-domain composition |
+| Module        | Package               | Owns                                                                                                                       |
+| ------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Core          | `@bolt/core`          | Shared contracts, workspace paths, security, logging, URLs, version metadata, and low-level utilities                      |
+| Agent         | `@bolt/agent`         | Providers, prompts, context selection, streaming, tools, commentary, continuation, recovery, and web browsing              |
+| Runtime       | `@bolt/runtime`       | Hosted runtime clients, workspace synchronization, Preview health/recovery, runtime-node provisioning, and command support |
+| Project       | `@bolt/project`       | Files, history, persistence, Workbench, editor, terminal, actions, collaboration, and project integrations                 |
+| Control plane | `@bolt/control-plane` | Tenant/admin policy, managed instances, updates, publishing, domains, billing, mail, and audit state                       |
+| Surfaces      | `@bolt/surfaces`      | Remix routes, application chrome, Cloudflare adapters, mobile, Tauri, and cross-domain composition                         |
 
 Each module has its own `package.json`, `tsconfig.json`, and `AGENTS.md`. Public imports use `@bolt/<module>/*`; the map in `modules/module-map.json` is the source of truth for permitted dependencies.
 
@@ -62,3 +62,7 @@ New production files are limited to 1,000 lines. Existing large files have expli
 6. Run the root release gate before merging.
 
 Do not bypass a dependency rule with a long relative path. If two low-level modules need each other, extract the shared contract or pure helper to `core`, or inject a port from the composition layer.
+
+## Project Data Boundary
+
+Generated projects do not receive a database automatically. `runtime` stores an explicitly connected Supabase or PostgreSQL record outside project source, injects its environment only into the owning session, and returns redacted status to browser surfaces. `project` owns the Database control state, while `agent` sees only the provider and variable contract. The optional PostgreSQL database used by bolt.gives profiles/admin is a separate control-plane concern.

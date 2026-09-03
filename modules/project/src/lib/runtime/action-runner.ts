@@ -41,6 +41,7 @@ import {
   isHostedRuntimeEnabled,
   runHostedRuntimeCommand,
   syncHostedRuntimeWorkspace,
+  terminateHostedRuntimeProcesses,
   type HostedRuntimePreviewInfo,
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { sanitizeHostedRuntimeFileMap } from '@bolt/runtime/lib/runtime/hosted-runtime-sanitize';
@@ -766,7 +767,7 @@ export class ActionRunner {
       }
 
       if (shouldRunZombieCleanup(action.content)) {
-        await this.#runZombieKiller('shell');
+        await this.#runZombieKiller();
       }
 
       await this.#runHostedShellLikeCommand({
@@ -801,7 +802,7 @@ export class ActionRunner {
     }
 
     if (shouldRunZombieCleanup(action.content)) {
-      await this.#runZombieKiller('shell');
+      await this.#runZombieKiller();
     }
 
     let finalOutput = '';
@@ -944,7 +945,7 @@ export class ActionRunner {
     }
 
     if (shouldRunZombieCleanup(action.content)) {
-      await this.#runZombieKiller('start');
+      await this.#runZombieKiller();
     }
 
     let finalOutput = '';
@@ -1115,16 +1116,11 @@ export class ActionRunner {
     return { socket, release };
   }
 
-  async #runZombieKiller(kind: 'shell' | 'start') {
+  async #runZombieKiller() {
     try {
       if (isHostedRuntimeEnabled()) {
-        const cleanupCommand = 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true';
         await this.#reconcileHostedRuntimeWorkspace();
-        await runHostedRuntimeCommand({
-          sessionId: this.#getHostedRuntimeSessionId(),
-          command: cleanupCommand,
-          kind,
-        });
+        await terminateHostedRuntimeProcesses(this.#getHostedRuntimeSessionId());
 
         return;
       }

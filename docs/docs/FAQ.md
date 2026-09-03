@@ -3,13 +3,13 @@
 ## What platforms are supported?
 
 - Using bolt.gives in a browser: supported on Windows, macOS, and Linux.
-- Installing / self-hosting bolt.gives: supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives: supported on **Ubuntu 20.04+ only**.
   - Windows is **not supported** for installation/self-hosting (but you can use the hosted app from Windows).
   - macOS is **not supported** for installation/self-hosting (but you can use the hosted app from macOS).
 
 ## Do I need a bolt.gives account to use it?
 
-No. bolt.gives does not require a bolt.gives signup/account.
+Hosted project history is scoped to a lightweight bolt.gives profile. A self-host can run locally and decide whether to configure persistent profile storage.
 
 To use an LLM provider, you will typically need an account with that provider (OpenAI/Anthropic/OpenRouter/etc.) to obtain an API key.
 
@@ -36,5 +36,4 @@ NODE_OPTIONS=--max-old-space-size=6142 pnpm run build
 
 ## Is Supabase required?
 
-No. Supabase is optional and is only needed for session save/resume/share features.
-
+No. Generated projects start without a database. When an app needs persistence, open **Database** and either paste a Supabase project URL plus publishable/anon key or connect your own PostgreSQL URL. PostgreSQL credentials stay in the private runtime and are not written into generated files.

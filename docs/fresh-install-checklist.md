@@ -1,10 +1,10 @@
-# Fresh Install Checklist (bolt.gives v3.0.2)
+# Fresh Install Checklist (bolt.gives v4)
 
 This checklist is meant to validate a clean developer machine setup end-to-end.
 
 ## Supported Install Platform (Important)
 
-- Installing / self-hosting bolt.gives is supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives is supported on **Ubuntu 20.04+ only**.
 - Windows is **not supported** for installation/self-hosting (but you can use the hosted app from Windows).
 - macOS is **not supported** for installation/self-hosting (but you can use the hosted app from macOS).
 
@@ -26,7 +26,8 @@ Installer guarantees:
 - repo clone/update
 - `.env.local` initialization
 - production build with `NODE_OPTIONS=--max-old-space-size=4096`
-- systemd services for app, collaboration, and web browsing helpers
+- systemd services for app, hosted runtime, collaboration, and web browsing helpers
+- no PostgreSQL dependency by default; use `--with-postgres` only for local profile/admin data
 
 ## Manual prerequisites
 
@@ -67,17 +68,20 @@ Install these on Ubuntu:
 1. Recommended
    - Use the installer-created services:
      - `sudo systemctl status bolt-gives-app --no-pager`
+     - `sudo systemctl status bolt-gives-runtime --no-pager`
      - `sudo systemctl status bolt-gives-collab --no-pager`
      - `sudo systemctl status bolt-gives-webbrowse --no-pager`
 2. Manual
    - Start each process in its own terminal:
      - `NODE_OPTIONS=--max-old-space-size=4096 pnpm run collab:server`
      - `NODE_OPTIONS=--max-old-space-size=4096 pnpm run webbrowse:server`
+     - `NODE_OPTIONS=--max-old-space-size=4096 pnpm run runtime:server`
      - `NODE_OPTIONS=--max-old-space-size=4096 pnpm run start`
 3. Confirm services
    - App: `http://localhost:5173`
    - Collaboration server: `ws://localhost:1234`
    - Web browsing service: `http://127.0.0.1:4179`
+   - Hosted runtime: `http://127.0.0.1:4321`
 
 ## Build
 
@@ -91,7 +95,15 @@ Validated self-host build command:
 - `pnpm run lint`
 - `pnpm test`
 
-## Optional (Sessions + Supabase)
+## Optional project database
+
+Generated projects do not require a database. In Chat or Agent Mode, open **Database**:
+
+1. For Supabase, paste the Project URL and publishable/anon key from Project Settings > API.
+2. For PostgreSQL, paste a restricted application connection string and let the runtime verify it.
+3. Never add either connection to generated source or commit it to Git.
+
+## Optional shared sessions
 
 1. Configure Supabase vars in `.env.local`
 2. Create `public.bolt_sessions` table

@@ -21,35 +21,7 @@ export function useSupabaseConnection() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
-    const initConnection = async () => {
-      // First, try to initialize from server-side token
-      try {
-        await initializeSupabaseConnection();
-      } catch {
-        // Fall back to localStorage restoration if env-based initialization is unavailable.
-      }
-
-      // Then check localStorage for additional data
-      const savedConnection = localStorage.getItem('supabase_connection');
-      const savedCredentials = localStorage.getItem('supabaseCredentials');
-
-      if (savedConnection) {
-        const parsed = JSON.parse(savedConnection);
-
-        if (savedCredentials && !parsed.credentials) {
-          parsed.credentials = JSON.parse(savedCredentials);
-        }
-
-        // Only update if we don't already have a connection from server-side
-        const currentState = supabaseConnection.get();
-
-        if (!currentState.user) {
-          updateSupabaseConnection(parsed);
-        }
-      }
-    };
-
-    initConnection();
+    initializeSupabaseConnection();
   }, []);
 
   const handleConnect = async () => {
@@ -118,8 +90,10 @@ export function useSupabaseConnection() {
 
     if (projectId && currentState.token) {
       try {
-        await fetchProjectApiKeys(projectId, currentState.token);
+        const credentials = await fetchProjectApiKeys(projectId, currentState.token);
         toast.success('Project selected successfully');
+
+        return credentials;
       } catch (error) {
         console.error('Failed to fetch API keys:', error);
         toast.error('Selected project but failed to fetch API keys');
@@ -129,6 +103,8 @@ export function useSupabaseConnection() {
     }
 
     setIsDropdownOpen(false);
+
+    return null;
   };
 
   const handleCreateProject = async () => {

@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   extractHostedRuntimeSessionIdFromPreviewBaseUrl,
+  fetchHostedProjectConnection,
   fetchHostedRuntimeSnapshot,
   fetchHostedRuntimePreviewStatus,
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   resolveHostedRuntimeBaseUrl,
+  saveHostedProjectConnection,
   subscribeHostedRuntimePreview,
+  terminateHostedRuntimeProcesses,
   shouldReloadHostedPreviewIframe,
 } from './hosted-runtime-client';
 
@@ -33,6 +36,26 @@ describe('hosted runtime client', () => {
         originHost: 'bolt-gives.pages.dev',
       }),
     ).toBe('https://bolt-gives.pages.dev/runtime');
+  });
+
+  it('cleans up only the active hosted runtime session', async () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'bolt-gives.pages.dev',
+        protocol: 'https:',
+        host: 'bolt-gives.pages.dev',
+      },
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await terminateHostedRuntimeProcesses('session with spaces');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://bolt-gives.pages.dev/runtime/sessions/session%20with%20spaces/command',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 
   it('keeps canonical Pages preview status checks on the iframe origin', async () => {
@@ -164,6 +187,49 @@ describe('hosted runtime client', () => {
     );
     expect(status.status).toBe('ready');
     expect(status.preview?.port).toBe(4100);
+  });
+
+  it('saves and reloads only redacted project database status', async () => {
+    vi.stubGlobal('window', {
+      location: {
+        hostname: 'alpha1.bolt.gives',
+        protocol: 'https:',
+        host: 'alpha1.bolt.gives',
+        origin: 'https://alpha1.bolt.gives',
+      },
+    });
+
+    const connection = {
+      provider: 'supabase' as const,
+      status: 'connected' as const,
+      label: 'calendar-app',
+      host: 'calendar-app.supabase.co',
+      updatedAt: '2026-09-03T10:00:00.000Z',
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ connection }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ connection }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      saveHostedProjectConnection('abc123', {
+        provider: 'supabase',
+        supabaseUrl: 'https://calendar-app.supabase.co',
+        anonKey: 'public-anon-key-value',
+      }),
+    ).resolves.toEqual(connection);
+    await expect(fetchHostedProjectConnection('abc123')).resolves.toEqual(connection);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://alpha1.bolt.gives/runtime/sessions/abc123/database-connection',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://alpha1.bolt.gives/runtime/sessions/abc123/database-connection',
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('fetches the hosted workspace snapshot from the runtime endpoint', async () => {

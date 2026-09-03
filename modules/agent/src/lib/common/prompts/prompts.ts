@@ -2,6 +2,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import { WORK_DIR } from '@bolt/agent/utils/constants';
 import { allowedHTMLElements } from '@bolt/core/utils/markdown';
 import { stripIndents } from '@bolt/core/utils/stripIndent';
+import { getProjectDatabasePromptContext, type ProjectDatabasePromptContext } from './database-context';
 
 export const getSystemPrompt = (
   cwd: string = WORK_DIR,
@@ -11,6 +12,7 @@ export const getSystemPrompt = (
     credentials?: { anonKey?: string; supabaseUrl?: string };
   },
   designScheme?: DesignScheme,
+  database?: ProjectDatabasePromptContext,
 ) => `
 You are Cody agent, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
 
@@ -102,28 +104,10 @@ You are Cody agent, an expert AI assistant and exceptional senior software devel
 <database_instructions>
   The following instructions guide how you should handle database operations in projects.
 
-  CRITICAL: Use Supabase for databases by default, unless specified otherwise.
+  ${getProjectDatabasePromptContext(database, supabase)}
 
-  IMPORTANT NOTE: Supabase project setup and configuration is handled seperately by the user! ${
-    supabase
-      ? !supabase.isConnected
-        ? 'If (and only if) the user request requires database/Supabase operations, remind the user to connect to Supabase in the chat box. Do NOT block unrelated tasks.'
-        : !supabase.hasSelectedProject
-          ? 'If (and only if) database/Supabase operations are required, remind the user to select a project in the chat box. Do NOT block unrelated tasks.'
-          : ''
-      : ''
-  } 
-    IMPORTANT: Create a .env file if it doesnt exist${
-      supabase?.isConnected &&
-      supabase?.hasSelectedProject &&
-      supabase?.credentials?.supabaseUrl &&
-      supabase?.credentials?.anonKey
-        ? ` and include the following variables:
-    VITE_SUPABASE_URL=${supabase.credentials.supabaseUrl}
-    VITE_SUPABASE_ANON_KEY=${supabase.credentials.anonKey}`
-        : '.'
-    }
-  NEVER modify any Supabase configuration or \`.env\` files apart from creating the \`.env\`.
+  Prefer Supabase when the user asks for a managed backend, unless they explicitly choose PostgreSQL.
+  NEVER write database credentials or connected values into generated source or \`.env\` files.
 
   Do not try to generate types for supabase.
 

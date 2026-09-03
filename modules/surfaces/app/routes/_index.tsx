@@ -60,7 +60,7 @@ const platformHighlights = [
   `Hosted ${FREE_PROVIDER_NAME} users can switch between ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through the protected server-side path.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
-  'Dedicated runtime-node setup can create per-project Ubuntu CLI workspaces with isolated PostgreSQL databases.',
+  'Projects start database-free and can connect Supabase in two fields or use a user-owned PostgreSQL URL held by the private runtime.',
   'Follow-up prompts keep project history, runtime snapshots, and current workspace context.',
   'Contributors can join through GitHub issues and roadmap-aligned pull requests.',
 ];
@@ -91,10 +91,10 @@ const conversionCards = [
       'Managed trial instances use assigned hostnames, same-origin runtime previews, and the protected hosted FREE provider path.',
   },
   {
-    eyebrow: 'Runtime node',
-    title: 'Issue real CLI workspaces when clients need server access.',
+    eyebrow: 'Bring your database',
+    title: 'Connect Supabase or PostgreSQL only when the app needs it.',
     description:
-      'The setup wizard provisions per-project Ubuntu users, private workspace directories, and dedicated PostgreSQL roles/databases on a runtime node.',
+      'Supabase quick connect uses a project URL and publishable key. PostgreSQL connection strings stay server-side and are injected only into that project runtime.',
   },
 ];
 
@@ -636,7 +636,8 @@ export default function Index() {
               <div className="text-sm font-black uppercase tracking-[0.22em] text-emerald-900">Runtime Node</div>
               <h3 className="mt-4 text-2xl font-black">Create a live CLI workspace</h3>
               <p className="mt-3 text-sm leading-6 text-emerald-950/75">
-                Provision an isolated Ubuntu project user, private workspace directory, and dedicated Postgres database.
+                Provision an isolated Ubuntu project user and private workspace, then connect a database only if the
+                project needs one.
               </p>
             </a>
           </div>

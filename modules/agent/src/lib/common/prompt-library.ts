@@ -4,6 +4,7 @@ import { getFineTunedPrompt } from './prompts/new-prompt';
 import { getSmallModelPrompt } from './prompts/small-model';
 import { getHostedFreeBuildPrompt } from './prompts/free-hosted-build';
 import type { DesignScheme } from '@bolt/core/types/design-scheme';
+import type { ProjectDatabasePromptContext } from './prompts/database-context';
 
 export interface PromptOptions {
   cwd: string;
@@ -18,6 +19,7 @@ export interface PromptOptions {
       supabaseUrl?: string;
     };
   };
+  database?: ProjectDatabasePromptContext;
 }
 
 export class PromptLibrary {
@@ -32,12 +34,12 @@ export class PromptLibrary {
     default: {
       label: 'Default Prompt',
       description: 'An fine tuned prompt for better results and less token usage',
-      get: (options) => getFineTunedPrompt(options.cwd, options.supabase, options.designScheme),
+      get: (options) => getFineTunedPrompt(options.cwd, options.supabase, options.designScheme, options.database),
     },
     original: {
       label: 'Old Default Prompt',
       description: 'The OG battle tested default system Prompt',
-      get: (options) => getSystemPrompt(options.cwd, options.supabase, options.designScheme),
+      get: (options) => getSystemPrompt(options.cwd, options.supabase, options.designScheme, options.database),
     },
     optimized: {
       label: 'Optimized Prompt (experimental)',
@@ -47,7 +49,7 @@ export class PromptLibrary {
     small: {
       label: 'Small Model Prompt',
       description: 'Compact prompt intended for smaller LLMs (more reliable artifact/actions)',
-      get: (options) => getSmallModelPrompt(options.cwd, options.supabase, options.designScheme),
+      get: (options) => getSmallModelPrompt(options.cwd, options.supabase, options.designScheme, options.database),
     },
     'free-hosted': {
       label: 'Hosted FREE Build Prompt',
@@ -93,7 +95,7 @@ export class PromptLibrary {
       }
     }
 
-    return getSystemPrompt(options.cwd, options.supabase, options.designScheme);
+    return getSystemPrompt(options.cwd, options.supabase, options.designScheme, options.database);
   }
 
   static getPropmtFromLibrary(promptId: string | undefined, options: PromptOptions) {

@@ -5,11 +5,11 @@ bolt.gives is a collaborative, open-source AI coding workspace.
 ## Platform Support (Important)
 
 - Using bolt.gives in a browser: supported on Windows, macOS, and Linux (any modern browser).
-- Installing / self-hosting bolt.gives: supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives: supported on **Ubuntu 20.04+ only**.
   - Windows is **not supported** for installation/self-hosting (but you can use the hosted app from Windows).
   - macOS is **not supported** for installation/self-hosting (but you can use the hosted app from macOS).
 
-## Setup (Ubuntu 18.04+)
+## Setup (Ubuntu 20.04+)
 
 ### 1) Install Prerequisites
 
@@ -56,6 +56,7 @@ pnpm run dev
 ```
 
 Defaults:
+
 - App: `http://localhost:5173`
 - Collaboration server: `ws://localhost:1234`
 

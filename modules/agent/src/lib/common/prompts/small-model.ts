@@ -2,6 +2,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import { WORK_DIR } from '@bolt/agent/utils/constants';
 import { allowedHTMLElements } from '@bolt/core/utils/markdown';
 import { stripIndents } from '@bolt/core/utils/stripIndent';
+import { getProjectDatabasePromptContext, type ProjectDatabasePromptContext } from './database-context';
 
 /*
  * A compact prompt variant intended for smaller / less instruction-following models.
@@ -15,6 +16,7 @@ export const getSmallModelPrompt = (
     credentials?: { anonKey?: string; supabaseUrl?: string };
   },
   _designScheme?: DesignScheme,
+  database?: ProjectDatabasePromptContext,
 ) => stripIndents`
   You are Cody agent, a coding agent. Be concise and follow the output contract exactly.
 
@@ -39,10 +41,9 @@ export const getSmallModelPrompt = (
     - If package.json already exists, continue from the existing project instead of re-scaffolding.
   </environment>
 
-  <supabase>
-    Default DB is Supabase. Setup is handled by the user.
-    ${supabase ? (!supabase.isConnected ? 'You are NOT connected to Supabase.' : !supabase.hasSelectedProject ? 'Supabase connected but no project selected.' : 'Supabase connected and project selected.') : ''}
-  </supabase>
+  <database>
+    ${getProjectDatabasePromptContext(database, supabase)}
+  </database>
 
   <format_examples>
     <codyArtifact id="example" title="Example">

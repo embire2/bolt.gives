@@ -58,6 +58,7 @@ function getPromptLocator() {
 
 async function captureHome() {
   await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await hideProfileOnboardingForScreenshot(page);
 
   const requiredMarkers = getReleaseHomeReadinessMarkers(versionLabel);
 
@@ -125,6 +126,18 @@ async function capturePromptShell(outputName) {
   await page.screenshot({ path: path.join(outDir, outputName), fullPage: true });
 }
 
+async function captureDatabaseConnection() {
+  await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await hideProfileOnboardingForScreenshot(page);
+  await waitReady();
+
+  const databaseButton = page.getByRole('button', { name: 'Open database connection' }).first();
+  await databaseButton.click();
+  await page.getByRole('heading', { name: 'Project database' }).waitFor({ state: 'visible', timeout: 15000 });
+  await page.screenshot({ path: path.join(outDir, 'database.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+}
+
 async function captureWorkspaceShell() {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await hideProfileOnboardingForScreenshot(page);
@@ -173,6 +186,7 @@ async function waitForImages() {
 try {
   await captureHome();
   await forceProviderDefaults();
+  await captureDatabaseConnection();
 
   if (skipPromptCaptures) {
     await capturePromptShell('chat.png');

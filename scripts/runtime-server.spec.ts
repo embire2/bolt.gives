@@ -1049,7 +1049,7 @@ describe('runtime server workspace isolation', () => {
 
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
-        config: { supported: true },
+        config: { supported: true, databaseEnabled: true },
         ensureWorkspaceFn,
         writeEvent: (event: { type: string; message?: string }) => events.push(event),
         now: 1_000,
@@ -1064,6 +1064,29 @@ describe('runtime server workspace isolation', () => {
       }),
     ]);
     resolveProvisioning();
+  });
+
+  it('does not provision a runtime-node database when automatic databases are disabled', async () => {
+    const ensureWorkspaceFn = vi.fn();
+    const writeEvent = vi.fn();
+
+    await expect(
+      resolveRuntimeNodeDatabaseEnvironmentForCommand(
+        {
+          id: 'database-free-runtime-session',
+          runtimeNodeDatabase: null,
+          runtimeNodeRetryAt: 0,
+        },
+        {
+          config: { supported: true, databaseEnabled: false },
+          ensureWorkspaceFn,
+          writeEvent,
+        },
+      ),
+    ).resolves.toEqual({});
+
+    expect(ensureWorkspaceFn).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
   });
 
   it('waits for the local project database on the first command and injects only project credentials', async () => {
@@ -1106,6 +1129,29 @@ describe('runtime server workspace isolation', () => {
     ]);
   });
 
+  it('prefers a user-owned connection without provisioning a platform database', async () => {
+    const ensureProjectDatabaseFn = vi.fn();
+    const environment = await resolveRuntimeNodeDatabaseEnvironmentForCommand(
+      { id: 'user-owned-database', previewSubscribers: new Set() },
+      {
+        projectConnection: {
+          provider: 'postgresql',
+          databaseUrl: 'postgresql://app:private@db.example.com/calendar?sslmode=require',
+        },
+        projectDatabaseConfig: { supported: true },
+        ensureProjectDatabaseFn,
+        config: { supported: false },
+      },
+    );
+
+    expect(ensureProjectDatabaseFn).not.toHaveBeenCalled();
+    expect(environment).toMatchObject({
+      DATABASE_URL: 'postgresql://app:private@db.example.com/calendar?sslmode=require',
+      PGHOST: 'db.example.com',
+      PGDATABASE: 'calendar',
+    });
+  });
+
   it('degrades a failed database tunnel without failing the hosted command', async () => {
     const events: Array<{ type: string; message?: string }> = [];
     const session = {
@@ -1123,7 +1169,7 @@ describe('runtime server workspace isolation', () => {
 
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
-        config: { supported: true },
+        config: { supported: true, databaseEnabled: true },
         connectDatabaseFn: async () => {
           throw new Error('ssh: connect timed out for private-password');
         },

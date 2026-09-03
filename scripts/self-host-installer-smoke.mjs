@@ -41,12 +41,31 @@ if (!installerSource.includes('chmod 600 \"${env_file}\"')) {
   throw new Error('install.sh does not protect .env.local permissions');
 }
 
+if (!installerSource.includes('INSTALL_POSTGRES=0') || !installerSource.includes('--with-postgres')) {
+  throw new Error('install.sh must keep local PostgreSQL optional and explicitly opt-in');
+}
+
+if (!installerSource.includes('\"BOLT_PROJECT_DATABASE_ENABLED\" \"false\"')) {
+  throw new Error('install.sh must keep automatic generated-project database provisioning disabled');
+}
+
+if (installerSource.includes('PROJECT_DATABASE_PROVISIONER')) {
+  throw new Error('install.sh still creates the retired generated-project database provisioner');
+}
+
 console.log(
   JSON.stringify(
     {
       ok: true,
-      checks: ['syntax', 'help-path', 'generated-service-secrets', 'env-permissions'],
-      scenarios: ['no-db: --skip-postgres --skip-caddy', 'full-db: PostgreSQL and Caddy prompts available'],
+      checks: [
+        'syntax',
+        'help-path',
+        'generated-service-secrets',
+        'env-permissions',
+        'database-free-default',
+        'optional-admin-postgres',
+      ],
+      scenarios: ['default: no PostgreSQL required', 'optional-db: --with-postgres for profile/admin data'],
     },
     null,
     2,

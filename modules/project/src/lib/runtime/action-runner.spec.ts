@@ -7,6 +7,7 @@ const hostedRuntimeMocks = vi.hoisted(() => ({
   isHostedRuntimeEnabled: vi.fn(() => false),
   syncHostedRuntimeWorkspace: vi.fn().mockResolvedValue(undefined),
   runHostedRuntimeCommand: vi.fn().mockResolvedValue({ exitCode: 0, output: 'ok' }),
+  terminateHostedRuntimeProcesses: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@bolt/runtime/lib/runtime/hosted-runtime-client', () => hostedRuntimeMocks);
@@ -70,6 +71,7 @@ describe('ActionRunner start actions', () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(false);
     hostedRuntimeMocks.syncHostedRuntimeWorkspace.mockResolvedValue(undefined);
     hostedRuntimeMocks.runHostedRuntimeCommand.mockResolvedValue({ exitCode: 0, output: 'ok' });
+    hostedRuntimeMocks.terminateHostedRuntimeProcesses.mockResolvedValue(undefined);
   });
 
   it('keeps restored actions visible and complete without executing them again', async () => {
@@ -1308,11 +1310,8 @@ describe('ActionRunner start actions', () => {
 
     expect(hostedRuntimeMocks.syncHostedRuntimeWorkspace).toHaveBeenCalledTimes(1);
 
-    const nonCleanupHostedCommands = hostedRuntimeMocks.runHostedRuntimeCommand.mock.calls.filter(
-      ([payload]) => payload.command !== 'pkill -9 -f "(vite|next|webpack-dev-server|rollup|esbuild)" || true',
-    );
-
-    expect(nonCleanupHostedCommands).toHaveLength(2);
+    expect(hostedRuntimeMocks.runHostedRuntimeCommand).toHaveBeenCalledTimes(2);
+    expect(hostedRuntimeMocks.terminateHostedRuntimeProcesses).toHaveBeenCalledOnce();
   });
 
   it('reconciles pending hosted file changes before executing a shell command', async () => {
@@ -1421,11 +1420,7 @@ describe('ActionRunner start actions', () => {
     hostedRuntimeMocks.isHostedRuntimeEnabled.mockReturnValue(true);
 
     let resolveHostedStart: ((value: { exitCode: number; output: string }) => void) | undefined;
-    hostedRuntimeMocks.runHostedRuntimeCommand.mockImplementation(async ({ command }) => {
-      if (command.includes('pkill -9 -f')) {
-        return { exitCode: 0, output: 'cleanup ok' };
-      }
-
+    hostedRuntimeMocks.runHostedRuntimeCommand.mockImplementation(async () => {
       return new Promise((resolve) => {
         resolveHostedStart = resolve;
       });

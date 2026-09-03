@@ -47,6 +47,7 @@ export interface HostedRuntimePreviewStatus {
   } | null;
   runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
   projectDatabase?: HostedProjectDatabase | null;
+  projectConnection?: HostedProjectConnection | null;
 }
 
 export interface HostedRuntimePreviewSummary {
@@ -59,6 +60,7 @@ export interface HostedRuntimePreviewSummary {
   recovery: HostedRuntimePreviewStatus['recovery'];
   runtimeNodeWorkspace?: HostedRuntimeNodeWorkspace | null;
   projectDatabase?: HostedProjectDatabase | null;
+  projectConnection?: HostedProjectConnection | null;
 }
 
 export interface HostedProjectDatabase {
@@ -67,6 +69,26 @@ export interface HostedProjectDatabase {
   databaseUser: string;
   persistence?: 'durable';
 }
+
+export interface HostedProjectConnection {
+  provider: 'supabase' | 'postgresql';
+  status: 'connected';
+  label: string;
+  host: string;
+  databaseName?: string;
+  updatedAt: string | null;
+}
+
+export type HostedProjectConnectionInput =
+  | {
+      provider: 'supabase';
+      supabaseUrl: string;
+      anonKey: string;
+    }
+  | {
+      provider: 'postgresql';
+      databaseUrl: string;
+    };
 
 export interface HostedRuntimeNodeWorkspace {
   id?: string;
@@ -79,8 +101,11 @@ export interface HostedRuntimeNodeWorkspace {
   sshCommand?: string | null;
   status?: string;
   oneTimeCliPassword?: string | null;
-  databaseName?: string;
-  databaseUser?: string;
+  databaseEnabled?: boolean;
+  databaseName?: string | null;
+  databaseUser?: string | null;
+  databaseHost?: string | null;
+  databasePort?: number | null;
   databaseUrl?: string | null;
   oneTimeDatabasePassword?: string | null;
   reason?: string | null;
@@ -386,6 +411,22 @@ export async function runHostedRuntimeCommand(options: {
   };
 }
 
+export async function terminateHostedRuntimeProcesses(sessionId: string): Promise<void> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/command`,
+    {
+      method: 'DELETE',
+      timeoutMs: HOSTED_STATUS_TIMEOUT_MS,
+      label: 'hosted-runtime/process-cleanup',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Hosted runtime cleanup failed with status ${response.status}`);
+  }
+}
+
 export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promise<HostedRuntimePreviewStatus> {
   const response = await boundedFetch(
     `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-status`,
@@ -405,6 +446,72 @@ export async function fetchHostedRuntimePreviewStatus(sessionId: string): Promis
   }
 
   return normalizeHostedRuntimePreviewPayloadForBrowser((await response.json()) as HostedRuntimePreviewStatus);
+}
+
+export async function fetchHostedProjectConnection(sessionId: string): Promise<HostedProjectConnection | null> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/database-connection`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      timeoutMs: HOSTED_STATUS_TIMEOUT_MS,
+      label: 'hosted-runtime/database-connection',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Database connection lookup failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { connection?: HostedProjectConnection | null };
+
+  return payload.connection || null;
+}
+
+export async function saveHostedProjectConnection(
+  sessionId: string,
+  input: HostedProjectConnectionInput,
+): Promise<HostedProjectConnection> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/database-connection`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      timeoutMs: 30_000,
+      label: 'hosted-runtime/database-connect',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Database connection failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { connection?: HostedProjectConnection };
+
+  if (!payload.connection) {
+    throw new Error('The runtime did not confirm the database connection.');
+  }
+
+  return payload.connection;
+}
+
+export async function deleteHostedProjectConnection(sessionId: string): Promise<void> {
+  const response = await boundedFetch(
+    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/database-connection`,
+    {
+      method: 'DELETE',
+      timeoutMs: HOSTED_STATUS_TIMEOUT_MS,
+      label: 'hosted-runtime/database-disconnect',
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Database disconnect failed with status ${response.status}`);
+  }
 }
 
 export function subscribeHostedRuntimePreview(

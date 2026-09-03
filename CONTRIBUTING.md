@@ -4,7 +4,7 @@ bolt.gives accepts contributions via the standard GitHub fork and pull request w
 
 ## Platform Support (Important)
 
-- Installing / self-hosting bolt.gives for development is supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives for development is supported on **Ubuntu 20.04+ only**.
 - Windows is **not supported** for installation/self-hosting (but you can use the hosted app from Windows).
 - macOS is **not supported** for installation/self-hosting (but you can use the hosted app from macOS).
 
@@ -48,13 +48,14 @@ bolt.gives accepts contributions via the standard GitHub fork and pull request w
 ## PR Guidance
 
 Include in the PR description:
+
 - What changed and why
 - Steps to verify locally
 - Tests you ran
 
 ## Development Setup
 
-Prereqs (Ubuntu 18.04+ only):
+Prereqs (Ubuntu 20.04+ only):
 
 1. Install base packages:
    ```bash
@@ -79,17 +80,20 @@ Prereqs (Ubuntu 18.04+ only):
    ```
 
 Install:
+
 ```bash
 pnpm install
 cp .env.example .env.local
 ```
 
 Run:
+
 ```bash
 pnpm run dev
 ```
 
 If the build fails with "JavaScript heap out of memory":
+
 ```bash
 pnpm run build:highmem
 ```
@@ -97,6 +101,7 @@ pnpm run build:highmem
 ## Reporting Issues
 
 When opening an issue, include:
+
 - What you expected to happen
 - What happened instead
 - Steps to reproduce

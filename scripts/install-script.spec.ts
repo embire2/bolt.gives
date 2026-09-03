@@ -4,9 +4,17 @@ import { describe, expect, it } from 'vitest';
 const installScript = readFileSync(new URL('../install.sh', import.meta.url), 'utf8');
 
 describe('install.sh', () => {
-  it('installs local PostgreSQL client tooling for self-host operators', () => {
-    expect(installScript).toContain('postgresql-client');
+  it('enforces the Node 22 compatible Ubuntu 20.04 minimum', () => {
+    expect(installScript).toContain('Supported target: Ubuntu 20.04+.');
+    expect(installScript).toContain('bolt.gives requires Ubuntu 20.04 or newer for Node.js ${NODE_MAJOR}.');
+    expect(installScript).toContain('10#${ubuntu_major} < 20');
+  });
+
+  it('installs local PostgreSQL tooling only for self-host operators who opt in', () => {
+    expect(installScript).toContain('if [[ "${INSTALL_POSTGRES}" -eq 1 ]]');
+    expect(installScript).toContain('packages+=(postgresql postgresql-contrib)');
     expect(installScript).toContain('need_cmd psql');
+    expect(installScript).not.toContain('packages=(git curl ca-certificates build-essential python3 postgresql');
   });
 
   it('prompts interactively for local PostgreSQL database credentials', () => {

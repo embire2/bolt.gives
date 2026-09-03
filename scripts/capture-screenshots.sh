@@ -48,7 +48,7 @@ BASE_URL="${BASE_URL}" README_SCREENSHOT_DIR="${OUT_DIR}" README_SCREENSHOT_SKIP
 BASE_URL="${BASE_URL}" SYSTEM_ACTION_SCREENSHOT_PATH="${OUT_DIR}/system-in-action.png" SYSTEM_ACTION_SKIP_PROMPT="${SYSTEM_ACTION_SKIP_PROMPT:-}" node "${ROOT_DIR}/scripts/capture-system-in-action.mjs" >/dev/null 2>&1
 
 mkdir -p "${PUBLIC_OUT_DIR}"
-cp "${OUT_DIR}/home.png" "${OUT_DIR}/chat.png" "${OUT_DIR}/chat-plan.png" "${OUT_DIR}/system-in-action.png" "${OUT_DIR}/changelog.png" "${PUBLIC_OUT_DIR}/"
+cp "${OUT_DIR}/home.png" "${OUT_DIR}/chat.png" "${OUT_DIR}/chat-plan.png" "${OUT_DIR}/database.png" "${OUT_DIR}/system-in-action.png" "${OUT_DIR}/changelog.png" "${PUBLIC_OUT_DIR}/"
 
 echo "Wrote:"
 ls -1 "${OUT_DIR}" | sed 's/^/  - /'

@@ -36,7 +36,7 @@ export function buildProjectDatabaseIdentity(sessionId) {
 }
 
 export function buildProjectDatabaseConfig(env = process.env) {
-  const enabled = envValue(env, 'BOLT_PROJECT_DATABASE_ENABLED') !== 'false';
+  const enabled = envValue(env, 'BOLT_PROJECT_DATABASE_ENABLED') === 'true';
   const adminUrl = envValue(env, 'BOLT_PROJECT_DATABASE_ADMIN_URL');
   const host = envValue(env, 'BOLT_PROJECT_DATABASE_HOST') || '127.0.0.1';
   const port = Number(envValue(env, 'BOLT_PROJECT_DATABASE_PORT') || '5432');

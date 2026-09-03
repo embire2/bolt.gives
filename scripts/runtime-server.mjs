@@ -88,6 +88,14 @@ import {
   sanitizeProjectDatabase,
 } from './project-databases.mjs';
 import {
+  buildProjectConnectionConfig,
+  buildProjectConnectionEnvironment,
+  deleteProjectConnection,
+  readProjectConnection,
+  sanitizeProjectConnection,
+  saveProjectConnection,
+} from './project-connections.mjs';
+import {
   appendProjectDeploymentEvent,
   buildCustomDomainDnsInstructions,
   buildProjectHostname,
@@ -242,6 +250,7 @@ const RUNTIME_NODE_RETRY_COOLDOWN_MS = Math.max(
   Number(process.env.RUNTIME_NODE_RETRY_COOLDOWN_MS || '60000') || 60_000,
 );
 const PROJECT_DATABASE_CONFIG = buildProjectDatabaseConfig();
+const PROJECT_CONNECTION_CONFIG = buildProjectConnectionConfig(process.env, PERSIST_ROOT);
 const MAX_PREVIEW_LOG_LINES = Number(process.env.RUNTIME_PREVIEW_LOG_LINES || '80');
 const AUTO_RESTORE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_AUTO_RESTORE_DELAY_MS || '3500');
 const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_DELAY_MS || '1200');
@@ -1503,6 +1512,48 @@ function queueProjectDatabaseProvisioning(session) {
   });
 }
 
+function redactProjectConnectionError(error, input = {}) {
+  let message = error instanceof Error ? error.message : String(error || 'Project database connection failed.');
+
+  for (const secret of [input.databaseUrl, input.anonKey]) {
+    if (typeof secret === 'string' && secret) {
+      message = message.replaceAll(secret, '[redacted]');
+    }
+  }
+
+  return message
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[redacted database connection]')
+    .replace(/(?:eyJ|sb_(?:publishable|secret)_)[A-Za-z0-9._-]+/g, '[redacted]')
+    .slice(0, 1000);
+}
+
+async function loadProjectConnectionForSession(session, options = {}) {
+  if (session.projectConnectionLoaded && options.force !== true) {
+    return session.projectConnection;
+  }
+
+  session.projectConnection = await readProjectConnection(session.id, PROJECT_CONNECTION_CONFIG);
+  session.projectConnectionLoaded = true;
+
+  return session.projectConnection;
+}
+
+async function saveProjectConnectionForSession(session, input) {
+  const record = await saveProjectConnection(session.id, input, PROJECT_CONNECTION_CONFIG);
+  session.projectConnection = record;
+  session.projectConnectionLoaded = true;
+  broadcastPreviewState(session);
+
+  return record;
+}
+
+async function deleteProjectConnectionForSession(session) {
+  await deleteProjectConnection(session.id, PROJECT_CONNECTION_CONFIG);
+  session.projectConnection = null;
+  session.projectConnectionLoaded = true;
+  broadcastPreviewState(session);
+}
+
 function attachRuntimeNodeDatabaseToSession(session, workspace, databasePassword) {
   const password = String(databasePassword || '');
 
@@ -1520,7 +1571,10 @@ function attachRuntimeNodeDatabaseToSession(session, workspace, databasePassword
 }
 
 async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
-  if (session.runtimeNodeWorkspace?.status === 'active' && session.runtimeNodeDatabase) {
+  if (
+    session.runtimeNodeWorkspace?.status === 'active' &&
+    (session.runtimeNodeWorkspace.databaseEnabled !== true || session.runtimeNodeDatabase)
+  ) {
     return session.runtimeNodeWorkspace;
   }
 
@@ -1560,9 +1614,13 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
 
       if (existing) {
         session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(existing);
+        session.runtimeNodeWorkspaceRecord = existing;
 
-        const databasePassword = await readRuntimeNodeDatabasePassword(existing, config);
-        attachRuntimeNodeDatabaseToSession(session, existing, databasePassword);
+        if (config.databaseEnabled && existing.databaseEnabled) {
+          const databasePassword = await readRuntimeNodeDatabasePassword(existing, config);
+          attachRuntimeNodeDatabaseToSession(session, existing, databasePassword);
+        }
+
         session.runtimeNodeRetryAt = 0;
         session.runtimeNodeLastError = null;
         broadcastPreviewState(session);
@@ -1577,6 +1635,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
           projectName: projectSlug,
           cliUsername,
           cliPassword: createStrongRuntimeNodePassword(),
+          databaseEnabled: config.databaseEnabled,
         },
         config,
       );
@@ -1604,7 +1663,14 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
       record.provisionedAt = new Date().toISOString();
       record.updatedAt = record.provisionedAt;
       record.lastError = null;
-      attachRuntimeNodeDatabaseToSession(session, record, secrets.databasePassword);
+
+      if (record.databaseEnabled) {
+        attachRuntimeNodeDatabaseToSession(session, record, secrets.databasePassword);
+      } else {
+        session.runtimeNodeWorkspaceRecord = record;
+        session.runtimeNodeDatabase = null;
+      }
+
       session.runtimeNodeWorkspace = sanitizeRuntimeNodeWorkspaceForClient(record);
       appendRuntimeNodeWorkspaceEvent(registry, {
         actor: 'runtime-session',
@@ -1614,7 +1680,7 @@ async function ensureRuntimeNodeWorkspaceForSession(session, options = {}) {
           sessionId: session.id,
           cliUsername: record.cliUsername,
           workspaceDir: record.workspaceDir,
-          databaseName: record.databaseName,
+          ...(record.databaseName ? { databaseName: record.databaseName } : {}),
         },
       });
       await writeRuntimeNodeWorkspaceRegistry(registry);
@@ -2918,6 +2984,7 @@ export function buildRuntimeNodeDatabaseStateForClient(session) {
 
 export function buildPreviewStateSummary(session) {
   const projectDatabase = buildRuntimeNodeDatabaseStateForClient(session);
+  const projectConnection = sanitizeProjectConnection(session?.projectConnection);
 
   return {
     sessionId: session.id,
@@ -2929,6 +2996,7 @@ export function buildPreviewStateSummary(session) {
     recovery: session.previewRecovery,
     runtimeNodeWorkspace: session.runtimeNodeWorkspace || null,
     ...(projectDatabase ? { projectDatabase } : {}),
+    ...(projectConnection ? { projectConnection } : {}),
   };
 }
 
@@ -3716,6 +3784,8 @@ function getSession(sessionId) {
       projectDatabaseProvisionPromise: null,
       projectDatabaseRetryAt: 0,
       projectDatabaseLastError: null,
+      projectConnection: null,
+      projectConnectionLoaded: false,
       publicOrigin: null,
       operationQueue: Promise.resolve(),
     };
@@ -5952,10 +6022,16 @@ function inferConfiguredBuildOutputDirectory(packageJson = {}) {
 }
 
 async function prepareCloudflareProjectDeployment(session, projectName) {
-  const projectDatabase = PROJECT_DATABASE_CONFIG.supported
-    ? await ensureProjectDatabaseForSession(session, { config: PROJECT_DATABASE_CONFIG })
-    : null;
-  const projectEnv = projectDatabase ? buildProjectDatabaseEnvironment(projectDatabase) : {};
+  const projectConnection = await loadProjectConnectionForSession(session);
+  const projectDatabase =
+    !projectConnection && PROJECT_DATABASE_CONFIG.supported
+      ? await ensureProjectDatabaseForSession(session, { config: PROJECT_DATABASE_CONFIG })
+      : null;
+  const projectEnv = projectConnection
+    ? buildProjectConnectionEnvironment(projectConnection, { target: 'static-build' })
+    : projectDatabase
+      ? buildProjectDatabaseEnvironment(projectDatabase)
+      : {};
   const packageJsonRecord = await readWorkspacePackageJson(session);
   const packageJson = packageJsonRecord?.json || {};
   const buildCommand = inferCloudflareBuildCommand(packageJson, {
@@ -6002,7 +6078,13 @@ async function prepareCloudflareProjectDeployment(session, projectName) {
 
   await fs.writeFile(path.join(stagingDirectory, '_worker.js'), buildCloudflarePagesWorkerScript(), 'utf8');
 
-  return { outputDirectory, stagingDirectory, projectDatabase, ...entryAssets };
+  return {
+    outputDirectory,
+    stagingDirectory,
+    projectDatabase,
+    projectConnection: sanitizeProjectConnection(projectConnection),
+    ...entryAssets,
+  };
 }
 
 async function waitForCloudflareDeploymentHealth(urls, timeoutMs = 45_000, options = {}) {
@@ -7255,6 +7337,22 @@ function runtimeNodeDatabaseFallbackMessage(session, now = Date.now()) {
 export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, options = {}) {
   const projectDatabaseConfig = options.projectDatabaseConfig || PROJECT_DATABASE_CONFIG;
   const writeEvent = typeof options.writeEvent === 'function' ? options.writeEvent : () => {};
+  const projectConnection =
+    options.projectConnection !== undefined
+      ? options.projectConnection
+      : await (options.loadProjectConnectionFn || loadProjectConnectionForSession)(session);
+
+  if (projectConnection) {
+    writeEvent({
+      type: 'status',
+      message:
+        projectConnection.provider === 'supabase'
+          ? 'Using the Supabase project connected to this workspace'
+          : 'Using the user-owned PostgreSQL database connected to this workspace',
+    });
+
+    return buildProjectConnectionEnvironment(projectConnection);
+  }
 
   if (projectDatabaseConfig.supported) {
     writeEvent({
@@ -7303,7 +7401,7 @@ export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, o
     Number(options.retryCooldownMs || RUNTIME_NODE_RETRY_COOLDOWN_MS) || RUNTIME_NODE_RETRY_COOLDOWN_MS,
   );
 
-  if (!config.supported) {
+  if (!config.supported || !config.databaseEnabled) {
     return {};
   }
 
@@ -8830,6 +8928,7 @@ export function createRuntimeServer() {
         const projectName = String(body.projectName || '').trim();
         const cliUsername = String(body.cliUsername || '').trim();
         const cliPassword = String(body.cliPassword || '');
+        const databaseEnabled = body.databaseEnabled === true;
         const usernameValidation = validateRuntimeNodeUsername(cliUsername);
         const projectSlug = slugifyRuntimeNodeProject(projectName);
 
@@ -8872,6 +8971,7 @@ export function createRuntimeServer() {
             projectName,
             cliUsername,
             cliPassword,
+            databaseEnabled,
           },
           config,
         );
@@ -8903,7 +9003,7 @@ export function createRuntimeServer() {
           details: {
             cliUsername: record.cliUsername,
             workspaceDir: record.workspaceDir,
-            databaseName: record.databaseName,
+            ...(record.databaseName ? { databaseName: record.databaseName } : {}),
           },
         });
         await writeRuntimeNodeWorkspaceRegistry(registry);
@@ -9181,6 +9281,7 @@ export function createRuntimeServer() {
     const previewEventsMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-events$/);
     const snapshotMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/snapshot$/);
     const previewAlertMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/preview-alert$/);
+    const projectConnectionMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/database-connection$/);
     const publishMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/publish$/);
     const cloudflareDeployMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/deploy\/cloudflare$/);
     const customDomainCheckoutMatch = pathname.match(/^\/runtime\/sessions\/([^/]+)\/custom-domain\/checkout$/);
@@ -10134,10 +10235,63 @@ export function createRuntimeServer() {
       return;
     }
 
+    if (req.method === 'GET' && projectConnectionMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(projectConnectionMatch[1]);
+        const session = getSession(requestedSessionId);
+        const connection = await loadProjectConnectionForSession(session);
+
+        sendJson(res, 200, {
+          ok: true,
+          sessionId: requestedSessionId,
+          connection: sanitizeProjectConnection(connection),
+        });
+      } catch (error) {
+        sendText(res, 500, redactProjectConnectionError(error));
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && projectConnectionMatch) {
+      let body = {};
+
+      try {
+        const requestedSessionId = normalizeSessionId(projectConnectionMatch[1]);
+        const session = getSession(requestedSessionId);
+        body = await readJsonBody(req);
+
+        const connection = await saveProjectConnectionForSession(session, body);
+
+        sendJson(res, 200, {
+          ok: true,
+          sessionId: requestedSessionId,
+          connection: sanitizeProjectConnection(connection),
+        });
+      } catch (error) {
+        sendText(res, 400, redactProjectConnectionError(error, body));
+      }
+
+      return;
+    }
+
+    if (req.method === 'DELETE' && projectConnectionMatch) {
+      try {
+        const requestedSessionId = normalizeSessionId(projectConnectionMatch[1]);
+        const session = getSession(requestedSessionId);
+        await deleteProjectConnectionForSession(session);
+
+        sendJson(res, 200, { ok: true, sessionId: requestedSessionId, connection: null });
+      } catch (error) {
+        sendText(res, 500, redactProjectConnectionError(error));
+      }
+      return;
+    }
+
     if (req.method === 'GET' && previewStatusMatch) {
       try {
         const requestedSessionId = normalizeSessionId(previewStatusMatch[1]);
         const session = getSession(requestedSessionId);
+        await loadProjectConnectionForSession(session);
         void ensureRuntimeNodeWorkspaceForSession(session);
         sendJson(res, 200, {
           sessionId: requestedSessionId,
@@ -10155,6 +10309,9 @@ export function createRuntimeServer() {
           ...(buildRuntimeNodeDatabaseStateForClient(session)
             ? { projectDatabase: buildRuntimeNodeDatabaseStateForClient(session) }
             : {}),
+          ...(sanitizeProjectConnection(session.projectConnection)
+            ? { projectConnection: sanitizeProjectConnection(session.projectConnection) }
+            : {}),
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect preview status');
@@ -10166,6 +10323,7 @@ export function createRuntimeServer() {
       try {
         const requestedSessionId = normalizeSessionId(previewEventsMatch[1]);
         const session = getSession(requestedSessionId);
+        await loadProjectConnectionForSession(session);
         void ensureRuntimeNodeWorkspaceForSession(session);
 
         res.writeHead(200, {

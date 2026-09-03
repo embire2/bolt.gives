@@ -29,7 +29,7 @@ import {
 import { logStore } from '@bolt/project/lib/stores/logs';
 import { streamingState } from '@bolt/project/lib/stores/streaming';
 import { filesToArtifacts } from '@bolt/project/utils/fileUtils';
-import { supabaseConnection } from '@bolt/project/lib/stores/supabase';
+import { projectDatabaseConnection } from '@bolt/project/lib/stores/project-database';
 import { defaultDesignScheme, type DesignScheme } from '@bolt/core/types/design-scheme';
 import type { ElementInfo } from '@bolt/project/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
@@ -547,10 +547,7 @@ export const ChatImpl = memo(
     const actionAlert = useStore(workbenchStore.alert);
     const isRuntimeScannerEnabled = useStore(workbenchStore.isRuntimeScannerEnabled);
     const deployAlert = useStore(workbenchStore.deployAlert);
-    const supabaseConn = useStore(supabaseConnection);
-    const selectedProject = supabaseConn.stats?.projects?.find(
-      (project) => project.id === supabaseConn.selectedProjectId,
-    );
+    const databaseConnection = useStore(projectDatabaseConnection);
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
     const [provider, setProvider] = useState<ProviderInfo>(() => {
@@ -730,12 +727,12 @@ export const ChatImpl = memo(
         chatMode,
         designScheme,
         supabase: {
-          isConnected: supabaseConn.isConnected,
-          hasSelectedProject: !!selectedProject,
-          credentials: {
-            supabaseUrl: supabaseConn?.credentials?.supabaseUrl,
-            anonKey: supabaseConn?.credentials?.anonKey,
-          },
+          isConnected: databaseConnection?.provider === 'supabase',
+          hasSelectedProject: databaseConnection?.provider === 'supabase',
+        },
+        databaseConnection: {
+          isConnected: Boolean(databaseConnection),
+          provider: databaseConnection?.provider,
         },
         maxLLMSteps: mcpSettings.maxLLMSteps,
         projectMemory,

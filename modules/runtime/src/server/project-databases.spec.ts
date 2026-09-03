@@ -18,6 +18,18 @@ afterEach(async () => {
 });
 
 describe('project database provisioning', () => {
+  it('is opt-in even when a provisioner URL exists', () => {
+    const config = buildProjectDatabaseConfig({
+      BOLT_PROJECT_DATABASE_ADMIN_URL: 'postgresql://provisioner:private@127.0.0.1:5432/postgres',
+    });
+
+    expect(config).toMatchObject({
+      enabled: false,
+      supported: false,
+      reason: 'Project database provisioning is disabled.',
+    });
+  });
+
   it('requires a server-only admin connection and redacts it from client config', () => {
     const unavailable = buildProjectDatabaseConfig({ BOLT_PROJECT_DATABASE_ENABLED: 'true' });
     const configured = buildProjectDatabaseConfig({

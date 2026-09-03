@@ -58,27 +58,18 @@ const storage =
     ? globalThis.localStorage
     : null;
 
-const savedConnection = storage ? storage.getItem('supabase_connection') : null;
-const savedCredentials = storage ? storage.getItem('supabaseCredentials') : null;
+// Remove credentials written by older releases. Connections now persist only in server-side runtime records.
+storage?.removeItem('supabase_connection');
+storage?.removeItem('supabaseCredentials');
 
-const initialState: SupabaseConnectionState = savedConnection
-  ? JSON.parse(savedConnection)
-  : {
-      user: null,
-      token: '',
-      stats: undefined,
-      selectedProjectId: undefined,
-      isConnected: false,
-      project: undefined,
-    };
-
-if (savedCredentials && !initialState.credentials) {
-  try {
-    initialState.credentials = JSON.parse(savedCredentials);
-  } catch (e) {
-    console.error('Failed to parse saved credentials:', e);
-  }
-}
+const initialState: SupabaseConnectionState = {
+  user: null,
+  token: '',
+  stats: undefined,
+  selectedProjectId: undefined,
+  isConnected: false,
+  project: undefined,
+};
 
 export const supabaseConnection = atom<SupabaseConnectionState>(initialState);
 
@@ -121,31 +112,10 @@ export function updateSupabaseConnection(connection: Partial<SupabaseConnectionS
 
   const newState = { ...currentState, ...connection };
   supabaseConnection.set(newState);
-
-  /*
-   * Always save the connection state to localStorage to persist across chats
-   */
-  if (connection.user || connection.token || connection.selectedProjectId !== undefined || connection.credentials) {
-    storage?.setItem('supabase_connection', JSON.stringify(newState));
-
-    if (newState.credentials) {
-      storage?.setItem('supabaseCredentials', JSON.stringify(newState.credentials));
-    } else {
-      storage?.removeItem('supabaseCredentials');
-    }
-  } else {
-    storage?.removeItem('supabase_connection');
-    storage?.removeItem('supabaseCredentials');
-  }
 }
 
 export function initializeSupabaseConnection() {
-  // Auto-connect using environment variable if available
-  const envToken = import.meta.env?.VITE_SUPABASE_ACCESS_TOKEN;
-
-  if (envToken && !supabaseConnection.get().token) {
-    updateSupabaseConnection({ token: envToken });
-  }
+  // Management tokens are intentionally session-only and must never enter a Vite browser bundle.
 }
 
 export async function fetchSupabaseStats(token: string) {

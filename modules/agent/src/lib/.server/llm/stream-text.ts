@@ -30,6 +30,10 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
       supabaseUrl?: string;
     };
   };
+  databaseConnection?: {
+    isConnected: boolean;
+    provider?: 'supabase' | 'postgresql';
+  };
 }
 
 const logger = createScopedLogger('stream-text');
@@ -369,8 +373,8 @@ export async function streamText(props: {
       supabase: {
         isConnected: options?.supabaseConnection?.isConnected || false,
         hasSelectedProject: options?.supabaseConnection?.hasSelectedProject || false,
-        credentials: options?.supabaseConnection?.credentials || undefined,
       },
+      database: options?.databaseConnection,
     }) ?? getSystemPrompt();
 
   const shouldInjectCommentaryWorkstyle = !(effectiveChatMode === 'build' && effectivePromptId === 'free-hosted');

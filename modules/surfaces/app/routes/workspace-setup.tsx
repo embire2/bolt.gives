@@ -33,10 +33,11 @@ type RuntimeNodeWorkspace = {
   sshHost: string | null;
   sshPort: number;
   sshCommand: string | null;
-  databaseName: string;
-  databaseUser: string;
-  databaseHost: string;
-  databasePort: number;
+  databaseEnabled: boolean;
+  databaseName: string | null;
+  databaseUser: string | null;
+  databaseHost: string | null;
+  databasePort: number | null;
   databaseUrl: string | null;
   oneTimeCliPassword: string | null;
   oneTimeDatabasePassword: string | null;
@@ -62,7 +63,7 @@ export const meta: MetaFunction = () => [
   {
     name: 'description',
     content:
-      'Create isolated Linux CLI workspaces and PostgreSQL databases for bolt.gives projects on a dedicated Ubuntu runtime node.',
+      'Create isolated Linux CLI workspaces for bolt.gives projects, with optional local PostgreSQL, on a dedicated Ubuntu runtime node.',
   },
 ];
 
@@ -101,6 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const projectName = String(formData.get('projectName') || '').trim();
   const cliUsername = String(formData.get('cliUsername') || '').trim();
   const cliPassword = String(formData.get('cliPassword') || '');
+  const databaseEnabled = formData.get('databaseEnabled') === 'on';
 
   try {
     const payload = await fetchRuntimeControlJson<{ ok: true; workspace: RuntimeNodeWorkspace }>(
@@ -114,6 +116,7 @@ export async function action({ request }: ActionFunctionArgs) {
           projectName,
           cliUsername,
           cliPassword,
+          databaseEnabled,
         }),
       },
     );
@@ -157,12 +160,12 @@ export default function WorkspaceSetupPage() {
                 Dedicated Runtime Node
               </div>
               <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-[-0.05em] text-slate-950 sm:text-6xl dark:text-white">
-                Launch a real Ubuntu workspace with CLI, files, and Postgres.
+                Launch a real Ubuntu workspace with CLI and private files.
               </h1>
               <p className="mt-5 max-w-3xl text-base leading-8 text-slate-700 dark:text-bolt-elements-textSecondary">
-                This wizard creates a per-project Linux user, a locked project directory, a PostgreSQL database and
-                role, and a ready-to-use SSH command. It is built for real client workspaces rather than shared
-                scratchpads.
+                This wizard creates a per-project Linux user, a locked project directory, and a ready-to-use SSH
+                command. Projects start database-free; local PostgreSQL is an optional advanced choice rather than a
+                requirement.
               </p>
             </div>
 
@@ -278,6 +281,18 @@ export default function WorkspaceSetupPage() {
                 </label>
               </div>
 
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-bolt-elements-borderColor dark:bg-bolt-elements-background-depth-1 dark:text-bolt-elements-textSecondary">
+                <input
+                  name="databaseEnabled"
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>
+                  <strong className="block text-slate-950 dark:text-white">Add local PostgreSQL</strong>
+                  Optional. Most projects can connect Supabase or an existing PostgreSQL server later from Agent Mode.
+                </span>
+              </label>
+
               <button
                 type="submit"
                 disabled={!support.supported}
@@ -293,7 +308,7 @@ export default function WorkspaceSetupPage() {
               <h2 className="text-xl font-black text-slate-950 dark:text-white">Isolation model</h2>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700 dark:text-bolt-elements-textSecondary">
                 <li>One Unix user per project, with a private home/workspace directory.</li>
-                <li>One PostgreSQL role and database per project.</li>
+                <li>Database-free by default, with optional local PostgreSQL when explicitly selected.</li>
                 <li>Default shell limits reduce runaway process count and open-file abuse.</li>
                 <li>Provisioning events are written into the runtime-node registry and node audit log.</li>
                 <li>Root SSH credentials never go to the browser.</li>
@@ -303,8 +318,8 @@ export default function WorkspaceSetupPage() {
             <div className={panelClass}>
               <h2 className="text-xl font-black text-slate-950 dark:text-white">CLI experience</h2>
               <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-bolt-elements-textSecondary">
-                After provisioning, the client receives an SSH command, workspace directory, database name, database
-                username, and one-time passwords. The project starts with a README and `.env` file inside the workspace.
+                After provisioning, the client receives an SSH command, workspace directory, and one-time CLI password.
+                If local PostgreSQL is selected, its one-time credentials and private `.env` file are also created.
               </p>
             </div>
           </aside>
@@ -329,10 +344,14 @@ export default function WorkspaceSetupPage() {
                   ['Workspace directory', workspace.workspaceDir],
                   ['CLI username', workspace.cliUsername],
                   ['CLI password', workspace.oneTimeCliPassword || 'Shown only at creation'],
-                  ['Database', workspace.databaseName],
-                  ['Database user', workspace.databaseUser],
-                  ['Database password', workspace.oneTimeDatabasePassword || 'Shown only at creation'],
-                  ['Database URL', workspace.databaseUrl || 'Stored in project .env'],
+                  ...(workspace.databaseEnabled
+                    ? [
+                        ['Database', workspace.databaseName || 'Unavailable'],
+                        ['Database user', workspace.databaseUser || 'Unavailable'],
+                        ['Database password', workspace.oneTimeDatabasePassword || 'Shown only at creation'],
+                        ['Database URL', workspace.databaseUrl || 'Stored in project .env'],
+                      ]
+                    : []),
                 ].map(([label, value]) => (
                   <div
                     key={label}

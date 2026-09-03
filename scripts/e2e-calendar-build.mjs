@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { closePageThenCleanupSession, resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
+import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
@@ -18,6 +19,7 @@ const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toU
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
 const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
 const captureChatBody = process.env.E2E_CAPTURE_CHAT_BODY === '1';
+const disableCollaboration = process.env.E2E_DISABLE_COLLABORATION === '1';
 const started = Date.now();
 const defaultPrompt = `Build a small single-page React calendar app that lets the user add and view events. Render a visible heading that contains the exact text "${appToken}". Implement complete files and run it.`;
 
@@ -255,6 +257,7 @@ function isBenignNetworkFailure(entry) {
     /REQFAIL HEAD .*\/api\/health :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/api\/system\/performance :: net::ERR_INSUFFICIENT_RESOURCES/.test(entry) ||
     /REQFAIL POST .*\/api\/chat :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/snapshot :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/preview-events :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/preview\/[^/]+\/\d+\/.* :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL POST .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry) ||
@@ -633,7 +636,7 @@ async function main() {
 
   // Pin the requested provider/model in localStorage so the smoke bypasses provider setup.
   await page.addInitScript(
-    ({ provider, model }) => {
+    ({ provider, model, collaborationDisabled }) => {
       const host = window.location.hostname;
       document.cookie = `selectedProvider=${encodeURIComponent(provider)}; Path=/; SameSite=Lax`;
       document.cookie = `selectedModel=${encodeURIComponent(model)}; Path=/; SameSite=Lax`;
@@ -642,8 +645,12 @@ async function main() {
         JSON.stringify({ providerName: provider, modelName: model, updatedAt: new Date().toISOString() }),
       );
       localStorage.setItem('bolt_provider_model_selection_v1', JSON.stringify({ [provider]: model }));
+
+      if (collaborationDisabled) {
+        localStorage.setItem('bolt_collab_enabled', 'false');
+      }
     },
-    { provider: providerName, model: modelName },
+    { provider: providerName, model: modelName, collaborationDisabled: disableCollaboration },
   );
 
   log('goto', baseUrl);
@@ -987,6 +994,7 @@ async function main() {
       }
 
       log('saved project restore result', JSON.stringify(historyRestore));
+      await hideProfileOnboardingForScreenshot(page);
       await page.screenshot({ path: path.join(outDir, '04-history-restored.png'), fullPage: true });
     } else {
       historyRestore = {
@@ -997,6 +1005,7 @@ async function main() {
     }
   }
 
+  await hideProfileOnboardingForScreenshot(page);
   await page.screenshot({ path: path.join(outDir, '04-final.png'), fullPage: true }).catch((error) => {
     log('final screenshot failed', error instanceof Error ? error.message : String(error));
   });

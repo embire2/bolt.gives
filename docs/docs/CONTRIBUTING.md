@@ -2,7 +2,7 @@
 
 ## Platform Support (Important)
 
-- Installing / self-hosting bolt.gives for development is supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives for development is supported on **Ubuntu 20.04+ only**.
 - Windows is **not supported** for installation/self-hosting (but you can use the hosted app from Windows).
 - macOS is **not supported** for installation/self-hosting (but you can use the hosted app from macOS).
 
@@ -13,11 +13,12 @@ The canonical contribution guide lives in the repo root:
 - `CONTRIBUTING.md`
 
 That file includes:
+
 - PR rules and validation gate (`pnpm run typecheck`, `pnpm run lint`, `pnpm test`)
 - Development setup steps
 - Issue reporting expectations
 
-## Quick Dev Setup (Ubuntu 18.04+)
+## Quick Dev Setup (Ubuntu 20.04+)
 
 ```bash
 sudo apt-get update
@@ -48,4 +49,3 @@ pnpm install
 cp .env.example .env.local
 pnpm run dev
 ```
-

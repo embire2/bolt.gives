@@ -949,6 +949,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         supabaseUrl?: string;
       };
     };
+    databaseConnection?: StreamingOptions['databaseConnection'];
     maxLLMSteps: number;
     projectMemory?: {
       projectKey: string;
@@ -1855,6 +1856,7 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
 
         const options: StreamingOptions = {
           supabaseConnection: supabase,
+          databaseConnection: requestPayload.databaseConnection,
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
           maxSteps: chatSelection.charge ? Math.min(20, Math.max(maxLLMSteps, 12)) : maxLLMSteps,

@@ -139,7 +139,7 @@ async function checkScreenshots(baseUrl) {
     SYSTEM_ACTION_SKIP_PROMPT: '1',
   });
 
-  const files = ['home.png', 'chat.png', 'chat-plan.png', 'changelog.png', 'system-in-action.png'];
+  const files = ['home.png', 'chat.png', 'chat-plan.png', 'database.png', 'changelog.png', 'system-in-action.png'];
 
   for (const fileName of files) {
     await checkScreenshot(path.join(tempDir, fileName));

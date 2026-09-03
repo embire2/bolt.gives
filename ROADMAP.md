@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 Status legend:
 
@@ -42,11 +42,16 @@ Release theme: complete the project-aware native coding workflow and make mandat
 
 Release theme: continue the previously planned v3.6 hardening track after the v4 Agent Mode release, complete Custom Domain account lifecycle, deepen operator-visible resource controls, and continue runtime and installer hardening.
 
+- [x] Make generated projects database-free by default, add a two-field Supabase quick connect, and support private user-owned PostgreSQL connections without writing credentials into source.
+- [x] Make fresh Ubuntu installs database-free by default while retaining explicit `--with-postgres` support for bolt.gives profile/admin data.
+- [x] Make dedicated Ubuntu CLI workspaces database-free by default while retaining an explicit local PostgreSQL option.
+- [x] Replace process-wide Preview cleanup with session-scoped runtime termination so one project cannot stop another project's build tooling.
 - [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
 - [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
 - [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
+- [~] Add connection health, rotation, and deployment guidance for Supabase, PostgreSQL, and supported managed data services.
 - [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v4.0.0 initial-route budget.
-- [ ] Extend repeatable installer smoke across clean and partially configured Ubuntu hosts.
+- [~] Extend repeatable installer smoke across clean and partially configured Ubuntu 20.04+ hosts.
 
 ## v4.0.1 - Shipped
 

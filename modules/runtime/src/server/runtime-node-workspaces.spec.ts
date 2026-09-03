@@ -42,9 +42,10 @@ describe('runtime-node workspace provisioning helpers', () => {
       authMode: 'password',
       baseDir: '/srv/bolt-live-workspaces',
     });
+    expect(config.databaseEnabled).toBe(false);
   });
 
-  it('returns project credentials only when the one-time secret payload is supplied', () => {
+  it('creates database-free workspaces by default', () => {
     const config = buildRuntimeNodeConfig({
       BOLT_RUNTIME_NODE_ENABLED: 'true',
       BOLT_RUNTIME_NODE_HOST: '31.6.62.183',
@@ -71,9 +72,43 @@ describe('runtime-node workspace provisioning helpers', () => {
     expect(withoutSecrets.oneTimeDatabasePassword).toBeNull();
     expect(withoutSecrets.databaseUrl).toBeNull();
     expect(withSecrets.oneTimeCliPassword).toBe('BetterPassword123');
+    expect(withSecrets.oneTimeDatabasePassword).toBeNull();
+    expect(withSecrets.databaseEnabled).toBe(false);
+    expect(withSecrets.databaseName).toBeNull();
+    expect(withSecrets.databaseUser).toBeNull();
+    expect(record.cliPasswordHash).not.toBe('BetterPassword123');
+    expect(record.databasePasswordHash).toBeNull();
+    expect(secrets.databasePassword).toBeNull();
+  });
+
+  it('returns optional local database credentials only in the one-time secret payload', () => {
+    const config = buildRuntimeNodeConfig({
+      BOLT_RUNTIME_NODE_ENABLED: 'true',
+      BOLT_RUNTIME_NODE_HOST: '31.6.62.183',
+      BOLT_RUNTIME_NODE_PORT: '22',
+      BOLT_RUNTIME_NODE_ADMIN_USER: 'root',
+      BOLT_RUNTIME_NODE_SSH_KEY_PATH: '/root/.ssh/runtime-node',
+      BOLT_RUNTIME_NODE_BASE_DIR: '/srv/bolt-live-workspaces',
+    });
+    const { record, secrets } = createRuntimeNodeWorkspaceRecord(
+      {
+        clientName: 'Ada Lovelace',
+        clientEmail: 'ada@example.com',
+        projectName: 'Calendar Command Center',
+        cliUsername: 'ada_calendar',
+        cliPassword: 'BetterPassword123',
+        databaseEnabled: true,
+      },
+      config,
+    );
+
+    const withoutSecrets = sanitizeRuntimeNodeWorkspaceForClient(record);
+    const withSecrets = sanitizeRuntimeNodeWorkspaceForClient(record, secrets);
+
+    expect(withoutSecrets.databaseUrl).toBeNull();
+    expect(withSecrets.databaseEnabled).toBe(true);
     expect(withSecrets.oneTimeDatabasePassword).toBe(secrets.databasePassword);
     expect(withSecrets.databaseUrl).toContain(record.databaseName);
-    expect(record.cliPasswordHash).not.toBe('BetterPassword123');
     expect(record.databasePasswordHash).not.toBe(secrets.databasePassword);
   });
 
@@ -93,13 +128,14 @@ describe('runtime-node workspace provisioning helpers', () => {
         projectName: 'Compiler Lab',
         cliUsername: 'grace_compiler',
         cliPassword: 'ShipItToday123',
+        databaseEnabled: true,
       },
       config,
     );
     const script = buildRuntimeNodeProvisionScript(record, secrets, config);
 
     expect(script).toContain(
-      'run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo postgresql postgresql-contrib',
+      'run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo git curl ca-certificates build-essential python3 nodejs npm postgresql postgresql-contrib',
     );
     expect(script).toContain('run_root useradd --create-home');
     expect(script).toContain('run_root chmod 751 "$BASE_DIR"');
@@ -110,6 +146,34 @@ describe('runtime-node workspace provisioning helpers', () => {
     expect(script).not.toContain('```');
     expect(script).not.toContain('`$WORKSPACE_DIR`');
     expect(script).toContain('/var/log/bolt-runtime/workspace-provision.log');
+  });
+
+  it('does not install or configure PostgreSQL for a default workspace', () => {
+    const config = buildRuntimeNodeConfig({
+      BOLT_RUNTIME_NODE_ENABLED: 'true',
+      BOLT_RUNTIME_NODE_HOST: 'runtime.internal',
+      BOLT_RUNTIME_NODE_PORT: '22',
+      BOLT_RUNTIME_NODE_ADMIN_USER: 'bolt-runtime-agent',
+      BOLT_RUNTIME_NODE_SSH_KEY_PATH: '/etc/bolt-gives/runtime-node-agent',
+      BOLT_RUNTIME_NODE_BASE_DIR: '/srv/bolt-live-workspaces',
+    });
+    const { record, secrets } = createRuntimeNodeWorkspaceRecord(
+      {
+        clientName: 'Grace Hopper',
+        clientEmail: 'grace@example.com',
+        projectName: 'Compiler Lab',
+        cliUsername: 'grace_compiler',
+        cliPassword: 'ShipItToday123',
+      },
+      config,
+    );
+    const script = buildRuntimeNodeProvisionScript(record, secrets, config);
+
+    expect(script).not.toContain('apt-get install -y sudo postgresql');
+    expect(script).not.toContain('systemctl enable --now postgresql');
+    expect(script).not.toContain('createdb -O');
+    expect(script).not.toContain('tee "$WORKSPACE_DIR/.env"');
+    expect(script).toContain('This workspace starts without a database.');
   });
 
   it('reads an existing project database password without exposing the complete env file', () => {

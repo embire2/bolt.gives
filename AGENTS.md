@@ -43,7 +43,7 @@ Preserve these behaviors unless a product decision explicitly replaces them:
 - Desktop Agent Mode keeps conversation, a compact follow-up composer, and a dominant Code/Preview workspace visible together. Mobile provides an explicit Agent/App switch while keeping the composer available.
 - Runtime state must not force the user from Code to Preview, reset the selected project, flash between contradictory states, or hide the prompt.
 - Commentary is plain-English output derived from real runtime, file, command, recovery, and Preview events. Technical detail remains available separately. Never generate generic keep-alive filler.
-- Follow-up prompts use the current conversation, active source snapshot, runtime identity, Preview state, and project database. They must not silently restart from a stale template.
+- Follow-up prompts use the current conversation, active source snapshot, runtime identity, Preview state, and any project database connection. They must not silently restart from a stale template.
 - Browser project history is scoped to the authenticated profile. Guest data and another account's projects must not appear after login on a shared browser.
 - Hosted generation is server-first. Install, build, test, command execution, filesystem synchronization, recovery, and Preview health verification happen through the managed runtime contract.
 - Generated development commands are normalized into managed Preview starts. Model-authored background polling, fixed `/home/project` paths, or hidden approvals must never bypass runtime health checks.
@@ -148,9 +148,11 @@ An E2E for prompt-to-preview is complete only when a normal browser submits a pr
 
 ## Databases and Runtime Isolation
 
-Every normal hosted project receives a restricted PostgreSQL role and database before its first command. Its credentials are injected server-side only into that project's commands and Preview. They must not be written to generated source, browser history, snapshots, deployment artifacts, commentary, or logs.
+Normal hosted projects start without a database. A user may connect Supabase with a project URL plus publishable/anon key, or attach a user-owned PostgreSQL connection string. Connection records are stored outside project source with mode `0600`; only redacted status reaches the browser, and variables are injected server-side into that project's commands and Preview. PostgreSQL is never injected into a static Cloudflare build. Credentials must not be written to generated source, browser history, snapshots, deployment artifacts, commentary, or logs.
 
-`/workspace-setup` additionally provisions an optional dedicated Ubuntu CLI workspace. One project gets one Unix user, one private directory, one PostgreSQL role/database, quotas, and auditable operations. Client-selected usernames must be valid non-reserved Linux usernames. Passwords are one-time handoff values; retain only hashes and metadata.
+Legacy local per-project PostgreSQL provisioning is operator opt-in through `BOLT_PROJECT_DATABASE_ENABLED=true`; fresh installs keep it disabled. The platform's own profile/admin database remains independent and optional for self-hosts.
+
+`/workspace-setup` additionally provisions an optional dedicated Ubuntu CLI workspace. One project gets one Unix user, one private directory, quotas, and auditable operations. It is database-free by default; operators may explicitly add a local PostgreSQL role/database, while most users should connect Supabase or their own PostgreSQL service from Agent Mode. Client-selected usernames must be valid non-reserved Linux usernames. Passwords are one-time handoff values; retain only hashes and metadata.
 
 Runtime-node steady state uses the non-root `bolt-runtime-agent` with SSH keys and constrained server-side `sudo`. Root/password access is bootstrap or explicitly approved emergency access only and must be removed from service configuration after key verification. A failed provision remains failed with a redacted reason; never mark it active optimistically.
 
@@ -176,7 +178,7 @@ The deployed tree may be synchronized without `.git`. Verify the deployment mani
 
 For runtime changes, validate both app and runtime services. For collaboration or web-browsing changes, validate the corresponding service too. Bind internal listeners to loopback unless the architecture explicitly requires a protected network listener.
 
-Self-host installations support interactive setup, custom app/admin/create domains, local PostgreSQL and `psql`, and Caddy-managed HTTPS. Installer changes require shell syntax checks plus a realistic clean and repair path.
+Self-host installations support interactive setup, custom app/admin/create domains, optional local PostgreSQL for profile/admin data, and Caddy-managed HTTPS. Generated apps bring their own data service. Installer changes require shell syntax checks plus a realistic clean and repair path.
 
 ## Git, Releases, and Deployment
 

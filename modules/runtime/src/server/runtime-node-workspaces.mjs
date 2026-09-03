@@ -106,6 +106,11 @@ export function buildRuntimeNodeConfig(env = /** @type {Record<string, string | 
       .trim()
       .toLowerCase(),
   );
+  const databaseEnabled = ['1', 'true', 'yes', 'on'].includes(
+    String(env.BOLT_RUNTIME_NODE_DATABASE_ENABLED || '')
+      .trim()
+      .toLowerCase(),
+  );
   const authMode = identityFile ? 'ssh-key' : sshPassword ? 'password' : 'none';
   const connectTimeoutSeconds = Math.max(
     2,
@@ -114,6 +119,7 @@ export function buildRuntimeNodeConfig(env = /** @type {Record<string, string | 
 
   return {
     enabled,
+    databaseEnabled,
     supported: Boolean(enabled && host && publicHost && port > 0 && port <= 65535 && adminUser && authMode !== 'none'),
     reason: !enabled
       ? 'Dedicated runtime-node workspaces are disabled on this deployment.'
@@ -157,6 +163,9 @@ export function normalizeRuntimeNodeWorkspaceRegistry(input) {
       const projectSlug = slugifyRuntimeNodeProject(workspace.projectSlug || workspace.projectName) || 'project';
       const cliUsername = normalizeRuntimeNodeUsername(workspace.cliUsername) || 'client';
       const id = String(workspace.id || crypto.randomUUID());
+      const databaseEnabled =
+        workspace.databaseEnabled === true ||
+        (workspace.databaseEnabled !== false && typeof workspace.databasePasswordHash === 'string');
 
       return {
         id,
@@ -168,10 +177,15 @@ export function normalizeRuntimeNodeWorkspaceRegistry(input) {
         projectSlug,
         cliUsername,
         cliPasswordHash: typeof workspace.cliPasswordHash === 'string' ? workspace.cliPasswordHash : null,
-        databaseName: String(workspace.databaseName || buildRuntimeNodeDatabaseName(projectSlug, id)),
-        databaseUser: String(workspace.databaseUser || buildRuntimeNodeDatabaseUser(cliUsername, id)),
+        databaseEnabled,
+        databaseName: databaseEnabled
+          ? String(workspace.databaseName || buildRuntimeNodeDatabaseName(projectSlug, id))
+          : null,
+        databaseUser: databaseEnabled
+          ? String(workspace.databaseUser || buildRuntimeNodeDatabaseUser(cliUsername, id))
+          : null,
         databasePasswordHash:
-          typeof workspace.databasePasswordHash === 'string' ? workspace.databasePasswordHash : null,
+          databaseEnabled && typeof workspace.databasePasswordHash === 'string' ? workspace.databasePasswordHash : null,
         workspaceDir:
           typeof workspace.workspaceDir === 'string' && workspace.workspaceDir
             ? workspace.workspaceDir
@@ -223,10 +237,13 @@ export function createRuntimeNodeWorkspaceRecord(input, config) {
     throw new Error('CLI password must be at least 12 characters and include lowercase, uppercase, and a number.');
   }
 
-  const databasePassword = String(input.databasePassword || createRuntimeNodeDatabasePassword());
+  const databaseEnabled = input.databaseEnabled === true;
+  const databasePassword = databaseEnabled
+    ? String(input.databasePassword || createRuntimeNodeDatabasePassword())
+    : null;
   const workspaceDir = `${config.baseDir.replace(/\/+$/, '')}/${projectSlug}`;
-  const databaseName = buildRuntimeNodeDatabaseName(projectSlug, id);
-  const databaseUser = buildRuntimeNodeDatabaseUser(usernameValidation.username, id);
+  const databaseName = databaseEnabled ? buildRuntimeNodeDatabaseName(projectSlug, id) : null;
+  const databaseUser = databaseEnabled ? buildRuntimeNodeDatabaseUser(usernameValidation.username, id) : null;
   const now = new Date().toISOString();
 
   return {
@@ -240,9 +257,10 @@ export function createRuntimeNodeWorkspaceRecord(input, config) {
       projectSlug,
       cliUsername: usernameValidation.username,
       cliPasswordHash: hashRuntimeNodeSecret(cliPassword),
+      databaseEnabled,
       databaseName,
       databaseUser,
-      databasePasswordHash: hashRuntimeNodeSecret(databasePassword),
+      databasePasswordHash: databasePassword ? hashRuntimeNodeSecret(databasePassword) : null,
       workspaceDir,
       sshHost: config.publicHost,
       sshPort: config.port,
@@ -277,10 +295,11 @@ export function sanitizeRuntimeNodeWorkspaceForClient(workspace, secrets = {}) {
     sshCommand,
     databaseName: workspace.databaseName,
     databaseUser: workspace.databaseUser,
-    databaseHost: '127.0.0.1',
-    databasePort: 5432,
+    databaseEnabled: workspace.databaseEnabled === true,
+    databaseHost: workspace.databaseEnabled ? '127.0.0.1' : null,
+    databasePort: workspace.databaseEnabled ? 5432 : null,
     databaseUrl:
-      secrets?.databasePassword && sshHost
+      workspace.databaseEnabled && secrets?.databasePassword && sshHost
         ? `postgresql://${workspace.databaseUser}:${encodeURIComponent(secrets.databasePassword)}@127.0.0.1:5432/${workspace.databaseName}`
         : null,
     oneTimeCliPassword: secrets?.cliPassword || null,
@@ -432,7 +451,51 @@ export async function readRuntimeNodeDatabasePassword(workspace, config) {
 }
 
 export function buildRuntimeNodeProvisionScript(workspace, secrets, config) {
-  const dbPasswordSql = String(secrets.databasePassword).replace(/'/g, "''");
+  const databaseEnabled = workspace.databaseEnabled === true;
+  const databasePackages = databaseEnabled ? ' postgresql postgresql-contrib' : '';
+  const databaseSetup = databaseEnabled
+    ? `
+run_root systemctl enable --now postgresql >/dev/null
+
+if run_postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
+  run_postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
+else
+  run_postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
+fi
+
+if ! run_postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+  run_postgres createdb -O "$DB_USER" "$DB_NAME"
+fi
+
+run_root tee "$WORKSPACE_DIR/.env" >/dev/null <<EOF_ENV
+DATABASE_URL=$DATABASE_URL
+PGHOST=127.0.0.1
+PGPORT=5432
+PGDATABASE=$DB_NAME
+PGUSER=$DB_USER
+PGPASSWORD=$DB_PASSWORD
+EOF_ENV
+`
+    : '';
+  const databaseReadme = databaseEnabled
+    ? `
+## Optional local PostgreSQL
+
+  source .env
+  psql "\\$DATABASE_URL"
+`
+    : `
+## Database
+
+This workspace starts without a database. Connect Supabase or your own PostgreSQL server from the bolt.gives Database control when the project needs persistence.
+`;
+  const databaseOwnership = databaseEnabled
+    ? `
+run_root chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env"
+run_root chmod 600 "$WORKSPACE_DIR/.env"
+`
+    : '';
+  const dbPasswordSql = String(secrets.databasePassword || '').replace(/'/g, "''");
 
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -443,9 +506,9 @@ WORKSPACE_DIR=${shellQuote(workspace.workspaceDir)}
 PROJECT_SLUG=${shellQuote(workspace.projectSlug)}
 CLI_USERNAME=${shellQuote(workspace.cliUsername)}
 CLI_PASSWORD=${shellQuote(secrets.cliPassword)}
-DB_NAME=${shellQuote(workspace.databaseName)}
-DB_USER=${shellQuote(workspace.databaseUser)}
-DB_PASSWORD=${shellQuote(secrets.databasePassword)}
+DB_NAME=${shellQuote(workspace.databaseName || '')}
+DB_USER=${shellQuote(workspace.databaseUser || '')}
+DB_PASSWORD=${shellQuote(secrets.databasePassword || '')}
 DB_PASSWORD_SQL=${shellQuote(dbPasswordSql)}
 DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:5432/$DB_NAME"
 
@@ -468,8 +531,7 @@ run_postgres() {
 cd /tmp
 
 run_root env DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null
-run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo postgresql postgresql-contrib git curl ca-certificates build-essential python3 nodejs npm >/dev/null
-run_root systemctl enable --now postgresql >/dev/null
+run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y sudo git curl ca-certificates build-essential python3 nodejs npm${databasePackages} >/dev/null
 
 if ! getent group bolt-clients >/dev/null; then
   run_root groupadd --system bolt-clients
@@ -495,24 +557,7 @@ if ! command -v pnpm >/dev/null 2>&1; then
   run_root npm install -g pnpm >/dev/null 2>&1 || true
 fi
 
-if run_postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
-  run_postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
-else
-  run_postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \\"$DB_USER\\" WITH LOGIN PASSWORD '$DB_PASSWORD_SQL';" >/dev/null
-fi
-
-if ! run_postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-  run_postgres createdb -O "$DB_USER" "$DB_NAME"
-fi
-
-run_root tee "$WORKSPACE_DIR/.env" >/dev/null <<EOF_ENV
-DATABASE_URL=$DATABASE_URL
-PGHOST=127.0.0.1
-PGPORT=5432
-PGDATABASE=$DB_NAME
-PGUSER=$DB_USER
-PGPASSWORD=$DB_PASSWORD
-EOF_ENV
+${databaseSetup}
 
 run_root tee "$WORKSPACE_DIR/README.md" >/dev/null <<EOF_README
 # $PROJECT_SLUG live workspace
@@ -525,8 +570,7 @@ This project workspace is isolated at:
 
   cd "$WORKSPACE_DIR"
   pnpm --version
-  source .env
-  psql "\\$DATABASE_URL"
+${databaseReadme}
 
 The workspace is owned by the project Unix user and is not readable by other client users.
 EOF_README
@@ -538,11 +582,11 @@ ulimit -n 2048
 cd "$HOME"
 EOF_PROFILE
 
-run_root chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/.env" "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
-run_root chmod 600 "$WORKSPACE_DIR/.env"
+run_root chown "$CLI_USERNAME:$CLI_USERNAME" "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
 run_root chmod 644 "$WORKSPACE_DIR/README.md" "$WORKSPACE_DIR/.profile"
+${databaseOwnership}
 
-printf '%s project=%s user=%s dir=%s db=%s\\n' "$(date -Is)" "$PROJECT_SLUG" "$CLI_USERNAME" "$WORKSPACE_DIR" "$DB_NAME" | run_root tee -a /var/log/bolt-runtime/workspace-provision.log >/dev/null
+printf '%s project=%s user=%s dir=%s db=%s\\n' "$(date -Is)" "$PROJECT_SLUG" "$CLI_USERNAME" "$WORKSPACE_DIR" "${databaseEnabled ? '$DB_NAME' : 'none'}" | run_root tee -a /var/log/bolt-runtime/workspace-provision.log >/dev/null
 echo "runtime-node workspace provisioned: $PROJECT_SLUG"
 `;
 }

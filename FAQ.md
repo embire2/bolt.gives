@@ -69,7 +69,7 @@ While local LLMs are improving rapidly, larger models like GPT-4o, Claude 3.5 So
 ### **What platforms are supported?**
 
 - Using bolt.gives in a browser: supported on Windows, macOS, and Linux.
-- Installing / self-hosting bolt.gives: supported on **Ubuntu 18.04+ only**.
+- Installing / self-hosting bolt.gives: supported on **Ubuntu 20.04+ only**.
   - Windows is **not supported** for installation/self-hosting (you can still use the hosted app from Windows).
   - macOS is **not supported** for installation/self-hosting (you can still use the hosted app from macOS).
 

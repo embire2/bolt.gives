@@ -19,19 +19,16 @@ CREATE_DOMAIN="${CREATE_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 DEFAULT_POSTGRES_DB="bolt_gives_admin"
 DEFAULT_POSTGRES_USER="bolt_gives_admin"
-DEFAULT_PROJECT_DATABASE_PROVISIONER_USER="bolt_project_provisioner"
 DEFAULT_OPERATOR_USERNAME="admin"
 POSTGRES_DB="${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}"
 POSTGRES_USER="${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
-PROJECT_DATABASE_PROVISIONER_USER="${PROJECT_DATABASE_PROVISIONER_USER:-${DEFAULT_PROJECT_DATABASE_PROVISIONER_USER}}"
-PROJECT_DATABASE_PROVISIONER_PASSWORD="${PROJECT_DATABASE_PROVISIONER_PASSWORD:-}"
 OPERATOR_USERNAME="${OPERATOR_USERNAME:-${DEFAULT_OPERATOR_USERNAME}}"
 OPERATOR_PASSWORD="${OPERATOR_PASSWORD:-}"
 INSTALL_DEPS=1
 INSTALL_SERVICE=1
 BUILD_APP=1
-INSTALL_POSTGRES=1
+INSTALL_POSTGRES=0
 INSTALL_CADDY=1
 APP_DOMAIN_SET_BY_FLAG=0
 ADMIN_DOMAIN_SET_BY_FLAG=0
@@ -40,6 +37,7 @@ LETSENCRYPT_EMAIL_SET_BY_FLAG=0
 POSTGRES_DB_SET_BY_FLAG=0
 POSTGRES_USER_SET_BY_FLAG=0
 POSTGRES_PASSWORD_SET_BY_FLAG=0
+POSTGRES_MODE_SET_BY_FLAG=0
 OPERATOR_USERNAME_SET_BY_FLAG=0
 OPERATOR_PASSWORD_SET_BY_FLAG=0
 
@@ -62,7 +60,8 @@ Options:
   --app-domain HOST    Public app domain (for example: code.example.com)
   --admin-domain HOST  Public admin/operator domain (for example: admin.example.com)
   --create-domain HOST Public trial-registration domain (for example: create.example.com)
-  --skip-postgres      Skip local PostgreSQL installation/configuration
+  --with-postgres      Install optional local PostgreSQL for profiles/admin data
+  --skip-postgres      Do not install local PostgreSQL (default)
   --skip-caddy         Skip Caddy installation/configuration
   --postgres-db NAME   Local PostgreSQL database name (default: bolt_gives_admin)
   --postgres-user NAME Local PostgreSQL user name (default: bolt_gives_admin)
@@ -86,12 +85,12 @@ Environment overrides:
   OPERATOR_USERNAME, OPERATOR_PASSWORD, LETSENCRYPT_EMAIL
 
 Notes:
-  - Supported target: Ubuntu 18.04+.
+  - Supported target: Ubuntu 20.04+.
   - Run this script as a regular user with sudo access, not as root.
   - Installer-generated services use a 4 GB Node heap by default.
-  - When domains are supplied, the installer can also provision Caddy and local PostgreSQL
-    so users can self-host the full app, admin panel, and managed-instance registration flow
-    on their own VPS.
+  - Generated projects do not require PostgreSQL. Users connect their own Supabase or
+    PostgreSQL database from the Database control when their app needs persistence.
+  - Local PostgreSQL is optional and stores bolt.gives profile/admin data only.
 EOF
 }
 
@@ -185,7 +184,18 @@ require_ubuntu() {
   source /etc/os-release
 
   if [[ "${ID:-}" != "ubuntu" ]]; then
-    fail "Unsupported platform '${ID:-unknown}'. Install/self-hosting is supported on Ubuntu 18.04+ only."
+    fail "Unsupported platform '${ID:-unknown}'. Install/self-hosting is supported on Ubuntu 20.04+ only."
+  fi
+
+  if [[ ! "${VERSION_ID:-}" =~ ^([0-9]+)\.([0-9]+) ]]; then
+    fail "Unable to determine the Ubuntu release version. bolt.gives requires Ubuntu 20.04 or newer."
+  fi
+
+  local ubuntu_major="${BASH_REMATCH[1]}"
+  local ubuntu_minor="${BASH_REMATCH[2]}"
+
+  if (( 10#${ubuntu_major} < 20 || (10#${ubuntu_major} == 20 && 10#${ubuntu_minor} < 4) )); then
+    fail "Unsupported Ubuntu release '${VERSION_ID}'. bolt.gives requires Ubuntu 20.04 or newer for Node.js ${NODE_MAJOR}."
   fi
 }
 
@@ -226,6 +236,12 @@ parse_args() {
         ;;
       --skip-postgres)
         INSTALL_POSTGRES=0
+        POSTGRES_MODE_SET_BY_FLAG=1
+        shift
+        ;;
+      --with-postgres)
+        INSTALL_POSTGRES=1
+        POSTGRES_MODE_SET_BY_FLAG=1
         shift
         ;;
       --skip-caddy)
@@ -235,16 +251,22 @@ parse_args() {
       --postgres-db)
         POSTGRES_DB="$2"
         POSTGRES_DB_SET_BY_FLAG=1
+        INSTALL_POSTGRES=1
+        POSTGRES_MODE_SET_BY_FLAG=1
         shift 2
         ;;
       --postgres-user)
         POSTGRES_USER="$2"
         POSTGRES_USER_SET_BY_FLAG=1
+        INSTALL_POSTGRES=1
+        POSTGRES_MODE_SET_BY_FLAG=1
         shift 2
         ;;
       --postgres-password)
         POSTGRES_PASSWORD="$2"
         POSTGRES_PASSWORD_SET_BY_FLAG=1
+        INSTALL_POSTGRES=1
+        POSTGRES_MODE_SET_BY_FLAG=1
         shift 2
         ;;
       --operator-username)
@@ -422,25 +444,23 @@ prompt_for_missing_config() {
     fi
   fi
 
+  if [[ "${POSTGRES_MODE_SET_BY_FLAG}" -eq 0 ]]; then
+    if prompt_yes_no "Install optional local PostgreSQL for bolt.gives profiles and admin data?" "N"; then
+      INSTALL_POSTGRES=1
+    fi
+  fi
+
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
-    if [[ "${POSTGRES_DB_SET_BY_FLAG}" -eq 0 && "${POSTGRES_USER_SET_BY_FLAG}" -eq 0 && "${POSTGRES_PASSWORD_SET_BY_FLAG}" -eq 0 ]]; then
-      if ! prompt_yes_no "Install and configure local PostgreSQL for the private admin panel?" "Y"; then
-        INSTALL_POSTGRES=0
-      fi
+    if [[ "${POSTGRES_DB_SET_BY_FLAG}" -eq 0 ]]; then
+      POSTGRES_DB="$(prompt_required_line "Local PostgreSQL database name" "${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}")"
     fi
 
-    if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
-      if [[ "${POSTGRES_DB_SET_BY_FLAG}" -eq 0 ]]; then
-        POSTGRES_DB="$(prompt_required_line "Local PostgreSQL database name" "${POSTGRES_DB:-${DEFAULT_POSTGRES_DB}}")"
-      fi
+    if [[ "${POSTGRES_USER_SET_BY_FLAG}" -eq 0 ]]; then
+      POSTGRES_USER="$(prompt_required_line "Local PostgreSQL user name" "${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}")"
+    fi
 
-      if [[ "${POSTGRES_USER_SET_BY_FLAG}" -eq 0 ]]; then
-        POSTGRES_USER="$(prompt_required_line "Local PostgreSQL user name" "${POSTGRES_USER:-${DEFAULT_POSTGRES_USER}}")"
-      fi
-
-      if [[ "${POSTGRES_PASSWORD_SET_BY_FLAG}" -eq 0 && -z "${POSTGRES_PASSWORD}" ]]; then
-        POSTGRES_PASSWORD="$(prompt_secret_line "Local PostgreSQL password (leave blank to generate)")"
-      fi
+    if [[ "${POSTGRES_PASSWORD_SET_BY_FLAG}" -eq 0 && -z "${POSTGRES_PASSWORD}" ]]; then
+      POSTGRES_PASSWORD="$(prompt_secret_line "Local PostgreSQL password (leave blank to generate)")"
     fi
   fi
 }
@@ -473,11 +493,6 @@ normalize_config_inputs() {
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     validate_sql_identifier "${POSTGRES_DB}"
     validate_sql_identifier "${POSTGRES_USER}"
-    validate_sql_identifier "${PROJECT_DATABASE_PROVISIONER_USER}"
-
-    if [[ "${PROJECT_DATABASE_PROVISIONER_USER}" == "${POSTGRES_USER}" ]]; then
-      fail "The project database provisioner must use a separate PostgreSQL role."
-    fi
   fi
 
   validate_operator_username "${OPERATOR_USERNAME}"
@@ -491,7 +506,7 @@ install_apt_packages() {
   log "Installing Ubuntu base packages"
   repair_apt_state
   retry_command 3 5 "apt-get update" sudo apt-get update >/dev/null
-  local packages=(git curl ca-certificates build-essential python3 postgresql-client)
+  local packages=(git curl ca-certificates build-essential python3)
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     packages+=(postgresql postgresql-contrib)
@@ -744,10 +759,6 @@ prepare_env_file() {
     fi
   fi
 
-  if [[ "${INSTALL_POSTGRES}" -eq 1 && -z "${PROJECT_DATABASE_PROVISIONER_PASSWORD}" ]]; then
-    PROJECT_DATABASE_PROVISIONER_PASSWORD="$(generate_secret)"
-  fi
-
   upsert_env_line "${env_file}" "NODE_OPTIONS" "--max-old-space-size=${NODE_HEAP_MB}"
   upsert_env_line "${env_file}" "RUNTIME_PORT" "${RUNTIME_PORT}"
   upsert_env_line "${env_file}" "RUNTIME_WORKSPACE_DIR" "${RUNTIME_WORKSPACE_DIR}"
@@ -764,6 +775,8 @@ prepare_env_file() {
   upsert_env_line "${env_file}" "BOLT_FREE_DAILY_TOKEN_LIMIT" "100"
   upsert_env_line "${env_file}" "BOLT_CUSTOM_DOMAIN_TOKEN_ALLOWANCE" "10000"
   upsert_env_line "${env_file}" "BOLT_STRIPE_CUSTOM_DOMAIN_PRICE_USD" "5"
+  upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ENABLED" "false"
+  upsert_env_line "${env_file}" "BOLT_PROJECT_CONNECTION_SECRET_ROOT" "${RUNTIME_WORKSPACE_DIR}/project-connections"
 
   if [[ -n "${BOLT_STRIPE_PUBLISHABLE_KEY:-}" ]]; then
     upsert_env_line "${env_file}" "BOLT_STRIPE_PUBLISHABLE_KEY" "${BOLT_STRIPE_PUBLISHABLE_KEY}"
@@ -784,13 +797,6 @@ prepare_env_file() {
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_USER" "${POSTGRES_USER}"
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD" "${POSTGRES_PASSWORD}"
     upsert_env_line "${env_file}" "BOLT_ADMIN_DATABASE_SSL" "disable"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ENABLED" "true"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ADMIN_URL" "postgresql://${PROJECT_DATABASE_PROVISIONER_USER}:${PROJECT_DATABASE_PROVISIONER_PASSWORD}@127.0.0.1:5432/postgres"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_HOST" "127.0.0.1"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_PORT" "5432"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_SSL" "disable"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_SECRET_ROOT" "${RUNTIME_WORKSPACE_DIR}/project-databases"
-    upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_CONNECTION_LIMIT" "10"
   fi
 
   local stripe_publishable stripe_secret stripe_webhook
@@ -907,7 +913,6 @@ setup_local_postgres() {
   retry_command 3 3 "postgresql startup" sudo systemctl enable --now postgresql \
     || fail "Unable to start PostgreSQL."
   local postgres_password_sql="${POSTGRES_PASSWORD//\'/\'\'}"
-  local project_provisioner_password_sql="${PROJECT_DATABASE_PROVISIONER_PASSWORD//\'/\'\'}"
 
   if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'" | grep -q 1; then
     sudo -u postgres psql -c "ALTER ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
@@ -919,21 +924,12 @@ setup_local_postgres() {
     sudo -u postgres createdb -O "${POSTGRES_USER}" "${POSTGRES_DB}"
   fi
 
-  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${PROJECT_DATABASE_PROVISIONER_USER}'" | grep -q 1; then
-    sudo -u postgres psql -c "ALTER ROLE \"${PROJECT_DATABASE_PROVISIONER_USER}\" WITH LOGIN PASSWORD '${project_provisioner_password_sql}' NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION;" >/dev/null
-  else
-    sudo -u postgres psql -c "CREATE ROLE \"${PROJECT_DATABASE_PROVISIONER_USER}\" WITH LOGIN PASSWORD '${project_provisioner_password_sql}' NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION;" >/dev/null
-  fi
-
   sudo -u postgres psql -c "REVOKE CONNECT ON DATABASE \"${POSTGRES_DB}\" FROM PUBLIC; GRANT CONNECT ON DATABASE \"${POSTGRES_DB}\" TO \"${POSTGRES_USER}\";" >/dev/null
 
   retry_command 3 2 "postgresql verification" \
     env PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'SELECT 1' >/dev/null \
     || fail "PostgreSQL was installed but the configured database credentials did not verify."
 
-  retry_command 3 2 "project database provisioner verification" \
-    env PGPASSWORD="${PROJECT_DATABASE_PROVISIONER_PASSWORD}" psql -h 127.0.0.1 -U "${PROJECT_DATABASE_PROVISIONER_USER}" -d postgres -c 'SELECT 1' >/dev/null \
-    || fail "PostgreSQL was installed but the project database provisioner did not verify."
 }
 
 install_dependencies() {
@@ -1063,16 +1059,16 @@ install_systemd_services() {
   log "Installing systemd services"
   write_service_unit "${COLLAB_SERVICE}" "bolt.gives collaboration server" "${INSTALL_DIR}/bin/start-collab.sh" "" "" "${COLLAB_PORT}"
   write_service_unit "${WEBBROWSE_SERVICE}" "bolt.gives web browsing server" "${INSTALL_DIR}/bin/start-webbrowse.sh" "" "" "${WEBBROWSE_PORT}"
-  local runtime_after=""
-  local runtime_wants=""
+  write_service_unit "${RUNTIME_SERVICE}" "bolt.gives hosted runtime server" "${INSTALL_DIR}/bin/start-runtime.sh" "" "" "${RUNTIME_PORT}"
+  local app_after="${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service"
+  local app_wants="${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service"
 
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
-    runtime_after="postgresql.service"
-    runtime_wants="postgresql.service"
+    app_after="${app_after} postgresql.service"
+    app_wants="${app_wants} postgresql.service"
   fi
 
-  write_service_unit "${RUNTIME_SERVICE}" "bolt.gives hosted runtime server" "${INSTALL_DIR}/bin/start-runtime.sh" "${runtime_after}" "${runtime_wants}" "${RUNTIME_PORT}"
-  write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${COLLAB_SERVICE}.service ${WEBBROWSE_SERVICE}.service ${RUNTIME_SERVICE}.service" "${APP_PORT}"
+  write_service_unit "${APP_SERVICE}" "bolt.gives app server" "${INSTALL_DIR}/bin/start-app.sh" "${app_after}" "${app_wants}" "${APP_PORT}"
 
   sudo systemctl daemon-reload
   retry_command 2 3 "enable/start systemd services" \

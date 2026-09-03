@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased - v4.1.0
+
+### Changed
+
+- Generated projects now start without a database. Automatic local per-project PostgreSQL provisioning is disabled by default and remains an explicit operator-only compatibility option.
+- The project Database control now offers a two-field Supabase quick connect and a user-owned PostgreSQL connection string. Runtime records are stored outside generated source with mode `0600`, and only redacted connection status returns to the browser.
+- Agent prompts use runtime-injected database variables and no longer tell models to copy Supabase values into generated `.env` files.
+- Fresh Ubuntu installs no longer install PostgreSQL unless `--with-postgres` is selected. Optional local PostgreSQL stores bolt.gives profile/admin data only and is no longer a runtime-service dependency.
+- Dedicated Ubuntu CLI workspaces also start database-free. The setup wizard offers local PostgreSQL as an explicit option, and legacy automatic runtime-node database injection requires `BOLT_RUNTIME_NODE_DATABASE_ENABLED=true`.
+- Self-host installation now rejects Ubuntu releases older than 20.04 instead of claiming compatibility with systems that cannot run the installer-provided Node.js 22 toolchain. The legacy installer entry point delegates to the canonical installer so their behavior cannot drift.
+
+### Fixed
+
+- Replaced the hosted action runner's process-wide `pkill` cleanup with a session-scoped runtime request. Starting one generated project can no longer terminate Wrangler, esbuild, or another tenant's Preview process.
+
+### Security
+
+- Removed Supabase access-token and credential persistence from browser local storage. Optional account discovery tokens now live only for the current browser session.
+- Supabase quick connect rejects modern secret keys and legacy service-role JWTs before they can be injected into a generated browser application.
+- PostgreSQL connections are verified server-side before storage, redacted from responses, and excluded from static Cloudflare build environments.
+
+### Validation
+
+- Added runtime persistence, redaction, environment-injection, browser Database-control, prompt-context, Ubuntu-version, and database-free installer smoke coverage.
+- Generated a calendar through the real hosted-runtime browser path without a project database and verified its healthy Vite Preview and persisted runtime snapshot.
+
 ## Unreleased
 
 ### Added
