@@ -89,7 +89,7 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 - [ ] I03: Complete the pending Luna/MagnetAPI BYOK browser matrix, actual catalog IDs, model switching, and credential separation.
 - [ ] I04: Create one disposable assigned Cloudflare instance; generate, iterate, restore, publish, verify public assets/deep links, update/rollback, and clean up only the test fixture.
 - [ ] I05: Exercise account isolation, OTP lifecycle, quota resets, Stripe test-mode fulfillment, domain ownership, tenant permissions, and collaboration reconnect with owned test accounts.
-- [~] I06: Added Ubuntu 22.04/24.04 clean/repair CI matrix, preserved-password/checkout/build recovery regressions, bounded retries, and a public Windows/WSL PowerShell entry point. Local shell/configuration/PowerShell contracts pass; actual CI and Windows/WSL install evidence remain required.
+- [~] I06: [Ubuntu 22.04/24.04 clean/repair and Windows PowerShell 5.1/7 CI passed](https://github.com/embire2/bolt.gives/actions/runs/34716586998), covering database-free and optional platform-database installs. Recovery preserves passwords, configuration, lockfiles and previous builds. Real TLS, Windows/WSL reboot-resume and clean-machine prompt generation remain required.
 - [ ] Release gate: no unresolved P1, no unexplained browser/5xx errors, full build/bundle checks, documented P2 disposition, and matching tag/artifacts/deployed manifest before fleet rollout.
 
 ### Existing Work Awaiting Release Validation

@@ -263,6 +263,24 @@ describe('workbenchStore file actions', () => {
     expect(workbenchStore.showWorkbench.get()).toBe(true);
   });
 
+  it('reconciles runtime snapshots without writing back or overriding Code selection', async () => {
+    const { webcontainer } = await import('@bolt/project/lib/webcontainer');
+    const runtime = await webcontainer;
+    vi.mocked(runtime.fs.writeFile).mockClear();
+    vi.mocked(runtime.fs.mkdir).mockClear();
+    vi.mocked(runtime.fs.rm).mockClear();
+    workbenchStore.currentView.set('code');
+    workbenchStore.previews.set([{ port: 4100, ready: true, baseUrl: 'https://fixture.example/preview' }]);
+
+    const files = { '/home/project/App.tsx': { type: 'file' as const, content: 'server source', isBinary: false } };
+    await workbenchStore.restoreSnapshot(files, true);
+    expect(workbenchStore.files.get()).toEqual(files);
+    expect(workbenchStore.currentView.get()).toBe('code');
+    expect(runtime.fs.writeFile).not.toHaveBeenCalled();
+    expect(runtime.fs.mkdir).not.toHaveBeenCalled();
+    expect(runtime.fs.rm).not.toHaveBeenCalled();
+  });
+
   it('rewrites generated entry-file variants onto the active starter file before persisting and running', async () => {
     const runAction = vi.fn().mockResolvedValue(undefined);
     const writeFile = vi.spyOn(workbenchStore, 'writeFile').mockResolvedValue(undefined);

@@ -21,6 +21,7 @@ import {
   migrateLegacyLocks,
 } from '@bolt/project/lib/persistence/lockedFiles';
 import { getCurrentChatId } from '@bolt/project/utils/fileLocks';
+import { restoreSnapshotFilesystem } from '@bolt/project/lib/runtime/snapshot-filesystem';
 
 const logger = createScopedLogger('FilesStore');
 const hotData = import.meta.hot?.data ?? {};
@@ -938,81 +939,20 @@ export class FilesStore {
     }
   }
 
-  async restoreSnapshot(snapshotFiles: FileMap) {
-    const webcontainer = await this.#webcontainer;
+  async restoreSnapshot(snapshotFiles: FileMap, fromRuntime = false) {
     const nextFiles = Object.fromEntries(
       Object.entries(snapshotFiles)
         .filter(([, dirent]) => dirent !== undefined)
         .map(([filePath, dirent]) => [filePath, dirent ? { ...dirent } : dirent]),
     ) as FileMap;
-    const currentFiles = this.files.get();
 
-    const existingPaths = Object.entries(currentFiles)
-      .filter(([, dirent]) => dirent !== undefined)
-      .sort(([leftPath], [rightPath]) => rightPath.length - leftPath.length);
-
-    for (const [absolutePath, dirent] of existingPaths) {
-      if (nextFiles[absolutePath] !== undefined) {
-        continue;
-      }
-
-      const relativePath = path.relative(webcontainer.workdir, absolutePath);
-
-      if (!relativePath || relativePath.startsWith('..')) {
-        continue;
-      }
-
-      try {
-        if (dirent?.type === 'folder') {
-          await webcontainer.fs.rm(relativePath, { recursive: true });
-        } else {
-          await webcontainer.fs.rm(relativePath);
-        }
-      } catch {
-        // Best effort only. The store is still updated to the snapshot below.
-      }
-    }
-
-    const folderEntries = Object.entries(nextFiles)
-      .filter(([, dirent]) => dirent?.type === 'folder')
-      .sort(([leftPath], [rightPath]) => leftPath.length - rightPath.length);
-    const fileEntries = Object.entries(nextFiles)
-      .filter(([, dirent]) => dirent?.type === 'file')
-      .sort(([leftPath], [rightPath]) => leftPath.length - rightPath.length);
-
-    for (const [absolutePath] of folderEntries) {
-      const relativePath = path.relative(webcontainer.workdir, absolutePath);
-
-      if (!relativePath || relativePath.startsWith('..')) {
-        continue;
-      }
-
-      await webcontainer.fs.mkdir(relativePath, { recursive: true });
-    }
-
-    for (const [absolutePath, dirent] of fileEntries) {
-      const relativePath = path.relative(webcontainer.workdir, absolutePath);
-
-      if (!relativePath || relativePath.startsWith('..') || dirent?.type !== 'file') {
-        continue;
-      }
-
-      const parentPath = path.dirname(relativePath);
-
-      if (parentPath && parentPath !== '.') {
-        await webcontainer.fs.mkdir(parentPath, { recursive: true });
-      }
-
-      if (dirent.isBinary) {
-        await webcontainer.fs.writeFile(relativePath, decodeBase64ToUint8Array(dirent.content));
-      } else {
-        await webcontainer.fs.writeFile(relativePath, dirent.content ?? '');
-      }
+    if (!fromRuntime) {
+      await restoreSnapshotFilesystem(await this.#webcontainer, this.files.get(), nextFiles);
     }
 
     this.#deletedPaths.clear();
     this.#modifiedFiles.clear();
-    this.#size = fileEntries.length;
+    this.#size = Object.values(nextFiles).filter((dirent) => dirent?.type === 'file').length;
     this.files.set(nextFiles);
     this.#persistDeletedPaths();
   }
@@ -1045,20 +985,4 @@ function isBinaryFile(buffer: Uint8Array | undefined) {
  */
 function convertToBuffer(view: Uint8Array): Buffer {
   return Buffer.from(view.buffer, view.byteOffset, view.byteLength);
-}
-
-function decodeBase64ToUint8Array(input: string): Uint8Array {
-  if (!input) {
-    return new Uint8Array();
-  }
-
-  const normalized = input.includes(',') ? input.slice(input.indexOf(',') + 1) : input;
-  const binary = atob(normalized);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index++) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
 }

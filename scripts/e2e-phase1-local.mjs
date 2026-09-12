@@ -23,7 +23,7 @@ const uid = process.getuid() === 0 ? 65534 : process.getuid();
 const gid = process.getuid() === 0 ? 65534 : process.getgid();
 const children = [];
 const logs = [];
-const report = { stages: [], errors: [], expectedErrors: [], chatRequests: [], runtimeUid: uid };
+const report = { stages: [], errors: [], expectedErrors: [], chatRequests: [], streams: [], runtimeUid: uid };
 const stage = (name, detail = {}) => {
   const entry = { name, at: new Date().toISOString(), ...detail };
   report.stages.push(entry);
@@ -120,6 +120,10 @@ async function previewContains(values, timeout = 360_000) {
   let nextUpdate = Date.now() + 15_000;
 
   while (Date.now() < end) {
+    if (report.errors.length) {
+      throw new Error(`Unexpected browser/HTTP error: ${report.errors[0]}`);
+    }
+
     const text = await page
       .frameLocator('iframe[title="preview"]')
       .first()
@@ -198,6 +202,23 @@ try {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   page = await context.newPage();
   page.on('pageerror', (error) => report.errors.push(redact(error.message).slice(0, 300)));
+  page.on('response', async (response) => {
+    if (new URL(response.url()).pathname !== '/api/chat') {
+      return;
+    }
+
+    const entry = { status: response.status(), startedAt: new Date().toISOString() };
+    report.streams.push(entry);
+
+    try {
+      const body = redact(await response.text());
+      entry.finishedAt = new Date().toISOString();
+      entry.bytes = body.length;
+      entry.tail = body.slice(-6000);
+    } catch (error) {
+      entry.failure = redact(error.message);
+    }
+  });
   page.on('response', (response) => {
     if (response.status() >= 400 && new URL(response.url()).hostname === 'phase1.localhost') {
       const entry = `${response.status()} ${new URL(response.url()).pathname}`;

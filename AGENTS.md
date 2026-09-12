@@ -182,7 +182,7 @@ Self-host installations support interactive setup, custom app/admin/create domai
 
 ## Git, Releases, and Deployment
 
-The v4.1 reliability work is authorized through Phase 2, but B13 (Preview browser-origin isolation) remains a release blocker. Consult `docs/quality/2026-09-12-phase2-checkpoint.md` and `ROADMAP.md`; do not mistake the validation branch or local E2E for a fleet rollout. `main` pushes currently trigger Cloudflare deployment. The public `install.ps1` is a Windows/WSL server bootstrap, not private desktop source. Installer fixes must retain existing database passwords, configuration and customer data; an exhausted retry must return failure.
+The v4.1 reliability work is authorized through Phase 2, but B13 (Preview browser-origin isolation) and B14 (generated-command process isolation) remain release blockers. Consult `docs/quality/2026-09-12-phase2-checkpoint.md` and `ROADMAP.md`; do not mistake the validation branch or local E2E for a fleet rollout. `main` pushes currently trigger Cloudflare deployment. The public `install.ps1` is a Windows/WSL server bootstrap, not private desktop source. Installer fixes must retain existing database passwords, configuration and customer data; an exhausted retry must return failure. Preview health snapshots are read-only reconciliation, not filesystem restore operations. On history reload, existing runtime source is authoritative; cached source is fallback only after an explicit missing-session response.
 
 1. Start from an up-to-date branch and inspect the dirty worktree.
 2. Keep one logical change per commit unless splitting would break an atomic migration.

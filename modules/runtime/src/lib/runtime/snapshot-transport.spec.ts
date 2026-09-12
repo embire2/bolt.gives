@@ -31,4 +31,21 @@ describe('runtime snapshot transport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 413 })));
     await expect(readRuntimeSnapshot('https://runtime.example/snapshot')).rejects.toThrow('413');
   });
+  it('distinguishes a missing session from a generic proxy 404', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response('Unknown runtime session', { status: 404 }))
+        .mockResolvedValueOnce(new Response('Route not found', { status: 404 })),
+    );
+    await expect(readRuntimeSnapshot('https://runtime.example/snapshot')).rejects.toMatchObject({
+      status: 404,
+      sessionMissing: true,
+    });
+    await expect(readRuntimeSnapshot('https://runtime.example/snapshot')).rejects.toMatchObject({
+      status: 404,
+      sessionMissing: false,
+    });
+  });
 });

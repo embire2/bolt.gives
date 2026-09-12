@@ -6,6 +6,8 @@ Date: 2026-09-12. Stable web version remains **4.0.1**; target **4.1.0** is not 
 
 Phase 1 source/persistence, private owner login, pricing SSR, account-key isolation, and public-browsing changes are retained. See [Phase 1 evidence](2026-09-12-phase1-review.md).
 
+- Source authority: Preview snapshot pulls no longer replay filesystem mutations back into the runtime. Stale responses are rejected after source/project changes, active file actions or unsaved editor changes. Read-only reconciliation preserves Code selection. History reload prefers current runtime source, including deletions; cached restore requires an explicit missing-session response. Regression tests exercise these contracts without weakening explicit local-history restores.
+
 - B06: Supabase is configured, not connectivity-verified. PostgreSQL records verification time after `SELECT 1`; existing records without proof are not treated as verified. Replacement is atomic; failure keeps previous settings. The UI explains that running processes retain old environment variables until restarted.
 - B07/B08: Login scrolls inside the application layout, provider notice wraps on narrow screens, and native modal onboarding makes background controls inert. Explicit Tab wrapping avoids browser-chrome focus escape. The expanded account journey passes native Chromium 200% zoom, 390x500 login, twelve Tab steps, Escape containment, registration, two-account/two-tab logout, Supabase rotation/disconnect, Checkout failure/cancellation and forged-success rejection. It recorded no browser exceptions. This is not a Stripe payment test.
 - B09: Pricing reads server billing state only after a Checkout return. Forged URL parameters, stale active records, and failed billing reads do not confirm payment. Pending checks are bounded, with manual recheck available.
@@ -15,13 +17,13 @@ Phase 1 source/persistence, private owner login, pricing SSR, account-key isolat
 
 ## Evidence
 
-Current full unit/integration run: **1,262 passed, nine skipped**. Strict boundaries, typecheck, lint (zero errors, ten warnings), production build, and bundle budget pass. Linux syntax/configuration/recovery fixtures and PowerShell 7.6.6 parser/contracts pass. The official PowerShell archive checksum was verified before execution. These results do not certify Windows PowerShell 5.1 or a Windows installation; CI was added for those contracts.
+Current full unit/integration run: **1,272 passed, nine skipped**. Strict boundaries, typecheck, lint (zero errors, ten warnings), production build, and bundle budget pass. Linux syntax/configuration/recovery fixtures and PowerShell 7.6.6 parser/contracts pass. The official PowerShell archive checksum was verified before execution.
 
 The production-build FREE/Luna browser journey at 19:41 UTC generated an interactive task board in about 39 seconds, applied a follow-up in about 14 seconds, retained Code selection and the composer, and restored source/history/Preview after navigation, reload, and deliberate runtime restart. It used a disposable non-root runtime, no project database, and no production data. No unexpected browser errors were recorded. The later final build includes the small-screen banner/focus changes, whose account journey is separately gated.
 
 Repeat failures are retained as evidence: a 19:56 run remained on the fallback starter with asset 409 responses; a newly introduced background-health/completion coupling was removed before publication. The 20:06 run produced a healthy task form with no browser errors, but did not meet the test's blank-click behavior requirement. The acceptance prompt now explicitly requests a titled-task form and the browser must submit a title and find that exact new card. A fresh full journey is required after the final status changes; neither failed run counts as release acceptance.
 
-The new CI workflow defines Ubuntu 22.04/24.04 clean/repair installs with no database and optional platform database, plus Windows PowerShell 5.1/7 contract jobs. **Definition is not execution**: do not mark I06 complete until actual jobs pass. Draft pull requests do not automatically publish a Preview deployment. Real TLS, clean-machine prompt generation and Windows/WSL reboot-resume testing remain open.
+[Installer CI passed all five jobs](https://github.com/embire2/bolt.gives/actions/runs/34716586998): real Ubuntu 22.04/24.04 clean/repair installs with no database and optional platform database, plus PowerShell 5.1/7 contracts on a Windows runner. Application/pricing/runtime health and configuration preservation passed after deliberately stopping and repairing the app. Real TLS, clean-machine prompt generation and Windows/WSL reboot-resume testing remain open, so I06 is not entirely complete. Draft Preview deployment was correctly skipped. CI/CD, Code Quality, Security Analysis and PR Validation also passed at checkpoint b849afc; optional Codeball failed because its external api.codeball.ai hostname did not resolve.
 
 ## Why Deployment Is Held
 
@@ -33,7 +35,7 @@ Direct DNS checks corrected an earlier assumption about Cloudflare: `bolt.gives`
 
 Read-only live checks still found `/pricing` returning 500 on bolt.gives, alpha1, create, and bolt-gives.pages.dev while `/api/health` returned 200. No new deployment has been made, so local fixes must not be described as live fixes. A `main` push automatically starts Pages deployment; publish this checkpoint on a validation branch until the blocker is fixed.
 
-Remaining release scope: B13/B14; I02 mixed-version/atomic rollback; I03 full live BYOK transport/model switching; I04 disposable assigned fleet instance and public deploy/rollback; I05 real Stripe test-mode and remaining account/domain/collaboration paths; I06 real installer matrix; and private native Windows W01-W07. No forced Windows update or new desktop release was attempted.
+Remaining release scope: repeatable final generation; B13/B14; I02 mixed-version/atomic rollback; I03 full live BYOK transport/model switching; I04 disposable assigned fleet instance and public deploy/rollback; I05 real Stripe test-mode and remaining account/domain/collaboration paths; remaining I06 TLS/WSL/generation paths; and private native Windows W01-W07. No forced Windows update or new desktop release was attempted.
 
 ## Reproduce
 

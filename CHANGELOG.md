@@ -18,6 +18,7 @@
 
 - Phase 1 (unreleased): excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
 - Replaced file-count snapshot freshness with bounded disk reconciliation, detected concurrent writes, preserved empty/deleted workspaces, and waited for IndexedDB transaction completion before reporting saved source.
+- Made Preview snapshot pulls read-only: background refresh cannot write old source back into the runtime or override Code selection. Slow results are discarded after project changes, file actions or unsaved edits. History reload prefers current runtime source and uses cached recovery only after an explicit missing-session response, never a generic outage.
 - Fixed `/pricing` server rendering, duplicate Checkout clicks, and error/retry behavior. Phase 2 also derives returned payment status from the billing server, bounds pending checks, and refuses to treat URL parameters or expired billing periods as proof of payment.
 - Phase 2 (unreleased): Supabase settings are labelled configured rather than healthy; PostgreSQL verification is timestamped at save time. Failed credential rotation preserves the previous record, and the UI explains Preview restart requirements after replacement/disconnection.
 - Added scrollable short-window login, a wrapping provider banner, native modal onboarding with inert background and explicit keyboard focus wrapping, and accessible status/error announcements.
@@ -42,7 +43,7 @@
 
 ### Validation
 
-- The [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md) records the ongoing browser and installer gates. The new Ubuntu/Windows workflow is not represented as executed until CI evidence exists. No v4.1 production/fleet release is claimed while Preview-origin isolation remains open.
+- The [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md) records passing Ubuntu clean/repair and Windows PowerShell contract CI, successful browser journeys, failed generation repeats, and remaining gates. No v4.1 production/fleet release is claimed while generation acceptance and Preview/process isolation remain open.
 - Phase 1 review and remaining release prerequisites are recorded in [the review checkpoint](docs/quality/2026-09-12-phase1-review.md). Browser coverage includes a disposable PostgreSQL two-profile/two-tab journey and isolated non-root FREE generation. These are not a production deployment, Stripe payment, clean-OS install, or Windows release certification.
 - Added provider transport, managed-key separation, dynamic model-catalog, medium-effort, banner visibility, and persistent-dismissal regression coverage.
 - Added runtime persistence, redaction, environment-injection, browser Database-control, prompt-context, Ubuntu-version, and database-free installer smoke coverage.

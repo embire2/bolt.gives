@@ -2,6 +2,15 @@ import type { FileMap } from '@bolt/core/types/files';
 import { filterWorkspaceSource } from '@bolt/core/lib/workspace-source.mjs';
 import { readBoundedResponse } from '@bolt/core/lib/bounded-response';
 
+export class RuntimeSnapshotError extends Error {
+  constructor(
+    readonly status: number,
+    readonly sessionMissing = false,
+  ) {
+    super(`Unable to read current project source (HTTP ${status}). Retry after the current command finishes.`);
+  }
+}
+
 export async function readRuntimeSnapshot(url: string): Promise<FileMap> {
   const signal = AbortSignal.timeout(30_000);
 
@@ -15,9 +24,10 @@ export async function readRuntimeSnapshot(url: string): Promise<FileMap> {
     }
 
     if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(
-        `Unable to read current project source (HTTP ${response.status}). Retry after the current command finishes.`,
+      const detail = await readBoundedResponse(response, 1024).catch(() => '');
+      throw new RuntimeSnapshotError(
+        response.status,
+        response.status === 404 && detail.trim() === 'Unknown runtime session',
       );
     }
 
