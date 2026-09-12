@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-03
+Last updated: 2026-09-12
 
 Status legend:
 
@@ -38,20 +38,74 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
-## v4.1.0 - In Progress
+## v4.1.0 - Bug-Fix Release Plan
 
-Release theme: continue the previously planned v3.6 hardening track after the v4 Agent Mode release, complete Custom Domain account lifecycle, deepen operator-visible resource controls, and continue runtime and installer hardening.
+Release theme: make the existing agentic coding workflow reliable, responsive, and testable before adding more product scope. Develop the native Windows replacement in a separate, privately maintained release lane.
 
-- [x] Make generated projects database-free by default, add a two-field Supabase quick connect, and support private user-owned PostgreSQL connections without writing credentials into source.
-- [x] Make fresh Ubuntu installs database-free by default while retaining explicit `--with-postgres` support for bolt.gives profile/admin data.
-- [x] Make dedicated Ubuntu CLI workspaces database-free by default while retaining an explicit local PostgreSQL option.
-- [x] Replace process-wide Preview cleanup with session-scoped runtime termination so one project cannot stop another project's build tooling.
-- [ ] Complete approval, invitation, password-reset, and production RBAC lifecycle coverage.
-- [ ] Add collaboration audit export plus stronger runtime-node quota and operator audit visibility.
-- [ ] Add a customer billing portal, subscription cancellation flow, invoices, top-up products, and operator-visible Custom Domain entitlement search.
-- [~] Add connection health, rotation, and deployment guidance for Supabase, PostgreSQL, and supported managed data services.
-- [ ] Continue server-side reconciliation and split the ratcheted legacy source hotspots while preserving the v4.0.0 initial-route budget.
-- [~] Extend repeatable installer smoke across clean and partially configured Ubuntu 20.04+ hosts.
+The [2026-09-12 audit](docs/quality/2026-09-12-v4.1-audit.md) records reproduction steps, owning modules, small PR-sized subtasks, and acceptance tests. It found 12 code/test-contract findings plus seven investigation or coverage tasks. These are open work, not shipped fixes.
+
+Audit baseline: 1,167 tests passed, nine skipped; six template Preview smokes passed. The alpha1 browser journey produced an interactive app, applied a follow-up, and restored it after reload, but recorded a snapshot 502. An earlier Code/Preview switch timed out. `/pricing` returned 500 on production and locally. This is **not** a clean release E2E pass.
+
+### Priority 1: Access, Source Integrity, and Account Safety
+
+| Task            | Actionable changes                                                                                                       | Owner                        | Exit test                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [ ] B01a / B01b | Exclude package caches and generated trees at every depth; bound snapshot reads/payloads and measure resource use        | runtime/project/core         | No `.cache`, `.local`, or nested dependencies in source snapshots; `.github` retained; reproducible memory/payload limits |
+| [ ] B02a / B02b | Replace file-count freshness decisions; reconcile saved source, external edits, deletions, and current runtime revisions | runtime/project              | Same-count edits, rename/delete, follow-up, reload, and restart all return current source                                 |
+| [ ] B03a / B03b | Fix pricing SSR; verify the real Upgrade/login/Stripe test-mode flow                                                     | surfaces/control-plane       | Direct and client navigation return 200; Checkout does not loop; cancellation/retry work                                  |
+| [ ] B04a / B04b | Make onboarding capability-aware without weakening hosted auth; prove both no-db and platform-db installs                | control-plane/surfaces       | Clean self-host reaches first Preview and saves/restores a project without requiring project PostgreSQL                   |
+| [ ] B05a / B05b | Scope provider keys to their owner and clear legacy browser copies on logout; add multi-profile/tab tests                | agent/control-plane/surfaces | Another account cannot inherit a previous user's key                                                                      |
+| [ ] B12a / B12b | Unify browser/fetch destination validation and bounded transport behavior; add safe redirect/address fixtures            | core/agent/surfaces          | Unsafe destinations fail closed in both transports; public browsing still works                                           |
+
+### Priority 2: Honest State and Accessible Controls
+
+| Task            | Actionable changes                                                                                                 | Owner                  | Exit test                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------- |
+| [ ] B06a / B06b | Separate configured from verified Supabase state; test failure, rotation, disconnect, and Preview restart guidance | runtime/surfaces       | An unreachable or invalid connection cannot appear healthy                                  |
+| [ ] B07a / B07b | Fix short-window login scrolling; cover banners, keyboard, phone, and zoom                                         | surfaces               | Submit and errors reachable at 390x500 and 200% zoom                                        |
+| [ ] B08a / B08b | Use accessible onboarding focus management and background inertness                                                | surfaces               | Tab stays in the dialog; login, errors, and all fields remain reachable                     |
+| [ ] B09a / B09b | Confirm payment from server state rather than return-URL text                                                      | control-plane/surfaces | Forged success parameters never claim payment; delayed/duplicate webhooks are handled       |
+| [ ] B10a / B10b | Unify Ready/Working/Recovery commentary and remove generic filler; test event ordering and reload                  | agent/surfaces         | Healthy completed Preview does not retain an Active/waiting summary or flash between states |
+
+### Release Evidence, Not Screenshot-Only Success
+
+- [ ] B11a: Replace stale Workspace-tab/prompt locators and overlay-bypassing fixtures with normal v4 onboarding/Agent Mode interactions.
+- [ ] B11b: Make first Preview, interaction, follow-up, saved history, Code selection, and unexpected-error assertions mandatory release checks.
+- [ ] I01: Reproduce Code-switch timeout and snapshot 502 with CPU/heap/network evidence, then enforce measured performance non-regression after B01/B02.
+- [ ] I02: Add app/runtime capability and revision checks; verify mixed-version failures and health-checked atomic rollout/rollback.
+- [ ] I03: Complete the pending Luna/MagnetAPI BYOK browser matrix, actual catalog IDs, model switching, and credential separation.
+- [ ] I04: Create one disposable assigned Cloudflare instance; generate, iterate, restore, publish, verify public assets/deep links, update/rollback, and clean up only the test fixture.
+- [ ] I05: Exercise account isolation, OTP lifecycle, quota resets, Stripe test-mode fulfillment, domain ownership, tenant permissions, and collaboration reconnect with owned test accounts.
+- [ ] I06: Add disposable Ubuntu clean-install and partial-repair jobs for both platform-db and no-db modes, including usable onboarding.
+- [ ] Release gate: no unresolved P1, no unexplained browser/5xx errors, full build/bundle checks, documented P2 disposition, and matching tag/artifacts/deployed manifest before fleet rollout.
+
+### Existing Work Awaiting Release Validation
+
+- [~] `main` contains database-free generated projects, Supabase quick connect, private user-owned PostgreSQL connections, optional-database CLI workspaces/installer, and session-scoped runtime cleanup. B01/B02/B04/B06 and I02/I06 must close their remaining contract gaps.
+- [~] The checkout contains Luna medium-effort labelling, separate user-key MagnetAPI discovery, a dismissible banner, and shell changes. These are not marked shipped until I03 and staging verification pass.
+
+## Native Windows Rewrite - Separate Release Lane
+
+Preferred stack: **C++20 + C++/WinRT + WinUI 3/XAML + Windows App SDK**, developed and tested on Windows. Start with a measured editor/terminal/Preview vertical slice; C# WinUI 3 is the fallback only if the spike demonstrates a safer result. Existing WPF is already native; changing language alone is not a performance fix.
+
+- [ ] W01: Inventory Desktop v1.10.2 parity; establish a private Windows build runner, pinned toolchain, signing prerequisites, and measured baseline.
+- [ ] W02: Prove native shell, editor interop, terminal control, compact prompt, accessibility, and Preview-only WebView2 before expanding the rewrite.
+- [ ] W03: Implement native six-digit OTP, OS-protected account-scoped credentials, and backup-first migration/rollback of settings and history.
+- [ ] W04: Implement versioned server contracts, async native chat/tool streams, cancellation, model switching, queued follow-ups, and project restore.
+- [ ] W05: Deliver native editor/diff/search, terminal, optional database connection, publishing, balance, and settings as separate parity slices.
+- [ ] W06: Decide packaging/migration; implement signed, resumable updates with progress, controlled shutdown, relaunch, rollback, and elevation only when installation scope requires it.
+- [ ] W07 / I07: Run native UI Automation, Preview interaction, standard-user install, upgrade from v1.10.2, tampering/offline/low-disk/UAC-decline recovery, DPI, keyboard, and performance gates on Windows.
+
+Proposed rewrite release: **Desktop v2.0.0**, not yet approved or shipped. Preserve the private desktop source boundary; public releases contain compiled artifacts, checksums, notes, and update metadata only. Keep v1.10.2 supported until native parity, trusted signing, migration, and updater tests pass. Do not force an unverified replacement onto users. See the [Windows work packages](docs/quality/2026-09-12-v4.1-audit.md#native-windows-rewrite) for the acceptance criteria.
+
+## Deferred Expansion
+
+Do not let these additions delay the v4.1.0 bug-fix gate. Reprioritize them after the reliability evidence is complete; no subsequent version number is assigned here.
+
+- [ ] New collaboration audit exports and expanded operator analytics beyond fixes needed for existing behavior.
+- [ ] New customer portal, invoice, top-up products, and entitlement-search surfaces beyond repairing current Checkout/renewal/cancellation behavior.
+- [ ] Broad RBAC/invitation product expansion beyond verifying and hardening existing access controls.
+- [ ] Further source-hotspot splitting or reconciliation rewrites only where profiling shows a concrete benefit; preserve the six-module dependency graph.
 
 ## v4.0.1 - Shipped
 

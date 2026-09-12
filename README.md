@@ -12,6 +12,8 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
+> **Reliability update, 12 September 2026:** v4.0.1 remains the stable web release. Our latest audit found 12 code/test-contract issues, including a broken pricing page and oversized/stale snapshots. A real alpha1 project reached Preview, accepted a follow-up, and restored after reload, but the run still recorded a snapshot 502. **v4.1.0 will prioritize these bugs and a separately versioned native Windows rewrite, not more feature sprawl.** Read the [findings, evidence, and small implementation tasks](docs/quality/2026-09-12-v4.1-audit.md). This is a plan, not a claim that the fixes are shipped. Model/database descriptions below include unreleased development work; live instances may differ.
+
 ## What You Can Do
 
 Type a request such as:
@@ -70,7 +72,9 @@ Version 4 replaced separate, competing Chat and Workspace routes with one contin
 - The selected model can change during a project without discarding history.
 - Recovery is bounded. The UI shows a stable repairing state instead of looping forever between Working and Needs Repair.
 
-The hosted FREE model menu currently supports ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through the server-side provider configured by the operator. Provider credentials do not enter the browser bundle or generated project.
+Unreleased provider work will show the hosted FREE default as **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without exposing the operator credential to the browser bundle or generated project. The audited live alpha instance still displayed ChatGPT-5.6 SOL; the pending provider changes are not included in this documentation-only publication.
+
+The pending user-funded integration adds **MagnetAPI** to the provider dropdown. Once released, users will sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a User API Key in its dashboard, and enter it in bolt.gives. Planned choices include ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1; actual upstream IDs and account-specific discovery must pass the I03 release checks. MagnetAPI advertises these inference routes at 10% of standard direct-provider cost. Personal MagnetAPI requests must never fall back to bolt.gives' operator-funded FREE key.
 
 ## What Version 4 Includes
 
@@ -166,25 +170,40 @@ The complete release record is in [CHANGELOG.md](CHANGELOG.md).
 
 ## v4.1.0 Plan
 
-v4.1.0 continues reliability and operator hardening rather than adding another competing workspace concept.
+**Make the existing workflow dependable before expanding it.** The [September audit](docs/quality/2026-09-12-v4.1-audit.md) combines six-module code tracing, isolated contract reproductions, 32 real-browser route visits, and hosted FREE project generation. It does not claim exhaustive coverage or error-free software.
 
-The current `main` branch already contains the first v4.1 work: database-free generated projects, two-field Supabase quick connect, private user-owned PostgreSQL connections, database-optional dedicated CLI workspaces, a database-free Ubuntu installer, and session-scoped runtime cleanup that cannot terminate another workspace's build process.
+| Finding                                                                             | How v4.1.0 will tackle it                                                                                            |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| B01: Package caches and nested dependencies enter source snapshots, increasing work | Filter generated trees consistently and bound snapshot bytes, file counts, and reads; measure browser/transport cost |
+| B02: Disk edits with unchanged file counts can return stale source                  | Reconcile revisions, changes, deletions, and renames; test follow-up context and restore against the latest source   |
+| B03: `/pricing` returns HTTP 500                                                    | Repair the server-render boundary and verify direct navigation plus the real Upgrade/login/Checkout path             |
+| B04: No-database self-host registration returns 503 behind mandatory onboarding     | Add an explicit supported self-host identity mode and run both no-db and platform-db clean-install journeys          |
+| B05: Saved provider credentials survive logout                                      | Make credentials account-owned and test complete cleanup across logout, account switches, and browser tabs           |
+| B06: Unreachable Supabase settings appear connected                                 | Distinguish saved settings from verified connection health; test failure, rotation, and Preview restart behavior     |
+| B07: Short-window login controls cannot be reached by scrolling                     | Fix available-height scrolling and test phone keyboards, banners, and zoom                                           |
+| B08: Keyboard focus escapes the onboarding dialog                                   | Add real focus containment, background inertness, and accessible error/focus handling                                |
+| B09: Pricing can claim payment from a return-URL parameter                          | Display payment state from authenticated server records, never from the query string alone                           |
+| B10: Commentary can remain Active when Preview is Ready                             | Use one event-derived state and remove generic filler; verify reload, recovery, and readable status text             |
+| B11: Screenshot/version gates and stale E2E selectors miss broken journeys          | Make normal onboarding, first Preview, interaction, follow-up, restore, and browser-error checks mandatory           |
+| B12: Browsing fallback has a weaker destination-validation policy                   | Unify safe network validation, redirect handling, limits, and test doubles across browse transports                  |
 
-Before v4.1.0 is declared stable, the plan is to:
+The first audit run hit a Code/Preview switching timeout. A second completed the task-board journey, including an Add task interaction, follow-up subtitle, saved-project URL, and reload, but logged a snapshot 502. These errors remain investigation tasks, not a clean E2E pass. Typecheck and strict module boundaries passed; lint had zero errors and seven warnings; **1,167 tests passed, nine were skipped, and all six template Preview smokes passed**. Full Windows testing, a new managed-instance/publication journey, live billing, and real clean-OS installation were not performed in this audit.
 
-- Expand clean-install and partial-repair tests across supported Ubuntu LTS releases.
-- Complete production RBAC, approvals, invitations, and password-reset lifecycle coverage.
-- Add collaboration audit export and stronger runtime-node quota visibility.
-- Complete customer billing portal, cancellation, invoices, top-ups, and entitlement search.
-- Add database connection health, credential rotation, and deployment guidance.
-- Move more reconciliation off the browser and continue splitting the remaining legacy source hotspots.
-- Keep reducing initial JavaScript and enforce bundle budgets in CI.
+[ROADMAP.md](ROADMAP.md) divides each finding into owned, reviewable subtasks with acceptance tests. Existing database-optional and MagnetAPI work must pass those gates before release. New feature expansion is deferred. A version number, screenshot, or HTTP 200 alone will not qualify v4.1.0 for release.
 
-See [ROADMAP.md](ROADMAP.md) for the live checklist. Roadmap items are proposals until their tests, documentation, and release evidence are complete.
+### A Truly Native Windows Client
+
+The preferred rewrite is **C++20 with C++/WinRT, WinUI 3/XAML, and the Windows App SDK**, developed and tested in a Windows environment. Native controls will handle authentication, projects, chat, editor, terminal, settings, and deployments. WebView2 is allowed only for generated-app Preview, not for loading the bolt.gives website as the application. Microsoft's [native Windows guidance](https://learn.microsoft.com/en-us/windows/apps/get-started/) supports WinUI 3 with C++ or C#.
+
+First we will prove a small editor/terminal/Preview slice and measure it against the existing WPF client, which is already a native Windows technology. C# WinUI 3 remains an alternative only if that evidence supports a safer implementation. The [Windows work packages](docs/quality/2026-09-12-v4.1-audit.md#native-windows-rewrite) cover OTP login, account-safe migration, feature parity, responsive streaming, signed updates, rollback, and real Windows UI Automation.
+
+**Desktop v1.10.2 remains the released client. Desktop v2.0.0 is the proposed rewrite version**, independent of web v4.1.0 and not yet shipped. Desktop source remains private; public releases receive compiled assets only. No mandatory replacement will be rolled out before native parity, signing, migration, and updater failure-path tests pass.
 
 ## Install on Ubuntu
 
 The supported self-host target is Ubuntu 20.04 or newer. A current Ubuntu LTS release is recommended.
+
+> **Known installer/onboarding gap (B04):** the current no-database default can start services but cannot complete mandatory profile registration without platform profile storage. Until this is fixed, configure the platform database or use `--with-postgres` on an isolated test server. This database is for bolt.gives accounts, not a requirement for generated projects. The installer smoke passed syntax/configuration checks, not a clean-machine E2E install.
 
 ### Requirements
 
@@ -351,7 +370,7 @@ Good first contributions include installer portability reports, accessible UI fi
 
 Do not report vulnerabilities in a public Issue. Follow the repository's private security-reporting path where available, and never include production credentials, session cookies, database URLs, SSH material, or customer data in a report.
 
-Generated code and model output are untrusted. The runtime validates paths and commands, isolates workspaces, filters machine-local trees from snapshots, bounds recovery, and keeps infrastructure credentials outside browser bundles and project artifacts.
+Generated code and model output are untrusted. The runtime includes path/command validation, workspace isolation, recovery bounds, and secret-handling controls. The [audit](docs/quality/2026-09-12-v4.1-audit.md) identifies remaining snapshot-filtering, credential-lifecycle, and browse-validation gaps; these must be fixed and tested rather than treated as already complete.
 
 ## License
 
