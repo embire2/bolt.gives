@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildRuntimeProxyHeaders,
   buildRuntimeProxyTargetUrl,
@@ -8,9 +8,59 @@ import {
   normalizeRuntimeControlBaseUrl,
   shouldProxyRuntimeRequest,
   shouldProxyHostedFreeApiRequest,
+  onRequest,
 } from '../functions/[[path]]';
 
 describe('Cloudflare Pages runtime proxy helpers', () => {
+  it('does not misreport a runtime outage as a signed-out owner', async () => {
+    const credentials = 'BoltProfile 01f00000-0000-4000-8000-000000000001.Abcdefghijklmnopqrstuvwxyz0123456789_-ABCDE';
+    const transport = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://example.com/runtime/sessions/fixture/snapshot', {
+          headers: { Authorization: credentials },
+        }),
+        env: { BOLT_SELF_HOST_MODE: 'single-user' },
+      } as never);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Retry-After')).toBe('2');
+      expect(response.headers.has('Set-Cookie')).toBe(false);
+    } finally {
+      transport.mockRestore();
+    }
+  });
+  it('requires an owner session for single-user runtime and generation access', async () => {
+    for (const pathname of ['/runtime/sessions/fixture/snapshot', '/api/chat']) {
+      const response = await onRequest({
+        request: new Request(`https://example.com${pathname}`),
+        env: { BOLT_SELF_HOST_MODE: 'single-user' },
+      } as never);
+      expect(response.status).toBe(401);
+    }
+  });
+  it('forwards runtime request streams in the Node production host without a duplex error', async () => {
+    const transport = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const forwarded = new Request(url, init);
+      expect(await forwarded.text()).toBe('{"files":{}}');
+
+      return new Response('{}');
+    });
+
+    try {
+      const response = await onRequest({
+        request: new Request('http://phase1.localhost/runtime/sessions/fixture/sync', {
+          method: 'POST',
+          body: '{"files":{}}',
+        }),
+        env: { BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4327/runtime' },
+      } as never);
+      expect(response.status).toBe(200);
+      expect(transport).toHaveBeenCalledTimes(1);
+    } finally {
+      transport.mockRestore();
+    }
+  });
   it('recognizes runtime routes that must be proxied instead of handled by Remix', () => {
     expect(shouldProxyRuntimeRequest('/runtime')).toBe(true);
     expect(shouldProxyRuntimeRequest('/runtime/sessions/session-1/preview-status')).toBe(true);

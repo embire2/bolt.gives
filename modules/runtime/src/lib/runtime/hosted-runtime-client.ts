@@ -1,6 +1,8 @@
 import type { FileMap } from '@bolt/core/types/files';
+import { readRuntimeSnapshot } from '@bolt/runtime/lib/runtime/snapshot-transport';
 import type { ActionAlert } from '@bolt/core/types/actions';
 import { boundedFetch } from '@bolt/core/lib/utils/reliability';
+import { filterWorkspaceSource } from '@bolt/core/lib/workspace-source.mjs';
 
 /*
  * Timeouts for the hosted runtime calls.
@@ -14,7 +16,6 @@ import { boundedFetch } from '@bolt/core/lib/utils/reliability';
 const HOSTED_SYNC_TIMEOUT_MS = 30_000;
 const HOSTED_COMMAND_TIMEOUT_MS = 5 * 60_000;
 const HOSTED_STATUS_TIMEOUT_MS = 10_000;
-const HOSTED_SNAPSHOT_TIMEOUT_MS = 30_000;
 const HOSTED_ALERT_TIMEOUT_MS = 10_000;
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
@@ -72,7 +73,8 @@ export interface HostedProjectDatabase {
 
 export interface HostedProjectConnection {
   provider: 'supabase' | 'postgresql';
-  status: 'connected';
+  status: 'configured' | 'verified' | 'connected';
+  verifiedAt?: string | null;
   label: string;
   host: string;
   databaseName?: string;
@@ -320,7 +322,7 @@ export async function syncHostedRuntimeWorkspace(options: { sessionId: string; f
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ files, prune }),
+    body: JSON.stringify({ files: filterWorkspaceSource(files), prune }),
     timeoutMs: HOSTED_SYNC_TIMEOUT_MS,
     label: 'hosted-runtime/sync',
   });
@@ -517,7 +519,7 @@ export async function deleteHostedProjectConnection(sessionId: string): Promise<
 export function subscribeHostedRuntimePreview(
   sessionId: string,
   callbacks: {
-    onMessage: (summary: HostedRuntimePreviewSummary) => void;
+    onMessage: (summary: HostedRuntimePreviewSummary) => void | Promise<void>;
     onError?: (error: Event | Error) => void;
   },
 ) {
@@ -528,13 +530,13 @@ export function subscribeHostedRuntimePreview(
   const url = `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/preview-events`;
   const eventSource = new EventSource(url);
 
-  eventSource.onmessage = (event) => {
+  eventSource.onmessage = async (event) => {
     if (!event.data) {
       return;
     }
 
     try {
-      callbacks.onMessage(
+      await callbacks.onMessage(
         normalizeHostedRuntimePreviewPayloadForBrowser(JSON.parse(event.data) as HostedRuntimePreviewSummary),
       );
     } catch (error) {
@@ -552,26 +554,7 @@ export function subscribeHostedRuntimePreview(
 }
 
 export async function fetchHostedRuntimeSnapshot(sessionId: string): Promise<FileMap> {
-  const response = await boundedFetch(
-    `${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`,
-    {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-      timeoutMs: HOSTED_SNAPSHOT_TIMEOUT_MS,
-      label: 'hosted-runtime/snapshot',
-    },
-  );
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Hosted runtime snapshot failed with status ${response.status}`);
-  }
-
-  const payload = (await response.json()) as { files?: FileMap };
-
-  return payload.files || {};
+  return readRuntimeSnapshot(`${getHostedRuntimeBaseUrl()}/sessions/${encodeURIComponent(sessionId)}/snapshot`);
 }
 
 export async function reportHostedRuntimePreviewAlert(sessionId: string, alert: ActionAlert) {

@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react';
 import { json, type HeadersFunction, type LinksFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData, useRevalidator } from '@remix-run/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from '@bolt/project/lib/stores/theme';
@@ -17,6 +17,8 @@ import { getPublicUrlConfig } from '@bolt/core/lib/public-urls';
 import { ProfileProvider } from './lib/profile-context';
 import { resolveProfileSession } from './lib/.server/profile-session';
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
+import { MagnetApiBanner } from './components/header/MagnetApiBanner';
+import { isSingleUserMode } from './lib/.server/self-host';
 
 import 'virtual:uno.css';
 
@@ -68,6 +70,7 @@ export const loader = async ({ context, request }: LoaderFunctionArgs) => {
   return json({
     publicUrls: getPublicUrlConfig(),
     profile: await resolveProfileSession(request, runtimeEnv),
+    singleUser: isSingleUserMode(runtimeEnv),
   });
 };
 
@@ -103,8 +106,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   return (
-    <>
+    <div className="flex h-full min-h-0 w-full flex-col">
       <ClientOnly>{() => <CursorGlow />}</ClientOnly>
+      <MagnetApiBanner />
       <ClientOnly>
         {() => (
           <Suspense fallback={null}>
@@ -112,7 +116,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Suspense>
         )}
       </ClientOnly>
-      {children}
+      <div className="relative min-h-0 flex-1">{children}</div>
       <ToastContainer
         closeButton={({ closeToast }) => {
           return (
@@ -140,7 +144,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       />
       <ScrollRestoration />
       <Scripts />
-    </>
+    </div>
   );
 }
 
@@ -149,6 +153,17 @@ import { logStore } from '@bolt/project/lib/stores/logs';
 export default function App() {
   const theme = useStore(themeStore);
   const data = useLoaderData<typeof loader>();
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === 'bolt-profile-owner' || event.key === null) {
+        revalidator.revalidate();
+      }
+    };
+    window.addEventListener('storage', changed);
+
+    return () => window.removeEventListener('storage', changed);
+  }, [revalidator]);
 
   useEffect(() => {
     logStore.logSystem('Application initialized', {
@@ -200,10 +215,8 @@ export default function App() {
 
   return (
     <PublicUrlConfigProvider value={data.publicUrls}>
-      <ProfileProvider profile={data.profile}>
-        <Layout>
-          <Outlet />
-        </Layout>
+      <ProfileProvider profile={data.profile} singleUser={data.singleUser}>
+        <Outlet />
       </ProfileProvider>
     </PublicUrlConfigProvider>
   );

@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { IconButton } from '~/components/ui/IconButton';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { recordPreviewVerification } from '@bolt/project/lib/runtime/preview-verification-event';
 import {
   extractHostedRuntimeSessionIdFromPreviewBaseUrl,
   fetchHostedRuntimeSnapshot,
@@ -296,6 +297,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       }
 
       await inspectHostedPreviewIframe(previewSessionId, signature);
+      recordPreviewVerification(status, workbenchStore.stepRunnerEvents, Boolean(lastPreviewAlertSignatureRef.current));
 
       const previewTarget = statusPreview || activePreview;
 
@@ -505,13 +507,11 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       void inspectHostedPreview();
 
       const unsubscribe = subscribeHostedRuntimePreview(previewSessionId, {
-        onMessage: (status) => {
-          if (cancelled) {
-            return;
+        onMessage: async (status) => {
+          if (!cancelled) {
+            hostedPreviewSubscriptionHealthyRef.current = true;
+            await applyHostedPreviewStatus(status);
           }
-
-          hostedPreviewSubscriptionHealthyRef.current = true;
-          void applyHostedPreviewStatus(status);
         },
         onError: () => {
           hostedPreviewSubscriptionHealthyRef.current = false;

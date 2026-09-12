@@ -4,8 +4,9 @@ import {
   type HostedPremiumStatus,
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { FreePlanPausedModal } from './FreePlanPausedModal.client';
-import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton';
 import { shouldRefreshProjectEntitlement, USAGE_BALANCE_REFRESH_INTERVAL_MS } from './usage-balance-refresh';
+import { useProfile } from '~/lib/profile-context';
 
 type FreeUsageBalance = {
   plan: 'free' | 'custom-domain';
@@ -35,11 +36,19 @@ function readDismissedResetAt() {
 }
 
 export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: boolean }) {
+  const profile = useProfile();
   const [freeBalance, setFreeBalance] = useState<FreeUsageBalance | null>(null);
   const [customDomain, setCustomDomain] = useState<HostedPremiumStatus | null>(null);
   const [dismissedResetAt, setDismissedResetAt] = useState<string | null>(readDismissedResetAt);
 
   useEffect(() => {
+    setFreeBalance(null);
+    setCustomDomain(null);
+
+    if (!profile) {
+      return undefined;
+    }
+
     let cancelled = false;
     let refreshInFlight = false;
     let lastProjectRefreshAt = 0;
@@ -113,7 +122,7 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
       window.removeEventListener('bolt-usage-balance-refresh', refreshWhenVisible);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, []);
+  }, [profile?.id]);
 
   const projectCustomDomainActive = customDomain?.status === 'active';
   const accountCustomDomainActive = freeBalance?.plan === 'custom-domain';

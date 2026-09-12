@@ -7,6 +7,9 @@
   "exports": {
     "./*": "./src/*"
   },
+  "dependencies": {
+    "ipaddr.js": "2.3.0"
+  },
   "devDependencies": {
     "eslint": "9.39.4",
     "pnpm": "9.14.4",

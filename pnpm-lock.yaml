@@ -595,6 +595,10 @@ importers:
         version: 2.1.9(@types/node@25.5.0)(jsdom@26.1.0)(lightningcss@1.27.0)(sass-embedded@1.98.0)(sass@1.98.0)(terser@5.46.1)
 
   modules/core:
+    dependencies:
+      ipaddr.js:
+        specifier: 2.3.0
+        version: 2.3.0
     devDependencies:
       eslint:
         specifier: 9.39.4

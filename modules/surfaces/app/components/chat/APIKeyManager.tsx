@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { IconButton } from '~/components/ui/IconButton';
 import type { ProviderInfo } from '@bolt/agent/types/model';
 import { getApiKeysFromCookies, setApiKeysCookie } from '@bolt/agent/lib/runtime/api-key-storage';
+import { useProfile } from '~/lib/profile-context';
 
 interface APIKeyManagerProps {
   provider: ProviderInfo;
@@ -16,20 +17,28 @@ const providerEnvKeyStatusCache: Record<string, boolean> = {};
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, setApiKey }) => {
+  const profile = useProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [isEnvKeySet, setIsEnvKeySet] = useState(false);
 
+  useEffect(() => {
+    setTempKey(apiKey);
+
+    if (!apiKey) {
+      setIsEditing(false);
+    }
+  }, [apiKey]);
+
   // Reset states and load saved key when provider changes
   useEffect(() => {
     // Load saved API key from cookies for this provider
-    const savedKeys = getApiKeysFromCookies();
+    const savedKeys = getApiKeysFromCookies(profile?.id);
     const savedKey = savedKeys[provider.name] || '';
 
     setTempKey(savedKey);
-    setApiKey(savedKey);
     setIsEditing(false);
-  }, [provider.name]);
+  }, [provider.name, profile?.id]);
 
   const checkEnvApiKey = useCallback(async () => {
     // Check cache first
@@ -63,39 +72,47 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
     setApiKey(normalizedKey);
 
     // Save to cookies
-    const currentKeys = getApiKeysFromCookies();
+    const currentKeys = getApiKeysFromCookies(profile?.id);
     const newKeys = { ...currentKeys, [provider.name]: normalizedKey };
-    setApiKeysCookie(newKeys, 365);
+    setApiKeysCookie(newKeys, 365, profile?.id);
 
     setIsEditing(false);
   };
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-2 py-3 px-1">
-      <div className="flex min-w-0 items-center gap-2 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-bolt-elements-textSecondary">{provider?.name} API Key:</span>
-          {!isEditing && (
-            <div className="flex items-center gap-2">
-              {apiKey ? (
-                <>
-                  <div className="i-ph:check-circle-fill text-green-500 w-4 h-4" />
-                  <span className="text-xs text-green-500">Set via UI</span>
-                </>
-              ) : isEnvKeySet ? (
-                <>
-                  <div className="i-ph:check-circle-fill text-green-500 w-4 h-4" />
-                  <span className="text-xs text-green-500">Set via environment variable</span>
-                </>
-              ) : (
-                <>
-                  <div className="i-ph:x-circle-fill text-red-500 w-4 h-4" />
-                  <span className="text-xs text-red-500">Not Set (Please set via UI or ENV_VAR)</span>
-                </>
-              )}
-            </div>
-          )}
+    <div className="flex flex-wrap items-start justify-between gap-2 px-1 py-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-bolt-elements-textSecondary">{provider?.name} API Key:</span>
+            {!isEditing && (
+              <div className="flex items-center gap-2">
+                {apiKey ? (
+                  <>
+                    <div className="i-ph:check-circle-fill text-green-500 w-4 h-4" />
+                    <span className="text-xs text-green-500">Set via UI</span>
+                  </>
+                ) : isEnvKeySet ? (
+                  <>
+                    <div className="i-ph:check-circle-fill text-green-500 w-4 h-4" />
+                    <span className="text-xs text-green-500">Set via environment variable</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="i-ph:x-circle-fill text-red-500 w-4 h-4" />
+                    <span className="text-xs text-red-500">Not Set (Please set via UI or ENV_VAR)</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+        {provider.name === 'MagnetAPI' ? (
+          <p className="max-w-xl text-xs leading-5 text-bolt-elements-textSecondary">
+            Sign in to MagnetAPI, buy a plan, create a User API Key in its dashboard, then paste that key here. Your key
+            is used only for requests you send with the MagnetAPI provider.
+          </p>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">

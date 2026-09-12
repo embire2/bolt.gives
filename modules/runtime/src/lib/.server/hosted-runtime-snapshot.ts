@@ -1,4 +1,5 @@
 import type { FileMap } from '@bolt/core/types/files';
+import { readRuntimeSnapshot } from '@bolt/runtime/lib/runtime/snapshot-transport';
 import type { ActionAlert } from '@bolt/core/types/actions';
 
 const LOCAL_RUNTIME_BASE_URL = 'http://127.0.0.1:4321/runtime';
@@ -95,6 +96,16 @@ function isTransientHostedPreviewError(status: HostedRuntimePreviewStatus | null
 }
 
 export function resolveHostedRuntimeBaseUrlForRequest(requestUrl: string) {
+  /*
+   * The Pages build can shim the bare process identifier; the Node host's
+   * trusted runtime configuration remains on globalThis.process.
+   */
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+
+  if (env?.BOLT_SELF_HOST_MODE === 'single-user' && env.BOLT_RUNTIME_CONTROL_URL) {
+    return env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
+  }
+
   const url = new URL(requestUrl);
   const host = url.hostname;
 
@@ -121,21 +132,8 @@ export async function fetchHostedRuntimeSnapshotForRequest(options: {
   }
 
   const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(requestUrl);
-  const response = await fetch(`${runtimeBaseUrl}/sessions/${encodeURIComponent(trimmedSessionId)}/snapshot`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
 
-  if (!response.ok) {
-    return null;
-  }
-
-  const payload = (await response.json()) as { files?: FileMap };
-  const files = payload.files || {};
-
-  return Object.keys(files).length > 0 ? files : null;
+  return readRuntimeSnapshot(`${runtimeBaseUrl}/sessions/${encodeURIComponent(trimmedSessionId)}/snapshot`);
 }
 
 export async function fetchHostedRuntimePreviewStatusForRequest(options: {

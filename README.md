@@ -14,6 +14,8 @@
 
 > **Reliability update, 12 September 2026:** v4.0.1 remains the stable web release. Our latest audit found 12 code/test-contract issues, including a broken pricing page and oversized/stale snapshots. A real alpha1 project reached Preview, accepted a follow-up, and restored after reload, but the run still recorded a snapshot 502. **v4.1.0 will prioritize these bugs and a separately versioned native Windows rewrite, not more feature sprawl.** Read the [findings, evidence, and small implementation tasks](docs/quality/2026-09-12-v4.1-audit.md). This is a plan, not a claim that the fixes are shipped. Model/database descriptions below include unreleased development work; live instances may differ.
 
+**Implementation checkpoint, not a release:** Phase 2 is now authorized and underway. The validation branch includes bounded/current snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, less misleading commentary, accessible onboarding, and installer recovery changes. **1,262 tests pass**; the [Phase 1 evidence](docs/quality/2026-09-12-phase1-review.md) and [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md) distinguish successful browser journeys from failed repeat runs and pending checks. **Production/fleet deployment is held:** generated Preview still needs an isolated browser-origin boundary with verified TLS/routing, and generated commands must stop inheriting the live root runtime identity. Wildcard DNS already points to this host; DNS is not managed in the configured Cloudflare account. Windows native parity, real Stripe test-mode fulfillment, and clean-OS installation are not certified by these local results.
+
 ## What You Can Do
 
 Type a request such as:
@@ -131,7 +133,9 @@ The PostgreSQL database used by bolt.gives itself for profiles or operator data 
 2. In Supabase, open **Project Settings > API**.
 3. In bolt.gives, open **Database > Supabase**.
 4. Paste the **Project URL** and **Publishable key** or legacy **anon key**.
-5. Select **Connect Supabase** and continue prompting.
+5. Select **Connect Supabase**, then restart an existing Preview to apply the new environment.
+
+In the v4.1 development build, Supabase reports **configured, not verified**. Saving a URL/key is not proof of network access, permissions, or RLS correctness. Test a real database operation in your app. Use **Replace credentials** for rotation; an unsuccessful replacement preserves the previous record. Restart Preview after replacement or disconnection because existing processes retain their old environment.
 
 The runtime provides these variables to the project:
 
@@ -191,6 +195,8 @@ The first audit run hit a Code/Preview switching timeout. A second completed the
 
 [ROADMAP.md](ROADMAP.md) divides each finding into owned, reviewable subtasks with acceptance tests. Existing database-optional and MagnetAPI work must pass those gates before release. New feature expansion is deferred. A version number, screenshot, or HTTP 200 alone will not qualify v4.1.0 for release.
 
+Work is split into two checkpoints. **Phase 1** addresses B01/B02/B03/B04/B05/B12. **Phase 2 is authorized and in progress**, addressing B06-B10 plus installer recovery and broader release evidence. Permission to deploy does not waive the Preview-origin security blocker or turn local tests into fleet, payment, clean-OS, or native-Windows certification.
+
 ### A Truly Native Windows Client
 
 The preferred rewrite is **C++20 with C++/WinRT, WinUI 3/XAML, and the Windows App SDK**, developed and tested in a Windows environment. Native controls will handle authentication, projects, chat, editor, terminal, settings, and deployments. WebView2 is allowed only for generated-app Preview, not for loading the bolt.gives website as the application. Microsoft's [native Windows guidance](https://learn.microsoft.com/en-us/windows/apps/get-started/) supports WinUI 3 with C++ or C#.
@@ -203,7 +209,7 @@ First we will prove a small editor/terminal/Preview slice and measure it against
 
 The supported self-host target is Ubuntu 20.04 or newer. A current Ubuntu LTS release is recommended.
 
-> **Known installer/onboarding gap (B04):** the current no-database default can start services but cannot complete mandatory profile registration without platform profile storage. Until this is fixed, configure the platform database or use `--with-postgres` on an isolated test server. This database is for bolt.gives accounts, not a requirement for generated projects. The installer smoke passed syntax/configuration checks, not a clean-machine E2E install.
+> **Stable versus development (B04):** the stable no-database installer has a mandatory-registration gap. The unreleased Phase 1 installer instead creates a private single-owner login without PostgreSQL or SMTP. Until those changes are released, stable installs should configure platform profile storage or use `--with-postgres`. Installer configuration/repair tests and isolated application journeys are not proof of a complete clean-machine apt/systemd/Caddy installation.
 
 ### Requirements
 
@@ -224,7 +230,7 @@ chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
 
-The installer:
+The development installer:
 
 - verifies Ubuntu and refuses root execution;
 - installs Node.js 22 and pnpm 9.14.4;
@@ -234,6 +240,30 @@ The installer:
 - creates app, runtime, collaboration, and web-browsing systemd services;
 - optionally configures Caddy and HTTPS;
 - leaves PostgreSQL off by default.
+
+Recovery is bounded and explicit: failed downloads/package commands retry; dependency repairs retain the frozen lockfile; failed builds restore previous build artifacts; invalid Caddy configuration is rolled back without forcibly restarting the shared proxy. Repairs never reset an existing PostgreSQL role's password or take over another role's database. A failed Git update leaves the current installation and private configuration in place. Already-running services are explicitly restarted after a successful update, and health checks use finite timeouts. Rerun the same command after correcting a reported prerequisite. Disk exhaustion, invalid credentials, conflicting local changes, DNS, and operating-system reboots cannot be safely repaired by pretending success.
+
+### Windows PowerShell Setup (Development)
+
+The public [install.ps1](install.ps1) installs the **open-source server in Ubuntu on WSL2**, not the separately versioned native Windows desktop application. It supports Windows PowerShell 5.1 and PowerShell 7. Review the script in the validation checkout, then run:
+
+```powershell
+.\install.ps1 -CheckOnly
+.\install.ps1 -InstallWsl
+.\install.ps1
+```
+
+WSL installation requests administrator approval when needed. If a reboot or first-run Linux user setup is required, the script stops with instructions and can be rerun; it never silently restarts Windows or deletes a distribution. Ubuntu must use a non-root user with sudo and active systemd. See Microsoft's [WSL installation](https://learn.microsoft.com/en-us/windows/wsl/install) and [systemd configuration](https://learn.microsoft.com/en-us/windows/wsl/wsl-config#systemd-support) guidance. Downloads have bounded retries; nonzero Linux exit codes remain failures. No operator credentials are embedded.
+
+Local PowerShell parser/contract tests pass; a full Windows/WSL installation and reboot-resume journey remains a release gate. The new CI workflow exercises Windows PowerShell 5.1/7 contracts and disposable Ubuntu 22.04/24.04 clean/repair installations with and without platform PostgreSQL. A workflow definition is not a passing CI run.
+
+### Single-Owner Mode (Unreleased)
+
+On a fresh database-free Phase 1 installation, the installer sets `BOLT_SELF_HOST_MODE=single-user` and generates `BOLT_SELF_HOST_ACCESS_TOKEN` in the protected `.env.local` file inside the installation directory (by default, `$HOME/bolt.gives`). Open that file privately on your server, enter the owner token in the browser's **Your private workspace** form, then select an AI provider and enter your own API key. Do not share or commit the owner token.
+
+This is one private owner, not an unauthenticated multi-user service. The profile and hashed sessions survive runtime restarts in a mode-`0600` file outside project source. Repair installs preserve the token; explicitly rotating it invalidates prior sessions while retaining the owner identity. Runtime HTTP and Preview WebSocket requests pass through owner authentication. Keep the runtime listener private on loopback.
+
+Existing platform-PostgreSQL installations are not silently converted to single-owner mode. New `--with-postgres` installs retain the hosted profile workflow. Generated projects remain database-free in either mode. A fresh self-host does not inherit the hosted FREE operator key, Stripe settings, SMTP credentials, or Cloudflare account.
 
 To install optional PostgreSQL for bolt.gives profile/admin data:
 

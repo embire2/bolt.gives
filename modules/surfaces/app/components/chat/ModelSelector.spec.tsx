@@ -29,7 +29,7 @@ const freeProvider: ProviderInfo = {
   staticModels: [
     {
       name: 'gpt-5.6-sol',
-      label: 'ChatGPT-5.6 SOL',
+      label: 'ChatGPT-Luna - Medium effort',
       provider: 'FREE',
       maxTokenAllowed: 64000,
     },
@@ -83,7 +83,7 @@ describe('ModelSelector', () => {
       />,
     );
 
-    expect(screen.getAllByRole('combobox')[1].textContent).toContain('ChatGPT-5.6 SOL');
+    expect(screen.getAllByRole('combobox')[1].textContent).toContain('ChatGPT-Luna - Medium effort');
     expect(screen.queryByText('Select model')).toBeNull();
   });
 

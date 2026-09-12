@@ -1,7 +1,10 @@
-import type { MetaFunction } from '@remix-run/cloudflare';
-import { Link, useSearchParams } from '@remix-run/react';
+import { json, type LoaderFunctionArgs, type MetaFunction } from '@remix-run/cloudflare';
+import { Link, useLoaderData, useRevalidator } from '@remix-run/react';
+import { useEffect, useRef } from 'react';
 import { APP_VERSION } from '@bolt/core/lib/version';
-import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
+import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
+import { getProfileBillingStatus } from '~/lib/.server/profile-session';
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton';
 
 export const meta: MetaFunction = () => [
   { title: `Custom Domain Pricing | bolt.gives v${APP_VERSION}` },
@@ -11,6 +14,32 @@ export const meta: MetaFunction = () => [
       'Compare bolt.gives FREE with Custom Domain: 100 free Agent tokens daily or 10,000 Agent tokens, Deep Build orchestration, verified previews, and custom-domain hosting at the $5/month launch price.',
   },
 ];
+
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const billingResult = new URL(request.url).searchParams.get('billing');
+  let billingState: 'none' | 'pending' | 'active' | 'unavailable' = 'none';
+
+  if (billingResult === 'success' || billingResult === 'cancelled') {
+    try {
+      const billing = await getProfileBillingStatus(request, resolveRuntimeEnvFromContext(context));
+
+      if (
+        billing?.plan === 'custom-domain' &&
+        billing.status === 'active' &&
+        billing.periodEnd &&
+        Date.parse(billing.periodEnd) > Date.now()
+      ) {
+        billingState = 'active';
+      } else if (billing?.status === 'pending') {
+        billingState = 'pending';
+      }
+    } catch {
+      billingState = 'unavailable';
+    }
+  }
+
+  return json({ billingResult, billingState }, { headers: { 'Cache-Control': 'private, no-store' } });
+}
 
 const FEATURES = [
   {
@@ -44,11 +73,24 @@ const WORKFLOW = [
 ];
 
 export default function PricingPage() {
-  const [searchParams] = useSearchParams();
-  const billingResult = searchParams.get('billing');
+  const { billingResult, billingState } = useLoaderData<typeof loader>();
+  const revalidator = useRevalidator();
+  const checks = useRef(0);
+  useEffect(() => {
+    if (billingState !== 'pending' || revalidator.state !== 'idle' || checks.current >= 6) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      checks.current += 1;
+      revalidator.revalidate();
+    }, 10_000);
+
+    return () => clearTimeout(timer);
+  }, [billingState, revalidator]);
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f2efe6] text-[#11130f]">
+    <main className="h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#f2efe6] text-[#11130f]">
       <div
         className="pointer-events-none fixed inset-0 opacity-40"
         style={{
@@ -71,14 +113,26 @@ export default function PricingPage() {
           </Link>
         </header>
 
-        {billingResult === 'success' ? (
-          <div className="border-x border-b border-[#11130f] bg-[#d9ff43] px-5 py-4 font-mono text-sm font-bold">
-            Payment received. Stripe is confirming the signed webhook now; your 10,000-token account balance will appear
-            automatically when activation completes.
-          </div>
-        ) : billingResult === 'cancelled' ? (
-          <div className="border-x border-b border-[#11130f] bg-[#f2efe6] px-5 py-4 font-mono text-sm font-bold">
-            Checkout was cancelled. Your current plan and token balance were not changed.
+        {billingResult === 'success' || billingResult === 'cancelled' ? (
+          <div
+            role="status"
+            className="border-x border-b border-[#11130f] bg-[#f2efe6] px-5 py-4 font-mono text-sm font-bold"
+          >
+            {billingState === 'active'
+              ? 'Your Custom Domain plan is active, confirmed by the billing server.'
+              : billingState === 'unavailable'
+                ? 'Billing verification is temporarily unavailable. No payment is confirmed on this page.'
+                : billingState === 'pending'
+                  ? 'Your upgrade is awaiting signed payment confirmation. We will check again shortly; do not pay twice.'
+                  : 'You have returned from Checkout. No upgrade is confirmed for this account; the return URL is not proof of payment.'}
+            <button
+              type="button"
+              disabled={revalidator.state !== 'idle'}
+              onClick={() => revalidator.revalidate()}
+              className="ml-3 underline disabled:opacity-50"
+            >
+              Check account status
+            </button>
           </div>
         ) : null}
 

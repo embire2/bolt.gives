@@ -2,10 +2,11 @@ const LOCAL_RUNTIME_CONTROL_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const CANONICAL_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
 type RuntimeEnv = Record<string, string | undefined>;
 
-class RuntimeControlError extends Error {
+export class RuntimeControlError extends Error {
   constructor(
     message: string,
     readonly cloudflareDirectIpAccess = false,
+    readonly status = 500,
   ) {
     super(message);
     this.name = 'RuntimeControlError';
@@ -57,6 +58,7 @@ async function fetchRuntimeControlJsonFromBase<T>(baseUrl: string, pathname: str
     throw new RuntimeControlError(
       responseText || `Runtime control request failed with status ${response.status}`,
       /error code:\s*1003/i.test(responseText),
+      response.status,
     );
   }
 

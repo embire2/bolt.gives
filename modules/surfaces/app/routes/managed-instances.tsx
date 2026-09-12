@@ -541,8 +541,8 @@ export default function ManagedInstancesPage() {
                   <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                   <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
                   <li>
-                    FREE boots with ChatGPT-5.6 SOL selected and lets users switch to Opus 4.8, Sonnet 5, or Fable 5
-                    without leaving their project.
+                    FREE boots with ChatGPT-Luna at medium effort without requiring a provider key. Users can connect a
+                    personal MagnetAPI key for its broader Frontier model catalog without leaving their project.
                   </li>
                   <li>
                     Your registration profile, including your email address, is stored in the private admin panel for

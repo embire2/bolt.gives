@@ -62,7 +62,18 @@ describe('index route fallback shell', () => {
       ),
     ).toBeTruthy();
     expect(screen.getAllByText('FREE').length).toBeGreaterThan(0);
-    expect(screen.getByText(/ChatGPT-5.6 SOL/i)).toBeTruthy();
+    expect(screen.getByText(/ChatGPT-Luna - Medium effort/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
+  });
+
+  it('does not initialize the private workspace before a single-user owner signs in', async () => {
+    const { ProfileProvider } = await import('~/lib/profile-context');
+    const { ChatWorkspace } = await import('~/routes/_index');
+    render(
+      <ProfileProvider profile={null} singleUser>
+        <ChatWorkspace />
+      </ProfileProvider>,
+    );
+    expect(screen.queryByText(/Preparing the coding workspace/)).toBeNull();
   });
 });

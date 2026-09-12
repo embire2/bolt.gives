@@ -7,6 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { proxyPreviewWebSocket } from '@bolt/surfaces/lib/server/preview-websocket.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
@@ -244,7 +245,7 @@ export async function startProductionServer(options = resolveProductionServerCon
       await writeWorkerResponse(workerResponse, response);
     })().catch((error) => {
       writeError(
-        `[pages-production] request failed: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+        `[pages-production] ${request.method} ${String(request.url || '').split('?')[0]} failed (${error?.cause?.code || error?.code || 'unknown'}): ${error instanceof Error ? error.stack || error.message : String(error)}`,
       );
 
       if (!response.headersSent) {
@@ -255,6 +256,17 @@ export async function startProductionServer(options = resolveProductionServerCon
         response.end('Internal server error');
       }
     });
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    void proxyPreviewWebSocket({
+      request,
+      socket,
+      head,
+      url: buildRequestUrl(request),
+      env,
+      authorize: (check) => worker.fetch(check, env, { waitUntil() {}, passThroughOnException() {} }),
+    }).catch(() => socket.destroy());
   });
 
   server.requestTimeout = 0;

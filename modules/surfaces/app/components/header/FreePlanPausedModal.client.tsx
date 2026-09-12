@@ -1,4 +1,4 @@
-import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton.client';
+import { BillingUpgradeButton } from '~/components/billing/BillingUpgradeButton';
 
 type FreePlanPausedModalProps = {
   open: boolean;

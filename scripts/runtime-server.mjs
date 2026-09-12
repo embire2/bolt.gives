@@ -10,6 +10,21 @@ import { spawn } from 'node:child_process';
 import net from 'node:net';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
+import { previewRequestHeaders } from '@bolt/runtime/server/preview-request-headers.mjs';
+import {
+  GENERATED_WORKSPACE_DIRECTORIES,
+  filterWorkspaceSource,
+  isWorkspaceSourcePath,
+} from '@bolt/core/lib/workspace-source.mjs';
+import {
+  createSingleUserProfiles,
+  handleSingleUserProfileRequest,
+} from '@bolt/control-plane/server/single-user-profile.mjs';
+import {
+  readWorkspaceSnapshot,
+  reconcileWorkspaceSnapshot,
+  walkWorkspaceSource,
+} from '@bolt/runtime/server/workspace-snapshot.mjs';
 import {
   createPreviewProbeCoordinator,
   extractConfiguredStartPort,
@@ -225,6 +240,7 @@ export function resolveRuntimeWorkspaceRoot(
 }
 
 const PERSIST_ROOT = resolveRuntimeWorkspaceRoot();
+const singleUserProfiles = createSingleUserProfiles({ root: path.join(PERSIST_ROOT, 'owner-auth') });
 const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6142';
 const MANAGED_INSTANCE_NODE_OPTIONS = process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
@@ -257,7 +273,7 @@ const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROB
 const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_WINDOW_MS || '12000');
 const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
 const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500, 3000, 4000, 5000, 7000, 8000];
-const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
+const PRESERVED_DIRS = GENERATED_WORKSPACE_DIRECTORIES;
 const VITE_MAIN_ENTRY_SRC_RE =
   /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
 const PREVIEW_ERROR_PATTERNS = [
@@ -481,7 +497,6 @@ const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
 const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
-const SNAPSHOT_TEXT_FILE_BYTES_LIMIT = Number(process.env.RUNTIME_SNAPSHOT_TEXT_FILE_BYTES_LIMIT || '1048576');
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
 const HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS = {
@@ -3077,7 +3092,9 @@ export function settleHealthyQueuedPreviewRepair(session, probe) {
 }
 
 function cloneFileMap(fileMap) {
-  return JSON.parse(JSON.stringify(fileMap || {}));
+  return Object.fromEntries(
+    Object.entries(filterWorkspaceSource(fileMap || {})).map(([key, value]) => [key, value ? { ...value } : value]),
+  );
 }
 
 function getFileMapEntry(fileMap, filePath) {
@@ -3234,7 +3251,7 @@ export function mergeWorkspaceFileMap(currentFileMap, incomingFileMap, options =
   const { prune = false } = options;
   const nextFileMap = prune ? {} : cloneFileMap(currentFileMap || {});
 
-  for (const [filePath, dirent] of Object.entries(incomingFileMap || {})) {
+  for (const [filePath, dirent] of Object.entries(filterWorkspaceSource(incomingFileMap || {}))) {
     if (dirent === undefined || dirent === null) {
       delete nextFileMap[filePath];
       continue;
@@ -5233,50 +5250,14 @@ function scheduleHostedAutoStartAfterSync(session) {
   }, 300);
 }
 
-async function walkWorkspace(rootDir, relativeDir = '') {
-  const absoluteDir = path.join(rootDir, relativeDir);
-  let entries = [];
-
-  try {
-    entries = await fs.readdir(absoluteDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
+async function walkWorkspace(rootDir) {
   const results = [];
 
-  for (const entry of entries) {
-    const relativePath = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
-
-    if (PRESERVED_DIRS.has(entry.name) && !relativeDir) {
-      continue;
-    }
-
-    if (entry.isDirectory()) {
-      results.push({ path: relativePath, type: 'dir' });
-      results.push(...(await walkWorkspace(rootDir, relativePath)));
-    } else if (entry.isFile()) {
-      results.push({ path: relativePath, type: 'file' });
-    }
+  for await (const entry of walkWorkspaceSource(rootDir)) {
+    results.push(entry);
   }
 
   return results;
-}
-
-function isBinaryWorkspaceBuffer(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    return false;
-  }
-
-  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
-
-  for (const value of sample) {
-    if (value === 0) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function fileMapContainsStarterPlaceholder(fileMap) {
@@ -5294,72 +5275,11 @@ function fileMapContainsStarterPlaceholder(fileMap) {
 }
 
 export async function buildWorkspaceFileMapFromDisk(session) {
-  const entries = await walkWorkspace(session.dir);
-  const nextFiles = {};
-
-  for (const entry of entries) {
-    const absolutePath = path.join(session.dir, entry.path);
-    const workbenchPath = path.posix.join(WORK_DIR, entry.path);
-
-    if (entry.type === 'dir') {
-      nextFiles[workbenchPath] = {
-        type: 'folder',
-      };
-      continue;
-    }
-
-    const buffer = await fs.readFile(absolutePath);
-    const isBinary = isBinaryWorkspaceBuffer(buffer);
-    const content = isBinary
-      ? buffer.toString('base64')
-      : buffer.subarray(0, SNAPSHOT_TEXT_FILE_BYTES_LIMIT).toString('utf8');
-
-    nextFiles[workbenchPath] = {
-      type: 'file',
-      content,
-      isBinary,
-    };
-  }
-
-  return nextFiles;
+  return readWorkspaceSnapshot(session.dir, WORK_DIR);
 }
 
-export async function resolveSessionSnapshotFiles(session) {
-  const currentFiles = session.currentFileMap || {};
-  const currentFileCount = Object.keys(currentFiles).length;
-  const currentHasStarterPlaceholder = fileMapContainsStarterPlaceholder(currentFiles);
-
-  let diskFiles = null;
-
-  try {
-    diskFiles = await buildWorkspaceFileMapFromDisk(session);
-  } catch {
-    diskFiles = null;
-  }
-
-  if (!diskFiles) {
-    return currentFiles;
-  }
-
-  const diskFileCount = Object.keys(diskFiles).length;
-
-  if (diskFileCount === 0) {
-    return currentFiles;
-  }
-
-  const diskHasStarterPlaceholder = fileMapContainsStarterPlaceholder(diskFiles);
-  const shouldUseDiskSnapshot =
-    currentFileCount === 0 ||
-    diskFileCount > currentFileCount ||
-    (currentHasStarterPlaceholder && !diskHasStarterPlaceholder);
-
-  if (!shouldUseDiskSnapshot) {
-    return currentFiles;
-  }
-
-  session.currentFileMap = cloneFileMap(diskFiles);
-
-  return diskFiles;
+export async function resolveSessionSnapshotFiles(session, options = {}) {
+  return reconcileWorkspaceSnapshot(session, { ...options, workDir: WORK_DIR });
 }
 
 function toRelativeWorkspacePath(filePath) {
@@ -5386,7 +5306,7 @@ function collectComparableWorkspaceFiles(fileMap) {
 
     const relativePath = toRelativeWorkspacePath(filePath);
 
-    if (!relativePath) {
+    if (!relativePath || !isWorkspaceSourcePath(relativePath)) {
       continue;
     }
 
@@ -5438,7 +5358,7 @@ export async function syncWorkspaceSnapshot(session, fileMap, options = {}) {
   const desiredFiles = new Map();
   const desiredDirs = new Set();
 
-  for (const [absolutePath, dirent] of Object.entries(fileMap || {})) {
+  for (const [absolutePath, dirent] of Object.entries(filterWorkspaceSource(fileMap || {}))) {
     if (!dirent) {
       continue;
     }
@@ -5472,13 +5392,17 @@ export async function syncWorkspaceSnapshot(session, fileMap, options = {}) {
   const existingEntries = await walkWorkspace(session.dir);
 
   if (prune) {
-    for (const entry of existingEntries) {
+    for (const entry of existingEntries.reverse()) {
       if (entry.type === 'file' && !desiredFiles.has(entry.path)) {
         await fs.rm(path.join(session.dir, entry.path), { force: true });
       }
 
       if (entry.type === 'dir' && !desiredDirs.has(entry.path)) {
-        await fs.rm(path.join(session.dir, entry.path), { recursive: true, force: true });
+        await fs.rmdir(path.join(session.dir, entry.path)).catch((error) => {
+          if (!['ENOTEMPTY', 'ENOENT'].includes(error.code)) {
+            throw error;
+          }
+        });
       }
     }
   }
@@ -6976,7 +6900,7 @@ async function proxyPublishedProjectRequest(req, res, deployment) {
       method: req.method,
       path: req.url || '/',
       headers: {
-        ...req.headers,
+        ...previewRequestHeaders(req.headers),
         host: `${HOST}:${port}`,
       },
     },
@@ -7996,7 +7920,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       method: req.method,
       path: upstreamPath,
       headers: {
-        ...req.headers,
+        ...previewRequestHeaders(req.headers),
         host: `${HOST}:${port}`,
       },
     },
@@ -8125,10 +8049,7 @@ function proxyUpgradeToPreviewPort(req, socket, head, { portRaw, upstreamPath })
   const upstreamSocket = net.connect(Number(portRaw), HOST, () => {
     const headerLines = [`GET ${upstreamPath} HTTP/1.1`];
 
-    for (let index = 0; index < req.rawHeaders.length; index += 2) {
-      const name = req.rawHeaders[index];
-      const value = req.rawHeaders[index + 1];
-
+    for (const [name, value] of Object.entries(previewRequestHeaders(req.headers))) {
       if (!name || value === undefined) {
         continue;
       }
@@ -8288,6 +8209,20 @@ export function createRuntimeServer() {
 
     if (pathname === '/runtime/health') {
       sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      return;
+    }
+
+    if (
+      await handleSingleUserProfileRequest({
+        profiles: singleUserProfiles,
+        req,
+        res,
+        pathname,
+        readJsonBody,
+        sendJson,
+        sendText,
+      })
+    ) {
       return;
     }
 
@@ -10364,14 +10299,21 @@ export function createRuntimeServer() {
         const session = getSession(requestedSessionId);
         void ensureRuntimeNodeWorkspaceForSession(session);
 
-        const files = await resolveSessionSnapshotFiles(session);
+        const controller = new AbortController();
+        res.once('close', () => controller.abort());
+
+        const files = await resolveSessionSnapshotFiles(session, { signal: controller.signal });
         sendJson(res, 200, {
           sessionId: requestedSessionId,
           files,
           recovery: session.previewRecovery,
         });
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect runtime snapshot');
+        sendText(
+          res,
+          error.status || 500,
+          error instanceof Error ? error.message : 'Failed to inspect runtime snapshot',
+        );
       }
       return;
     }
@@ -10841,7 +10783,7 @@ export function createRuntimeServer() {
         const requestedSessionId = normalizeSessionId(syncMatch[1]);
         const session = getSession(requestedSessionId);
         const body = await readJsonBody(req);
-        const incomingFiles = body.files || {};
+        const incomingFiles = filterWorkspaceSource(body.files || {});
         const prune = body.prune === true;
         let workspaceChanged = false;
         void ensureRuntimeNodeWorkspaceForSession(session);

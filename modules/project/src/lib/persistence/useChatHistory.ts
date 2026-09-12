@@ -91,6 +91,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?:
       } catch (error) {
         console.error('Failed to save snapshot:', error);
         toast.error('Failed to save chat snapshot.');
+        throw error;
       }
     },
     [db],

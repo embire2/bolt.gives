@@ -12,7 +12,7 @@ function isAgentCommentaryAnnotation(value: JSONValue): value is AgentCommentary
 
   const candidate = value as Record<string, unknown>;
 
-  return candidate.type === 'agent-commentary' && typeof candidate.message === 'string';
+  return candidate.type === 'agent-commentary' && candidate.heartbeat !== true && typeof candidate.message === 'string';
 }
 
 function isProgressAnnotation(value: JSONValue): value is ProgressAnnotation {
@@ -54,18 +54,18 @@ function getPhaseLabel(phase: AgentCommentaryAnnotation['phase']): string {
 
 function getStatusClasses(status: AgentCommentaryAnnotation['status'] | 'superseded'): string {
   if (status === 'complete' || status === 'recovered') {
-    return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+    return 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/30';
   }
 
   if (status === 'warning') {
-    return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+    return 'text-amber-800 dark:text-amber-300 bg-amber-500/10 border-amber-500/30';
   }
 
   if (status === 'superseded') {
     return 'text-bolt-elements-textTertiary bg-bolt-elements-background-depth-2 border-bolt-elements-borderColor';
   }
 
-  return 'text-sky-400 bg-sky-500/10 border-sky-500/30';
+  return 'text-sky-800 dark:text-sky-300 bg-sky-500/10 border-sky-500/30';
 }
 
 function parseContractDetail(detail: string | undefined): { keyChanges?: string; next?: string } {
@@ -110,6 +110,26 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
     return null;
   }
 
+  if (latestEvent.description === 'Preview health confirmed') {
+    return {
+      status: 'complete' as const,
+      phaseLabel: 'Ready',
+      now: 'Preview is healthy and ready for inspection.',
+      last: 'Source and runtime health checks passed. This does not confirm every requested feature.',
+      next: 'Inspect the app and enter a follow-up prompt if you want to change it.',
+    };
+  }
+
+  if (latestEvent.description === 'Preview health unavailable') {
+    return {
+      status: 'in-progress' as const,
+      phaseLabel: 'Verifying',
+      now: 'Preview has not passed its latest health check.',
+      last: 'A saved address or an earlier successful run is not current health verification.',
+      next: 'Check the runtime diagnostics while Preview health is being checked.',
+    };
+  }
+
   if (latestEvent.type === 'error') {
     return {
       status: 'warning' as const,
@@ -143,7 +163,7 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
     };
   }
 
-  if (latestEvent.type === 'complete' || latestRunCompletion || hasPreviewVerification(stepRunnerEvents)) {
+  if (hasPreviewVerification(stepRunnerEvents)) {
     return {
       status: 'complete' as const,
       phaseLabel: 'Ready',
@@ -153,6 +173,16 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
         normalizeStepDescription(latestCompletedStep?.description) ||
         'All planned execution steps completed.',
       next: 'Inspect the files and preview, or continue with the next change request.',
+    };
+  }
+
+  if (latestEvent.type === 'complete' || latestRunCompletion) {
+    return {
+      status: 'in-progress' as const,
+      phaseLabel: 'Verifying',
+      now: 'Generation finished; Preview has not yet been verified.',
+      last: normalizeStepDescription(latestCompletedStep?.output) || 'The execution stream completed.',
+      next: 'Wait for a runtime health result before using or publishing Preview.',
     };
   }
 
@@ -170,18 +200,18 @@ function summarizeStepRunnerState(stepRunnerEvents: ReturnType<typeof workbenchS
 
 function getSummaryTone(status: AgentCommentaryAnnotation['status'] | 'idle') {
   if (status === 'warning') {
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-200';
+    return 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200';
   }
 
   if (status === 'complete' || status === 'recovered') {
-    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200';
   }
 
   if (status === 'idle') {
     return 'border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary';
   }
 
-  return 'border-sky-500/30 bg-sky-500/10 text-sky-200';
+  return 'border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-200';
 }
 
 interface CommentaryFeedProps {
@@ -216,7 +246,9 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
     Boolean(stepRunnerSummary) &&
     (stepRunnerSummary?.status === 'warning' ||
       (Number.isFinite(latestStepTimestamp) && latestStepTimestamp > latestCommentaryTimestamp));
-  const previewVerified = hasPreviewVerification(stepRunnerEvents);
+  const previewVerified =
+    latestStepEvent?.description !== 'Preview health unavailable' &&
+    (hasPreviewVerification(stepRunnerEvents) || latestStepEvent?.description === 'Preview health confirmed');
   const currentStep = deriveProgressMessage(progressEvents, stepRunnerEvents);
   const hasSignals =
     commentaryEvents.length > 0 ||
@@ -346,7 +378,7 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
             );
           })}
         </div>
-      ) : (
+      ) : !previewVerified ? (
         <div
           ref={feedRef}
           className="rounded-md border border-dashed border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-3 py-3 text-xs text-bolt-elements-textSecondary"
@@ -355,7 +387,7 @@ export function CommentaryFeed(props: CommentaryFeedProps) {
           <br />
           If the provider fails before generation starts, the exact failure reason will appear here.
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

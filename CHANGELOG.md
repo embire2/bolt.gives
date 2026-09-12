@@ -4,6 +4,9 @@
 
 ### Changed
 
+- The managed FREE default is now shown as ChatGPT-Luna with medium reasoning effort while retaining the protected MagnetAPI Responses transport, quota enforcement, and existing project history.
+- Added MagnetAPI as a separate bring-your-own-key provider with authenticated live model discovery, OpenAI Responses and Anthropic Messages routing, and visible ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1 choices. Personal requests cannot fall back to the operator-funded FREE credential.
+- Added a compact site-wide MagnetAPI notice with a direct link, verified 90%-less pricing attribution, accessible controls, and persistent browser dismissal.
 - Generated projects now start without a database. Automatic local per-project PostgreSQL provisioning is disabled by default and remains an explicit operator-only compatibility option.
 - The project Database control now offers a two-field Supabase quick connect and a user-owned PostgreSQL connection string. Runtime records are stored outside generated source with mode `0600`, and only redacted connection status returns to the browser.
 - Agent prompts use runtime-injected database variables and no longer tell models to copy Supabase values into generated `.env` files.
@@ -13,17 +16,35 @@
 
 ### Fixed
 
+- Phase 1 (unreleased): excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
+- Replaced file-count snapshot freshness with bounded disk reconciliation, detected concurrent writes, preserved empty/deleted workspaces, and waited for IndexedDB transaction completion before reporting saved source.
+- Fixed `/pricing` server rendering, duplicate Checkout clicks, and error/retry behavior. Phase 2 also derives returned payment status from the billing server, bounds pending checks, and refuses to treat URL parameters or expired billing periods as proof of payment.
+- Phase 2 (unreleased): Supabase settings are labelled configured rather than healthy; PostgreSQL verification is timestamped at save time. Failed credential rotation preserves the previous record, and the UI explains Preview restart requirements after replacement/disconnection.
+- Added scrollable short-window login, a wrapping provider banner, native modal onboarding with inert background and explicit keyboard focus wrapping, and accessible status/error announcements.
+- Removed historical transport heartbeats from commentary cards, deduplicated unchanged timer reports, and stopped previous Preview verification from overriding a newer command/error. Unverified generation is not labelled Ready.
+- Corrected the Linux retry helper's false-zero exit status. Repair preserves checkout/configuration, frozen dependency versions, existing PostgreSQL passwords/ownership, and previous build artifacts on failure. Caddy validation/reload failure restores its previous configuration instead of forcing a shared-proxy restart.
+- Added public Windows PowerShell setup for the open-source server via WSL2, with prerequisite checks, explicit reboot instructions, bounded downloads, and native exit-code propagation. This is not the private native Windows desktop rewrite.
+- Added explicit single-owner no-database authentication for fresh self-hosts, persistent hashed sessions, guarded runtime/Preview access, and installer repair that preserves credentials and existing PostgreSQL configurations.
+- Fixed Node runtime request-body streaming, authenticated Preview WebSocket forwarding, and self-host runtime verification targeting. Runtime outages now return a retryable service-unavailable result at the owner guard instead of a false signed-out response.
+- Awaited asynchronous Preview event reconciliation so failed snapshots enter the existing retry path rather than becoming unhandled browser exceptions during runtime restarts.
+- Removed provider-key writes during editor initialization, rejected delayed old-account saves, cleared keys/editors across logout and tabs, and stopped the signed-out balance badge from loading an old runtime workspace.
+- Made profile timestamps deterministic across server/browser time zones to prevent hydration failures.
 - Replaced the hosted action runner's process-wide `pkill` cleanup with a session-scoped runtime request. Starting one generated project can no longer terminate Wrangler, esbuild, or another tenant's Preview process.
 - Updated the live release smoke to follow v4 Agent Mode directly instead of waiting for the retired Workspace tab.
 
 ### Security
 
+- Phase 1 public browsing uses shared public-address validation, DNS-pinned connections, bounded responses/deadlines, and revalidated redirect destinations. Removed the unprotected raw-fetch fallback and blocked private Chromium subresources and WebSockets.
+- Removed the unowned encrypted-localStorage provider-key restore path. Generated HTTP/WebSocket Preview requests no longer forward platform session, provider-key, Git-provider, or internal operator headers/cookies to generated application servers.
 - Removed Supabase access-token and credential persistence from browser local storage. Optional account discovery tokens now live only for the current browser session.
 - Supabase quick connect rejects modern secret keys and legacy service-role JWTs before they can be injected into a generated browser application.
 - PostgreSQL connections are verified server-side before storage, redacted from responses, and excluded from static Cloudflare build environments.
 
 ### Validation
 
+- The [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md) records the ongoing browser and installer gates. The new Ubuntu/Windows workflow is not represented as executed until CI evidence exists. No v4.1 production/fleet release is claimed while Preview-origin isolation remains open.
+- Phase 1 review and remaining release prerequisites are recorded in [the review checkpoint](docs/quality/2026-09-12-phase1-review.md). Browser coverage includes a disposable PostgreSQL two-profile/two-tab journey and isolated non-root FREE generation. These are not a production deployment, Stripe payment, clean-OS install, or Windows release certification.
+- Added provider transport, managed-key separation, dynamic model-catalog, medium-effort, banner visibility, and persistent-dismissal regression coverage.
 - Added runtime persistence, redaction, environment-injection, browser Database-control, prompt-context, Ubuntu-version, and database-free installer smoke coverage.
 - Generated a calendar through the real hosted-runtime browser path without a project database and verified its healthy Vite Preview and persisted runtime snapshot.
 

@@ -8,9 +8,12 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const runtimeEnv = resolveRuntimeEnvFromContext(context);
   await revokeProfileSession(request, runtimeEnv);
 
+  const headers = new Headers();
+  headers.append('Set-Cookie', await clearProfileSession(runtimeEnv));
+  headers.append('Set-Cookie', 'apiKeys=; Path=/; Max-Age=0; SameSite=Lax');
+  headers.append('Set-Cookie', 'bolt_api_key_owner=; Path=/; Max-Age=0; SameSite=Lax');
+
   return redirect('/', {
-    headers: {
-      'Set-Cookie': await clearProfileSession(runtimeEnv),
-    },
+    headers,
   });
 }

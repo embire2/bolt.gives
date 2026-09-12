@@ -41,7 +41,7 @@ import { enforceCommentaryContract } from '@bolt/agent/lib/runtime/commentary-co
 import { extractCheckpointEvents, extractExecutionFailure } from '@bolt/agent/lib/runtime/checkpoint-events';
 import {
   COMMENTARY_HEARTBEAT_INTERVAL_MS,
-  buildCommentaryHeartbeat,
+  createCommentaryHeartbeatReporter,
 } from '@bolt/agent/lib/runtime/commentary-heartbeat';
 import {
   buildHostedPreviewRecoveryPrompt,
@@ -1218,8 +1218,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             message: effectiveMessage,
             detail,
           });
-          const keyChanges = contracted.detail.match(/Key changes:\s*([\s\S]*?)(?=\nNext:|$)/i)?.[1]?.trim();
-          const nextStep = contracted.detail.match(/Next:\s*([\s\S]*?)$/i)?.[1]?.trim();
 
           const payload: AgentCommentaryAnnotation = {
             type: 'agent-commentary',
@@ -1233,15 +1231,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           };
 
           if (!options?.heartbeat) {
-            if (keyChanges) {
-              lastVisibleResultForHeartbeat = keyChanges;
-            } else {
-              lastVisibleResultForHeartbeat = contracted.message;
-            }
-
-            if (nextStep) {
-              lastProgressMessageForHeartbeat = nextStep;
-            }
+            lastVisibleResultForHeartbeat = contracted.message;
           }
 
           dataStream.writeData({
@@ -1253,19 +1243,25 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           }
         };
 
+        const reportHeartbeat = createCommentaryHeartbeatReporter();
         const startCommentaryHeartbeat = () => {
           if (commentaryHeartbeat) {
             return;
           }
 
           commentaryHeartbeat = setInterval(() => {
-            const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase, {
+            const heartbeat = reportHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase, {
               goal: latestUserGoal,
               currentStep: lastProgressMessageForHeartbeat,
               lastVisibleResult: lastVisibleResultForHeartbeat,
             });
+
+            if (!heartbeat) {
+              return;
+            }
+
             writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, {
-              usePool: true,
+              usePool: false,
               trackRunActivity: false,
               heartbeat: true,
             });

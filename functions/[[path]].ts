@@ -1,5 +1,6 @@
 import type { ServerBuild } from '@remix-run/cloudflare';
 import { createPagesFunctionHandler } from '@remix-run/cloudflare-pages';
+import { resolveProfileSession } from '../modules/surfaces/app/lib/.server/profile-session';
 import {
   createKvRateLimitStore,
   createSecurityHeaders,
@@ -155,6 +156,7 @@ async function proxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
     method: request.method,
     headers: buildHostedFreeApiProxyHeaders(request, String(env.BOLT_HOSTED_FREE_RELAY_SECRET || '')),
     body: request.body,
+    ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',
   });
 }
@@ -183,6 +185,7 @@ async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
     method: request.method,
     headers: buildRuntimeProxyHeaders(request),
     body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',
   });
 }
@@ -190,6 +193,28 @@ async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
 export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
+
+  const ownerProtected =
+    (url.pathname.startsWith('/runtime/') && url.pathname !== '/runtime/health') ||
+    ['/api/chat', '/api/llmcall', '/api/enhancer', '/api/web-search'].includes(url.pathname);
+
+  if (env.BOLT_SELF_HOST_MODE === 'single-user' && ownerProtected) {
+    try {
+      if (
+        !(await resolveProfileSession(request, env as Record<string, string | undefined>, { failOnUnavailable: true }))
+      ) {
+        return Response.json(
+          { error: 'Sign in with the owner access token before using this private workspace.' },
+          { status: 401 },
+        );
+      }
+    } catch {
+      return Response.json(
+        { error: 'The runtime is restarting or unavailable. Please retry shortly.' },
+        { status: 503, headers: { 'Retry-After': '2' } },
+      );
+    }
+  }
 
   if (shouldProxyRuntimeRequest(url.pathname)) {
     return proxyRuntimeRequest(request, env);

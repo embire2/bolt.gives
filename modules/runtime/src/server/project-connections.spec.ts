@@ -41,7 +41,12 @@ describe('user-owned project database connections', () => {
 
     expect(files).toHaveLength(1);
     expect((await fs.stat(path.join(config.secretRoot, files[0]))).mode & 0o777).toBe(0o600);
-    expect(status).toMatchObject({ provider: 'supabase', label: 'project-ref', status: 'connected' });
+    expect(status).toMatchObject({
+      provider: 'supabase',
+      label: 'project-ref',
+      status: 'configured',
+      verifiedAt: null,
+    });
     expect(JSON.stringify(status)).not.toContain('public-anon-key-value');
     expect(buildProjectConnectionEnvironment(record)).toMatchObject({
       VITE_SUPABASE_URL: 'https://project-ref.supabase.co',
@@ -87,6 +92,7 @@ describe('user-owned project database connections', () => {
     });
 
     expect(verifyPostgresConnectionFn).toHaveBeenCalledOnce();
+    expect(sanitizeProjectConnection(record)).toMatchObject({ status: 'verified', verifiedAt: record.updatedAt });
     expect(buildProjectConnectionEnvironment(record)).toMatchObject({
       DATABASE_URL: databaseUrl,
       PGHOST: 'db.example.com',
@@ -114,5 +120,39 @@ describe('user-owned project database connections', () => {
 
     await deleteProjectConnection('project-three', config);
     await expect(readProjectConnection('project-three', config)).resolves.toBeNull();
+  });
+
+  it('does not replace the last saved connection when credential rotation fails', async () => {
+    const config = await createConfig();
+    const input = { provider: 'postgresql', databaseUrl: 'postgresql://app:fixture@db.example/app' };
+    const record = await saveProjectConnection('rotation', input, config, {
+      verifyPostgresConnectionFn: async () => undefined,
+    });
+    await expect(
+      saveProjectConnection('rotation', { ...input, databaseUrl: 'postgresql://app:wrong@db.example/app' }, config, {
+        verifyPostgresConnectionFn: async () => {
+          throw new Error('fixture unreachable');
+        },
+      }),
+    ).rejects.toThrow('fixture unreachable');
+    expect(await readProjectConnection('rotation', config)).toEqual(record);
+  });
+
+  it('never labels an uncontacted Supabase origin healthy and rejects non-origin URLs', async () => {
+    const config = await createConfig();
+    const input = { provider: 'supabase', supabaseUrl: 'https://unreachable.example', anonKey: 'public-fixture-key' };
+    const record = await saveProjectConnection('offline', input, config);
+    expect(sanitizeProjectConnection(record)).toMatchObject({ status: 'configured', verifiedAt: null });
+    await expect(
+      saveProjectConnection(
+        'offline',
+        { ...input, supabaseUrl: 'https://unreachable.example/path?key=fixture' },
+        config,
+      ),
+    ).rejects.toThrow('origin');
+
+    const replaced = await saveProjectConnection('offline', { ...input, anonKey: 'replacement-fixture-key' }, config);
+    expect((await readProjectConnection('offline', config))?.anonKey).toBe('replacement-fixture-key');
+    expect(sanitizeProjectConnection(replaced)?.status).toBe('configured');
   });
 });

@@ -1,11 +1,17 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
 
 export function BillingUpgradeButton({ children, className }: { children: ReactNode; className?: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
   const startCheckout = async () => {
+    if (inFlight.current) {
+      return;
+    }
+
+    inFlight.current = true;
     setLoading(true);
     setError(null);
 
@@ -29,6 +35,7 @@ export function BillingUpgradeButton({ children, className }: { children: ReactN
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start secure Stripe Checkout.');
       setLoading(false);
+      inFlight.current = false;
     }
   };
 
@@ -37,7 +44,11 @@ export function BillingUpgradeButton({ children, className }: { children: ReactN
       <button type="button" onClick={startCheckout} disabled={loading} className={className}>
         {loading ? 'Opening secure checkout...' : children}
       </button>
-      {error ? <span className="mt-2 block text-xs font-semibold text-red-700">{error}</span> : null}
+      {error ? (
+        <span role="alert" className="mt-2 block text-xs font-semibold text-red-700">
+          {error}
+        </span>
+      ) : null}
     </span>
   );
 }

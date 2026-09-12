@@ -242,9 +242,8 @@ describe('hosted runtime client', () => {
       },
     });
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
         files: {
           '/home/project/src/App.tsx': {
             type: 'file',
@@ -253,7 +252,7 @@ describe('hosted runtime client', () => {
           },
         },
       }),
-    });
+    );
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -446,7 +445,7 @@ describe('hosted runtime client', () => {
     });
   });
 
-  it('subscribes to hosted preview events through EventSource', () => {
+  it('subscribes to hosted preview events and handles rejected async snapshot reconciliation', async () => {
     vi.stubGlobal('window', {
       location: {
         hostname: 'alpha1.bolt.gives',
@@ -509,6 +508,11 @@ describe('hosted runtime client', () => {
 
     source.onmessage?.({ data: 'not-json' });
     expect(onError).toHaveBeenCalled();
+
+    onError.mockClear();
+    onMessage.mockRejectedValueOnce(new Error('Snapshot temporarily unavailable'));
+    await source.onmessage?.({ data: JSON.stringify({ sessionId: 'abc123', status: 'starting', preview: null }) });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Snapshot temporarily unavailable' }));
 
     unsubscribe();
     expect(close).toHaveBeenCalled();

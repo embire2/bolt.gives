@@ -2,6 +2,7 @@ import type { Message } from 'ai';
 import { createScopedLogger } from '@bolt/core/utils/logger';
 import type { ChatHistoryItem } from './useChatHistory';
 import type { Snapshot } from './types'; // Import Snapshot type
+import { filterWorkspaceSource } from '@bolt/core/lib/workspace-source.mjs';
 
 export interface IChatMetadata {
   gitUrl: string;
@@ -362,7 +363,10 @@ export async function getSnapshot(db: IDBDatabase, chatId: string): Promise<Snap
     const store = transaction.objectStore('snapshots');
     const request = store.get(chatId);
 
-    request.onsuccess = () => resolve(request.result?.snapshot as Snapshot | undefined);
+    request.onsuccess = () => {
+      const snapshot = request.result?.snapshot as Snapshot | undefined;
+      resolve(snapshot ? { ...snapshot, files: filterWorkspaceSource(snapshot.files) } : undefined);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -371,9 +375,10 @@ export async function setSnapshot(db: IDBDatabase, chatId: string, snapshot: Sna
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('snapshots', 'readwrite');
     const store = transaction.objectStore('snapshots');
-    const request = store.put({ chatId, snapshot });
+    const request = store.put({ chatId, snapshot: { ...snapshot, files: filterWorkspaceSource(snapshot.files) } });
 
-    request.onsuccess = () => resolve();
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error || new Error('Snapshot transaction aborted'));
     request.onerror = () => reject(request.error);
   });
 }

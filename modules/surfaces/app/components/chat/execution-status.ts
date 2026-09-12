@@ -23,7 +23,18 @@ export function isPreviewReadyStepEvent(event: InteractiveStepRunnerEvent): bool
 }
 
 export function hasPreviewVerification(stepRunnerEvents: InteractiveStepRunnerEvent[]): boolean {
-  return stepRunnerEvents.some(isPreviewReadyStepEvent);
+  for (let index = stepRunnerEvents.length - 1; index >= 0; index--) {
+    const event = stepRunnerEvents[index];
+
+    if (isPreviewReadyStepEvent(event)) {
+      return true;
+    }
+
+    if (event.type === 'step-start' || event.type === 'error') {
+      return false;
+    }
+  }
+  return false;
 }
 
 function getLatestStepEventTimestamp(

@@ -87,6 +87,8 @@ import {
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '@bolt/agent/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay } from '@bolt/agent/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '@bolt/agent/lib/runtime/api-key-storage';
+import { useProfileApiKeys } from '~/lib/hooks/useProfileApiKeys';
+import { useProfile } from '~/lib/profile-context';
 import {
   classifyRecoverableStreamError,
   isHostedFreeFundingError,
@@ -297,10 +299,6 @@ function persistProjectMemory(projectContextId: string, memory: ProjectMemoryDat
   window.localStorage.setItem(getProjectMemoryStorageKey(projectContextId), JSON.stringify(memory));
 }
 
-function getApiKeysFromCookiesSafe(): Record<string, string> {
-  return getApiKeysFromCookies();
-}
-
 function getProviderSettingsFromCookiesSafe(): Record<string, IProviderSetting> {
   try {
     const raw = Cookies.get('providers');
@@ -480,6 +478,7 @@ function appendArchitectTimelineEvent(event: Omit<InteractiveStepRunnerEvent, 't
 }
 
 export function Chat() {
+  const profile = useProfile();
   renderLogger.trace('Chat');
 
   const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useHistory();
@@ -508,7 +507,7 @@ export function Chat() {
     <>
       {ready && preparedReloadKey === reloadPreparationKey && (
         <ChatImpl
-          key={chatKey}
+          key={`${profile?.id || 'guest'}:${chatKey}`}
           description={title}
           initialMessages={initialMessages}
           exportChat={exportChat}
@@ -530,6 +529,7 @@ interface ChatProps {
 
 export const ChatImpl = memo(
   ({ description, initialMessages, storeMessageHistory, importChat, exportChat }: ChatProps) => {
+    const profile = useProfile();
     useShortcuts();
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -584,7 +584,7 @@ export const ChatImpl = memo(
     const { showChat } = useStore(chatStore);
     const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
-    const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => getApiKeysFromCookiesSafe());
+    const [apiKeys, setApiKeys] = useProfileApiKeys();
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | undefined>();
@@ -1831,7 +1831,7 @@ Requirements:
       let cancelled = false;
 
       const bootstrapSelection = async () => {
-        const nextApiKeys = getApiKeysFromCookiesSafe();
+        const nextApiKeys = getApiKeysFromCookies(profile?.id);
         setApiKeys(nextApiKeys);
 
         const instanceSelection =
@@ -3672,8 +3672,11 @@ CONTINUE IMMEDIATELY:
 
     const handleApiKeysUpdated = useCallback(
       async ({ apiKeys: updatedApiKeys, providerName, apiKey, providerModels }: ApiKeysUpdatePayload) => {
+        if (!setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS, profile?.id)) {
+          return;
+        }
+
         setApiKeys(updatedApiKeys);
-        setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS);
 
         const normalizedKey = apiKey.trim();
         cachedModelCatalog = null;

@@ -6,7 +6,9 @@ import type { ModelInfo } from '@bolt/agent/lib/modules/llm/types';
 import {
   FREE_HOSTED_API_BASE_URL,
   FREE_HOSTED_API_TOKEN_KEY,
+  FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
+  FREE_HOSTED_MODEL_REASONING_EFFORT,
   FREE_HOSTED_MODEL_MAX_TOKENS,
   FREE_HOSTED_MODELS,
   FREE_PROVIDER_NAME,
@@ -123,10 +125,19 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     }
   }
 
+  const isLunaModel = payload.model === FREE_HOSTED_MODEL;
   const normalizedPayload = {
     ...payload,
     instructions: instructions.filter(Boolean).join('\n\n'),
     input: conversation.join('\n\n'),
+    ...(isLunaModel
+      ? {
+          reasoning: {
+            ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
+            effort: FREE_HOSTED_MODEL_REASONING_EFFORT,
+          },
+        }
+      : {}),
   };
 
   if (
@@ -163,7 +174,7 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     parallel_tool_calls: false,
     reasoning: {
       ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
-      effort: 'low',
+      effort: isLunaModel ? FREE_HOSTED_MODEL_REASONING_EFFORT : 'low',
     },
     text: {
       ...(isJsonRecord(payload.text) ? payload.text : {}),
@@ -324,7 +335,7 @@ function createHostedFreeResponseEventStream(
   });
 }
 
-const hostedFreeFetch: typeof fetch = async (input, init) => {
+export const hostedFreeFetch: typeof fetch = async (input, init) => {
   let requestInit = init;
   let requestedStream = false;
   let bridgeBuildActions = false;
@@ -729,7 +740,7 @@ function normalizeHostedFreeClaudeSse(response: Response, workspaceFiles = new M
   });
 }
 
-const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
+export const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
   const requestHeaders = typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined;
   const headers = new Headers(requestHeaders);
 

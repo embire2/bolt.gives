@@ -3,9 +3,10 @@ export const FREE_HOSTED_API_BASE_URL = 'https://api.magnetapi.org/v1';
 export const FREE_HOSTED_API_TOKEN_KEY = 'MAGNET_API_KEY';
 export const FREE_HOSTED_MODEL_MAX_TOKENS = 64000;
 export const FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS = 8192;
+export const FREE_HOSTED_MODEL_REASONING_EFFORT = 'medium';
 
 export const FREE_HOSTED_MODELS = [
-  { name: 'gpt-5.6-sol', label: 'ChatGPT-5.6 SOL' },
+  { name: 'gpt-5.6-sol', label: 'ChatGPT-Luna - Medium effort' },
   { name: 'claude-opus-4-8', label: 'Opus 4.8' },
   { name: 'claude-sonnet-5', label: 'Sonnet 5' },
   { name: 'claude-fable-5', label: 'Fable 5' },

@@ -91,7 +91,15 @@ export function normalizeProjectConnection(input) {
 
     const url = parseUrl(supabaseUrl, 'Supabase project URL');
 
-    if (!['https:', 'http:'].includes(url.protocol) || !url.hostname || url.username || url.password) {
+    if (
+      !['https:', 'http:'].includes(url.protocol) ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
       throw new Error('Supabase project URL must be an HTTP(S) origin without embedded credentials.');
     }
 
@@ -131,7 +139,8 @@ export function sanitizeProjectConnection(record) {
 
     return {
       provider: 'supabase',
-      status: 'connected',
+      status: 'configured',
+      verifiedAt: null,
       label: projectRef || url.hostname,
       host: url.hostname,
       updatedAt: record.updatedAt || null,
@@ -144,7 +153,8 @@ export function sanitizeProjectConnection(record) {
 
     return {
       provider: 'postgresql',
-      status: 'connected',
+      status: record.verifiedAt ? 'verified' : 'configured',
+      verifiedAt: record.verifiedAt || null,
       label: `${databaseName}@${url.hostname}`,
       host: url.hostname,
       databaseName,
@@ -230,9 +240,8 @@ export async function verifyPostgresConnection(record, config, dependencies = {}
     statement_timeout: config.connectionTimeoutMs,
   });
 
-  await client.connect();
-
   try {
+    await client.connect();
     await client.query('SELECT 1');
   } finally {
     await client.end();
@@ -260,6 +269,7 @@ export async function saveProjectConnection(
     ...normalized,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
+    verifiedAt: normalized.provider === 'postgresql' ? now : null,
   };
 
   await writeRecord(config, normalizedSessionId, record, dependencies.fsApi || fs);

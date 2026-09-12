@@ -5,6 +5,8 @@ import { APP_VERSION } from '@bolt/core/lib/version';
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 import { resolveProfileSession } from '~/lib/.server/profile-session';
 import { UsageBalanceBadge } from '~/components/header/UsageBalanceBadge.client';
+import { useSingleUserMode } from '~/lib/profile-context';
+import { formatProfileTimestamp } from '~/lib/profile-display';
 
 export const meta: MetaFunction = () => [{ title: `Your Profile | bolt.gives v${APP_VERSION}` }];
 
@@ -20,6 +22,7 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
 
 export default function ProfilePage() {
   const { profile } = useLoaderData<typeof loader>();
+  const singleUser = useSingleUserMode();
   const initial = profile.name.charAt(0).toUpperCase();
 
   return (
@@ -52,8 +55,8 @@ export default function ProfilePage() {
             {[
               ['Email address', profile.email],
               ['Country', profile.country],
-              ['Profile created', profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Recently'],
-              ['Last login', profile.lastLoginAt ? new Date(profile.lastLoginAt).toLocaleString() : 'This session'],
+              ['Profile created', formatProfileTimestamp(profile.createdAt)],
+              ['Last login', formatProfileTimestamp(profile.lastLoginAt)],
             ].map(([label, value]) => (
               <div key={label} className="bg-[#fffdf5] p-7">
                 <dt className="text-xs font-black uppercase tracking-[0.16em] text-[#527065]">{label}</dt>
@@ -65,7 +68,7 @@ export default function ProfilePage() {
           <div className="flex flex-col gap-4 p-8 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-xl text-sm leading-6 text-[#52645e]">
               Your authentication token is stored in a signed HTTP-only cookie. Only its hash is retained by the
-              PostgreSQL profile service.
+              {singleUser ? 'private owner session store on this server.' : 'PostgreSQL profile service.'}
             </p>
             <Form method="post" action="/logout">
               <button

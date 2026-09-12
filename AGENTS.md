@@ -53,9 +53,9 @@ Preserve these behaviors unless a product decision explicitly replaces them:
 
 ### Hosted Models and Quotas
 
-The managed `FREE` provider is server-side only. Its supported coding models are `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`, with ChatGPT-5.6 SOL as the default. Users may switch model during a project without losing history or runtime context.
+The managed `FREE` provider is server-side only. Its default `gpt-5.6-sol` route is shown as ChatGPT-Luna and always uses medium reasoning effort. The compatibility choices `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5` remain available, and users may switch model during a project without losing history or runtime context.
 
-MagnetAPI.org is the upstream transport: Responses API for ChatGPT-5.6 SOL and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
+MagnetAPI.org is the managed FREE upstream transport: Responses API for ChatGPT-Luna and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. `MagnetAPI` is also a separate user-key provider: hosted users must supply their own MagnetAPI User API Key, and that path must never fall back to the operator-funded FREE credential. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
 
 Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to useful coding time rather than raw model-token accounting. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month. Entitlements and resets come from signed server-side billing events, not browser redirects.
 
@@ -181,6 +181,8 @@ For runtime changes, validate both app and runtime services. For collaboration o
 Self-host installations support interactive setup, custom app/admin/create domains, optional local PostgreSQL for profile/admin data, and Caddy-managed HTTPS. Generated apps bring their own data service. Installer changes require shell syntax checks plus a realistic clean and repair path.
 
 ## Git, Releases, and Deployment
+
+The v4.1 reliability work is authorized through Phase 2, but B13 (Preview browser-origin isolation) remains a release blocker. Consult `docs/quality/2026-09-12-phase2-checkpoint.md` and `ROADMAP.md`; do not mistake the validation branch or local E2E for a fleet rollout. `main` pushes currently trigger Cloudflare deployment. The public `install.ps1` is a Windows/WSL server bootstrap, not private desktop source. Installer fixes must retain existing database passwords, configuration and customer data; an exhausted retry must return failure.
 
 1. Start from an up-to-date branch and inspect the dirty worktree.
 2. Keep one logical change per commit unless splitting would break an atomic migration.

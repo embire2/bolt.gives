@@ -1,0 +1,72 @@
+name: Installer Recovery
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - install.sh
+      - install.ps1
+      - scripts/self-host-installer-*.ts
+      - scripts/test-windows-setup.ps1
+      - .github/workflows/installer-recovery.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows PowerShell 5.1 contracts
+        shell: powershell
+        run: ./scripts/test-windows-setup.ps1
+      - name: PowerShell 7 contracts
+        shell: pwsh
+        run: ./scripts/test-windows-setup.ps1
+
+  ubuntu-install:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        database: [no-db, platform-db]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean Ubuntu installation and same-checkout repair
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/bolt-installer
+          BOLT_INSTALL_NONINTERACTIVE: '1'
+          TEST_DATABASE_MODE: ${{ matrix.database }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # A disposable checkout, not the runner or a production installation.
+          git clone --no-hardlinks "$GITHUB_WORKSPACE" "$INSTALL_DIR"
+          git -C "$INSTALL_DIR" checkout -b installer-fixture
+          git -C "$GITHUB_WORKSPACE" branch installer-fixture HEAD
+          export OPERATOR_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$OPERATOR_PASSWORD"
+          database_flag=--skip-postgres
+          if [[ "$TEST_DATABASE_MODE" == platform-db ]]; then database_flag=--with-postgres; fi
+          bash ./install.sh --branch installer-fixture --skip-caddy "$database_flag"
+          test "$(stat -c '%a' "$INSTALL_DIR/.env.local")" = 600
+          before="$(sha256sum "$INSTALL_DIR/.env.local" | cut -d ' ' -f1)"
+          # A repair must preserve credentials and restart an already-installed stack.
+          sudo systemctl stop bolt-gives-app
+          bash ./install.sh --branch installer-fixture --skip-deps --skip-build --skip-caddy "$database_flag"
+          after="$(sha256sum "$INSTALL_DIR/.env.local" | cut -d ' ' -f1)"
+          test "$before" = "$after"
+          curl --connect-timeout 5 --max-time 20 -fsS http://127.0.0.1:5173/pricing >/dev/null
+          curl --connect-timeout 5 --max-time 20 -fsS http://127.0.0.1:4321/runtime/health >/dev/null
+          sudo systemctl is-active --quiet bolt-gives-app bolt-gives-runtime bolt-gives-webbrowse bolt-gives-collab
+      - name: Report only service status, never environment files
+        if: always()
+        shell: bash
+        run: |
+          for service in bolt-gives-app bolt-gives-runtime bolt-gives-webbrowse bolt-gives-collab; do
+            systemctl show "$service" --property=ActiveState,SubState,Result --no-pager || true
+          done

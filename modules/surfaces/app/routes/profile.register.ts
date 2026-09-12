@@ -1,7 +1,9 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { normalizeProfileReturnTo } from '@bolt/control-plane/server/profile-auth.mjs';
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
-import { registerProfile, serializeProfileSession } from '~/lib/.server/profile-session';
+import { registerProfile } from '~/lib/.server/profile-session';
+import { isSingleUserMode, loginSelfHost } from '~/lib/.server/self-host';
+import { profileLoginHeaders } from '~/lib/.server/profile-response';
 
 export const loader = ({ request }: LoaderFunctionArgs) => redirect(new URL(request.url).origin);
 
@@ -18,19 +20,19 @@ export async function action({ context, request }: ActionFunctionArgs) {
   const runtimeEnv = resolveRuntimeEnvFromContext(context);
 
   try {
-    const payload = await registerProfile(
-      {
-        name: String(formData.get('name') || ''),
-        email: String(formData.get('email') || ''),
-        country: String(formData.get('country') || ''),
-      },
-      runtimeEnv,
-    );
+    const payload = isSingleUserMode(runtimeEnv)
+      ? await loginSelfHost(String(formData.get('accessToken') || ''), runtimeEnv)
+      : await registerProfile(
+          {
+            name: String(formData.get('name') || ''),
+            email: String(formData.get('email') || ''),
+            country: String(formData.get('country') || ''),
+          },
+          runtimeEnv,
+        );
 
     return redirect(returnTo, {
-      headers: {
-        'Set-Cookie': await serializeProfileSession(payload.session, runtimeEnv),
-      },
+      headers: await profileLoginHeaders(payload.session, runtimeEnv),
     });
   } catch (error) {
     return json(
