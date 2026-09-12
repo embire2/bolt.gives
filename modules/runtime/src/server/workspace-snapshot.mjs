@@ -80,8 +80,24 @@ export async function* walkWorkspaceSource(rootDir, options = {}) {
 }
 
 export async function readWorkspaceSnapshot(rootDir, workDir = '/home/project', options = {}) {
-  const limits = { ...snapshotLimits(), ...options };
   const root = await fs.realpath(rootDir);
+
+  try {
+    return await readSourceSnapshot(root, workDir, options);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      throw new WorkspaceSnapshotError(
+        'Workspace changed during snapshot. Retry after the current command finishes.',
+        409,
+      );
+    }
+
+    throw error;
+  }
+}
+
+async function readSourceSnapshot(root, workDir, options) {
+  const limits = { ...snapshotLimits(), ...options };
   const state = { entries: 0, deadline: Date.now() + limits.timeoutMs };
 
   /** @type {Record<string, {type: 'folder'} | {type: 'file', content: string, isBinary: boolean}>} */

@@ -219,7 +219,7 @@ try {
       entry.failure = redact(error.message);
     }
   });
-  page.on('response', (response) => {
+  page.on('response', async (response) => {
     if (response.status() >= 400 && new URL(response.url()).hostname === 'phase1.localhost') {
       const entry = `${response.status()} ${new URL(response.url()).pathname}`;
       (expectedFailure ||
@@ -228,9 +228,28 @@ try {
         ? report.expectedErrors
         : report.errors
       ).push(entry);
+
+      if (response.status() >= 500) {
+        const detail = redact(await response.text().catch(() => 'Response body unavailable')).slice(0, 500);
+        stage('http-failure-detail', { response: entry, detail });
+      }
     }
   });
   page.on('request', (request) => {
+    if (/\/sessions\/[^/]+\/sync$/.test(new URL(request.url()).pathname)) {
+      const body = request.postDataJSON();
+      stage('browser-source-sync', {
+        prune: body?.prune,
+        files: Object.entries(body?.files || {})
+          .filter(([name]) => /App\.[jt]sx?$/.test(name))
+          .map(([name, file]) => ({
+            name,
+            followup: /_FOLLOWUP/.test(file.content || ''),
+            bytes: file.content?.length,
+          })),
+      });
+    }
+
     if (!ownerLoggedIn) {
       guestRequests.add(request);
     }
@@ -238,6 +257,7 @@ try {
     if (new URL(request.url()).pathname === '/api/chat' && request.method() === 'POST') {
       const body = request.postDataJSON();
       report.chatRequests.push({
+        origin: new URL(request.url()).origin,
         model: body.model || body.selectedModel,
         provider: body.provider?.name || body.selectedProvider,
         messageCount: body.messages?.length,
@@ -271,6 +291,10 @@ try {
   await prompt.press('Enter');
   stage('first-prompt-submitted');
   await previewContains([marker]);
+  await page
+    .getByRole('button', { name: 'Stop generation', exact: true })
+    .waitFor({ state: 'hidden', timeout: 120_000 });
+  await previewContains([marker]);
   await page.screenshot({ path: path.join(out, 'first-preview.png') });
 
   const frame = page.frameLocator('iframe[title="preview"]').first();
@@ -298,6 +322,9 @@ try {
   );
   await prompt.press('Enter');
   await previewContains([marker, followup]);
+  await page
+    .getByRole('button', { name: 'Stop generation', exact: true })
+    .waitFor({ state: 'hidden', timeout: 120_000 });
   stage('followup-preview-rendered');
   await page.waitForTimeout(5000);
 
@@ -328,12 +355,22 @@ try {
   report.snapshotEntries = Object.keys(snapshot.files).length;
   report.snapshotElapsedMs = Math.round(performance.now() - snapshotStarted);
 
+  const assertDiskSource = async (checkpoint) => {
+    const content = await fs.readFile(path.join(root, 'workspaces', sessionId, 'src/App.tsx'), 'utf8');
+
+    if (!content.includes(marker) || !content.includes(followup)) {
+      throw new Error(`Runtime source lost the requested change at ${checkpoint}`);
+    }
+  };
+  await assertDiskSource('before navigation');
+
   const runtimeMemory = await fs.readFile(`/proc/${runtime.pid}/status`, 'utf8');
   report.runtimeHighWaterKiB = Number(runtimeMemory.match(/^VmHWM:\s+(\d+)/m)?.[1]);
   await page.goto(`${base}/pricing`);
   await page.goto(projectUrl);
   await previewContains([marker, followup], 60_000);
   stage('project-restored-after-navigation');
+  await assertDiskSource('after navigation');
   await page.reload();
   await previewContains([marker, followup], 60_000);
   await page.getByText('Preview is healthy and ready for inspection.', { exact: true }).waitFor({ timeout: 30_000 });
@@ -344,10 +381,13 @@ try {
 
   await page.screenshot({ path: path.join(out, 'restored-preview.png') });
   stage('history-and-preview-restored-after-reload');
+  await assertDiskSource('after reload');
   expectedFailure = true;
   await stop(runtime);
+  await assertDiskSource('after runtime shutdown');
   runtime = await start('runtime-restarted', path.join(root, 'scripts/runtime-server.mjs'), runtimeEnv, true);
   await healthy(`${runtimeBase}/health`);
+  await assertDiskSource('after runtime startup');
   await page.reload();
   await previewContains([marker, followup], 90_000);
   expectedFailure = false;

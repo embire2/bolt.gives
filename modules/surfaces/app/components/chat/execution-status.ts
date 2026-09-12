@@ -1,6 +1,63 @@
 import type { JSONValue } from 'ai';
 import type { InteractiveStepRunnerEvent } from '@bolt/agent/lib/runtime/interactive-step-runner';
 import type { AgentCommentaryAnnotation, ProgressAnnotation } from '@bolt/core/types/context';
+import type { FileMap } from '@bolt/core/types/files';
+import { hasFallbackStarterPlaceholder } from '@bolt/agent/lib/runtime/starter-placeholder';
+
+export function hasGeneratedWorkspaceChanges(current: FileMap, baseline: FileMap): boolean {
+  if (current === baseline || hasFallbackStarterPlaceholder(current)) {
+    return false;
+  }
+
+  const paths = new Set([...Object.keys(current), ...Object.keys(baseline)]);
+
+  for (const path of paths) {
+    const next = current[path];
+    const previous = baseline[path];
+
+    if (next?.type !== 'file' && previous?.type !== 'file') {
+      continue;
+    }
+
+    if (
+      next?.type !== 'file' ||
+      previous?.type !== 'file' ||
+      next.content !== previous.content ||
+      next.isBinary !== previous.isBinary
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function findMergeableStreamIndex(
+  events: InteractiveStepRunnerEvent[],
+  incoming: InteractiveStepRunnerEvent,
+): number {
+  if (incoming.type !== 'stdout' && incoming.type !== 'stderr') {
+    return -1;
+  }
+
+  for (let index = events.length - 1; index >= 0; index--) {
+    const candidate = events[index];
+
+    if (candidate.stepIndex !== incoming.stepIndex) {
+      continue;
+    }
+
+    if (candidate.type === 'step-end' || candidate.type === 'error' || candidate.type === 'complete') {
+      break;
+    }
+
+    if (candidate.type === incoming.type) {
+      return index;
+    }
+  }
+
+  return -1;
+}
 
 export function isCommentaryHeartbeatEvent(value: JSONValue | undefined): boolean {
   return Boolean(

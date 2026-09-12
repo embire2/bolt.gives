@@ -15,7 +15,7 @@ import { resolvePromptIdForModel } from './prompt-selection';
 import { withDevelopmentCommentaryWorkstyle } from './prompt-workstyle';
 import { createWebBrowsingTools } from './tools/web-tools';
 import { shouldEnableBuiltInWebTools } from './tool-intent';
-import { ensureFreeProviderAvailability } from './free-provider-preflight';
+import { validateFreeProviderSelection } from './free-provider-validation';
 import { FREE_HOSTED_API_TOKEN_KEY, FREE_PROVIDER_NAME } from '@bolt/agent/lib/modules/llm/free-provider-config';
 import { normalizeCredential } from '@bolt/core/lib/runtime/credentials';
 
@@ -556,15 +556,15 @@ export async function streamText(props: {
 
   if (provider.name === FREE_PROVIDER_NAME) {
     const envRecord = serverEnv as Record<string, string | undefined> | undefined;
-    const preflightApiKey =
+    const hostedApiKey =
       normalizeCredential(apiKeys?.[provider.name]) ||
       normalizeCredential(envRecord?.[FREE_HOSTED_API_TOKEN_KEY]) ||
       normalizeCredential(process?.env?.[FREE_HOSTED_API_TOKEN_KEY]);
 
-    await ensureFreeProviderAvailability({
+    validateFreeProviderSelection({
       providerName: provider.name,
       modelName: modelDetails.name,
-      apiKey: preflightApiKey,
+      apiKey: hostedApiKey,
     });
   }
 

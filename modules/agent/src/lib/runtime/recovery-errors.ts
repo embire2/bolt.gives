@@ -45,7 +45,8 @@ export function shouldIgnoreDisconnectAfterCompletedRun(context: CompletedRunDis
     return false;
   }
 
-  const completionEvidenceAt = Math.max(context.lastRunCompletedAt ?? 0, context.lastPreviewReadyAt ?? 0);
+  // A completed install/scaffold command is not evidence of a working application.
+  const completionEvidenceAt = context.lastPreviewReadyAt ?? 0;
 
   return completionEvidenceAt >= context.requestStartedAt && completionEvidenceAt > 0;
 }

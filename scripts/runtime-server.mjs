@@ -3571,7 +3571,7 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
 }
 
 function schedulePreviewAutoRestore(session, alert) {
-  if (!session.restorePointFileMap) {
+  if (!session.preview || !session.restorePointFileMap) {
     touchPreviewDiagnostics(session, {
       status: 'error',
       healthy: false,
@@ -3602,13 +3602,13 @@ function schedulePreviewAutoRestore(session, alert) {
     session.autoRestoreTimer = null;
 
     void (async () => {
-      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+      if (!session.preview || session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
         return;
       }
 
       const probe = await probeSessionPreviewHealth(session);
 
-      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+      if (!session.preview || session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
         return;
       }
 
@@ -7400,10 +7400,14 @@ async function waitForPreview(port) {
   throw new Error(`Preview did not become ready on port ${port}`);
 }
 
-async function terminateSessionProcesses(session, options = {}) {
+export async function terminateSessionProcesses(session, options = {}) {
   const preservePreviewPort = Number(options.preservePreviewPort || 0);
+
+  // Invalidate asynchronous health probes before the intentional disconnect.
+  session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
   cancelPendingPreviewAutoRestore(session);
   cancelPendingPreviewVerification(session);
+  cancelPendingPreviewAutostart(session);
 
   for (const [, handle] of session.processes.entries()) {
     terminateSessionProcessHandle(handle);

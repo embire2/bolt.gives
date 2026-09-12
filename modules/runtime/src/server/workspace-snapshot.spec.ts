@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readWorkspaceSnapshot, reconcileWorkspaceSnapshot } from './workspace-snapshot.mjs';
 
 const roots: string[] = [];
@@ -14,10 +14,31 @@ async function fixture(content = 'content') {
   return dir;
 }
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 describe('snapshot budgets', () => {
+  it('excludes transient atomic writes from source snapshots', async () => {
+    const dir = await fixture();
+    await fs.writeFile(path.join(dir, 'source.txt.bolt-sync-123-1789247810000-a2b3c.tmp'), 'in-flight');
+    expect(Object.keys(await readWorkspaceSnapshot(dir))).toEqual(['/home/project/source.txt']);
+  });
+
+  it.each(['ENOENT', 'ENOTDIR'])('returns retryable conflict for a concurrent source removal (%s)', async (code) => {
+    const dir = await fixture();
+    const previous = { saved: { content: 'last complete source' } };
+    const session = { dir, currentFileMap: previous };
+    vi.spyOn(fs, 'open').mockRejectedValueOnce(Object.assign(new Error('concurrent source mutation'), { code }));
+    await expect(reconcileWorkspaceSnapshot(session)).rejects.toMatchObject({ status: 409 });
+    expect(session.currentFileMap).toBe(previous);
+  });
+
+  it('does not disguise permissions failures as a retryable mutation', async () => {
+    const dir = await fixture();
+    vi.spyOn(fs, 'open').mockRejectedValueOnce(Object.assign(new Error('access denied'), { code: 'EACCES' }));
+    await expect(readWorkspaceSnapshot(dir)).rejects.toMatchObject({ code: 'EACCES' });
+  });
   it('rejects oversized files rather than silently truncating them', async () => {
     const dir = await fixture('x'.repeat(100));
     await expect(readWorkspaceSnapshot(dir, undefined, { maxFileBytes: 16 })).rejects.toThrow('file exceeds');

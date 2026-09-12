@@ -79,6 +79,8 @@ import type {
   UsageDataEvent,
 } from '@bolt/core/types/context';
 import {
+  findMergeableStreamIndex,
+  hasGeneratedWorkspaceChanges,
   hasHealthyRuntimePreviewForCurrentObjective,
   isCommentaryHeartbeatEvent,
   shouldFinalizeVerifiedPreviewAtDeadline,
@@ -340,30 +342,6 @@ async function fetchProviderModels(providerName: string): Promise<ModelInfo[]> {
 
 let bufferedStepRunnerEvents: InteractiveStepRunnerEvent[] = [];
 let stepRunnerFlushHandle: ReturnType<typeof setTimeout> | null = null;
-
-function findMergeableStreamIndex(events: InteractiveStepRunnerEvent[], incoming: InteractiveStepRunnerEvent): number {
-  if (incoming.type !== 'stdout' && incoming.type !== 'stderr') {
-    return -1;
-  }
-
-  for (let index = events.length - 1; index >= 0; index--) {
-    const candidate = events[index];
-
-    if (candidate.stepIndex !== incoming.stepIndex) {
-      continue;
-    }
-
-    if (candidate.type === 'step-end' || candidate.type === 'error' || candidate.type === 'complete') {
-      break;
-    }
-
-    if (candidate.type === incoming.type) {
-      return index;
-    }
-  }
-
-  return -1;
-}
 
 function mergeOrAppendStepRunnerEvent(
   events: InteractiveStepRunnerEvent[],
@@ -789,7 +767,10 @@ export const ChatImpl = memo(
           providerName: runContextRef.current.providerName,
           chatMode,
           assistantContent: currentRequestAssistantContent,
-          workspaceChanged: workbenchStore.files.get() !== requestWorkspaceBaselineRef.current,
+          workspaceChanged: hasGeneratedWorkspaceChanges(
+            workbenchStore.files.get(),
+            requestWorkspaceBaselineRef.current,
+          ),
         });
 
         if (shouldRecoverEmptyBuild) {
@@ -1255,7 +1236,10 @@ Requirements:
 
           if (!shouldFinalizeVerifiedPreview && hostedRuntimeEnabled) {
             const sessionId = workbenchStore.hostedRuntimeSessionId;
-            const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+            const workspaceChanged = hasGeneratedWorkspaceChanges(
+              workbenchStore.files.get(),
+              userObjectiveWorkspaceBaselineRef.current,
+            );
 
             if (sessionId && workspaceChanged) {
               try {
@@ -2136,7 +2120,10 @@ Requirements:
           (timeoutLikeError || disconnectLikeError)
         ) {
           const sessionId = workbenchStore.hostedRuntimeSessionId;
-          const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+          const workspaceChanged = hasGeneratedWorkspaceChanges(
+            workbenchStore.files.get(),
+            userObjectiveWorkspaceBaselineRef.current,
+          );
 
           if (sessionId && workspaceChanged) {
             try {

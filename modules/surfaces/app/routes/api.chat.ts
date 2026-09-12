@@ -51,7 +51,7 @@ import {
 } from '@bolt/runtime/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '@bolt/agent/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '@bolt/agent/lib/.server/llm/api-key-utils';
-import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
+import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-validation';
 import { hydrateWebsiteSourceContext } from '@bolt/agent/lib/.server/llm/web-context';
 import {
   buildDeterministicHostedFreeSummary,
@@ -3229,7 +3229,7 @@ Next: I am sending the final result now.`,
         }
 
         if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
-          return 'Custom error: Network error. Please check your internet connection and try again.';
+          return 'Custom error: Network error while contacting the coding service. Your project is preserved; retry or choose another provider.';
         }
 
         return `Custom error: ${errorMessage}`;

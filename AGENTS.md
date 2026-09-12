@@ -57,6 +57,8 @@ The managed `FREE` provider is server-side only. Its default `gpt-5.6-sol` route
 
 MagnetAPI.org is the managed FREE upstream transport: Responses API for ChatGPT-Luna and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. `MagnetAPI` is also a separate user-key provider: hosted users must supply their own MagnetAPI User API Key, and that path must never fall back to the operator-funded FREE credential. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
 
+Validate provider configuration locally; do not gate generation on a separate paid test prompt. Actual generation determines upstream availability. Intentional runtime shutdown must invalidate pending health/repair work, never restore older source in response to the expected disconnect.
+
 Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to useful coding time rather than raw model-token accounting. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month. Entitlements and resets come from signed server-side billing events, not browser redirects.
 
 ### Desktop Boundary

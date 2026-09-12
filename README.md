@@ -14,7 +14,11 @@
 
 > **Reliability update, 12 September 2026:** v4.0.1 remains the stable web release. Our latest audit found 12 code/test-contract issues, including a broken pricing page and oversized/stale snapshots. A real alpha1 project reached Preview, accepted a follow-up, and restored after reload, but the run still recorded a snapshot 502. **v4.1.0 will prioritize these bugs and a separately versioned native Windows rewrite, not more feature sprawl.** Read the [findings, evidence, and small implementation tasks](docs/quality/2026-09-12-v4.1-audit.md). This is a plan, not a claim that the fixes are shipped. Model/database descriptions below include unreleased development work; live instances may differ.
 
-**Implementation checkpoint, not a release:** [Draft PR #19](https://github.com/embire2/bolt.gives/pull/19) contains Phase 1 fixes and the approved Phase 2 work completed so far: bounded/current snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, accessible onboarding, and recoverable installers. **1,272 tests pass.** Preview refresh no longer writes fetched snapshots back over agent files; reload prefers existing runtime source instead of an older browser cache. [Installer CI passed](https://github.com/embire2/bolt.gives/actions/runs/34716586998) clean/repair Ubuntu 22.04/24.04 installs with and without platform PostgreSQL and PowerShell 5.1/7 contracts on Windows. Read the [Phase 1 evidence](docs/quality/2026-09-12-phase1-review.md) and [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md), including failed generation repeats. **Neither production nor the fleet has been updated:** repeatable final generation, isolated Preview origins/TLS, and non-root project-process isolation remain release gates. Real Stripe fulfillment, Windows/WSL reboot-resume, and native desktop parity are not certified.
+**Implementation checkpoint, not a release:** [Draft PR #19](https://github.com/embire2/bolt.gives/pull/19) contains Phase 1 fixes and the approved Phase 2 work completed so far: current/bounded snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, accessible onboarding, and recoverable installers. We also removed a blocking 30-second FREE model probe and fixed an automatic repair that could overwrite a saved follow-up during runtime shutdown. Preview refresh and history reload now preserve current runtime source.
+
+**Validation:** 1,284 tests pass, with nine skipped. Build, typecheck, lint and module-boundary checks pass. [Installer CI passed](https://github.com/embire2/bolt.gives/actions/runs/34717535481) clean/repair Ubuntu 22.04/24.04 installs with and without platform PostgreSQL and PowerShell 5.1/7 contracts on Windows. A real FREE/Luna browser journey passed first Preview, interaction, follow-up, navigation, reload and runtime restart, with disk checks confirming the saved change survived shutdown. Read the [Phase 1 evidence](docs/quality/2026-09-12-phase1-review.md) and [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md), including failed repeats and the latest verification scope.
+
+**Neither production nor the fleet has been updated.** Isolated Preview origins/TLS and non-root project-process isolation remain release gates; a successful functional test does not close those boundaries. Real Stripe fulfillment, Windows/WSL reboot-resume and native desktop parity are not certified. Windows PowerShell setup installs the open-source server through WSL2; it is not the private native desktop rewrite.
 
 ## What You Can Do
 
@@ -55,6 +59,10 @@ Conversation, the compact follow-up prompt, Code, and Preview remain part of one
 This calendar was generated from a normal English prompt in a real isolated Node.js runtime with no project database. Chromium waited for the generated files, development command, healthy Preview, and runtime snapshot before taking the screenshot.
 
 ![A real calendar project running in bolt.gives Agent Mode](docs/screenshots/agent-mode-calendar-v4.0.1.png)
+
+The unreleased v4.1 reliability checkpoint was also tested with a real FREE/Luna task board, an interactive Add task control, a follow-up change, navigation, reload and runtime restart. This screenshot shows the restored follow-up in the isolated test environment. The version badge remains 4.0.1 because no 4.1 release has been published.
+
+![Real task board after a follow-up and history reload in the unreleased checkpoint](docs/screenshots/agent-mode-v4.1-checkpoint.png)
 
 ### Connect data only when the app needs it
 

@@ -31,7 +31,7 @@ describe('classifyRecoverableStreamError', () => {
     });
   });
 
-  it('ignores a disconnect if the run already completed after the request started', () => {
+  it('does not ignore a disconnect after a completed command without a verified preview', () => {
     expect(
       shouldIgnoreDisconnectAfterCompletedRun({
         message: 'Stream disconnected before completion: websocket closed by server before response.completed',
@@ -39,7 +39,7 @@ describe('classifyRecoverableStreamError', () => {
         lastRunCompletedAt: 2_000,
         lastPreviewReadyAt: null,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('does not ignore a disconnect when completion evidence belongs to an older run', () => {
@@ -49,6 +49,17 @@ describe('classifyRecoverableStreamError', () => {
         requestStartedAt: 2_000,
         lastRunCompletedAt: 1_500,
         lastPreviewReadyAt: null,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not let a new completed command reuse an older verified preview', () => {
+    expect(
+      shouldIgnoreDisconnectAfterCompletedRun({
+        message: 'Network error',
+        requestStartedAt: 2_000,
+        lastRunCompletedAt: 3_000,
+        lastPreviewReadyAt: 1_500,
       }),
     ).toBe(false);
   });

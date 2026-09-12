@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { InteractiveStepRunnerEvent } from '@bolt/agent/lib/runtime/interactive-step-runner';
 import type { AgentCommentaryAnnotation, ProgressAnnotation } from '@bolt/core/types/context';
+import type { FileMap } from '@bolt/core/types/files';
 import {
   deriveActionCount,
   deriveProgressMessage,
   deriveWhyThisAction,
   hasHealthyRuntimePreviewForCurrentObjective,
+  hasGeneratedWorkspaceChanges,
   hasPreviewVerification,
   hasSettledVerifiedExecution,
   isCommentaryHeartbeatEvent,
@@ -23,6 +25,35 @@ function createTelemetryEvent(output: string, description = 'runtime telemetry')
 }
 
 describe('execution-status helpers', () => {
+  const baseline: FileMap = { 'src/App.tsx': { type: 'file', content: '<h1>Task board</h1>', isBinary: false } };
+
+  it('does not treat a new snapshot object or lock metadata as generated source changes', () => {
+    expect(hasGeneratedWorkspaceChanges(structuredClone(baseline), baseline)).toBe(false);
+    expect(
+      hasGeneratedWorkspaceChanges({ 'src/App.tsx': { ...baseline['src/App.tsx']!, isLocked: true } }, baseline),
+    ).toBe(false);
+  });
+
+  it('does not accept fallback starter changes as the requested application', () => {
+    expect(
+      hasGeneratedWorkspaceChanges(
+        { 'src/App.tsx': { type: 'file', content: 'Your fallback starter is ready.', isBinary: false } },
+        {},
+      ),
+    ).toBe(false);
+  });
+
+  it('accepts actual source edits, additions and removals', () => {
+    expect(
+      hasGeneratedWorkspaceChanges(
+        { 'src/App.tsx': { type: 'file', content: '<h1>Updated board</h1>', isBinary: false } },
+        baseline,
+      ),
+    ).toBe(true);
+    expect(hasGeneratedWorkspaceChanges(baseline, {})).toBe(true);
+    expect(hasGeneratedWorkspaceChanges({}, baseline)).toBe(true);
+  });
+
   it('detects preview verification from preview-ready telemetry', () => {
     expect(
       hasPreviewVerification([createTelemetryEvent('url=https://localhost:5173 port=5173', 'Preview verified')]),

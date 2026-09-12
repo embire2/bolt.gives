@@ -14,4 +14,10 @@ describe('source path policy', () => {
       'src/main.tsx': 3,
     });
   });
+
+  it('excludes atomic runtime write files but retains unrelated user source', () => {
+    expect(isWorkspaceSourcePath('src/App.tsx.bolt-sync-123-1789247810000-a2b3c.tmp')).toBe(false);
+    expect(isWorkspaceSourcePath('src/App.tsx')).toBe(true);
+    expect(isWorkspaceSourcePath('docs/.bolt-sync-notes.tmp')).toBe(true);
+  });
 });

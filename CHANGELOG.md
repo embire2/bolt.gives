@@ -16,6 +16,10 @@
 
 ### Fixed
 
+- Removed blocking synthetic FREE model probes: a timed-out `Reply with OK` request could fail every new project before actual coding began. Selection still validates credentials and approved models; real generation remains authoritative for upstream authentication, funding and rate-limit errors.
+- Require verified Preview evidence before suppressing a late connection failure. Completed scaffold commands and cloned snapshot objects no longer count as a generated application. Upstream network failures no longer blame the user's internet connection.
+- Invalidate queued/in-flight repair probes and cancel autostart on intentional runtime shutdown. Late proxy errors cannot restore an older source snapshot after the Preview process has deliberately stopped.
+- Exclude temporary atomic-write files from snapshots and classify concurrent source removal as a retryable conflict, preserving the last complete snapshot instead of returning partial source or a generic server error.
 - Phase 1 (unreleased): excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
 - Replaced file-count snapshot freshness with bounded disk reconciliation, detected concurrent writes, preserved empty/deleted workspaces, and waited for IndexedDB transaction completion before reporting saved source.
 - Made Preview snapshot pulls read-only: background refresh cannot write old source back into the runtime or override Code selection. Slow results are discarded after project changes, file actions or unsaved edits. History reload prefers current runtime source and uses cached recovery only after an explicit missing-session response, never a generic outage.

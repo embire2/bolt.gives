@@ -10,7 +10,7 @@ import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/c
 import { createScopedLogger } from '@bolt/core/utils/logger';
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 import { hydrateApiKeysFromRuntimeEnv } from '@bolt/agent/lib/.server/llm/api-key-utils';
-import { ensureFreeProviderAvailability } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
+import { validateFreeProviderSelection } from '@bolt/agent/lib/.server/llm/free-provider-validation';
 import {
   isHostedFreeRelayRequest,
   relayHostedFreeRequest,
@@ -314,7 +314,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
       logger.info(`Generating response Provider: ${provider.name}, Model: ${modelDetails.name}`);
 
       if (provider.name === 'FREE') {
-        await ensureFreeProviderAvailability({
+        validateFreeProviderSelection({
           providerName: provider.name,
           modelName: modelDetails.name,
           apiKey: apiKeys[provider.name],
