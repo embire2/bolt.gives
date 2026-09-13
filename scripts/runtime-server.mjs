@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import http from 'node:http';
+import { endFailedCommandResponse } from '../modules/runtime/src/server/command-response.mjs';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
@@ -102,6 +103,7 @@ import {
 import {
   buildProjectDatabaseConfig,
   buildProjectDatabaseEnvironment,
+  readExistingProjectDatabase,
   ensureProjectDatabase,
   sanitizeProjectDatabase,
 } from './project-databases.mjs';
@@ -1475,7 +1477,8 @@ export async function ensureProjectDatabaseForSession(session, options = {}) {
   const config = options.config || PROJECT_DATABASE_CONFIG;
 
   if (!config.supported) {
-    return null;
+    session.projectDatabase = await readExistingProjectDatabase(session.id, config);
+    return session.projectDatabase;
   }
 
   if (session.projectDatabase) {
@@ -6584,6 +6587,7 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
   const body = new URLSearchParams(encodeStripeForm(payload));
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -6620,6 +6624,7 @@ async function createStripeProfileBillingCheckout({ profile }) {
   });
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -6674,6 +6679,7 @@ async function retrieveStripeSubscription(subscriptionId) {
   }
 
   const response = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
     },
@@ -6749,28 +6755,22 @@ async function applyProfileBillingStripeEvent(event) {
     metadata = { ...(subscription?.metadata || {}), ...metadata };
   }
 
-  const profileId = String(metadata.profileId || object.client_reference_id || '');
-  let billing = await findProfileBillingByStripe({
-    profileId: profileId || null,
-    checkoutSessionId: object.object === 'checkout.session' ? object.id : null,
-    subscriptionId,
-  });
-  const isProfileBillingEvent = metadata.kind === 'bolt-profile-custom-domain' || Boolean(billing);
-
-  if (!isProfileBillingEvent) {
+  if (metadata.application && metadata.application !== 'bolt-gives-open-source') {
     return { handled: false, duplicate: false };
   }
 
-  if (billing?.lastStripeEventId === event.id) {
-    return { handled: true, duplicate: true };
-  }
+  const profileId = String(metadata.profileId || object.client_reference_id || '');
+  let billing = await findProfileBillingByStripe({
+    profileId: metadata.application === 'bolt-gives-open-source' ? profileId || null : null,
+    checkoutSessionId: object.object === 'checkout.session' ? object.id : null,
+    subscriptionId,
+  });
+  const isProfileBillingEvent =
+    (metadata.application === 'bolt-gives-open-source' && metadata.kind === 'bolt-profile-custom-domain') ||
+    Boolean(billing);
 
-  if (!billing && profileId && object.object === 'checkout.session') {
-    billing = await upsertPendingProfileBilling({
-      profileId,
-      checkoutSessionId: object.id,
-      tokensAllowance: Number(metadata.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
-    });
+  if (!isProfileBillingEvent) {
+    return { handled: false, duplicate: false };
   }
 
   if (!billing) {
@@ -6778,17 +6778,23 @@ async function applyProfileBillingStripeEvent(event) {
   }
 
   let status = billing.status;
+  const paid =
+    ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType) &&
+    !(eventType.startsWith('checkout.') && object.payment_status === 'unpaid');
 
-  if (['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType)) {
-    status = eventType.startsWith('checkout.') && object.payment_status === 'unpaid' ? 'pending' : 'active';
+  if (paid) {
+    status = 'active';
   } else {
-    status = resolvePremiumStripeEventStatus(eventType, object.status) || status;
+    const nextStatus = resolvePremiumStripeEventStatus(eventType, object.status);
+
+    // Subscription state alone is not payment evidence and must not grant a new allowance.
+    status = nextStatus === 'active' ? billing.status : nextStatus || billing.status;
   }
 
   subscriptionId = subscriptionId || billing.stripeSubscriptionId;
   subscription = subscription || (await retrieveStripeSubscription(subscriptionId));
 
-  const period = getStripeSubscriptionPeriod(subscription || object);
+  const period = paid ? getStripeSubscriptionPeriod(subscription || object) : {};
   billing = await updateProfileBillingFromStripe({
     profileId: billing.profileId,
     checkoutSessionId: object.object === 'checkout.session' ? object.id : billing.stripeCheckoutSessionId,
@@ -6802,6 +6808,7 @@ async function applyProfileBillingStripeEvent(event) {
     status,
     tokensAllowance: Number(metadata.tokensAllowance || billing.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
     eventId: event.id,
+    eventCreated: !paid && status === billing.status ? billing.lastStripeEventCreated : event.created,
     ...period,
   });
 
@@ -6812,7 +6819,7 @@ async function applyProfileBillingStripeEvent(event) {
     );
 
     if (attached) {
-      if (status === 'active') {
+      if (billing.status === 'active') {
         activatePremiumEntitlement(attached, {
           eventId: event.id,
           subscriptionId: billing.stripeSubscriptionId,
@@ -6821,7 +6828,7 @@ async function applyProfileBillingStripeEvent(event) {
           periodEnd: billing.periodEnd,
         });
       } else {
-        updatePremiumEntitlementStatus(attached, status, event.id);
+        updatePremiumEntitlementStatus(attached, billing.status, event.id);
       }
 
       appendPremiumEntitlementEvent(premiumRegistry, {
@@ -6865,28 +6872,17 @@ async function applyPremiumStripeEvent(event) {
     metadata = { ...(subscription?.metadata || {}), ...metadata };
   }
 
-  const sessionId = String(metadata.sessionId || object.client_reference_id || '');
-  let entitlement =
+  const entitlement =
     registry.entitlements.find((entry) => entry.stripeCheckoutSessionId === object.id) ||
-    registry.entitlements.find((entry) => subscriptionId && entry.stripeSubscriptionId === subscriptionId) ||
-    registry.entitlements.find((entry) => sessionId && entry.sessionId === sessionId);
-  const isWebCoderEvent = metadata.kind === 'webcoder-premium' || Boolean(entitlement);
+    registry.entitlements.find((entry) => subscriptionId && entry.stripeSubscriptionId === subscriptionId);
+  const isWebCoderEvent =
+    Boolean(entitlement) && (!metadata.application || metadata.application === 'bolt-gives-open-source');
 
   if (!isWebCoderEvent) {
     registry.processedStripeEventIds = [...registry.processedStripeEventIds.slice(-999), event.id];
     await writePremiumEntitlementRegistry(registry);
 
     return { duplicate: false, handled: false };
-  }
-
-  if (!entitlement && sessionId && metadata.deploymentId) {
-    entitlement = upsertPendingPremiumEntitlement(registry, {
-      sessionId,
-      deploymentId: String(metadata.deploymentId),
-      customDomain: String(metadata.customDomain || ''),
-      stripeCheckoutSessionId: object.object === 'checkout.session' ? object.id : null,
-      creditsAllowance: Number(metadata.tokensAllowance || metadata.creditsAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
-    });
   }
 
   if (!entitlement) {
@@ -6918,19 +6914,8 @@ async function applyPremiumStripeEvent(event) {
   } else {
     const status = resolvePremiumStripeEventStatus(eventType, object.status);
 
-    if (status) {
+    if (status && status !== 'active') {
       updatePremiumEntitlementStatus(entitlement, status, event.id);
-
-      if (status === 'active') {
-        const period = getStripeSubscriptionPeriod(object);
-        activatePremiumEntitlement(entitlement, {
-          eventId: event.id,
-          subscriptionId: object.id,
-          customerId: typeof object.customer === 'string' ? object.customer : null,
-          ...period,
-        });
-        await markPremiumProjectDomainPaid(entitlement);
-      }
     }
   }
 
@@ -7358,6 +7343,20 @@ export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, o
     });
 
     return buildProjectConnectionEnvironment(projectConnection);
+  }
+
+  const legacyDatabase = projectDatabaseConfig.supported
+    ? null
+    : await readExistingProjectDatabase(session.id, projectDatabaseConfig);
+
+  if (legacyDatabase) {
+    session.projectDatabase = legacyDatabase;
+
+    const containerHost = process.env.BOLT_PROJECT_DATABASE_CONTAINER_HOST;
+    const host =
+      containerHost && ['127.0.0.1', 'localhost'].includes(legacyDatabase.host) ? containerHost : legacyDatabase.host;
+
+    return buildProjectDatabaseEnvironment({ ...legacyDatabase, host });
   }
 
   if (projectDatabaseConfig.supported) {
@@ -8066,7 +8065,9 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       });
       upstreamRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        let rewritten = rewritePreviewAssetUrls(body, previewBasePath);
+
+        // Dedicated origins use native asset URLs, avoiding duplicate modules during Vite optimization.
+        let rewritten = req.boltIsolatedPreview ? body : rewritePreviewAssetUrls(body, previewBasePath);
 
         if (req.boltIsolatedPreview && /text\/html/.test(contentType)) {
           rewritten = injectPreviewBrowserMonitor(rewritten);
@@ -8267,6 +8268,16 @@ async function readJsonBody(req) {
 
 export function createRuntimeServer() {
   return http.createServer(async (req, res) => {
+    if (req.url?.startsWith('/runtime/preview-certificate?')) {
+      const domain = new URL(req.url, 'http://localhost').searchParams.get('domain');
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      const permitted = req.method === 'GET' && local && previewOrigins?.permitsCertificate(domain);
+      res.writeHead(permitted ? 204 : 403, { 'Cache-Control': 'no-store' });
+      res.end();
+
+      return;
+    }
+
     if (previewOrigins?.handle(req, res, proxyPreviewRequest)) {
       return;
     }
@@ -8302,8 +8313,10 @@ export function createRuntimeServer() {
         }
 
         const event = JSON.parse(rawBody);
-        const profileResult = await applyProfileBillingStripeEvent(event);
-        const result = profileResult.handled ? profileResult : await applyPremiumStripeEvent(event);
+        const result = await runPremiumEntitlementMutation(async () => {
+          const profileResult = await applyProfileBillingStripeEvent(event);
+          return profileResult.handled ? profileResult : await applyPremiumStripeEvent(event);
+        });
         sendJson(res, 200, { received: true, ...result });
       } catch (error) {
         sendText(res, 400, error instanceof Error ? error.message : 'Stripe webhook processing failed.');
@@ -10992,7 +11005,7 @@ export function createRuntimeServer() {
         void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, () => handleRunCommand(req, res, session, body));
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Runtime command failed');
+        endFailedCommandResponse(res, redactProjectDatabaseError(error));
       }
       return;
     }

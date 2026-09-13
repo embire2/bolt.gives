@@ -1085,6 +1085,7 @@ describe('runtime server workspace isolation', () => {
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
         config: { supported: true, databaseEnabled: true },
+        projectDatabaseConfig: { supported: false },
         ensureWorkspaceFn,
         writeEvent: (event: { type: string; message?: string }) => events.push(event),
         now: 1_000,
@@ -1114,6 +1115,7 @@ describe('runtime server workspace isolation', () => {
         },
         {
           config: { supported: true, databaseEnabled: false },
+          projectDatabaseConfig: { supported: false },
           ensureWorkspaceFn,
           writeEvent,
         },
@@ -1205,6 +1207,7 @@ describe('runtime server workspace isolation', () => {
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
         config: { supported: true, databaseEnabled: true },
+        projectDatabaseConfig: { supported: false },
         connectDatabaseFn: async () => {
           throw new Error('ssh: connect timed out for private-password');
         },

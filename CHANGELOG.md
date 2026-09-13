@@ -4,12 +4,23 @@
 
 ### Runtime and Recovery
 
+- Fix recursive public runtime proxying and authenticate server-side snapshot, handoff and Preview verification. Propagate staging FREE relay configuration instead of hardcoding the production origin.
+- Keep existing private database records available when new database provisioning is disabled; use the active workspace root and an optional private container bridge without changing credentials.
+- End failed command streams safely without sending headers twice or crashing the runtime. Use canonical isolated Preview asset URLs to avoid duplicate module aliases.
+- Use host-prefixed production authentication cookies consistently in the separately compiled gateway and application; skip account connection lookups before sign-in.
 - Added opt-in rootless Podman execution for generated commands, dependency installation/repair, builds and Preview. Containers mount only the project, drop capabilities, use a read-only image and enforce CPU/RAM/PID limits. Root execution is rejected, and unmigrated source ownership fails explicitly rather than being silently changed.
 - Await isolated process termination before releasing/reusing its Preview port, preventing restart collisions with an old container. Reserve operator-storage names so they cannot be selected as project session IDs.
 - Added a signed per-project HTTPS Preview gateway with host-only, HTTP-only partitioned capabilities, cross-project/origin rejection, bounded browser-error reporting and project-scoped repair readiness. Generated servers cannot set parent-domain/platform cookies or permissive cross-project CORS headers. Public TLS and live workspace migration remain pending.
 - Require authenticated hosted runtime/Preview access and reject cross-origin runtime calls. The Linux installer routes both hosted and private-owner runtime traffic through application authorization rather than exposing the runtime directly.
 - Keep Chat mounted after an empty failed assistant stream so navigation cannot discard queued recovery; restore the user's latest visible request on Chat initialization. Count real buffered FREE file-argument progress toward stream activity without publishing partial artifacts or synthetic commentary.
 - Added real rootless process acceptance and combined HTTPS/browser prompt, follow-up, history, restart and injected-stream-failure fixtures. Production and managed instances are unchanged; see `ROADMAP.md` for outstanding gates.
+
+### Billing
+
+- Fulfill profile entitlements with a durable event ledger and row-locked transactions; duplicate, delayed and out-of-order events cannot reset used tokens or shorten a paid period.
+- Require confirmed payment before granting quota. Scope Stripe metadata to the open-source application and known checkout/subscription identities so a shared commercial account cannot activate unrelated profiles.
+- Reject malformed webhook signatures, bound upstream billing requests and provide an explicit operator-only dedicated webhook setup tool that preserves unrelated Stripe endpoints.
+- Add disposable PostgreSQL event-replay acceptance and real browser Checkout verification that never submits a payment.
 
 ### Removed
 

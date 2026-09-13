@@ -1,7 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { waitForHostedRuntimePreviewVerificationForRequest } from './hosted-runtime-snapshot';
+import {
+  resolveHostedRuntimeBaseUrlForRequest,
+  waitForHostedRuntimePreviewVerificationForRequest,
+} from './hosted-runtime-snapshot';
 
 describe('waitForHostedRuntimePreviewVerificationForRequest', () => {
+  it('uses the trusted internal listener for hosted accounts, not only owner-only installs', () => {
+    expect(
+      resolveHostedRuntimeBaseUrlForRequest('https://alpha1.bolt.gives/api/chat', {
+        BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4322/runtime',
+        BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime',
+      }),
+    ).toBe('http://127.0.0.1:4322/runtime');
+  });
+
+  it('forwards only profile authentication when a remote runtime needs it', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ status: 'ready', healthy: true, preview: { port: 4100 } }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await waitForHostedRuntimePreviewVerificationForRequest({
+      requestUrl: 'https://instance.pages.dev/api/chat',
+      sessionId: 'owned-fixture',
+      runtimeEnv: { BOLT_RUNTIME_CONTROL_URL: 'https://bolt.gives/runtime' },
+      headers: { Cookie: '__Host-bolt_profile_session=fixture; apiKeys=never-forward', 'X-Api-Key': 'never-forward' },
+    });
+    expect(result.outcome).toBe('ready');
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get('Cookie')).toBe('__Host-bolt_profile_session=fixture');
+    expect(headers.has('X-Api-Key')).toBe(false);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

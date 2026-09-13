@@ -33,11 +33,12 @@ function getManagedInstanceCookieSecret() {
 }
 
 function createManagedInstanceCookie() {
-  return createCookie('bolt_managed_instance', {
+  const secure = typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true;
+  return createCookie(secure ? '__Host-bolt_managed_instance' : 'bolt_managed_instance', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
+    secure,
     maxAge: 60 * 60 * 24 * 365,
     secrets: [getManagedInstanceCookieSecret()],
   });

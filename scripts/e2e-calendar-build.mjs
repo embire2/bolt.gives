@@ -5,6 +5,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { closePageThenCleanupSession, resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
 import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
+import { isIsolatedPreviewNavigationAbort, observedPromptTokens } from './calendar-e2e-contracts.mjs';
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
@@ -254,6 +255,9 @@ async function checkRuntimeSnapshotTokens(page, sessionId, tokens) {
 
 function isBenignNetworkFailure(entry) {
   return (
+    isIsolatedPreviewNavigationAbort(entry) ||
+    /REQFAIL POST .*\/profile\/register\?[^ ]* :: net::ERR_ABORTED/.test(entry) ||
+    /REQFAIL DELETE .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL HEAD .*\/api\/health :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/api\/system\/performance :: net::ERR_INSUFFICIENT_RESOURCES/.test(entry) ||
     /REQFAIL POST .*\/api\/chat :: net::ERR_ABORTED/.test(entry) ||
@@ -319,25 +323,48 @@ async function ensureChatComposerVisible(page) {
 
 async function waitForChatIdle(page, timeout = 180000) {
   await ensureChatComposerVisible(page);
-  await page.waitForFunction(
-    () => {
-      const visible = (element) => {
-        if (!(element instanceof HTMLElement)) {
-          return false;
-        }
 
-        const style = window.getComputedStyle(element);
+  const capture = setInterval(() => {
+    void page.screenshot({ path: path.join(outDir, 'waiting-for-idle.png') }).catch(() => {});
+    void page
+      .evaluate(() => ({
+        path: location.pathname,
+        buttons: Array.from(document.querySelectorAll('button[aria-label="Stop generation"]')).map((element) => ({
+          rects: element.getClientRects().length,
+          text: element.textContent,
+        })),
+        composers: Array.from(document.querySelectorAll('textarea')).map((element) => ({
+          rects: element.getClientRects().length,
+          disabled: element.disabled,
+        })),
+      }))
+      .then((state) => fs.writeFile(path.join(outDir, 'waiting-for-idle.json'), JSON.stringify(state), { mode: 0o600 }))
+      .catch(() => {});
+  }, 10_000);
 
-        return style.display !== 'none' && style.visibility !== 'hidden';
-      };
-      const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop generation"]'));
-      const textareas = Array.from(document.querySelectorAll('textarea'));
+  try {
+    await page.waitForFunction(
+      () => {
+        const visible = (element) => {
+          if (!(element instanceof HTMLElement)) {
+            return false;
+          }
 
-      return !stopButtons.some(visible) && textareas.some((element) => visible(element) && !element.disabled);
-    },
-    undefined,
-    { timeout },
-  );
+          const style = window.getComputedStyle(element);
+
+          return element.getClientRects().length > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop generation"]'));
+        const textareas = Array.from(document.querySelectorAll('textarea'));
+
+        return !stopButtons.some(visible) && textareas.some((element) => visible(element) && !element.disabled);
+      },
+      undefined,
+      { timeout },
+    );
+  } finally {
+    clearInterval(capture);
+  }
   await page.waitForTimeout(1500);
   log('chat stream idle');
 }
@@ -348,7 +375,7 @@ async function inspectPersistedProject(page, projectPath, expectedTokens) {
   return page.evaluate(
     async ({ requestedUrlId, tokens }) => {
       const database = await new Promise((resolve, reject) => {
-        const request = indexedDB.open('boltHistory', 2);
+        const request = indexedDB.open('boltHistory');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -582,6 +609,7 @@ async function main() {
         .join('\n');
 
       chatRequestInputs.push({
+        ...observedPromptTokens(userContent, appToken, followUpToken),
         selectedProvider: payload?.selectedProvider || null,
         selectedModel: payload?.selectedModel || null,
         messageCount: requestMessages.length,
@@ -655,6 +683,15 @@ async function main() {
 
   log('goto', baseUrl);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
+  if (process.env.E2E_REGISTER_PROFILE === '1') {
+    await page.getByLabel('Name and Surname').fill('Release Acceptance');
+    await page.getByLabel('Email address', { exact: true }).fill(`release-${Date.now()}@example.invalid`);
+    await page.getByLabel('Country', { exact: true }).fill('South Africa');
+    await page.getByRole('button', { name: 'Create profile and continue' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    log('authenticated test profile created through normal onboarding');
+  }
 
   const textarea = await ensureChatComposerVisible(page);
   log('prompt surface ready');
@@ -1010,6 +1047,18 @@ async function main() {
     log('final screenshot failed', error instanceof Error ? error.message : String(error));
   });
 
+  let publicDeployment = null;
+
+  if (process.env.E2E_REQUIRE_PUBLISH === '1') {
+    const { verifyBrowserPublishing } = await import('./e2e-publish-project.mjs');
+    publicDeployment = await verifyBrowserPublishing(page, context, {
+      initialToken: appToken,
+      followUpToken,
+      output: outDir,
+    });
+    log('public deployment verified', JSON.stringify(publicDeployment));
+  }
+
   const finalBody = bodyTextLast.replace(/\s+/g, ' ').slice(0, 4000);
   await fs.writeFile(path.join(outDir, 'final-body.txt'), bodyTextLast);
   isTearingDown = true;
@@ -1025,9 +1074,7 @@ async function main() {
 
   const initialSelectionOk = chatRequestInputs.some(
     (input) =>
-      input.selectedProvider === providerName &&
-      input.selectedModel === modelName &&
-      String(input.userContent || '').includes(appToken),
+      input.selectedProvider === providerName && input.selectedModel === modelName && input.initialPromptObserved,
   );
   const followUpSelectionOk =
     !requireFollowUp ||
@@ -1035,7 +1082,7 @@ async function main() {
       (input) =>
         input.selectedProvider === providerName &&
         input.selectedModel === followUpModelName &&
-        String(input.userContent || '').includes(followUpToken),
+        input.followUpPromptObserved,
     );
   const summary = {
     ok:
@@ -1082,6 +1129,7 @@ async function main() {
     historyRestoreVerified,
     projectDatabaseVerified,
     runtimeCleanup,
+    publicDeployment,
     chatRequestInputs,
     runtimeMutationRequests,
     chatRequests,

@@ -34,6 +34,7 @@ interface PagesEnv {
   BOLT_RUNTIME_CONTROL_PUBLIC_URL?: string;
   BOLT_RUNTIME_CONTROL_URL?: string;
   BOLT_HOSTED_FREE_RELAY_SECRET?: string;
+  BOLT_HOSTED_FREE_RELAY_ORIGIN?: string;
   NODE_ENV?: string;
   [key: string]: unknown;
 }
@@ -92,7 +93,7 @@ export function buildRuntimeProxyTargetUrl(requestUrl: string, runtimeControlBas
   return `${normalizeRuntimeControlBaseUrl(runtimeControlBaseUrl)}${runtimeSuffix}${url.search}`;
 }
 
-export function buildRuntimeProxyHeaders(request: Request) {
+export function buildRuntimeProxyHeaders(request: Request, targetUrl?: string) {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
 
@@ -101,6 +102,14 @@ export function buildRuntimeProxyHeaders(request: Request) {
   headers.set('x-bolt-public-origin', url.origin);
   headers.set('x-forwarded-host', url.host);
   headers.set('x-forwarded-proto', url.protocol.replace(/:$/, ''));
+
+  /*
+   * The entrypoint already checked the browser Origin. The next hop is a server request,
+   * which may traverse the authenticated gateway of a different managed-instance origin.
+   */
+  if (targetUrl && headers.has('Origin')) {
+    headers.set('Origin', new URL(targetUrl).origin);
+  }
 
   return headers;
 }
@@ -150,7 +159,10 @@ export function buildHostedFreeApiProxyHeaders(request: Request, relaySecret: st
 
 async function proxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
   const requestUrl = new URL(request.url);
-  const relayUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, DEFAULT_HOSTED_FREE_RELAY_ORIGIN);
+  const relayUrl = new URL(
+    `${requestUrl.pathname}${requestUrl.search}`,
+    env.BOLT_HOSTED_FREE_RELAY_ORIGIN || DEFAULT_HOSTED_FREE_RELAY_ORIGIN,
+  );
 
   return fetch(relayUrl, {
     method: request.method,
@@ -161,13 +173,17 @@ async function proxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
   });
 }
 
+export function runtimeProxyBaseUrl(env: PagesEnv) {
+  // Public URLs point back at this gateway on Linux. Always prefer the internal server listener.
+  return (
+    env.BOLT_RUNTIME_CONTROL_URL?.trim() ||
+    env.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim() ||
+    DEFAULT_RUNTIME_CONTROL_BASE_URL
+  );
+}
+
 async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
-  const runtimeControlBaseUrl =
-    typeof env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL === 'string' && env.BOLT_RUNTIME_CONTROL_PUBLIC_URL.trim()
-      ? env.BOLT_RUNTIME_CONTROL_PUBLIC_URL
-      : typeof env?.BOLT_RUNTIME_CONTROL_URL === 'string' && env.BOLT_RUNTIME_CONTROL_URL.trim()
-        ? env.BOLT_RUNTIME_CONTROL_URL
-        : DEFAULT_RUNTIME_CONTROL_BASE_URL;
+  const runtimeControlBaseUrl = runtimeProxyBaseUrl(env);
   const targetUrl = buildRuntimeProxyTargetUrl(request.url, runtimeControlBaseUrl);
   const requestOrigin = new URL(request.url).origin;
   const targetOrigin = new URL(targetUrl).origin;
@@ -183,7 +199,7 @@ async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
 
   return fetch(targetUrl, {
     method: request.method,
-    headers: buildRuntimeProxyHeaders(request),
+    headers: buildRuntimeProxyHeaders(request, targetUrl),
     body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
     ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',

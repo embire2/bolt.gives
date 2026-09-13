@@ -30,13 +30,17 @@ function mapProfileBillingRow(row) {
     periodStart: normalizeProfileBillingTimestamp(row.period_start),
     periodEnd: normalizeProfileBillingTimestamp(row.period_end),
     lastStripeEventId: row.last_stripe_event_id,
+    lastStripeEventCreated: Number(row.last_stripe_event_created || 0),
     createdAt: normalizeProfileBillingTimestamp(row.created_at),
     updatedAt: normalizeProfileBillingTimestamp(row.updated_at),
   };
 }
 
 export function shouldResetProfileBillingUsage({ status, nextPeriodStart, currentPeriodStart } = {}) {
-  return Boolean(status === 'active' && nextPeriodStart && nextPeriodStart !== currentPeriodStart);
+  const next = Date.parse(nextPeriodStart);
+  const current = Date.parse(currentPeriodStart);
+
+  return status === 'active' && Number.isFinite(next) && (!Number.isFinite(current) || next > current);
 }
 
 export async function getProfileBilling(profileId) {
@@ -100,24 +104,48 @@ export async function upsertPendingProfileBilling({ profileId, checkoutSessionId
 }
 
 export async function updateProfileBillingFromStripe(input = {}) {
-  const current = await findProfileBillingByStripe(input);
+  const found = await findProfileBillingByStripe(input);
 
-  if (!current) {
+  if (!found) {
     return null;
   }
 
-  if (input.eventId && current.lastStripeEventId === input.eventId) {
-    return current;
-  }
+  const client = await getAdminDatabasePool().connect();
 
-  const nextPeriodStart = input.periodStart || current.periodStart;
-  const resetUsage = shouldResetProfileBillingUsage({
-    status: input.status,
-    nextPeriodStart,
-    currentPeriodStart: current.periodStart,
-  });
-  const result = await getAdminDatabasePool().query(
-    `
+  try {
+    await client.query('BEGIN');
+
+    // Serialize fulfillment with other events and token consumption for this profile.
+    const locked = await client.query('SELECT * FROM bolt_user_profile_billing WHERE profile_id = $1 FOR UPDATE', [
+      found.profileId,
+    ]);
+    const current = mapProfileBillingRow(locked.rows[0]);
+
+    if (!current) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    if (input.eventId) {
+      const inserted = await client.query(
+        'INSERT INTO bolt_user_profile_billing_events (event_id, profile_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING event_id',
+        [input.eventId, current.profileId],
+      );
+
+      if (!inserted.rowCount || Number(input.eventCreated || 0) < current.lastStripeEventCreated) {
+        await client.query('COMMIT');
+        return current;
+      }
+    }
+
+    const nextPeriodStart = input.periodStart || current.periodStart;
+    const resetUsage = shouldResetProfileBillingUsage({
+      status: input.status,
+      nextPeriodStart,
+      currentPeriodStart: current.periodStart,
+    });
+    const result = await client.query(
+      `
       UPDATE bolt_user_profile_billing
       SET
         status = $2,
@@ -126,29 +154,39 @@ export async function updateProfileBillingFromStripe(input = {}) {
         stripe_customer_id = COALESCE($5, stripe_customer_id),
         tokens_allowance = $6,
         tokens_used = CASE WHEN $7::boolean THEN 0 ELSE tokens_used END,
-        period_start = COALESCE($8::timestamptz, period_start),
-        period_end = COALESCE($9::timestamptz, period_end),
+        period_start = GREATEST($8::timestamptz, period_start),
+        period_end = GREATEST($9::timestamptz, period_end),
         last_stripe_event_id = COALESCE($10, last_stripe_event_id),
-        updated_at = $11
+        updated_at = $11,
+        last_stripe_event_created = GREATEST($12, last_stripe_event_created)
       WHERE profile_id = $1
       RETURNING *
     `,
-    [
-      current.profileId,
-      input.status || current.status,
-      input.checkoutSessionId || null,
-      input.subscriptionId || null,
-      input.customerId || null,
-      Math.max(1, Number(input.tokensAllowance || current.tokensAllowance || 10_000)),
-      resetUsage,
-      input.periodStart || null,
-      input.periodEnd || null,
-      input.eventId || null,
-      new Date().toISOString(),
-    ],
-  );
+      [
+        current.profileId,
+        input.status || current.status,
+        input.checkoutSessionId || null,
+        input.subscriptionId || null,
+        input.customerId || null,
+        Math.max(1, Number(input.tokensAllowance || current.tokensAllowance || 10_000)),
+        resetUsage,
+        input.periodStart || null,
+        input.periodEnd || null,
+        input.eventId || null,
+        new Date().toISOString(),
+        Math.max(0, Number(input.eventCreated || 0)),
+      ],
+    );
 
-  return mapProfileBillingRow(result.rows[0]);
+    await client.query('COMMIT');
+
+    return mapProfileBillingRow(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function recordProfileBillingTokens({ profileId, runId, totalTokens } = {}) {

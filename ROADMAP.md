@@ -24,6 +24,15 @@ Next release target:
 
 - [~] `v4.1.0`
 
+Latest live acceptance: alpha1 now runs the isolated development build with
+non-root services and publicly trusted project Preview TLS. A real FREE/Luna
+Calendar prompt, follow-up and saved-history restore passed in normal Chromium.
+Real USD 5 monthly Stripe Checkout navigation passed without charging a card;
+signed webhook checks and disposable PostgreSQL fulfillment/replay tests passed.
+Production and fleet rollout remain pending. Historical checkpoint statements
+below describe their dates, not the current alpha deployment. See the
+[13 September alpha evidence](docs/quality/2026-09-13-alpha-acceptance.md).
+
 Independent Desktop release:
 
 - [x] `Desktop v1.10.2`

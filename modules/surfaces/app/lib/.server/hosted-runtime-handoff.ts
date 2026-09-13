@@ -11,6 +11,8 @@ import { detectProjectCommands } from '@bolt/core/utils/projectCommands';
 import {
   fetchHostedRuntimeSnapshotForRequest,
   resolveHostedRuntimeBaseUrlForRequest,
+  authenticationHeaders,
+  type HostedRuntimeRequestOptions,
 } from '@bolt/runtime/lib/.server/hosted-runtime-snapshot';
 
 export interface HostedRuntimeCommandReplayResult {
@@ -239,13 +241,15 @@ function reconcilePackageJsonAction(fileActions: ExtractedFileAction[], currentF
   return nextFileActions;
 }
 
-async function syncHostedRuntimeWorkspaceServer(options: { requestUrl: string; sessionId: string; files: FileMap }) {
-  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(options.requestUrl);
+async function syncHostedRuntimeWorkspaceServer(options: HostedRuntimeRequestOptions & { files: FileMap }) {
+  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(options.requestUrl, options.runtimeEnv);
+  const headers = authenticationHeaders(options.headers);
+  headers.set('Content-Type', 'application/json');
+
   const response = await fetch(`${runtimeBaseUrl}/sessions/${encodeURIComponent(options.sessionId)}/sync`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
+    signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
       files: options.files,
       prune: true,
@@ -289,20 +293,17 @@ function shouldVerifyStarterReplacement(currentSnapshot: FileMap, fileActions: E
   );
 }
 
-async function ensureHostedRuntimeFilesApplied(options: {
-  requestUrl: string;
-  sessionId: string;
-  expectedFiles: ExtractedFileAction[];
-  shouldVerifyStarter: boolean;
-}) {
+async function ensureHostedRuntimeFilesApplied(
+  options: HostedRuntimeRequestOptions & {
+    expectedFiles: ExtractedFileAction[];
+    shouldVerifyStarter: boolean;
+  },
+) {
   if (!options.shouldVerifyStarter) {
     return;
   }
 
-  const snapshot = await fetchHostedRuntimeSnapshotForRequest({
-    requestUrl: options.requestUrl,
-    sessionId: options.sessionId,
-  });
+  const snapshot = await fetchHostedRuntimeSnapshotForRequest(options);
 
   if (!snapshot) {
     throw new Error('Hosted runtime snapshot could not be loaded after sync.');
@@ -324,18 +325,20 @@ async function ensureHostedRuntimeFilesApplied(options: {
   }
 }
 
-async function runHostedRuntimeCommandServer(options: {
-  requestUrl: string;
-  sessionId: string;
-  kind: 'shell' | 'start';
-  command: string;
-}): Promise<HostedRuntimeCommandReplayResult> {
-  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(options.requestUrl);
+async function runHostedRuntimeCommandServer(
+  options: HostedRuntimeRequestOptions & {
+    kind: 'shell' | 'start';
+    command: string;
+  },
+): Promise<HostedRuntimeCommandReplayResult> {
+  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(options.requestUrl, options.runtimeEnv);
+  const headers = authenticationHeaders(options.headers);
+  headers.set('Content-Type', 'application/json');
+
   const response = await fetch(`${runtimeBaseUrl}/sessions/${encodeURIComponent(options.sessionId)}/command`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
+    signal: AbortSignal.timeout(180_000),
     body: JSON.stringify({
       kind: options.kind,
       command: options.command,
@@ -416,12 +419,12 @@ async function runHostedRuntimeCommandServer(options: {
   };
 }
 
-export async function applyHostedRuntimeAssistantActions(options: {
-  requestUrl: string;
-  sessionId: string;
-  assistantContent: string;
-  synthesizedRunHandoff: SynthesizedRunHandoff;
-}): Promise<HostedRuntimeServerHandoffResult | null> {
+export async function applyHostedRuntimeAssistantActions(
+  options: HostedRuntimeRequestOptions & {
+    assistantContent: string;
+    synthesizedRunHandoff: SynthesizedRunHandoff;
+  },
+): Promise<HostedRuntimeServerHandoffResult | null> {
   const sessionId = options.sessionId.trim();
 
   if (!sessionId) {
@@ -429,7 +432,7 @@ export async function applyHostedRuntimeAssistantActions(options: {
   }
 
   const currentSnapshot = await fetchHostedRuntimeSnapshotForRequest({
-    requestUrl: options.requestUrl,
+    ...options,
     sessionId,
   }).catch(() => null);
   const fileActions = rewriteHostedRuntimeFileActions(
@@ -453,27 +456,27 @@ export async function applyHostedRuntimeAssistantActions(options: {
   const shouldVerifyStarter = shouldVerifyStarterReplacement(currentSnapshot || {}, fileActions);
 
   await syncHostedRuntimeWorkspaceServer({
-    requestUrl: options.requestUrl,
+    ...options,
     sessionId,
     files: mergedFiles,
   });
 
   try {
     await ensureHostedRuntimeFilesApplied({
-      requestUrl: options.requestUrl,
+      ...options,
       sessionId,
       expectedFiles: fileActions,
       shouldVerifyStarter,
     });
   } catch {
     await syncHostedRuntimeWorkspaceServer({
-      requestUrl: options.requestUrl,
+      ...options,
       sessionId,
       files: mergedFiles,
     });
 
     await ensureHostedRuntimeFilesApplied({
-      requestUrl: options.requestUrl,
+      ...options,
       sessionId,
       expectedFiles: fileActions,
       shouldVerifyStarter,
@@ -491,7 +494,7 @@ export async function applyHostedRuntimeAssistantActions(options: {
       ? normalizeHostedRuntimeCommand(inferredCommands.startCommand, 'start')
       : normalizeHostedRuntimeCommand(options.synthesizedRunHandoff.startCommand, 'start');
   const startResult = await runHostedRuntimeCommandServer({
-    requestUrl: options.requestUrl,
+    ...options,
     sessionId,
     kind: 'start',
     command: startCommand,

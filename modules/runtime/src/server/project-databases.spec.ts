@@ -7,6 +7,7 @@ import {
   buildProjectDatabaseEnvironment,
   buildProjectDatabaseIdentity,
   ensureProjectDatabase,
+  readExistingProjectDatabase,
   sanitizeProjectDatabase,
   sanitizeProjectDatabaseConfig,
 } from './project-databases.mjs';
@@ -18,6 +19,17 @@ afterEach(async () => {
 });
 
 describe('project database provisioning', () => {
+  it('loads a legacy connection without provisioning when new databases are disabled', async () => {
+    const record = {
+      ...buildProjectDatabaseIdentity('old-project'),
+      databasePassword: 'existing-private-password-unchanged',
+    };
+    const readFile = vi.fn().mockResolvedValue(JSON.stringify(record));
+    const config = buildProjectDatabaseConfig({ BOLT_PROJECT_DATABASE_ENABLED: 'false' });
+    expect(await readExistingProjectDatabase('old-project', config, { ...fs, readFile })).toEqual(record);
+    expect(readFile).toHaveBeenCalledOnce();
+  });
+
   it('is opt-in even when a provisioner URL exists', () => {
     const config = buildProjectDatabaseConfig({
       BOLT_PROJECT_DATABASE_ADMIN_URL: 'postgresql://provisioner:private@127.0.0.1:5432/postgres',
@@ -28,6 +40,12 @@ describe('project database provisioning', () => {
       supported: false,
       reason: 'Project database provisioning is disabled.',
     });
+  });
+
+  it('keeps default legacy-record lookup scoped to the configured runtime tree', () => {
+    expect(buildProjectDatabaseConfig({ RUNTIME_WORKSPACE_DIR: '/tmp/owned-runtime' }).secretRoot).toBe(
+      '/tmp/owned-runtime/project-databases',
+    );
   });
 
   it('requires a server-only admin connection and redacts it from client config', () => {

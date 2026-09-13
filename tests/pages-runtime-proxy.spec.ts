@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildRuntimeProxyHeaders,
   buildRuntimeProxyTargetUrl,
+  runtimeProxyBaseUrl,
   buildHostedFreeApiProxyHeaders,
   fetchPagesStaticAsset,
   isStaticAssetRequest,
@@ -108,6 +109,22 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
     ).toBe('https://bolt.gives/runtime/preview/session-1/4100/src/main.tsx?import');
 
     expect(normalizeRuntimeControlBaseUrl('https://bolt.gives')).toBe('https://bolt.gives/runtime');
+  });
+
+  it('uses the private listener instead of recursively proxying to the public app', () => {
+    expect(
+      runtimeProxyBaseUrl({
+        BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4322/runtime',
+        BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime',
+      }),
+    ).toBe('http://127.0.0.1:4322/runtime');
+  });
+
+  it('normalizes an already-validated browser Origin for the server proxy hop', () => {
+    const request = new Request('https://instance.pages.dev/runtime/sessions/one/sync', {
+      headers: { Origin: 'https://instance.pages.dev' },
+    });
+    expect(buildRuntimeProxyHeaders(request, 'https://bolt.gives/runtime').get('Origin')).toBe('https://bolt.gives');
   });
 
   it('preserves the managed instance origin for preview URL generation', () => {

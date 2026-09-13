@@ -164,6 +164,16 @@ export async function ensureAdminDatabaseSchema() {
         `);
 
         await client.query(`
+          ALTER TABLE bolt_user_profile_billing
+          ADD COLUMN IF NOT EXISTS last_stripe_event_created BIGINT NOT NULL DEFAULT 0;
+          CREATE TABLE IF NOT EXISTS bolt_user_profile_billing_events (
+            event_id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
+
+        await client.query(`
           CREATE TABLE IF NOT EXISTS bolt_user_profile_billing_usage (
             run_id TEXT PRIMARY KEY,
             profile_id TEXT NOT NULL REFERENCES bolt_admin_client_profiles(id) ON DELETE CASCADE,

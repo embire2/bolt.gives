@@ -4,7 +4,6 @@ import {
   collectRequestObjectiveCandidatesFromPayload,
   collectUserRequestCandidates,
   collectUserRequestEnvelopeCandidates,
-  detectRestoredHostedRuntimeHandoffMismatch,
   extractRequiredVisibleTextLiterals,
   extractUserRequestTextFromMessage,
   findMissingRequiredVisibleTextLiterals,
@@ -496,52 +495,6 @@ describe('api.chat continuation helpers', () => {
         } as any,
       }),
     ).toBe(false);
-  });
-
-  it('treats restored previews as unhealthy when the latest handoff files were rolled back', () => {
-    const mismatch = detectRestoredHostedRuntimeHandoffMismatch({
-      status: {
-        recovery: { state: 'restored' },
-      } as any,
-      snapshot: {
-        '/home/project/src/App.tsx': {
-          type: 'file',
-          content: 'export default function App(){return <h1>old</h1>}\n',
-          isBinary: false,
-        } as any,
-      },
-      appliedFiles: [
-        {
-          path: '/home/project/src/App.tsx',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-        },
-      ],
-    });
-
-    expect(mismatch).toContain('latest generated update to src/App.tsx was not retained');
-  });
-
-  it('accepts restored previews when the runtime snapshot still contains the latest handoff files', () => {
-    const mismatch = detectRestoredHostedRuntimeHandoffMismatch({
-      status: {
-        recovery: { state: 'restored' },
-      } as any,
-      snapshot: {
-        '/home/project/src/App.tsx': {
-          type: 'file',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-          isBinary: false,
-        } as any,
-      },
-      appliedFiles: [
-        {
-          path: '/home/project/src/App.tsx',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-        },
-      ],
-    });
-
-    expect(mismatch).toBeNull();
   });
 
   it('skips planner for architect recovery prompts', () => {

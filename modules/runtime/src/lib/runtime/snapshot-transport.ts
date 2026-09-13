@@ -11,11 +11,13 @@ export class RuntimeSnapshotError extends Error {
   }
 }
 
-export async function readRuntimeSnapshot(url: string): Promise<FileMap> {
+export async function readRuntimeSnapshot(url: string, headers: HeadersInit = {}): Promise<FileMap> {
   const signal = AbortSignal.timeout(30_000);
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set('Accept', 'application/json');
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+    const response = await fetch(url, { method: 'GET', headers: requestHeaders, signal });
 
     if (response.status === 409 && attempt < 2) {
       await response.body?.cancel();

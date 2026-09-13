@@ -87,6 +87,7 @@ export function createPreviewOrigin({
   };
   const cookieName = local ? LOCAL_COOKIE : COOKIE;
   const errorWindows = new WeakMap();
+  const certificateHosts = new Map();
   const headers = {
     'Cache-Control': 'no-store',
     'Referrer-Policy': 'no-referrer',
@@ -141,8 +142,14 @@ export function createPreviewOrigin({
 
   return {
     isHost,
+    permitsCertificate(host) {
+      const id = certificateHosts.get(String(host || '').toLowerCase());
+      return Boolean(id && lookup(id)?.preview?.port);
+    },
     url(sessionId, port) {
       const host = hostId(sessionId);
+      certificateHosts.set(`${host}${suffix}`, sessionId);
+
       const token = encode({ sessionId, host, kind: 'bootstrap', expires: now() + 5 * 60_000 });
 
       return `${originFor(host)}/runtime/preview/${sessionId}/${port}/?__bolt_isolated=1&__bolt_token=${token}`;
@@ -175,7 +182,7 @@ export function createPreviewOrigin({
         url.searchParams.delete('__bolt_token');
         res.writeHead(303, {
           ...headers,
-          Location: `${url.pathname}${url.search}`,
+          Location: `/${url.search}`,
           'Set-Cookie': `${cookieName}=${access}; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=3600`,
         });
         res.end();

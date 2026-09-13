@@ -81,7 +81,7 @@ import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime
 import { createProfileFreeUsageMeter } from '~/lib/.server/profile-free-usage';
 import { createUsageLimitResponse } from '~/lib/.server/profile-billing-response';
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
-import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
+import { summarizeRestoredHostedRuntimeHandoffMismatchForRequest } from '@bolt/runtime/lib/.server/hosted-handoff-verification';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
 import {
   isLongThinkModel,
@@ -728,83 +728,6 @@ export function shouldContinueForMissingRequiredVisibleText(options: {
   );
 }
 
-const HOSTED_HANDOFF_PERSISTENCE_FILE_RE =
-  /(^|\/)(?:src|app|components?|pages|routes)(?:\/|$)|(^|\/)(?:index\.html|App\.(?:tsx?|jsx?)|main\.(?:tsx?|jsx?))$/i;
-
-function normalizeComparableFileContent(content: string | undefined) {
-  return String(content || '')
-    .replace(/\r\n/g, '\n')
-    .trimEnd();
-}
-
-function toProjectRelativePath(filePath: string) {
-  return normalizeArtifactFilePath(filePath).replace(/^\/home\/project\/?/i, '');
-}
-
-export function detectRestoredHostedRuntimeHandoffMismatch(options: {
-  status?: HostedRuntimePreviewStatus | null;
-  snapshot?: FileMap | null;
-  appliedFiles?: Array<{ path: string; content: string }> | null;
-}): string | null {
-  if (options.status?.recovery?.state !== 'restored') {
-    return null;
-  }
-
-  const appliedFiles = options.appliedFiles || [];
-
-  if (appliedFiles.length === 0) {
-    return null;
-  }
-
-  if (!options.snapshot || Object.keys(options.snapshot).length === 0) {
-    return 'The hosted preview recovered by restoring a prior workspace, but the runtime snapshot could not be loaded to confirm the latest generated files were retained.';
-  }
-
-  const criticalFiles = appliedFiles.filter((file) => HOSTED_HANDOFF_PERSISTENCE_FILE_RE.test(file.path));
-  const filesToVerify = criticalFiles.length > 0 ? criticalFiles : appliedFiles;
-
-  for (const appliedFile of filesToVerify) {
-    const normalizedPath = normalizeArtifactFilePath(appliedFile.path);
-    const snapshotEntry = options.snapshot[normalizedPath] ?? options.snapshot[appliedFile.path];
-
-    if (!snapshotEntry || snapshotEntry.type !== 'file' || snapshotEntry.isBinary) {
-      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
-        appliedFile.path,
-      )} is no longer present. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
-    }
-
-    if (normalizeComparableFileContent(snapshotEntry.content) !== normalizeComparableFileContent(appliedFile.content)) {
-      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
-        appliedFile.path,
-      )} was not retained. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
-    }
-  }
-
-  return null;
-}
-
-async function summarizeRestoredHostedRuntimeHandoffMismatchForRequest(options: {
-  requestUrl: string;
-  sessionId: string;
-  status?: HostedRuntimePreviewStatus | null;
-  appliedFiles?: Array<{ path: string; content: string }> | null;
-}) {
-  if (options.status?.recovery?.state !== 'restored') {
-    return null;
-  }
-
-  const snapshot = await fetchHostedRuntimeSnapshotForRequest({
-    requestUrl: options.requestUrl,
-    sessionId: options.sessionId,
-  }).catch(() => null);
-
-  return detectRestoredHostedRuntimeHandoffMismatch({
-    status: options.status,
-    snapshot,
-    appliedFiles: options.appliedFiles,
-  });
-}
-
 export function shouldAttemptHostedPreviewVerification(options: {
   chatMode?: 'discuss' | 'build';
   previewCheckpointObserved: boolean;
@@ -982,6 +905,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     selectedProvider: selectedProviderBody,
   } = requestPayload;
 
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   let files = requestFiles;
   const cookieHeader = request.headers.get('Cookie');
   const parsedCookies = parseCookies(cookieHeader || '');
@@ -992,6 +916,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   if (typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0) {
     try {
       const hostedRuntimeSnapshot = await fetchHostedRuntimeSnapshotForRequest({
+        runtimeEnv: runtimeEnv as Record<string, string | undefined>,
+        headers: request.headers,
         requestUrl: request.url,
         sessionId: hostedRuntimeSessionId,
       });
@@ -1014,7 +940,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const selectedProviderCookie = parsedCookies.selectedProvider;
   const selectedModel = selectedModelBody || selectedModelCookie;
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
-  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const desktopProfileCredentials = parseProfileAuthorizationHeader(request.headers.get('Authorization'));
 
   if (desktopProfileCredentials && !(await resolveProfileSession(request, runtimeEnv))) {
@@ -2085,6 +2010,8 @@ Next: I am sending the final result now.`,
               typeof hostedRuntimeSessionId === 'string' &&
               hostedRuntimeSessionId.trim().length > 0
                 ? await fetchHostedRuntimeSnapshotForRequest({
+                    runtimeEnv: envVars,
+                    headers: request.headers,
                     requestUrl: request.url,
                     sessionId: hostedRuntimeSessionId,
                   }).catch(() => null)
@@ -2128,6 +2055,8 @@ Next: I am starting the managed preview from that synced workspace before report
                 );
 
                 const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                  runtimeEnv: envVars,
+                  headers: request.headers,
                   requestUrl: request.url,
                   sessionId: hostedRuntimeSessionId!,
                   assistantContent: content,
@@ -2175,6 +2104,8 @@ Next: I am waiting for the hosted preview to confirm the generated app is runnin
 
                   hostedRuntimeSnapshot =
                     (await fetchHostedRuntimeSnapshotForRequest({
+                      runtimeEnv: envVars,
+                      headers: request.headers,
                       requestUrl: request.url,
                       sessionId: hostedRuntimeSessionId!,
                     }).catch(() => null)) || hostedRuntimeSnapshot;
@@ -2234,6 +2165,8 @@ Next: I am keeping the server-side recovery loop active so the next pass can rep
               let lastDirectPreviewVerificationStatus = '';
 
               let directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                runtimeEnv: envVars,
+                headers: request.headers,
                 requestUrl: request.url,
                 sessionId: hostedRuntimeSessionId!,
                 timeoutMs:
@@ -2328,6 +2261,8 @@ Next: I am giving the recovered local dev server a short settle window so the ru
                 );
 
                 directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                  runtimeEnv: envVars,
+                  headers: request.headers,
                   requestUrl: request.url,
                   sessionId: hostedRuntimeSessionId!,
                   timeoutMs: recoverySettleTimeoutMs,
@@ -2387,6 +2322,8 @@ Next: I am waiting for it to become healthy before deciding whether another repa
 
               let verifiedHostedPreviewOutcome = directHostedPreviewVerification.outcome;
               const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                runtimeEnv: envVars,
+                headers: request.headers,
                 requestUrl: request.url,
                 sessionId: hostedRuntimeSessionId!,
                 status: directHostedPreviewVerification.status,
@@ -2586,6 +2523,8 @@ Next: I am returning the finished result with the verified preview ready for ins
                 if (hasHostedRuntimeSession) {
                   try {
                     const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                      runtimeEnv: envVars,
+                      headers: request.headers,
                       requestUrl: request.url,
                       sessionId: hostedRuntimeSessionId,
                       assistantContent: content,
@@ -2644,6 +2583,8 @@ Next: I am waiting for the hosted preview to confirm the updated app is running.
                       let lastHostedPreviewVerificationCommentaryAt = 0;
                       let lastHostedPreviewVerificationStatus = '';
                       const hostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                        runtimeEnv: envVars,
+                        headers: request.headers,
                         requestUrl: request.url,
                         sessionId: hostedRuntimeSessionId,
                         timeoutMs:
@@ -2698,6 +2639,8 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
 
                       let hostedPreviewVerificationOutcome = hostedPreviewVerification.outcome;
                       const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                        runtimeEnv: envVars,
+                        headers: request.headers,
                         requestUrl: request.url,
                         sessionId: hostedRuntimeSessionId,
                         status: hostedPreviewVerification.status,

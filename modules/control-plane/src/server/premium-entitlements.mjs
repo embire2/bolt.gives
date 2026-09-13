@@ -28,6 +28,10 @@ export function verifyStripeWebhookSignature(rawBody, signatureHeader, secret, o
   const expectedBuffer = Buffer.from(expected, 'hex');
 
   return signatures.some((signature) => {
+    if (!/^[a-fA-F0-9]{64}$/.test(signature || '')) {
+      return false;
+    }
+
     try {
       const signatureBuffer = Buffer.from(signature, 'hex');
       return (
@@ -72,6 +76,8 @@ export function classifyPremiumTaskComplexity(prompt, options = {}) {
 export function buildPremiumCheckoutPayload(options) {
   const metadata = {
     kind: 'webcoder-premium',
+    application: 'bolt-gives-open-source',
+    applicationOrigin: new URL(options.origin).origin,
     sessionId: options.deployment.sessionId,
     deploymentId: options.deployment.id,
     subdomain: options.deployment.subdomain,
@@ -111,6 +117,8 @@ export function buildPremiumCheckoutPayload(options) {
 export function buildProfileBillingCheckoutPayload(options) {
   const metadata = {
     kind: 'bolt-profile-custom-domain',
+    application: 'bolt-gives-open-source',
+    applicationOrigin: new URL(options.origin).origin,
     profileId: options.profile.id,
     tokensAllowance: String(options.tokensAllowance),
     billingInterval: 'month',
@@ -224,14 +232,20 @@ export function upsertPendingPremiumEntitlement(registry, input) {
 
 export function activatePremiumEntitlement(entitlement, input = {}) {
   const nextPeriodStart = input.periodStart || entitlement.periodStart;
-  const isNewPaidPeriod = Boolean(nextPeriodStart && nextPeriodStart !== entitlement.periodStart);
+  const next = Date.parse(nextPeriodStart);
+  const current = Date.parse(entitlement.periodStart);
+  const isNewPaidPeriod = Number.isFinite(next) && (!Number.isFinite(current) || next > current);
 
   entitlement.status = 'active';
   entitlement.stripeCheckoutSessionId = input.checkoutSessionId || entitlement.stripeCheckoutSessionId;
   entitlement.stripeSubscriptionId = input.subscriptionId || entitlement.stripeSubscriptionId;
   entitlement.stripeCustomerId = input.customerId || entitlement.stripeCustomerId;
-  entitlement.periodStart = nextPeriodStart || null;
-  entitlement.periodEnd = input.periodEnd || entitlement.periodEnd;
+  entitlement.periodStart = isNewPaidPeriod ? nextPeriodStart : entitlement.periodStart || null;
+
+  if (input.periodEnd && (!entitlement.periodEnd || Date.parse(input.periodEnd) > Date.parse(entitlement.periodEnd))) {
+    entitlement.periodEnd = input.periodEnd;
+  }
+
   entitlement.lastStripeEventId = input.eventId || entitlement.lastStripeEventId;
   entitlement.updatedAt = new Date().toISOString();
 

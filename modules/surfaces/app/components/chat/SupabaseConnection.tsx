@@ -12,6 +12,7 @@ import {
   saveHostedProjectConnection,
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { Dialog, DialogButton, DialogClose, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
+import { useProfile } from '~/lib/profile-context';
 
 type DatabaseTab = 'supabase' | 'postgresql';
 
@@ -22,6 +23,7 @@ const inputClasses = classNames(
 );
 
 export function SupabaseConnection() {
+  const profileId = useProfile()?.id;
   const {
     connection: supabaseAccount,
     connecting: connectingAccount,
@@ -57,6 +59,10 @@ export function SupabaseConnection() {
     setSupabaseAnonKey('');
     setDatabaseUrl('');
 
+    if (!profileId) {
+      return undefined;
+    }
+
     void fetchHostedProjectConnection(runtimeSessionId)
       .then((currentConnection) => {
         if (active) {
@@ -70,7 +76,7 @@ export function SupabaseConnection() {
     return () => {
       active = false;
     };
-  }, [runtimeSessionId]);
+  }, [runtimeSessionId, profileId]);
 
   const connectSupabase = async () => {
     setSaving(true);

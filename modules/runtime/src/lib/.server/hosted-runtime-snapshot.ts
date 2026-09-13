@@ -95,15 +95,48 @@ function isTransientHostedPreviewError(status: HostedRuntimePreviewStatus | null
   return false;
 }
 
-export function resolveHostedRuntimeBaseUrlForRequest(requestUrl: string) {
+export interface HostedRuntimeRequestOptions {
+  requestUrl: string;
+  sessionId: string;
+  runtimeEnv?: Record<string, string | undefined>;
+  headers?: HeadersInit;
+}
+
+export function authenticationHeaders(input?: HeadersInit) {
+  const source = new Headers(input);
+  const headers = new Headers({ Accept: 'application/json' });
+  const cookie = (source.get('Cookie') || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => /^(?:__Host-)?bolt_profile_session=/.test(part))
+    .join('; ');
+
+  if (cookie) {
+    headers.set('Cookie', cookie);
+  }
+
+  if (source.get('Authorization')?.startsWith('BoltProfile ')) {
+    headers.set('Authorization', source.get('Authorization')!);
+  }
+
+  return headers;
+}
+
+export function resolveHostedRuntimeBaseUrlForRequest(
+  requestUrl: string,
+  runtimeEnv: Record<string, string | undefined> = {},
+) {
   /*
    * The Pages build can shim the bare process identifier; the Node host's
    * trusted runtime configuration remains on globalThis.process.
    */
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
 
-  if (env?.BOLT_SELF_HOST_MODE === 'single-user' && env.BOLT_RUNTIME_CONTROL_URL) {
-    return env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
+  const configured =
+    runtimeEnv.BOLT_RUNTIME_CONTROL_URL || env?.BOLT_RUNTIME_CONTROL_URL || runtimeEnv.BOLT_RUNTIME_CONTROL_PUBLIC_URL;
+
+  if (configured) {
+    return configured.replace(/\/$/, '');
   }
 
   const url = new URL(requestUrl);
@@ -120,10 +153,9 @@ export function resolveHostedRuntimeBaseUrlForRequest(requestUrl: string) {
   return `${url.protocol}//${url.host}/runtime`;
 }
 
-export async function fetchHostedRuntimeSnapshotForRequest(options: {
-  requestUrl: string;
-  sessionId: string;
-}): Promise<FileMap | null> {
+export async function fetchHostedRuntimeSnapshotForRequest(
+  options: HostedRuntimeRequestOptions,
+): Promise<FileMap | null> {
   const { requestUrl, sessionId } = options;
   const trimmedSessionId = sessionId.trim();
 
@@ -131,15 +163,17 @@ export async function fetchHostedRuntimeSnapshotForRequest(options: {
     return null;
   }
 
-  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(requestUrl);
+  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(requestUrl, options.runtimeEnv);
 
-  return readRuntimeSnapshot(`${runtimeBaseUrl}/sessions/${encodeURIComponent(trimmedSessionId)}/snapshot`);
+  return readRuntimeSnapshot(
+    `${runtimeBaseUrl}/sessions/${encodeURIComponent(trimmedSessionId)}/snapshot`,
+    authenticationHeaders(options.headers),
+  );
 }
 
-export async function fetchHostedRuntimePreviewStatusForRequest(options: {
-  requestUrl: string;
-  sessionId: string;
-}): Promise<HostedRuntimePreviewStatus | null> {
+export async function fetchHostedRuntimePreviewStatusForRequest(
+  options: HostedRuntimeRequestOptions,
+): Promise<HostedRuntimePreviewStatus | null> {
   const { requestUrl, sessionId } = options;
   const trimmedSessionId = sessionId.trim();
 
@@ -147,12 +181,11 @@ export async function fetchHostedRuntimePreviewStatusForRequest(options: {
     return null;
   }
 
-  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(requestUrl);
+  const runtimeBaseUrl = resolveHostedRuntimeBaseUrlForRequest(requestUrl, options.runtimeEnv);
   const response = await fetch(`${runtimeBaseUrl}/sessions/${encodeURIComponent(trimmedSessionId)}/preview-status`, {
     method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
+    headers: authenticationHeaders(options.headers),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -162,13 +195,13 @@ export async function fetchHostedRuntimePreviewStatusForRequest(options: {
   return (await response.json()) as HostedRuntimePreviewStatus;
 }
 
-export async function waitForHostedRuntimePreviewVerificationForRequest(options: {
-  requestUrl: string;
-  sessionId: string;
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-  onPoll?: (status: HostedRuntimePreviewStatus | null, elapsedMs: number) => void | Promise<void>;
-}): Promise<HostedRuntimePreviewVerificationResult> {
+export async function waitForHostedRuntimePreviewVerificationForRequest(
+  options: HostedRuntimeRequestOptions & {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    onPoll?: (status: HostedRuntimePreviewStatus | null, elapsedMs: number) => void | Promise<void>;
+  },
+): Promise<HostedRuntimePreviewVerificationResult> {
   const timeoutMs =
     typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
       ? options.timeoutMs

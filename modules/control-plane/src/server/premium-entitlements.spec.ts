@@ -155,6 +155,11 @@ describe('Custom Domain entitlements', () => {
     const secret = 'whsec_test';
     const timestamp = 1_800_000_000;
     const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+    expect(
+      verifyStripeWebhookSignature(body, `t=${timestamp},v1=${signature}junk`, secret, {
+        nowMs: timestamp * 1000,
+      }),
+    ).toBe(false);
 
     expect(
       verifyStripeWebhookSignature(body, `t=${timestamp},v1=${signature}`, secret, {

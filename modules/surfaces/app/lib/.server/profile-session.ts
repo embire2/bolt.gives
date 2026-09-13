@@ -73,13 +73,16 @@ function getProfileCookieSecret(runtimeEnv: RuntimeEnv = {}) {
 }
 
 export function createProfileCookie(runtimeEnv: RuntimeEnv = {}) {
-  return createCookie('bolt_profile_session', {
+  /*
+   * Both the separately compiled Pages gateway and Remix must choose the same name.
+   * Build-time replacement of process.env.NODE_ENV can otherwise split authentication.
+   */
+  const secure = !['development', 'test'].includes(runtimeEnv.NODE_ENV || '');
+  return createCookie(secure ? '__Host-bolt_profile_session' : 'bolt_profile_session', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure:
-      runtimeEnv.NODE_ENV === 'production' ||
-      (typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true),
+    secure,
     maxAge: 60 * 60 * 24 * 365,
     secrets: [getProfileCookieSecret(runtimeEnv)],
   });

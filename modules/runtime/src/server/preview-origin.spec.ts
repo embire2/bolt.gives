@@ -53,6 +53,7 @@ describe('isolated Preview capability gateway', () => {
     expect(f.gateway.handle(f.request, f.response, f.proxy)).toBe(true);
     expect(f.response.status).toBe(303);
     expect(f.response.headers.Location).not.toContain('__bolt_token');
+    expect(f.response.headers.Location).toBe('/?__bolt_isolated=1');
 
     const cookie = f.response.headers['Set-Cookie'];
     expect(cookie).toContain('__Host-bolt_preview=');
@@ -60,6 +61,14 @@ describe('isolated Preview capability gateway', () => {
     expect(cookie).not.toContain('Domain=');
     expect(f.response.headers['Referrer-Policy']).toBe('no-referrer');
     expect(f.proxyCalls).toHaveLength(0);
+  });
+
+  it('permits certificates only for issued hosts with an existing Preview', () => {
+    const f = fixture();
+    expect(f.gateway.permitsCertificate(f.url.hostname)).toBe(true);
+    expect(f.gateway.permitsCertificate('pv-unknown.preview.example.com')).toBe(false);
+    f.sessions.delete('one');
+    expect(f.gateway.permitsCertificate(f.url.hostname)).toBe(false);
   });
 
   it('scopes HTTP access to one project and strips its capability before upstream forwarding', () => {
