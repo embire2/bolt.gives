@@ -85,6 +85,22 @@ runTemplatePreviewSmoke('first-party template Preview smoke', () => {
 
         const firstPassMs = Math.round(performance.now() - startedAt);
         expect(firstPassMs).toBeLessThan(10_000);
+
+        if (pack.id === 'calendar-planner') {
+          await page.getByRole('button', { name: '+ Create event', exact: true }).click();
+          await page.getByLabel('Event title').fill('Acceptance meeting');
+          await page.getByRole('button', { name: 'Save event', exact: true }).click();
+          expect(await page.getByText('Acceptance meeting', { exact: true }).count()).toBeGreaterThan(0);
+          await page.reload({ waitUntil: 'networkidle' });
+          expect(await page.getByText('Acceptance meeting', { exact: true }).count()).toBeGreaterThan(0);
+
+          const geometry = await page
+            .locator('.mini-grid')
+            .evaluate((grid) => ({ width: grid.clientWidth, content: grid.scrollWidth }));
+          expect(geometry.content).toBeLessThanOrEqual(geometry.width + 1);
+          expect(await page.locator('.mini-grid').innerText()).not.toMatch(/\b3[2-5]\b/);
+        }
+
         console.info(`[template-preview] ${pack.id} first-pass=${firstPassMs}ms`);
       } finally {
         await page.close();

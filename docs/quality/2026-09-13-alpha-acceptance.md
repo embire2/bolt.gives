@@ -40,6 +40,34 @@ runtime has the signing secret and the coordinated rollout is complete. The
 operator will perform the actual paid acceptance test; an unpaid Checkout is
 not proof of a completed payment.
 
+## Canary Findings
+
+A real assigned Pages canary was created through the staging registration form.
+Its repeated journeys exposed two additional deployment boundaries: Wrangler
+discarded plain-text runtime routing bindings, and a partial deployment sync left
+the Cloudflare entry file stale. Protected routing bindings now survive deploy,
+and alpha code sync includes every tracked file. A stale-port redirect also lost
+the instance's host-only login cookie at the central host; the gateway now keeps
+that redirect on the authenticated instance.
+
+Setting the automatic refresh interval to zero previously left startup rollout
+enabled. That unexpectedly created six staging-branch deployments on older test
+assignments. Alpha was stopped, all six branch deployments were removed, and
+their configuration and assignments were restored. Cloudflare confirmed that
+none of those six canonical production deployments changed. A regression now
+requires zero interval to disable both startup and periodic refresh.
+
+The public private-admin runtime path was confirmed reachable and immediately
+blocked in Caddy. The application gateway has matching regression coverage;
+the normal admin page remains reachable. A full-suite repeat passed 1,367 tests
+with nine skipped before the subsequent Calendar interaction and redirect fixes.
+Calendar interaction failed against the original template and then passed,
+including creating an event, reload persistence and mini-calendar geometry.
+
+The Cloudflare canary has not yet completed clean generation, follow-up and
+publishing acceptance. Earlier failure logs remain retained. No stable release
+or completed fleet rollout is implied by creating the instance.
+
 ## Remaining Release Work
 
 - Validate an assigned Cloudflare canary, including generation, restore and public publishing.

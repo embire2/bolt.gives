@@ -4,6 +4,10 @@
 
 ### Runtime and Recovery
 
+- Preserve managed-instance runtime and FREE relay routing across Wrangler deployments, keep stale-port redirects on the client's authenticated hostname, and resolve registration settings from the request's runtime.
+- Treat zero automatic-refresh interval as manual-only at startup as well as during periodic refresh. Block the private tenant-admin API at public gateways while retaining server-side admin operations.
+- Fix the Calendar template's inactive Create event button, calendar filtering, impossible dates and overflowing mini-calendar. Event creation and reload persistence now run in the real Chromium template smoke, not only a screenshot check.
+- Wait for required GitHub workflows on the exact PR head instead of racing a missing synthetic-merge check; required failures are no longer marked continue-on-error.
 - Fix recursive public runtime proxying and authenticate server-side snapshot, handoff and Preview verification. Propagate staging FREE relay configuration instead of hardcoding the production origin.
 - Keep existing private database records available when new database provisioning is disabled; use the active workspace root and an optional private container bridge without changing credentials.
 - End failed command streams safely without sending headers twice or crashing the runtime. Use canonical isolated Preview asset URLs to avoid duplicate module aliases.

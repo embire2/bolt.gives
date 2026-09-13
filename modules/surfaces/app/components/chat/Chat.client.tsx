@@ -696,6 +696,7 @@ export const ChatImpl = memo(
     } = useChat({
       api: '/api/chat',
       fetch: securedFetch,
+      headers: { 'X-Bolt-Selected-Provider': provider.name },
       body: {
         apiKeys,
         providerSettings: getProviderSettingsFromCookiesSafe(),

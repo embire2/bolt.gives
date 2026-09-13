@@ -130,7 +130,7 @@ function formatAdminTimestamp(value: string | null | undefined) {
 
 function getTenantAdminCookieSecret() {
   return (
-    (typeof process !== 'undefined' && process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) ||
+    (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) ||
     'bolt-tenant-admin-dev-secret-change-me'
   );
 }
@@ -176,8 +176,8 @@ function requirePrivilegedAdminSession(
 }
 
 function getRuntimeControlBaseUrl() {
-  if (typeof process !== 'undefined' && process.env?.BOLT_RUNTIME_CONTROL_URL) {
-    return process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
+  if (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_RUNTIME_CONTROL_URL) {
+    return globalThis.process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
   }
 
   return 'http://127.0.0.1:4321/runtime';

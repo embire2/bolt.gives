@@ -383,38 +383,73 @@ function buildCalendarPlannerFiles(originalRequest: string): FirstPartyTemplateP
     {
       name: 'App.tsx',
       path: 'src/App.tsx',
-      content: `import { useState } from 'react';
+      content: `import { useEffect, useState } from 'react';
 import './App.css';
 
 const pageHeading = ${JSON.stringify(displayHeading)};
-const days = ['Mon 24', 'Tue 25', 'Wed 26', 'Thu 27', 'Fri 28', 'Sat 29', 'Sun 30'];
+const today = new Date();
+const weekStart = new Date(today);
+weekStart.setDate(today.getDate() - (today.getDay() + 6) % 7);
+const dayLabel = (date: Date) => date.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + date.getDate();
+const days = Array.from({ length: 7 }, (_, offset) => {
+  const date = new Date(weekStart);
+  date.setDate(weekStart.getDate() + offset);
+  return dayLabel(date);
+});
+const monthDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+const monthOffset = (new Date(today.getFullYear(), today.getMonth(), 1).getDay() + 6) % 7;
 const hours = ['8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM'];
 const calendars = ['Personal', 'Team', 'Launch', 'Focus'];
-const events = [
-  { day: 'Mon 24', time: '9 AM', title: 'Design sync', calendar: 'Team', span: 2 },
-  { day: 'Tue 25', time: '11 AM', title: 'Content review', calendar: 'Launch', span: 1 },
-  { day: 'Wed 26', time: '1 PM', title: 'Deep work block', calendar: 'Focus', span: 2 },
-  { day: 'Thu 27', time: '10 AM', title: 'Partner demo', calendar: 'Team', span: 1 },
-  { day: 'Fri 28', time: '2 PM', title: 'Weekly planning', calendar: 'Personal', span: 2 },
+const initialEvents = [
+  { day: days[0], time: '9 AM', title: 'Design sync', calendar: 'Team', span: 2 },
+  { day: days[1], time: '11 AM', title: 'Content review', calendar: 'Launch', span: 1 },
+  { day: days[2], time: '1 PM', title: 'Deep work block', calendar: 'Focus', span: 2 },
+  { day: days[3], time: '10 AM', title: 'Partner demo', calendar: 'Team', span: 1 },
+  { day: days[4], time: '2 PM', title: 'Weekly planning', calendar: 'Personal', span: 2 },
 ];
 
 export default function App() {
-  const [selectedDay, setSelectedDay] = useState(days[2]);
-
-  const selectedEvents = events.filter((event) => event.day === selectedDay);
+  const [selectedDay, setSelectedDay] = useState(dayLabel(today));
+  const [creating, setCreating] = useState(false);
+  const [visibleCalendars, setVisibleCalendars] = useState(calendars);
+  const [events, setEvents] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('calendar-events') || 'null');
+      return Array.isArray(saved) ? saved as typeof initialEvents : initialEvents;
+    } catch { return initialEvents; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('calendar-events', JSON.stringify(events)); } catch { /* Storage may be unavailable. */ }
+  }, [events]);
+  const visibleEvents = events.filter((event) => visibleCalendars.includes(event.calendar));
+  const selectedEvents = visibleEvents.filter((event) => event.day === selectedDay);
 
   return (
     <main className="calendar-shell">
       <aside className="sidebar">
-        <button className="create-button">+ Create event</button>
+        <button className="create-button" onClick={() => setCreating(!creating)}>+ Create event</button>
+        {creating && <form className="event-form" onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const title = String(form.get('title') || '').trim();
+          if (!title) return;
+          setEvents((current) => [...current, { day: selectedDay, time: String(form.get('time')), title, calendar: 'Personal', span: 1 }]);
+          setCreating(false);
+        }}>
+          <label>Event title<input name="title" required maxLength={120} autoFocus /></label>
+          <label>Time<select name="time">{hours.map((hour) => <option key={hour}>{hour}</option>)}</select></label>
+          <button className="create-button" type="submit">Save event</button>
+        </form>}
         <section className="mini-card">
-          <p className="eyebrow">June 2026</p>
+          <p className="eyebrow">{today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
           <div className="mini-grid">
-            {Array.from({ length: 35 }, (_, index) => (
+            {Array.from({ length: monthOffset }, (_, index) => <span key={'pad-' + index} />)}
+            {Array.from({ length: monthDays }, (_, index) => (
               <button
                 key={index}
-                className={index === 16 ? 'today' : index === 18 ? 'selected' : ''}
+                className={index + 1 === today.getDate() ? 'today' : ''}
                 aria-label={String(index + 1)}
+                onClick={() => setSelectedDay(dayLabel(new Date(today.getFullYear(), today.getMonth(), index + 1)))}
               >
                 {index + 1}
               </button>
@@ -425,7 +460,7 @@ export default function App() {
           <p className="eyebrow">My calendars</p>
           {calendars.map((calendar) => (
             <label key={calendar}>
-              <input type="checkbox" defaultChecked />
+              <input type="checkbox" checked={visibleCalendars.includes(calendar)} onChange={() => setVisibleCalendars((current) => current.includes(calendar) ? current.filter((item) => item !== calendar) : [...current, calendar])} />
               <span>{calendar}</span>
             </label>
           ))}
@@ -439,8 +474,8 @@ export default function App() {
             <h1>{pageHeading}</h1>
           </div>
           <div className="topbar-actions">
-            <button>Today</button>
-            <button className="ghost">Week</button>
+            <button onClick={() => setSelectedDay(dayLabel(today))}>Today</button>
+            <span className="ghost">Week</span>
           </div>
         </header>
 
@@ -463,9 +498,9 @@ export default function App() {
             {hours.map((hour) => (
               <div key={hour} className="time-row" />
             ))}
-            {events.map((event, index) => (
+            {visibleEvents.map((event, index) => (
               <article
-                key={event.title}
+                key={event.title + index}
                 className={event.day === selectedDay ? 'event-card selected-event' : 'event-card'}
                 style={{
                   top: String(hours.indexOf(event.time) * 68 + 12) + 'px',
@@ -485,8 +520,8 @@ export default function App() {
         <p className="eyebrow">Agenda</p>
         <h2>{selectedDay}</h2>
         {selectedEvents.length > 0 ? (
-          selectedEvents.map((event) => (
-            <article key={event.title} className="agenda-item">
+          selectedEvents.map((event, index) => (
+            <article key={event.title + index} className="agenda-item">
               <span>{event.time}</span>
               <strong>{event.title}</strong>
               <p>{event.calendar} calendar</p>
@@ -586,11 +621,17 @@ input {
 
 .mini-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
 }
 
+.event-form { display: grid; gap: 12px; margin-top: 16px; }
+.event-form label { display: grid; gap: 6px; }
+.event-form input, .event-form select { min-width: 0; width: 100%; padding: 8px; border: 1px solid #526179; border-radius: 8px; }
+
 .mini-grid button {
+  min-width: 0;
+  padding: 0;
   aspect-ratio: 1;
   border: 0;
   border-radius: 999px;

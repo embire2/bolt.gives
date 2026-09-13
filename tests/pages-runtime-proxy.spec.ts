@@ -13,6 +13,47 @@ import {
 } from '../functions/[[path]]';
 
 describe('Cloudflare Pages runtime proxy helpers', () => {
+  it('keeps stale-port redirects on the authenticated instance rather than losing its cookie at the central host', async () => {
+    const transport = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+      String(url).endsWith('/profile/session')
+        ? Response.json({ ok: true, profile: { id: 'fixture' } })
+        : new Response(null, {
+            status: 307,
+            headers: { Location: 'https://alpha1.bolt.gives/runtime/preview/fixture/6100/?revision=2' },
+          }),
+    );
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://fixture.pages.dev/runtime/preview/fixture/4100/', {
+          headers: {
+            Authorization:
+              'BoltProfile 01f00000-0000-4000-8000-000000000001.Abcdefghijklmnopqrstuvwxyz0123456789_-ABCDE',
+          },
+        }),
+        env: { BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime' },
+      } as never);
+      expect(response.headers.get('Location')).toBe(
+        'https://fixture.pages.dev/runtime/preview/fixture/6100/?revision=2',
+      );
+    } finally {
+      transport.mockRestore();
+    }
+  });
+  it.each(['GET', 'POST'])('never forwards the private admin control plane (%s)', async (method) => {
+    const transport = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://example.com/runtime/tenant-admin/status', { method }),
+        env: {},
+      } as never);
+      expect(response.status).toBe(404);
+      expect(transport).not.toHaveBeenCalled();
+    } finally {
+      transport.mockRestore();
+    }
+  });
   it('does not misreport a runtime outage as a signed-out owner', async () => {
     const credentials = 'BoltProfile 01f00000-0000-4000-8000-000000000001.Abcdefghijklmnopqrstuvwxyz0123456789_-ABCDE';
     const transport = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));

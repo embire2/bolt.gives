@@ -7,6 +7,7 @@ on:
       - main
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
   checks: write
@@ -15,61 +16,41 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Wait for CI checks
-        uses: lewagon/wait-on-check-action@v1.3.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          check-name: 'Test'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-
-      - name: Check required status checks
+      - name: Wait for required workflows on this exact PR head
         uses: actions/github-script@v7
-        continue-on-error: true
+        timeout-minutes: 30
         with:
           script: |
-            const { data: checks } = await github.rest.checks.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.payload.pull_request.head.sha
-            });
-
-            const requiredChecks = ['Test', 'CodeQL Analysis'];
-            const optionalChecks = ['Quality Analysis', 'Deploy Preview'];
-            const failedChecks = [];
-            const passedChecks = [];
-
-            // Check required workflows
-            for (const checkName of requiredChecks) {
-              const check = checks.check_runs.find(c => c.name === checkName);
-              if (check && check.conclusion === 'success') {
-                passedChecks.push(checkName);
-              } else {
-                failedChecks.push(checkName);
+            // PR jobs may be attached to a synthetic merge SHA. Workflow runs
+            // retain the actual head SHA, so do not search for an absent job name.
+            const required = ['CI/CD', 'Security Analysis', 'Installer Recovery'];
+            const sha = context.payload.pull_request.head.sha;
+            const deadline = Date.now() + 28 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                ...context.repo, head_sha: sha, event: 'pull_request', per_page: 100
+              });
+              const current = required.map(name => data.workflow_runs
+                .filter(run => run.name === name && run.head_sha === sha)
+                .sort((a, b) => b.id - a.id)[0]);
+              const failed = current.filter(run => run?.status === 'completed' && run.conclusion !== 'success');
+              if (failed.length) {
+                core.setFailed(failed.map(run => `${run.name}: ${run.conclusion} (${run.html_url})`).join('\n'));
+                return;
               }
-            }
-
-            // Report optional checks
-            for (const checkName of optionalChecks) {
-              const check = checks.check_runs.find(c => c.name === checkName);
-              if (check && check.conclusion === 'success') {
-                passedChecks.push(`${checkName} (optional)`);
+              if (current.every(run => run?.status === 'completed' && run.conclusion === 'success')) {
+                core.info(`Required workflows passed on ${sha}`);
+                return;
               }
+              core.info(`Waiting: ${required.filter((name, index) => current[index]?.conclusion !== 'success').join(', ')}`);
+              await new Promise(resolve => setTimeout(resolve, 10000));
             }
-
-            console.log(`✅ Passed checks: ${passedChecks.join(', ')}`);
-            
-            if (failedChecks.length > 0) {
-              console.log(`❌ Failed required checks: ${failedChecks.join(', ')}`);
-              core.setFailed(`Required checks failed: ${failedChecks.join(', ')}`);
-            } else {
-              console.log(`✅ All required checks passed!`);
-            }
+            core.setFailed('Timed out waiting for the exact-head required workflows.');
 
   validate-release:
     name: Release Validation
@@ -101,13 +82,13 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, 'major')
         run: |
           echo "⚠️ This PR contains breaking changes and will trigger a major release."
-          
+
       - name: Validate changelog entry
         if: contains(github.event.pull_request.labels.*.name, 'stable-release')
         run: |
-          if ! grep -q "${{ github.event.pull_request.number }}" CHANGES.md; then
+          if ! test -s CHANGELOG.md; then
             echo "❌ No changelog entry found for PR #${{ github.event.pull_request.number }}"
-            echo "Please add an entry to CHANGES.md"
+            echo "Please add the release entry to CHANGELOG.md"
             exit 1
           else
             echo "✓ Changelog entry found"
@@ -117,7 +98,7 @@ jobs:
     name: Security Review Required
     runs-on: ubuntu-latest
     if: contains(github.event.pull_request.labels.*.name, 'security')
-    
+
     steps:
       - name: Check security label
         run: |

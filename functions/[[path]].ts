@@ -197,13 +197,29 @@ async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
     });
   }
 
-  return fetch(targetUrl, {
+  const response = await fetch(targetUrl, {
     method: request.method,
     headers: buildRuntimeProxyHeaders(request, targetUrl),
     body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
     ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',
   });
+
+  // Port-recovery redirects must return through the caller's authenticated gateway.
+  const location = response.headers.get('Location');
+
+  if (location) {
+    const redirected = new URL(location, targetUrl);
+
+    if (redirected.origin === targetOrigin && redirected.pathname.startsWith('/runtime/preview/')) {
+      const headers = new Headers(response.headers);
+      headers.set('Location', `${requestOrigin}${redirected.pathname}${redirected.search}${redirected.hash}`);
+
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+  }
+
+  return response;
 }
 
 export const onRequest: PagesFunction<PagesEnv> = async (context) => {
@@ -211,6 +227,10 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const url = new URL(request.url);
 
   // A generated sibling-origin Preview must not mutate the platform via its runtime proxy.
+  if (url.pathname === '/runtime/tenant-admin' || url.pathname.startsWith('/runtime/tenant-admin/')) {
+    return new Response('Not found', { status: 404 });
+  }
+
   const origin = request.headers.get('Origin');
 
   if (

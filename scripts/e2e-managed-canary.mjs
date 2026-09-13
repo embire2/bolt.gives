@@ -24,7 +24,7 @@ try {
   await page
     .getByLabel('What are you building?')
     .fill('Disposable release acceptance: generate, iterate, restore and publish a Calendar.');
-  await page.getByRole('button', { name: 'Spawn managed instance', exact: true }).click();
+  await page.getByRole('button', { name: 'Spawn managed instance', exact: true }).click({ timeout: 240_000 });
 
   const link = page.locator(`a[href="https://${subdomain}.pages.dev"]`).first();
   await link.waitFor({ state: 'visible', timeout: 240_000 });
@@ -39,8 +39,15 @@ try {
   await fs.writeFile(`${output}/instance.json`, JSON.stringify(report, null, 2), { mode: 0o600 });
   console.log(JSON.stringify(report));
 } catch (error) {
-  await page.screenshot({ path: `${output}/failure.png`, fullPage: true });
-  await fs.writeFile(`${output}/failure.txt`, await page.locator('body').innerText(), { mode: 0o600 });
+  await page.screenshot({ path: `${output}/failure.png`, fullPage: true, timeout: 5000 }).catch(() => undefined);
+  await fs.writeFile(
+    `${output}/failure.txt`,
+    await page
+      .locator('body')
+      .innerText({ timeout: 5000 })
+      .catch(() => String(error)),
+    { mode: 0o600 },
+  );
   throw error;
 } finally {
   await browser.close();

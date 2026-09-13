@@ -11073,6 +11073,18 @@ function startServer() {
       console.warn(`[runtime] managed rollout guard active: ${rolloutGuard.reason}`);
     }
 
+    const { automaticManagedRolloutEnabled } =
+      await import('../modules/control-plane/src/server/managed-rollout-policy.mjs');
+
+    if (
+      !automaticManagedRolloutEnabled({
+        enabled: MANAGED_INSTANCE_PUBLIC_ENABLED,
+        intervalMs: MANAGED_INSTANCE_SYNC_INTERVAL_MS,
+      })
+    ) {
+      return;
+    }
+
     void runSerializedManagedInstanceRollout(
       () => rolloutManagedInstancesToCurrentBuild({ reason: 'startup-sync', actor: 'system' }),
       { reason: 'startup-sync' },

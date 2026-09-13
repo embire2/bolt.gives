@@ -290,11 +290,11 @@ describe('managed instance registry helpers', () => {
       preview: {
         env_vars: {
           BOLT_HOSTED_FREE_RELAY_ORIGIN: {
-            type: 'plain_text',
+            type: 'secret_text',
             value: 'https://bolt.gives',
           },
           BOLT_RUNTIME_CONTROL_PUBLIC_URL: {
-            type: 'plain_text',
+            type: 'secret_text',
             value: 'https://bolt.gives/runtime',
           },
         },
@@ -302,11 +302,11 @@ describe('managed instance registry helpers', () => {
       production: {
         env_vars: {
           BOLT_HOSTED_FREE_RELAY_ORIGIN: {
-            type: 'plain_text',
+            type: 'secret_text',
             value: 'https://bolt.gives',
           },
           BOLT_RUNTIME_CONTROL_PUBLIC_URL: {
-            type: 'plain_text',
+            type: 'secret_text',
             value: 'https://bolt.gives/runtime',
           },
         },
