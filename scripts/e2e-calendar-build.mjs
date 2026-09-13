@@ -536,7 +536,9 @@ async function main() {
       const serializedArguments = argumentValues
         .map((value) => (typeof value === 'string' ? value : JSON.stringify(value)))
         .join(' ');
-      const entry = `[${msg.type()}] ${serializedArguments || msg.text()}`;
+      const location = msg.location().url;
+      const source = location ? new URL(location, baseUrl) : null;
+      const entry = `[${msg.type()}] ${serializedArguments || msg.text()}${source ? ` at ${source.origin}${source.pathname}` : ''}`;
       consoleErrors.push(entry);
       log('browser console', entry.slice(0, 800));
     }
@@ -648,7 +650,9 @@ async function main() {
 
       if (captureChatBody) {
         try {
-          bodyPreview = (await res.text()).slice(0, 12000);
+          const text = await res.text();
+          bodyPreview = text.slice(0, 12000);
+          await fs.writeFile(path.join(outDir, `chat-stream-${Date.now()}.txt`), text, { mode: 0o600 });
         } catch {}
       }
 

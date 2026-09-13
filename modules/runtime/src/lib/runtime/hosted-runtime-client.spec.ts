@@ -7,6 +7,7 @@ import {
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   resolveHostedRuntimeBaseUrl,
+  runHostedRuntimeCommand,
   saveHostedProjectConnection,
   subscribeHostedRuntimePreview,
   terminateHostedRuntimeProcesses,
@@ -18,6 +19,39 @@ afterEach(() => {
 });
 
 describe('hosted runtime client', () => {
+  it('normalizes ready events before subscribers can navigate the Preview iframe', async () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://client.pages.dev',
+        hostname: 'client.pages.dev',
+        host: 'client.pages.dev',
+        protocol: 'https:',
+      },
+    });
+
+    const events = [
+      {
+        type: 'ready',
+        preview: { port: 6100, baseUrl: 'https://alpha1.bolt.gives/runtime/preview/one/6100', revision: 2 },
+      },
+      { type: 'exit', exitCode: 0 },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(events.map((event) => JSON.stringify(event)).join('\n') + '\n')),
+    );
+
+    const onEvent = vi.fn();
+
+    const result = await runHostedRuntimeCommand({ sessionId: 'one', command: 'npm run dev', kind: 'start', onEvent });
+
+    expect(onEvent).toHaveBeenCalledWith({
+      type: 'ready',
+      preview: { port: 6100, baseUrl: 'https://client.pages.dev/runtime/preview/one/6100', revision: 2 },
+    });
+    expect(result.preview).toEqual(onEvent.mock.calls[0][0].preview);
+  });
+
   it('never moves a verified isolated Preview URL back onto platform storage', () => {
     vi.stubGlobal('window', {
       location: {

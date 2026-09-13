@@ -400,12 +400,17 @@ export async function runHostedRuntimeCommand(options: {
         continue;
       }
 
+      if (event.type === 'ready') {
+        // Subscribers navigate immediately, before the command result is returned.
+        event = { ...event, preview: normalizeHostedRuntimePreviewInfoForBrowser(event.preview) };
+      }
+
       onEvent?.(event);
 
       if (event.type === 'stdout' || event.type === 'stderr') {
         output += event.chunk;
       } else if (event.type === 'ready') {
-        preview = normalizeHostedRuntimePreviewInfoForBrowser(event.preview);
+        preview = event.preview;
       } else if (event.type === 'exit') {
         exitCode = event.exitCode;
       } else if (event.type === 'error') {
