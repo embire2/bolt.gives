@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - After v4.1.0-beta.1
+
+### Removed
+
+- Removed the optional Codeball PR-review workflow after both Cloudflare DNS (`1.1.1.1`) and the authoritative nameserver returned `NXDOMAIN` for its API hostname. Tests, security scans, build validation, installer recovery and release/E2E workflows are unchanged. This CI-only maintenance does not update the running application or resolve the outstanding production-release blockers.
+
 ## v4.1.0-beta.1 (2026-09-13) - Test Prerelease
 
 Combines the implemented work from both reliability phases. **Not a stable release or production/fleet deployment.** Preview-origin isolation (B13), non-root per-project execution (B14), and the remaining live acceptance matrix are still open. Test only on a disposable private machine without customer data or production credentials. The native Windows release line is unchanged.

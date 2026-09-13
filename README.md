@@ -23,6 +23,8 @@ The beta is an opt-in test publication, **not a completed Phase 2 or stable v4.1
 
 **Neither production nor the fleet has been updated.** Isolated Preview origins/TLS, non-root project-process isolation and the intermittent B15 browser crash remain stable-release gates. Real Stripe fulfillment, Windows/WSL reboot-resume and native desktop parity are not certified. Windows PowerShell setup installs the open-source server through WSL2; it is not the private native desktop rewrite.
 
+**CI maintenance after the beta:** the unavailable Codeball PR-review workflow has been removed from the development branch. Tests, security analysis, builds, installer recovery and release/E2E workflows are retained unchanged. Codeball was not a required merge check; removing it does not waive the release gates above or deploy the application.
+
 ## What You Can Do
 
 Type a request such as:

@@ -16,6 +16,10 @@ Combined opt-in test publication:
 
 - [~] `v4.1.0-beta.1`: both implemented reliability phases, not stable deployment or completed Phase 2. See the [release scope and pinned installers](docs/releases/v4.1.0-beta.1.md). B13/B14 and the remaining acceptance gates below are not waived; do not roll this beta out to shared production instances.
 
+CI maintenance after the beta:
+
+- [x] Remove the unavailable optional Codeball review workflow without changing tests, security analysis, builds, installer recovery or release/E2E workflows. Its API hostname is absent from authoritative DNS as well as `1.1.1.1`; changing the production server's DNS resolver is not a fix. This maintenance does not complete the application deployment gates.
+
 Next release target:
 
 - [~] `v4.1.0`
