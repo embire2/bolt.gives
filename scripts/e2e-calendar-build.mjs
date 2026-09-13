@@ -260,7 +260,6 @@ function isBenignNetworkFailure(entry) {
     /REQFAIL DELETE .*\/runtime\/sessions\/[^/]+\/command :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL HEAD .*\/api\/health :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/api\/system\/performance :: net::ERR_INSUFFICIENT_RESOURCES/.test(entry) ||
-    /REQFAIL POST .*\/api\/chat :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/snapshot :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/sessions\/[^/]+\/preview-events :: net::ERR_ABORTED/.test(entry) ||
     /REQFAIL GET .*\/runtime\/preview\/[^/]+\/\d+\/.* :: net::ERR_ABORTED/.test(entry) ||
@@ -271,7 +270,7 @@ function isBenignNetworkFailure(entry) {
 
 function isFatalConsoleError(entry) {
   return (
-    /\[error\].*\[chat:.*:diagnostics\]/i.test(entry) ||
+    /^\[(?:error|pageerror)\]/i.test(entry) ||
     /BOLT_STREAM_TIMEOUT/i.test(entry) ||
     /Custom error: (?:Network error|Generation stream timed out)/i.test(entry)
   );
@@ -528,6 +527,11 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await context.newPage();
 
+  if (captureChatBody) {
+    const { captureChatStreams } = await import('./e2e-chat-stream-capture.mjs');
+    await captureChatStreams(context, page, outDir);
+  }
+
   page.on('console', async (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
       const argumentValues = await Promise.all(
@@ -646,17 +650,7 @@ async function main() {
         `status=${res.status()} deadlineMs=${headers['x-bolt-stream-deadline-ms'] || 'missing'}`,
       );
 
-      let bodyPreview = '';
-
-      if (captureChatBody) {
-        try {
-          const text = await res.text();
-          bodyPreview = text.slice(0, 12000);
-          await fs.writeFile(path.join(outDir, `chat-stream-${Date.now()}.txt`), text, { mode: 0o600 });
-        } catch {}
-      }
-
-      chatRequests.push({ status: res.status(), url, headers, bodyPreview });
+      chatRequests.push({ status: res.status(), url, headers });
     }
 
     if (res.status() >= 400 && !url.includes('/api/chat')) {

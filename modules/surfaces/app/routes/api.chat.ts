@@ -417,7 +417,22 @@ export function resolveContinuationFiles(options: {
 }
 
 export function extractRequiredVisibleTextLiterals(request: string | undefined): string[] {
-  const source = String(request || '').replace(/\\(["'`])/g, '$1');
+  let source = String(request || '');
+
+  // Decode message envelopes before scanning quotes, not by removing their escapes.
+  if (source.trim().startsWith('{')) {
+    try {
+      const envelope = JSON.parse(source);
+
+      if (envelope && typeof envelope === 'object' && ('content' in envelope || 'parts' in envelope)) {
+        source = extractUserRequestTextFromMessage(envelope);
+      }
+    } catch {
+      // A plain-English request may start with a non-JSON brace.
+    }
+  }
+
+  source = source.replace(/\\(["'`])/g, '$1');
 
   if (!source.trim()) {
     return [];
