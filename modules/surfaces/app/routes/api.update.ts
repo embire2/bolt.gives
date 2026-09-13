@@ -1,4 +1,5 @@
 import { json, type ActionFunction, type LoaderFunction, type LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { compareReleaseVersions as compareVersions } from '@bolt/core/lib/release-version';
 import {
   parseUpdatePolicyFromReleaseBody,
   type UpdatePolicy,
@@ -122,29 +123,6 @@ async function canRunUpdateManager(): Promise<boolean> {
   }
 
   return canRunNodeFileSystem();
-}
-
-function compareVersions(v1: string, v2: string): number {
-  const p1 = v1
-    .replace(/^v/i, '')
-    .split('.')
-    .map((part) => Number(part || 0));
-  const p2 = v2
-    .replace(/^v/i, '')
-    .split('.')
-    .map((part) => Number(part || 0));
-  const maxLength = Math.max(p1.length, p2.length);
-
-  for (let index = 0; index < maxLength; index++) {
-    const left = p1[index] || 0;
-    const right = p2[index] || 0;
-
-    if (left !== right) {
-      return left - right;
-    }
-  }
-
-  return 0;
 }
 
 export function toUserSafeUpdateError(error: unknown): string {

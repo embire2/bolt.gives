@@ -55,7 +55,7 @@ Usage:
 
 Options:
   --install-dir PATH   Install/update the repo in PATH (default: $HOME/bolt.gives)
-  --branch NAME        Git branch to install (default: main)
+  --branch NAME        Git branch or release tag to install (default: main)
   --repo-url URL       Git repository URL to clone/update
   --app-domain HOST    Public app domain (for example: code.example.com)
   --admin-domain HOST  Public admin/operator domain (for example: admin.example.com)
@@ -584,17 +584,52 @@ install_pnpm() {
 }
 
 clone_or_update_repo() {
+  [[ "${BRANCH}" != -* ]] && git check-ref-format "refs/heads/${BRANCH}" >/dev/null \
+    || fail "Invalid Git branch or tag name."
+
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     if [[ -n "$(git -C "${INSTALL_DIR}" status --porcelain --untracked-files=no)" ]]; then
       fail "Tracked files have local changes. Commit or back them up before updating; nothing was overwritten."
     fi
     log "Updating existing repository in ${INSTALL_DIR}"
-    if retry_command 3 5 "repository fetch" git -C "${INSTALL_DIR}" fetch origin "${BRANCH}" \
-      && git -C "${INSTALL_DIR}" checkout "${BRANCH}" \
-      && git -C "${INSTALL_DIR}" merge --ff-only "origin/${BRANCH}"; then
-      return
+    local remote_refs ref_name fetch_ref fetched_commit local_commit
+    remote_refs="$(retry_command 3 5 "repository ref lookup" git -C "${INSTALL_DIR}" ls-remote --refs origin \
+      "refs/heads/${BRANCH}" "refs/tags/${BRANCH}")" \
+      || fail "Repository ref lookup failed. The existing checkout was not changed."
+    ref_name="$(printf '%s\n' "${remote_refs}" | awk -v wanted="refs/heads/${BRANCH}" '$2 == wanted {print $2}')"
+    if [[ -z "${ref_name}" ]]; then
+      ref_name="$(printf '%s\n' "${remote_refs}" | awk -v wanted="refs/tags/${BRANCH}" '$2 == wanted {print $2}')"
     fi
-    fail "Repository update failed. The existing installation, configuration and history were preserved. Repair network or branch divergence and rerun."
+    [[ -n "${ref_name}" ]] || fail "Requested branch or tag does not exist on origin. Nothing was changed."
+    fetch_ref="${ref_name}"
+    if [[ "${ref_name}" == refs/tags/* ]]; then
+      fetch_ref="${ref_name}:${ref_name}"
+    fi
+    retry_command 3 5 "repository fetch" git -C "${INSTALL_DIR}" fetch --no-tags origin "${fetch_ref}" \
+      || fail "Repository fetch failed. The existing checkout was not changed."
+    fetched_commit="$(git -C "${INSTALL_DIR}" rev-parse --verify 'FETCH_HEAD^{commit}')" \
+      || fail "The requested ref is not a commit."
+    git -C "${INSTALL_DIR}" merge-base --is-ancestor HEAD "${fetched_commit}" \
+      || fail "Update is not fast-forward. Back up/reconcile local commits before retrying; nothing was overwritten."
+
+    if [[ "${ref_name}" == refs/tags/* ]]; then
+      # Release tags are immutable targets, not origin/<tag> tracking branches.
+      git -C "${INSTALL_DIR}" checkout --detach "${fetched_commit}" \
+        || fail "Unable to select the release commit."
+    else
+      if git -C "${INSTALL_DIR}" show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+        local_commit="$(git -C "${INSTALL_DIR}" rev-parse "refs/heads/${BRANCH}")"
+        git -C "${INSTALL_DIR}" merge-base --is-ancestor "${local_commit}" "${fetched_commit}" \
+          || fail "The local target branch has diverged. Nothing was overwritten."
+        git -C "${INSTALL_DIR}" checkout "${BRANCH}" \
+          && git -C "${INSTALL_DIR}" merge --ff-only "${fetched_commit}" \
+          || fail "Unable to fast-forward the requested branch."
+      else
+        git -C "${INSTALL_DIR}" checkout -b "${BRANCH}" "${fetched_commit}" \
+          || fail "Unable to create the requested local branch."
+      fi
+    fi
+    return
   fi
 
   if [[ -e "${INSTALL_DIR}" ]]; then

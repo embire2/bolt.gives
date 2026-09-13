@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 Status legend:
 
@@ -11,6 +11,10 @@ Status legend:
 Current stable release:
 
 - [x] `v4.0.1`
+
+Combined opt-in test publication:
+
+- [~] `v4.1.0-beta.1`: both implemented reliability phases, not stable deployment or completed Phase 2. See the [release scope and pinned installers](docs/releases/v4.1.0-beta.1.md). B13/B14 and the remaining acceptance gates below are not waived; do not roll this beta out to shared production instances.
 
 Next release target:
 
@@ -50,9 +54,9 @@ Audit baseline: 1,167 tests passed, nine skipped; six template Preview smokes pa
 
 Phase 1 implements the six Priority 1 packages below in the development checkout. See the [review checkpoint and evidence](docs/quality/2026-09-12-phase1-review.md). `[~]` below means implemented locally with validation/review still open, not deployed. Stripe test-mode payment fulfillment and a clean Ubuntu install are still required before claiming the corresponding release acceptance tests complete.
 
-Phase 2 and both deployments are now authorized. Work continues on the validation branch; deployment still requires the security and health gates. See the [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md). The Preview-origin boundary and non-root generated-command isolation remain open. Wildcard DNS already points to this server, but arbitrary Preview hostnames fail TLS and need routing/certificate configuration; DNS is authoritative outside Cloudflare. Do not merge an unreleased checkpoint into the automatic production rollout merely to publish documentation.
+Phase 2 and both deployments were authorized. The two implemented halves are consolidated on the validation branch and published as an opt-in beta; stable deployment still requires the security and health gates. See the [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md). The Preview-origin boundary and non-root generated-command isolation remain open. Wildcard DNS already points to this server, but arbitrary Preview hostnames fail TLS and need routing/certificate configuration; DNS is authoritative outside Cloudflare. Do not merge this test prerelease into the automatic production rollout merely to publish it.
 
-Late acceptance work fixed three additional reliability gaps: a blocking 30-second synthetic FREE probe before actual coding; snapshot-object/scaffold completion mistaken for generated output; and shutdown-triggered repair restoring older source. The 21:02 and final 21:05 UTC browser runs passed interaction, follow-up, navigation, reload and intentional runtime restart with disk-source assertions. B01 also excludes atomic-write files and treats concurrent source removal as a retryable conflict; the final repeat includes that change. The full suite has **1,284 passing tests, nine skipped**. These fixes are still **unreleased**, and B13/B14 remain open.
+Late acceptance work fixed three additional reliability gaps: a blocking 30-second synthetic FREE probe before actual coding; snapshot-object/scaffold completion mistaken for generated output; and shutdown-triggered repair restoring older source. The 21:02 and final 21:05 UTC browser runs passed interaction, follow-up, navigation, reload and intentional runtime restart with disk-source assertions. B01 also excludes atomic-write files and treats concurrent source removal as a retryable conflict; the final repeat includes that change. That checkpoint passed **1,284 tests, nine skipped**. These fixes are in the **test prerelease only**, and B13/B14 remain open. Publication work also corrects tag-based install/repair, refuses rewritten tags and fixes beta-to-stable update ordering; it does not change either isolation boundary.
 
 Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/typecheck/build/bundle budgets passed, lint has zero errors and ten warnings. The final real-browser FREE/Luna journey passed first Preview, interaction, follow-up, Code selection, navigation, reload, and deliberate runtime restart without unexpected browser errors. The two-profile/two-tab PostgreSQL account journey also passed. No production deployment or release was made.
 
@@ -60,6 +64,10 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 
 - [ ] B13: Move untrusted Preview onto isolated origins or an equivalently verified browser boundary, use capability-scoped access, and prove generated code cannot read platform credentials/storage or make authenticated platform mutations. Preserve Vite assets, WebSockets, database access rules, follow-up health checks, and mobile Preview.
 - [ ] B14: Migrate hosted generated commands away from the root runtime identity into per-project process/filesystem isolation. The current live runtime service runs as root and the local command spawn inherits that identity. Preserve existing source/database records, test install/build/Preview/recovery without access to operator files or other projects, then migrate staging before production. Local non-root acceptance fixtures do not certify live isolation.
+- [ ] B15: Trace the intermittent `Cannot read properties of null (reading 'useState')` browser crash seen at 10:36 UTC on 13 September. Capture exact stack, frame and module identity; distinguish product render failure from generated-app failure; add deterministic reproduction and a regression. The instrumented 10:37 repeat passed, which is not proof that the intermittent issue is resolved.
+- [~] B16: Stop browser-build environment credential exposure. Exact public-name allowlisting and bundled secret fixtures are implemented. The old GitHub token found in live assets returns 401, but existing live/cached assets still require replacement during the stable rollout; never reactivate/reuse exposed credentials.
+
+- [~] Beta repeat finding: an upstream file-tool result contained a nested artifact wrapper, causing the browser to commit an empty `App.tsx` before server handoff. Normalize valid single-file envelopes at the provider boundary; reject nested commands/path changes and test browser/server extraction together. Keep the failed 13 September browser run in the evidence, not in the pass count.
 
 ### Priority 1: Access, Source Integrity, and Account Safety
 

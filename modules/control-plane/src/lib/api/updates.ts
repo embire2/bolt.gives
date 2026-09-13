@@ -14,26 +14,6 @@ interface PackageJson {
   [key: string]: unknown;
 }
 
-function compareVersions(v1: string, v2: string): number {
-  // Remove 'v' prefix if present
-  const version1 = v1.replace(/^v/, '');
-  const version2 = v2.replace(/^v/, '');
-
-  const parts1 = version1.split('.').map(Number);
-  const parts2 = version2.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const part1 = parts1[i] || 0;
-    const part2 = parts2[i] || 0;
-
-    if (part1 !== part2) {
-      return part1 - part2;
-    }
-  }
-
-  return 0;
-}
-
 export const checkForUpdates = async (): Promise<UpdateCheckResult> => {
   try {
     // Get the current version from local package.json
@@ -104,3 +84,4 @@ export const acknowledgeUpdate = async (version: string): Promise<void> => {
     console.error('Failed to store acknowledged version:', error);
   }
 };
+import { compareReleaseVersions as compareVersions } from '@bolt/core/lib/release-version';

@@ -36,8 +36,14 @@ export function buildBoltArtifactFromHostedFreeResponsesToolInput(input: unknown
     return '';
   }
 
+  const content = normalizeHostedFreeFileContent(path, input.content);
+
+  if (content === null) {
+    return '';
+  }
+
   return `<boltArtifact id="free-responses-file" title="Project update">
-<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${input.content}</boltAction>
+<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${content}</boltAction>
 <boltAction type="start">
 pnpm run dev
 </boltAction>
@@ -201,3 +207,4 @@ export function normalizeHostedFreeResponsesSse(response: Response): Response {
     headers,
   });
 }
+import { normalizeHostedFreeFileContent } from './hosted-free-file-content';

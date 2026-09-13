@@ -48,6 +48,7 @@ jobs:
           git clone --no-hardlinks "$GITHUB_WORKSPACE" "$INSTALL_DIR"
           git -C "$INSTALL_DIR" checkout -b installer-fixture
           git -C "$GITHUB_WORKSPACE" branch installer-fixture HEAD
+          git -C "$GITHUB_WORKSPACE" tag installer-tag-fixture HEAD
           export OPERATOR_PASSWORD="$(openssl rand -hex 24)"
           echo "::add-mask::$OPERATOR_PASSWORD"
           database_flag=--skip-postgres
@@ -58,6 +59,9 @@ jobs:
           # A repair must preserve credentials and restart an already-installed stack.
           sudo systemctl stop bolt-gives-app
           bash ./install.sh --branch installer-fixture --skip-deps --skip-build --skip-caddy "$database_flag"
+          # Version-tag installs must also survive a second repair unchanged.
+          bash ./install.sh --branch installer-tag-fixture --skip-deps --skip-build --skip-caddy "$database_flag"
+          bash ./install.sh --branch installer-tag-fixture --skip-deps --skip-build --skip-caddy "$database_flag"
           after="$(sha256sum "$INSTALL_DIR/.env.local" | cut -d ' ' -f1)"
           test "$before" = "$after"
           curl --connect-timeout 5 --max-time 20 -fsS http://127.0.0.1:5173/pricing >/dev/null

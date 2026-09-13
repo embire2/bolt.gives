@@ -20,6 +20,7 @@ import {
   HOSTED_FREE_RESPONSES_WRITE_TOOL,
   normalizeHostedFreeResponsesSse,
 } from './hosted-free-responses-build';
+import { normalizeHostedFreeFileContent } from './hosted-free-file-content';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -151,6 +152,7 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
 
   return {
     ...normalizedPayload,
+    instructions: `${normalizedPayload.instructions}\nThe write_file tool is the only output transport. Its content must be the raw complete file, not boltArtifact/codyArtifact/action tags, Markdown fences, or an explanation. Do not nest the artifact output contract inside the file content.`,
     tools: [
       {
         type: 'function',
@@ -574,7 +576,11 @@ function buildBoltArtifactFromHostedFreeClaudeToolInput(input: unknown, workspac
     return '';
   }
 
-  return `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${content}</boltAction>\n</boltArtifact>`;
+  const normalizedContent = normalizeHostedFreeFileContent(path, content);
+
+  return normalizedContent === null
+    ? ''
+    : `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${normalizedContent}</boltAction>\n</boltArtifact>`;
 }
 
 function normalizeHostedFreeClaudeSseBlock(block: string, state: HostedFreeClaudeToolStreamState): string | null {

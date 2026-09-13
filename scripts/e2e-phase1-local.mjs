@@ -201,7 +201,34 @@ try {
 
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   page = await context.newPage();
-  page.on('pageerror', (error) => report.errors.push(redact(error.message).slice(0, 300)));
+  page.on('pageerror', (error) => {
+    report.errors.push(redact(error.message).slice(0, 300));
+    report.errorStacks ||= [];
+    report.errorStacks.push(redact(error.stack || error.message).slice(0, 4000));
+  });
+  page.on('response', async (response) => {
+    const url = new URL(response.url());
+
+    if (
+      !url.pathname.startsWith('/runtime/preview/') ||
+      !/(?:\/src\/(?:App|main)\.|\/node_modules\/\.vite\/deps\/(?:react|chunk))/.test(url.pathname) ||
+      !response.ok()
+    ) {
+      return;
+    }
+
+    report.previewModules ||= [];
+
+    if (report.previewModules.length >= 80) {
+      return;
+    }
+
+    const body = await response.text().catch(() => '');
+    report.previewModules.push({
+      url: redact(`${url.pathname}${url.search}`),
+      imports: [...body.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => redact(match[1])).slice(0, 30),
+    });
+  });
   page.on('response', async (response) => {
     if (new URL(response.url()).pathname !== '/api/chat') {
       return;

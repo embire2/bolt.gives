@@ -3,6 +3,7 @@
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
 [![Current release](https://img.shields.io/badge/release-v4.0.1-173f5f)](https://github.com/embire2/bolt.gives/releases)
+[![Test prerelease](https://img.shields.io/badge/prerelease-v4.1.0--beta.1-d97706)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0-beta.1)
 [![Next release](https://img.shields.io/badge/roadmap-v4.1.0-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
@@ -14,11 +15,13 @@
 
 > **Reliability update, 12 September 2026:** v4.0.1 remains the stable web release. Our latest audit found 12 code/test-contract issues, including a broken pricing page and oversized/stale snapshots. A real alpha1 project reached Preview, accepted a follow-up, and restored after reload, but the run still recorded a snapshot 502. **v4.1.0 will prioritize these bugs and a separately versioned native Windows rewrite, not more feature sprawl.** Read the [findings, evidence, and small implementation tasks](docs/quality/2026-09-12-v4.1-audit.md). This is a plan, not a claim that the fixes are shipped. Model/database descriptions below include unreleased development work; live instances may differ.
 
-**Implementation checkpoint, not a release:** [Draft PR #19](https://github.com/embire2/bolt.gives/pull/19) contains Phase 1 fixes and the approved Phase 2 work completed so far: current/bounded snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, accessible onboarding, and recoverable installers. We also removed a blocking 30-second FREE model probe and fixed an automatic repair that could overwrite a saved follow-up during runtime shutdown. Preview refresh and history reload now preserve current runtime source.
+**Combined test prerelease, 13 September 2026:** [v4.1.0-beta.1](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0-beta.1) brings together Phase 1 and the implemented Phase 2 work from [PR #19](https://github.com/embire2/bolt.gives/pull/19): current/bounded snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, accessible onboarding, and recoverable Linux/PowerShell installers. It removes a blocking 30-second FREE model probe and prevents repair from overwriting a saved follow-up during runtime shutdown. Preview refresh and history reload preserve current runtime source. Tagged-install repair and beta-to-stable version comparison are also corrected.
 
-**Validation:** 1,284 tests pass, with nine skipped. Build, typecheck, lint and module-boundary checks pass. [Installer CI passed](https://github.com/embire2/bolt.gives/actions/runs/34717535481) clean/repair Ubuntu 22.04/24.04 installs with and without platform PostgreSQL and PowerShell 5.1/7 contracts on Windows. A real FREE/Luna browser journey passed first Preview, interaction, follow-up, navigation, reload and runtime restart, with disk checks confirming the saved change survived shutdown. Read the [Phase 1 evidence](docs/quality/2026-09-12-phase1-review.md) and [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md), including failed repeats and the latest verification scope.
+The beta is an opt-in test publication, **not a completed Phase 2 or stable v4.1.0**. Use a disposable private VM with test credentials only, not a shared/customer-facing server. [Pinned installation instructions, checksums and outstanding gates](docs/releases/v4.1.0-beta.1.md) accompany the release. Default `main` installers and production/fleet deployments remain on the stable channel.
 
-**Neither production nor the fleet has been updated.** Isolated Preview origins/TLS and non-root project-process isolation remain release gates; a successful functional test does not close those boundaries. Real Stripe fulfillment, Windows/WSL reboot-resume and native desktop parity are not certified. Windows PowerShell setup installs the open-source server through WSL2; it is not the private native desktop rewrite.
+**Validation:** 1,326 tests pass, with nine skipped. Build, typecheck, lint and module-boundary checks pass. [Checkpoint installer CI passed](https://github.com/embire2/bolt.gives/actions/runs/34719193742) clean/repair Ubuntu 22.04/24.04 installs with and without platform PostgreSQL and PowerShell 5.1/7 contracts on Windows. The 13 September real FREE/Luna browser repeat passed first Preview, interaction, follow-up, navigation, reload and runtime restart, with disk checks confirming the saved change survived shutdown. A preceding repeat also exposed an intermittent `useState` crash (B15), which remains open; one passing journey does not certify every run. Read the [Phase 1 evidence](docs/quality/2026-09-12-phase1-review.md) and [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md), including failed repeats and the latest verification scope.
+
+**Neither production nor the fleet has been updated.** Isolated Preview origins/TLS, non-root project-process isolation and the intermittent B15 browser crash remain stable-release gates. Real Stripe fulfillment, Windows/WSL reboot-resume and native desktop parity are not certified. Windows PowerShell setup installs the open-source server through WSL2; it is not the private native desktop rewrite.
 
 ## What You Can Do
 
@@ -60,9 +63,9 @@ This calendar was generated from a normal English prompt in a real isolated Node
 
 ![A real calendar project running in bolt.gives Agent Mode](docs/screenshots/agent-mode-calendar-v4.0.1.png)
 
-The unreleased v4.1 reliability checkpoint was also tested with a real FREE/Luna task board, an interactive Add task control, a follow-up change, navigation, reload and runtime restart. This screenshot shows the restored follow-up in the isolated test environment. The version badge remains 4.0.1 because no 4.1 release has been published.
+The combined beta was tested with a real FREE/Luna task board, an interactive Add task control, a follow-up change, navigation, reload and runtime restart. This 13 September screenshot shows the restored follow-up in the isolated test environment, not a production deployment. The earlier checkpoint screenshot remains in the [historical evidence](docs/quality/2026-09-12-phase2-checkpoint.md).
 
-![Real task board after a follow-up and history reload in the unreleased checkpoint](docs/screenshots/agent-mode-v4.1-checkpoint.png)
+![Real task board after a follow-up and history reload in v4.1.0-beta.1](docs/screenshots/agent-mode-v4.1-beta.1.png)
 
 ### Connect data only when the app needs it
 
@@ -82,9 +85,9 @@ Version 4 replaced separate, competing Chat and Workspace routes with one contin
 - The selected model can change during a project without discarding history.
 - Recovery is bounded. The UI shows a stable repairing state instead of looping forever between Working and Needs Repair.
 
-Unreleased provider work will show the hosted FREE default as **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without exposing the operator credential to the browser bundle or generated project. The audited live alpha instance still displayed ChatGPT-5.6 SOL; the pending provider changes are not included in this documentation-only publication.
+The test prerelease shows the hosted FREE default as **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without embedding the operator credential in the browser bundle or generated project. The audited live alpha instance still displayed ChatGPT-5.6 SOL; this beta publication does not update hosted instances.
 
-The pending user-funded integration adds **MagnetAPI** to the provider dropdown. Once released, users will sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a User API Key in its dashboard, and enter it in bolt.gives. Planned choices include ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1; actual upstream IDs and account-specific discovery must pass the I03 release checks. MagnetAPI advertises these inference routes at 10% of standard direct-provider cost. Personal MagnetAPI requests must never fall back to bolt.gives' operator-funded FREE key.
+The beta's user-funded integration adds **MagnetAPI** to the provider dropdown. Users sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a User API Key in its dashboard, and enter it in bolt.gives. Choices include ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1; actual upstream IDs and account-specific discovery still require the full I03 release matrix. MagnetAPI advertises these inference routes at 10% of standard direct-provider cost. Personal MagnetAPI requests must never fall back to bolt.gives' operator-funded FREE key.
 
 ## What Version 4 Includes
 

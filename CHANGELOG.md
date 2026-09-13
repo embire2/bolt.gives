@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased - v4.1.0
+## v4.1.0-beta.1 (2026-09-13) - Test Prerelease
+
+Combines the implemented work from both reliability phases. **Not a stable release or production/fleet deployment.** Preview-origin isolation (B13), non-root per-project execution (B14), and the remaining live acceptance matrix are still open. Test only on a disposable private machine without customer data or production credentials. The native Windows release line is unchanged.
 
 ### Changed
 
@@ -16,15 +18,18 @@
 
 ### Fixed
 
+- Normalize redundant single-file artifact wrappers returned inside FREE tool payloads before emitting actions. A fresh browser test caught an extra wrapper causing an empty `App.tsx` write and missing-default-export Preview failure. The bridge now unwraps matching single-file envelopes, rejects nested commands/path changes and gives the upstream an explicit raw-file-only instruction. Browser and server parsers share regression coverage for the resulting artifact.
+- Repair version-tagged self-host installs without looking for a nonexistent `origin/<tag>` branch. Both branch and tag updates use the exact fetched commit, reject divergence/rewritten tags, and preserve configuration. Added real-Git regressions and repeated tagged repair to Ubuntu CI.
+- Compare prerelease versions correctly so a beta installation can later recognize the stable release as newer. Preserve support for historical four-part web versions and reject malformed/native-desktop version strings.
 - Removed blocking synthetic FREE model probes: a timed-out `Reply with OK` request could fail every new project before actual coding began. Selection still validates credentials and approved models; real generation remains authoritative for upstream authentication, funding and rate-limit errors.
 - Require verified Preview evidence before suppressing a late connection failure. Completed scaffold commands and cloned snapshot objects no longer count as a generated application. Upstream network failures no longer blame the user's internet connection.
 - Invalidate queued/in-flight repair probes and cancel autostart on intentional runtime shutdown. Late proxy errors cannot restore an older source snapshot after the Preview process has deliberately stopped.
 - Exclude temporary atomic-write files from snapshots and classify concurrent source removal as a retryable conflict, preserving the last complete snapshot instead of returning partial source or a generic server error.
-- Phase 1 (unreleased): excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
+- Phase 1: excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
 - Replaced file-count snapshot freshness with bounded disk reconciliation, detected concurrent writes, preserved empty/deleted workspaces, and waited for IndexedDB transaction completion before reporting saved source.
 - Made Preview snapshot pulls read-only: background refresh cannot write old source back into the runtime or override Code selection. Slow results are discarded after project changes, file actions or unsaved edits. History reload prefers current runtime source and uses cached recovery only after an explicit missing-session response, never a generic outage.
 - Fixed `/pricing` server rendering, duplicate Checkout clicks, and error/retry behavior. Phase 2 also derives returned payment status from the billing server, bounds pending checks, and refuses to treat URL parameters or expired billing periods as proof of payment.
-- Phase 2 (unreleased): Supabase settings are labelled configured rather than healthy; PostgreSQL verification is timestamped at save time. Failed credential rotation preserves the previous record, and the UI explains Preview restart requirements after replacement/disconnection.
+- Phase 2: Supabase settings are labelled configured rather than healthy; PostgreSQL verification is timestamped at save time. Failed credential rotation preserves the previous record, and the UI explains Preview restart requirements after replacement/disconnection.
 - Added scrollable short-window login, a wrapping provider banner, native modal onboarding with inert background and explicit keyboard focus wrapping, and accessible status/error announcements.
 - Removed historical transport heartbeats from commentary cards, deduplicated unchanged timer reports, and stopped previous Preview verification from overriding a newer command/error. Unverified generation is not labelled Ready.
 - Corrected the Linux retry helper's false-zero exit status. Repair preserves checkout/configuration, frozen dependency versions, existing PostgreSQL passwords/ownership, and previous build artifacts on failure. Caddy validation/reload failure restores its previous configuration instead of forcing a shared-proxy restart.
@@ -39,6 +44,7 @@
 
 ### Security
 
+- Replace broad `VITE_*` browser environment exposure with an exact public allowlist. Artifact scanning found an old GitHub token embedded in local and live browser chunks; GitHub returned 401 for that token, but credential embedding remains unacceptable. Direct access and whole-object `import.meta.env` now exclude credential variables, with a real bundled regression test. Public provider base URLs containing credentials, query strings or fragments are omitted. This beta does not replace existing live/cached assets or rotate credentials.
 - Phase 1 public browsing uses shared public-address validation, DNS-pinned connections, bounded responses/deadlines, and revalidated redirect destinations. Removed the unprotected raw-fetch fallback and blocked private Chromium subresources and WebSockets.
 - Removed the unowned encrypted-localStorage provider-key restore path. Generated HTTP/WebSocket Preview requests no longer forward platform session, provider-key, Git-provider, or internal operator headers/cookies to generated application servers.
 - Removed Supabase access-token and credential persistence from browser local storage. Optional account discovery tokens now live only for the current browser session.
