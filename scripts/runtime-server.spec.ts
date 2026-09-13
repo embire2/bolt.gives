@@ -670,6 +670,41 @@ describe('runtime server workspace isolation', () => {
     expect(normalizeSessionId('  shared_session_2  ')).toBe('shared_session_2');
   });
 
+  it('never mounts operator registries or credential storage as a generated project', () => {
+    for (const id of [
+      'tenants',
+      'owner-auth',
+      'project-connections',
+      'project-databases',
+      'cloudflare-deployments',
+      'node_modules',
+      'projects',
+      'runtime-node-workspaces',
+    ]) {
+      expect(() => normalizeSessionId(id)).toThrow('Reserved runtime session');
+      expect(() => normalizeSessionId(id.toUpperCase())).toThrow('Reserved runtime session');
+    }
+  });
+
+  it('keeps generated cookies host-only and removes permissive cross-project CORS', () => {
+    const headers = applyPreviewResponseHeaders(
+      {
+        'Access-Control-Allow-Origin': 'https://another-project.example',
+        'Access-Control-Allow-Credentials': 'true',
+        'Set-Cookie': [
+          '__Host-bolt_preview=spoof; Path=/; Secure',
+          'app_session=fixture; Domain=example.com; HttpOnly',
+        ],
+        'Referrer-Policy': 'unsafe-url',
+      },
+      true,
+    );
+    expect(headers).not.toHaveProperty('Access-Control-Allow-Origin');
+    expect(headers).not.toHaveProperty('Access-Control-Allow-Credentials');
+    expect(headers).toHaveProperty('set-cookie', ['app_session=fixture; HttpOnly']);
+    expect(headers['Referrer-Policy']).toBe('no-referrer');
+  });
+
   it('removes iframe-blocking headers from proxied preview responses', () => {
     expect(
       applyPreviewResponseHeaders({

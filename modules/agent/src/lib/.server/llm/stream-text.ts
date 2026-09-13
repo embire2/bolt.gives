@@ -22,6 +22,7 @@ import { normalizeCredential } from '@bolt/core/lib/runtime/credentials';
 export type Messages = Message[];
 
 export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0], 'model'> {
+  onProviderActivity?: () => void;
   supabaseConnection?: {
     isConnected: boolean;
     hasSelectedProject: boolean;
@@ -509,6 +510,7 @@ export async function streamText(props: {
   const tokenParams = isReasoning ? { maxCompletionTokens: adjustedMaxTokens } : { maxTokens: adjustedMaxTokens };
 
   // Filter out unsupported parameters for reasoning models
+  const onProviderActivity = options?.onProviderActivity;
   const filteredOptions =
     isReasoning && options
       ? Object.fromEntries(
@@ -525,7 +527,8 @@ export async function streamText(props: {
               ].includes(key),
           ),
         )
-      : options || {};
+      : { ...options };
+  delete filteredOptions.onProviderActivity;
 
   const mcpTools = (filteredOptions.tools || {}) as ToolSet;
   const webToolIntentDetected = shouldEnableBuiltInWebTools(processedMessages);
@@ -574,6 +577,7 @@ export async function streamText(props: {
       serverEnv,
       apiKeys,
       providerSettings,
+      ...(onProviderActivity ? { onStreamActivity: onProviderActivity } : {}),
     }),
     system: effectiveChatMode === 'build' ? systemPrompt : discussPrompt(),
     ...tokenParams,

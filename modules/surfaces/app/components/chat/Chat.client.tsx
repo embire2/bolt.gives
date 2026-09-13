@@ -97,7 +97,11 @@ import {
   shouldIgnoreDisconnectAfterCompletedRun,
 } from '@bolt/agent/lib/runtime/recovery-errors';
 import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
-import { buildStarterBootstrapMessages, findPendingStarterRequest } from './starter-bootstrap-messages';
+import {
+  buildStarterBootstrapMessages,
+  findPendingStarterRequest,
+  findLatestVisibleUserRequest,
+} from './starter-bootstrap-messages';
 import {
   getStarterBootstrapRuntimeActionStatus,
   selectMissingStarterBootstrapRuntimeActions,
@@ -842,7 +846,7 @@ export const ChatImpl = memo(
     const requestAssistantBaselineSignatureRef = useRef('');
     const requestWorkspaceBaselineRef = useRef(workbenchStore.files.get());
     const userObjectiveWorkspaceBaselineRef = useRef(requestWorkspaceBaselineRef.current);
-    const latestUserRequestRef = useRef('');
+    const latestUserRequestRef = useRef(findLatestVisibleUserRequest(initialMessages));
     const requestLifecycleStartedAtRef = useRef(Date.now());
     const userObjectiveStartedAtRef = useRef(requestLifecycleStartedAtRef.current);
     const lastRunCompletedAtRef = useRef<number | null>(null);

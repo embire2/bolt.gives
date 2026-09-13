@@ -1,0 +1,9 @@
+FROM docker.io/library/node:22.22.0-bookworm-slim
+ENV COREPACK_HOME=/opt/corepack
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable && corepack prepare pnpm@9.14.4 --activate
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV COREPACK_DEFAULT_TO_LATEST=0
+USER node
+WORKDIR /home/node

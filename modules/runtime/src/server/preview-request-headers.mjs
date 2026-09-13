@@ -1,4 +1,4 @@
-const PLATFORM_COOKIE = /^(?:bolt[_:-]|cody[-:]|git(?::|hub|lab)|VITE_|apiKeys$|providers$|csrf_token$)/i;
+const PLATFORM_COOKIE = /^(?:(?:__Host-)?bolt[_:-]|cody[-:]|git(?::|hub|lab)|VITE_|apiKeys$|providers$|csrf_token$)/i;
 
 export function previewRequestHeaders(headers) {
   const result = {};

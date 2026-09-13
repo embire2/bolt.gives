@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { buildStarterBootstrapMessages, findPendingStarterRequest } from './starter-bootstrap-messages';
+import {
+  buildStarterBootstrapMessages,
+  findPendingStarterRequest,
+  findLatestVisibleUserRequest,
+} from './starter-bootstrap-messages';
 
 describe('buildStarterBootstrapMessages', () => {
+  it('restores the last user goal without adopting hidden recovery instructions', () => {
+    expect(
+      findLatestVisibleUserRequest([
+        { id: 'u1', role: 'user', content: 'Build a calendar app' },
+        { id: 'u2', role: 'user', content: 'Internal recovery instructions', annotations: ['hidden'] },
+        { id: 'a1', role: 'assistant', content: '' },
+      ]),
+    ).toBe('Build a calendar app');
+  });
   it('includes the continuation prompt after the starter assistant message', () => {
     const messages = buildStarterBootstrapMessages({
       userMessageId: 'user-1',

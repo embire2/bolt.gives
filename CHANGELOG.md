@@ -2,6 +2,15 @@
 
 ## Unreleased - After v4.1.0-beta.1
 
+### Runtime and Recovery
+
+- Added opt-in rootless Podman execution for generated commands, dependency installation/repair, builds and Preview. Containers mount only the project, drop capabilities, use a read-only image and enforce CPU/RAM/PID limits. Root execution is rejected, and unmigrated source ownership fails explicitly rather than being silently changed.
+- Await isolated process termination before releasing/reusing its Preview port, preventing restart collisions with an old container. Reserve operator-storage names so they cannot be selected as project session IDs.
+- Added a signed per-project HTTPS Preview gateway with host-only, HTTP-only partitioned capabilities, cross-project/origin rejection, bounded browser-error reporting and project-scoped repair readiness. Generated servers cannot set parent-domain/platform cookies or permissive cross-project CORS headers. Public TLS and live workspace migration remain pending.
+- Require authenticated hosted runtime/Preview access and reject cross-origin runtime calls. The Linux installer routes both hosted and private-owner runtime traffic through application authorization rather than exposing the runtime directly.
+- Keep Chat mounted after an empty failed assistant stream so navigation cannot discard queued recovery; restore the user's latest visible request on Chat initialization. Count real buffered FREE file-argument progress toward stream activity without publishing partial artifacts or synthetic commentary.
+- Added real rootless process acceptance and combined HTTPS/browser prompt, follow-up, history, restart and injected-stream-failure fixtures. Production and managed instances are unchanged; see `ROADMAP.md` for outstanding gates.
+
 ### Removed
 
 - Removed the optional Codeball PR-review workflow after both Cloudflare DNS (`1.1.1.1`) and the authoritative nameserver returned `NXDOMAIN` for its API hostname. Tests, security scans, build validation, installer recovery and release/E2E workflows are unchanged. This CI-only maintenance does not update the running application or resolve the outstanding production-release blockers.

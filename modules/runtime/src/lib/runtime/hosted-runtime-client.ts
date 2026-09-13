@@ -204,6 +204,14 @@ export function normalizeHostedRuntimePreviewBaseUrlForBrowser(baseUrl: string |
     const browserHost = window.location.hostname;
     const previewUrl = new URL(rawBaseUrl, browserOrigin);
 
+    if (
+      previewUrl.searchParams.get('__bolt_isolated') === '1' &&
+      (previewUrl.protocol === 'https:' ||
+        (previewUrl.protocol === 'http:' && previewUrl.hostname.endsWith('.localhost')))
+    ) {
+      return previewUrl.toString();
+    }
+
     if (isLocalHost(browserHost) || !previewUrl.pathname.startsWith('/runtime/preview/')) {
       return rawBaseUrl;
     }

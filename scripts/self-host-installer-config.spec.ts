@@ -96,7 +96,7 @@ describe('installer clean and repair configuration', () => {
     expect(config.BOLT_SELF_HOST_MODE).not.toBe('single-user');
     expect(config.BOLT_ADMIN_DATABASE_PASSWORD.length).toBeGreaterThanOrEqual(32);
     expect(config.BOLT_PROJECT_DATABASE_ENABLED).toBe('false');
-    expect(await caddy()).toMatch(/handle \/runtime\/\*\s*\{\s*reverse_proxy 127\.0\.0\.1:4321/);
+    expect(await caddy()).toMatch(/handle \/runtime\/\*\s*\{\s*reverse_proxy 127\.0\.0\.1:5173/);
   }, 15_000);
   it('does not downgrade an existing platform database installation', async () => {
     const { apply } = await configure('BOLT_ADMIN_DATABASE_URL=postgresql://dummy:fixture@db.example/fixture\n');

@@ -25,6 +25,8 @@ The beta is an opt-in test publication, **not a completed Phase 2 or stable v4.1
 
 **CI maintenance after the beta:** the unavailable Codeball PR-review workflow has been removed from the development branch. Tests, security analysis, builds, installer recovery and release/E2E workflows are retained unchanged. Codeball was not a required merge check; removing it does not waive the release gates above or deploy the application.
 
+**Isolation and recovery development:** the next checkpoint adds a rootless, per-project Podman launcher and a signed, project-specific HTTPS Preview gateway. **1,347 tests pass, with nine skipped.** Real FREE/Luna browser journeys passed interactive Preview, cross-origin platform-access rejection, follow-up changes, saved history and runtime restart. An injected empty-stream failure recovered automatically; two runs also passed 20 cold reloads each. Empty-stream history navigation and buffered file-activity tracking now have regression fixes. These changes are **not deployed**: public TLS, runtime-storage/service migration, the intermittent B15 crash and remaining live acceptance still gate stable v4.1.0. Read the [new checkpoint and exact remaining work](docs/quality/2026-09-13-isolation-checkpoint.md).
+
 ## What You Can Do
 
 Type a request such as:

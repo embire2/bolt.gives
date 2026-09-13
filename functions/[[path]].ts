@@ -194,11 +194,28 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
 
+  // A generated sibling-origin Preview must not mutate the platform via its runtime proxy.
+  const origin = request.headers.get('Origin');
+
+  if (
+    url.pathname.startsWith('/runtime/') &&
+    origin &&
+    origin !== url.origin &&
+    !url.pathname.startsWith('/runtime/preview/') &&
+    url.pathname !== '/runtime/health'
+  ) {
+    return new Response('Cross-origin runtime request blocked.', { status: 403 });
+  }
+
   const ownerProtected =
     (url.pathname.startsWith('/runtime/') && url.pathname !== '/runtime/health') ||
     ['/api/chat', '/api/llmcall', '/api/enhancer', '/api/web-search'].includes(url.pathname);
 
-  if (env.BOLT_SELF_HOST_MODE === 'single-user' && ownerProtected) {
+  if (
+    (env.BOLT_SELF_HOST_MODE === 'single-user' && ownerProtected) ||
+    url.pathname.startsWith('/runtime/sessions/') ||
+    url.pathname.startsWith('/runtime/preview/')
+  ) {
     try {
       if (
         !(await resolveProfileSession(request, env as Record<string, string | undefined>, { failOnUnavailable: true }))

@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright';
@@ -13,14 +15,21 @@ import { parse } from 'dotenv';
 
 const exec = promisify(execFile);
 const repo = process.cwd();
-const out = path.join(repo, 'output/playwright/phase1-20260912');
+const out = path.resolve(process.env.BOLT_E2E_OUTPUT_DIR || path.join(repo, 'output/playwright/phase1-20260912'));
 await fs.mkdir(out, { recursive: true });
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'bolt-phase1-e2e-'));
 await fs.chmod(root, 0o755);
 
-const uid = process.getuid() === 0 ? 65534 : process.getuid();
-const gid = process.getuid() === 0 ? 65534 : process.getgid();
+// Keep the selected toolchain accessible to the unprivileged fixture without opening the operator's home.
+const fixtureNode = path.join(root, 'node');
+await fs.copyFile(process.execPath, fixtureNode);
+await fs.chmod(fixtureNode, 0o755);
+
+const rootless = process.env.BOLT_E2E_ROOTLESS === '1';
+const originIsolation = process.env.BOLT_E2E_ORIGIN_ISOLATION === '1';
+const uid = rootless ? Number(process.env.BOLT_PROJECT_RUNNER_UID) : process.getuid() === 0 ? 65534 : process.getuid();
+const gid = rootless ? Number(process.env.BOLT_PROJECT_RUNNER_GID) : process.getuid() === 0 ? 65534 : process.getgid();
 const children = [];
 const logs = [];
 const report = { stages: [], errors: [], expectedErrors: [], chatRequests: [], streams: [], runtimeUid: uid };
@@ -43,12 +52,16 @@ async function port() {
 const appPort = await port();
 const runtimePort = await port();
 const browsePort = await port();
-const base = `http://phase1.localhost:${appPort}`;
+const tlsPort = originIsolation ? await port() : undefined;
+const base = `${originIsolation ? 'https' : 'http'}://phase1.localhost:${tlsPort || appPort}`;
 const runtimeBase = `http://127.0.0.1:${runtimePort}/runtime`;
 const ownerToken = crypto.randomBytes(32).toString('hex');
 const quotaSecret = crypto.randomBytes(32).toString('hex');
-const local = parse(await fs.readFile(path.join(repo, '.env.local')).catch(() => Buffer.from('')));
-const magnetKey = process.env.MAGNET_API_KEY || local.MAGNET_API_KEY;
+const replay = process.env.BOLT_E2E_HOOK_REPLAY === '1';
+const local = replay ? {} : parse(await fs.readFile(path.join(repo, '.env.local')).catch(() => Buffer.from('')));
+const magnetKey = replay
+  ? 'magnet-user-owned-replay-fixture-not-a-key'
+  : process.env.MAGNET_API_KEY || local.MAGNET_API_KEY;
 
 if (!magnetKey) {
   throw new Error('Set MAGNET_API_KEY in the ignored operator .env.local to run live generation.');
@@ -57,17 +70,21 @@ if (!magnetKey) {
 const secrets = [magnetKey, ownerToken];
 const redact = (value) => secrets.reduce((text, secret) => text.split(secret).join('[redacted]'), String(value));
 let runtime;
+let previewGateway;
 let browser;
 let page;
 let expectedFailure = false;
 let ownerLoggedIn = false;
 const guestRequests = new WeakSet();
+const securityProbeRequests = new WeakSet();
+const securityProbeResponses = [];
+let injectedStreamFailure = false;
 
 async function start(label, script, env, nonRoot = false) {
   const fd = fsSync.openSync(path.join(out, `${label}.log`), 'w', 0o600);
   logs.push(fd);
 
-  const child = spawn('/usr/bin/node', [script], {
+  const child = spawn(fixtureNode, [script], {
     cwd: nonRoot ? root : repo,
     env: { PATH: '/usr/bin:/bin', HOME: path.join(root, 'home'), NODE_ENV: 'development', ...env },
     ...(nonRoot ? { uid, gid } : {}),
@@ -166,8 +183,118 @@ try {
     }
   }
 
+  let previewOriginEnv = {};
+
+  if (originIsolation) {
+    const gatewayPort = tlsPort;
+    const signingSecret = crypto.randomBytes(32).toString('hex');
+    const keyPath = path.join(root, 'preview-test.key');
+    const certPath = path.join(root, 'preview-test.crt');
+    await exec('openssl', [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      keyPath,
+      '-out',
+      certPath,
+      '-subj',
+      '/CN=*.localhost',
+      '-days',
+      '1',
+    ]);
+    secrets.push(signingSecret);
+    previewOriginEnv = {
+      BOLT_PREVIEW_ORIGIN_TEMPLATE: `https://{id}.localhost:${gatewayPort}`,
+      BOLT_PREVIEW_SIGNING_SECRET: signingSecret,
+    };
+    previewGateway = https.createServer(
+      { key: await fs.readFile(keyPath), cert: await fs.readFile(certPath) },
+      (request, response) => {
+        if (
+          process.env.BOLT_E2E_STREAM_FAILURE === '1' &&
+          !injectedStreamFailure &&
+          request.headers.host === `phase1.localhost:${tlsPort}` &&
+          new URL(request.url, base).pathname === '/api/chat'
+        ) {
+          injectedStreamFailure = true;
+          request.resume();
+          stage('fixture-first-stream-error');
+          response.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'x-vercel-ai-data-stream': 'v1',
+            'Cache-Control': 'no-store',
+          });
+          response.end(
+            'f:{"messageId":"empty-failure-fixture"}\n0:""\n3:"Custom error: Generation stream timed out while waiting for model output."\n',
+          );
+
+          return;
+        }
+
+        const upstream = http.request(
+          {
+            host: '127.0.0.1',
+            port: request.headers.host === `phase1.localhost:${tlsPort}` ? appPort : runtimePort,
+            path: request.url,
+            method: request.method,
+            headers: { ...request.headers, 'x-forwarded-proto': 'https' },
+          },
+          (incoming) => {
+            if (new URL(request.url, base).searchParams.has('__bolt_isolation_probe')) {
+              securityProbeResponses.push({
+                status: incoming.statusCode,
+                method: request.method,
+                origin: request.headers.origin,
+              });
+            }
+
+            response.writeHead(incoming.statusCode, incoming.headers);
+            incoming.pipe(response);
+          },
+        );
+        upstream.on('error', () => {
+          response.writeHead(503);
+          response.end('Runtime intentionally unavailable');
+        });
+        request.pipe(upstream);
+      },
+    );
+    previewGateway.on('upgrade', (request, socket, head) => {
+      const upstream = net.connect(runtimePort, '127.0.0.1', () => {
+        upstream.write(
+          `${request.method} ${request.url} HTTP/1.1\r\n${Object.entries(request.headers)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('\r\n')}\r\n\r\n`,
+        );
+        upstream.write(head);
+        socket.pipe(upstream).pipe(socket);
+      });
+      upstream.on('error', () => socket.destroy());
+      socket.on('error', () => upstream.destroy());
+      socket.on('close', () => upstream.destroy());
+    });
+    await new Promise((resolve) => previewGateway.listen(gatewayPort, '127.0.0.1', resolve));
+  }
+
   // The runtime must not inherit any operator/provider/Cloudflare/Stripe/SMTP keys.
   const runtimeEnv = {
+    ...previewOriginEnv,
+    ...(rootless
+      ? Object.fromEntries(
+          Object.entries(process.env).filter(([key]) =>
+            [
+              'BOLT_PROJECT_EXECUTION_MODE',
+              'BOLT_PROJECT_RUNNER_UID',
+              'BOLT_PROJECT_RUNNER_GID',
+              'BOLT_PROJECT_RUNNER_HOME',
+              'BOLT_PROJECT_CONTAINER_IMAGE',
+            ].includes(key),
+          ),
+        )
+      : {}),
     RUNTIME_HOST: '127.0.0.1',
     RUNTIME_PORT: String(runtimePort),
     RUNTIME_WORKSPACE_DIR: path.join(root, 'workspaces'),
@@ -185,6 +312,8 @@ try {
   await start('app', path.join(repo, 'scripts/e2e-phase1-server.mjs'), {
     PORT: String(appPort),
     BOLT_E2E_REPO: repo,
+    BOLT_E2E_HOOK_REPLAY: process.env.BOLT_E2E_HOOK_REPLAY,
+    BOLT_E2E_REPLAY_DELAY_MS: process.env.BOLT_E2E_REPLAY_DELAY_MS,
     BOLT_RUNTIME_CONTROL_URL: runtimeBase,
     BOLT_RUNTIME_CONTROL_PUBLIC_URL: runtimeBase,
     BOLT_APP_PUBLIC_URL: base,
@@ -197,10 +326,37 @@ try {
   await healthy(`http://127.0.0.1:${appPort}/pricing`);
   stage('production-build-ssr-healthy');
 
-  browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP phase1.localhost 127.0.0.1'] });
+  browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1'] });
 
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const context = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+    ignoreHTTPSErrors: originIsolation,
+  });
   page = await context.newPage();
+  report.simulatedProvider = process.env.BOLT_E2E_HOOK_REPLAY === '1';
+
+  const diagnosticSession = await context.newCDPSession(page);
+  const executionContexts = new Map();
+  diagnosticSession.on('Runtime.executionContextCreated', ({ context }) => {
+    executionContexts.set(context.id, { origin: context.origin, frameId: context.auxData?.frameId });
+  });
+  diagnosticSession.on('Runtime.executionContextDestroyed', ({ executionContextId }) => {
+    executionContexts.delete(executionContextId);
+  });
+  diagnosticSession.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
+    report.browserExceptions ||= [];
+    report.browserExceptions.push({
+      context: executionContexts.get(exceptionDetails.executionContextId),
+      text: redact(exceptionDetails.exception?.description || exceptionDetails.text).slice(0, 4000),
+      frames: exceptionDetails.stackTrace?.callFrames.slice(0, 15).map((frame) => ({
+        function: frame.functionName,
+        url: redact(frame.url),
+        line: frame.lineNumber,
+        column: frame.columnNumber,
+      })),
+    });
+  });
+  await diagnosticSession.send('Runtime.enable');
   page.on('pageerror', (error) => {
     report.errors.push(redact(error.message).slice(0, 300));
     report.errorStacks ||= [];
@@ -251,6 +407,7 @@ try {
       const entry = `${response.status()} ${new URL(response.url()).pathname}`;
       (expectedFailure ||
       (response.status() === 409 && new URL(response.url()).pathname.endsWith('/snapshot')) ||
+      (response.status() === 403 && securityProbeRequests.has(response.request())) ||
       (response.status() === 401 && guestRequests.has(response.request()))
         ? report.expectedErrors
         : report.errors
@@ -263,6 +420,10 @@ try {
     }
   });
   page.on('request', (request) => {
+    if (new URL(request.url()).searchParams.has('__bolt_isolation_probe')) {
+      securityProbeRequests.add(request);
+    }
+
     if (/\/sessions\/[^/]+\/sync$/.test(new URL(request.url()).pathname)) {
       const body = request.postDataJSON();
       stage('browser-source-sync', {
@@ -317,6 +478,25 @@ try {
   );
   await prompt.press('Enter');
   stage('first-prompt-submitted');
+
+  if (process.env.BOLT_E2E_STREAM_FAILURE === '1') {
+    const deadline = Date.now() + 60_000;
+
+    while (report.chatRequests.length < 2 && Date.now() < deadline) {
+      await page.waitForTimeout(500);
+    }
+
+    if (!injectedStreamFailure) {
+      throw new Error('The stream-failure fixture was not exercised.');
+    }
+
+    if (report.chatRequests.length < 2) {
+      throw new Error('The empty failed stream did not dispatch an automatic continuation.');
+    }
+
+    stage('empty-stream-failure-retried-automatically');
+  }
+
   await previewContains([marker]);
   await page
     .getByRole('button', { name: 'Stop generation', exact: true })
@@ -331,6 +511,91 @@ try {
   await frame.getByText(addedTask, { exact: true }).waitFor({ timeout: 5000 });
 
   stage('first-preview-interactive');
+
+  if (originIsolation) {
+    const isolatedFrame = page.frames().find((candidate) => new URL(candidate.url(), base).hostname.startsWith('pv-'));
+
+    if (!isolatedFrame || new URL(isolatedFrame.url()).origin === new URL(base).origin) {
+      throw new Error('Preview did not load on its isolated browser origin.');
+    }
+
+    const boundary = await isolatedFrame.evaluate(() => {
+      let parentStorage = false;
+      let parentDocument = false;
+
+      try {
+        void parent.localStorage.length;
+        parentStorage = true;
+      } catch {}
+
+      try {
+        void parent.document.body;
+        parentDocument = true;
+      } catch {}
+      localStorage.setItem('preview-owned-fixture', 'retained');
+
+      return {
+        parentStorage,
+        parentDocument,
+        ownStorage: localStorage.getItem('preview-owned-fixture'),
+        platformCookie: document.cookie.includes('bolt_profile_session'),
+      };
+    });
+
+    if (
+      boundary.parentStorage ||
+      boundary.parentDocument ||
+      boundary.platformCookie ||
+      boundary.ownStorage !== 'retained'
+    ) {
+      throw new Error('Preview browser isolation/storage failed.');
+    }
+
+    const target = `${base}/runtime/sessions/isolated-fixture/command?__bolt_isolation_probe=1`;
+    await isolatedFrame.evaluate(async (url) => {
+      try {
+        await fetch(url, { method: 'POST', credentials: 'include', body: '{}' });
+      } catch {}
+    }, target);
+
+    // Chromium can suppress response events for CORS failures; inspect the actual fixture proxy result.
+    if (
+      !securityProbeResponses.some(
+        (response) =>
+          response.status === 403 &&
+          response.method === 'POST' &&
+          response.origin === new URL(isolatedFrame.url()).origin,
+      )
+    ) {
+      throw new Error(
+        `Cross-origin runtime mutation was not denied by the server: ${JSON.stringify(securityProbeResponses)}`,
+      );
+    }
+
+    stage('preview-origin-and-platform-mutation-isolation-passed', boundary);
+
+    if (process.env.BOLT_E2E_HOOK_REPLAY === '1') {
+      const reported = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).origin === new URL(isolatedFrame.url()).origin &&
+          new URL(response.url()).pathname === '/__bolt/error' &&
+          response.request().method() === 'POST',
+      );
+      await isolatedFrame.evaluate(() => {
+        window.dispatchEvent(new ErrorEvent('error', { message: 'Owned browser reporting acceptance fixture' }));
+      });
+
+      const response = await reported;
+
+      if (response.status() !== 202) {
+        throw new Error(`Isolated browser error report failed: ${response.status()}`);
+      }
+
+      await previewContains([marker]);
+      stage('isolated-browser-error-reported-and-project-retained');
+    }
+  }
+
   await page.getByRole('button', { name: 'Code', exact: true }).click();
   await page.waitForTimeout(3000);
 
@@ -420,6 +685,26 @@ try {
   expectedFailure = false;
   stage('owner-history-and-preview-survive-runtime-restart');
 
+  const repeats = Math.min(30, Math.max(0, Number(process.env.BOLT_E2E_RELOAD_REPEATS) || 0));
+
+  if (repeats) {
+    const devtools = await context.newCDPSession(page);
+    await devtools.send('Network.enable');
+    await devtools.send('Network.setCacheDisabled', { cacheDisabled: true });
+
+    for (let index = 0; index < repeats; index++) {
+      await page.reload();
+      await previewContains([marker, followup], 60_000);
+
+      if (!(await prompt.isVisible())) {
+        throw new Error('Follow-up prompt disappeared during cold reload soak.');
+      }
+
+      stage('cold-reload-soak-passed', { iteration: index + 1 });
+    }
+    await devtools.detach();
+  }
+
   if (!(await prompt.isVisible())) {
     throw new Error('Follow-up prompt is hidden after restart.');
   }
@@ -469,6 +754,11 @@ try {
   process.exitCode = 1;
 } finally {
   await browser?.close();
+
+  if (previewGateway) {
+    previewGateway.closeAllConnections();
+    await new Promise((resolve) => previewGateway.close(resolve));
+  }
 
   for (const child of children.reverse()) {
     await stop(child);

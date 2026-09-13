@@ -42,6 +42,11 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
   it('forwards runtime request streams in the Node production host without a duplex error', async () => {
     const transport = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const forwarded = new Request(url, init);
+
+      if (forwarded.url.endsWith('/profile/session')) {
+        return Response.json({ ok: true, profile: { id: 'owned-fixture' } });
+      }
+
       expect(await forwarded.text()).toBe('{"files":{}}');
 
       return new Response('{}');
@@ -51,12 +56,39 @@ describe('Cloudflare Pages runtime proxy helpers', () => {
       const response = await onRequest({
         request: new Request('http://phase1.localhost/runtime/sessions/fixture/sync', {
           method: 'POST',
+          headers: {
+            Authorization:
+              'BoltProfile 01f00000-0000-4000-8000-000000000001.Abcdefghijklmnopqrstuvwxyz0123456789_-ABCDE',
+          },
           body: '{"files":{}}',
         }),
         env: { BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4327/runtime' },
       } as never);
       expect(response.status).toBe(200);
-      expect(transport).toHaveBeenCalledTimes(1);
+      expect(transport).toHaveBeenCalledTimes(2);
+    } finally {
+      transport.mockRestore();
+    }
+  });
+  it('rejects anonymous project access on hosted instances, not only private owner installs', async () => {
+    for (const pathname of ['/runtime/sessions/fixture/snapshot', '/runtime/preview/fixture/4100/']) {
+      const response = await onRequest({ request: new Request(`https://example.com${pathname}`), env: {} } as never);
+      expect(response.status).toBe(401);
+    }
+  });
+  it.each(['GET', 'POST', 'DELETE'])('blocks generated sibling-origin runtime requests (%s)', async (method) => {
+    const transport = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://example.com/runtime/sessions/fixture/snapshot', {
+          method,
+          headers: { Origin: 'https://pv-fixture.example.com' },
+        }),
+        env: {},
+      } as never);
+      expect(response.status).toBe(403);
+      expect(transport).not.toHaveBeenCalled();
     } finally {
       transport.mockRestore();
     }

@@ -11,6 +11,9 @@ import net from 'node:net';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { previewRequestHeaders } from '@bolt/runtime/server/preview-request-headers.mjs';
+import { prepareProjectProcessDirectory, spawnProjectProcess } from '@bolt/runtime/server/project-process.mjs';
+import { createPreviewOrigin } from '@bolt/runtime/server/preview-origin.mjs';
+import { injectPreviewBrowserMonitor } from '@bolt/runtime/server/preview-browser-monitor.mjs';
 import {
   GENERATED_WORKSPACE_DIRECTORIES,
   filterWorkspaceSource,
@@ -2707,7 +2710,7 @@ async function reportShoutboxMessage({ messageId, reporter = 'anonymous', reason
   return report;
 }
 
-export function applyPreviewResponseHeaders(rawHeaders = {}) {
+export function applyPreviewResponseHeaders(rawHeaders = {}, isolated = false) {
   const headers = { ...rawHeaders };
 
   delete headers['x-frame-options'];
@@ -2717,11 +2720,38 @@ export function applyPreviewResponseHeaders(rawHeaders = {}) {
   delete headers['content-security-policy-report-only'];
   delete headers['Content-Security-Policy-Report-Only'];
 
+  if (isolated) {
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase().startsWith('access-control-')) {
+        delete headers[name];
+        continue;
+      }
+
+      if (['referrer-policy', 'origin-agent-cluster', 'cache-control', 'set-cookie'].includes(name.toLowerCase())) {
+        const value = headers[name];
+        delete headers[name];
+
+        if (name.toLowerCase() === 'set-cookie') {
+          const cookies = (Array.isArray(value) ? value : [value])
+            .filter((cookie) => !/^\s*(?:(?:__Host-)?bolt[_:-]|csrf_token=|apiKeys=|providers=)/i.test(String(cookie)))
+            .map((cookie) => String(cookie).replace(/;\s*domain=[^;]*/gi, ''));
+
+          if (cookies.length) {
+            headers['set-cookie'] = cookies;
+          }
+        }
+      }
+    }
+  }
+
   return {
     ...headers,
-    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': isolated ? 'cross-origin' : 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Opener-Policy': 'same-origin',
+    ...(isolated
+      ? { 'Referrer-Policy': 'no-referrer', 'Origin-Agent-Cluster': '?1', 'Cache-Control': 'no-store' }
+      : {}),
   };
 }
 
@@ -3761,6 +3791,21 @@ export function normalizeSessionId(sessionId) {
     throw new Error('Missing runtime session id');
   }
 
+  if (
+    [
+      'tenants',
+      'owner-auth',
+      'project-connections',
+      'project-databases',
+      'cloudflare-deployments',
+      'node_modules',
+      'projects',
+      'runtime-node-workspaces',
+    ].includes(normalized.toLowerCase())
+  ) {
+    throw new Error('Reserved runtime session id');
+  }
+
   return normalized;
 }
 
@@ -4005,15 +4050,20 @@ export function extractUnavailablePackageVersionRepair(stderr = '') {
 
 async function resolveLatestPackageVersion(packageName, options = {}) {
   const { cwd = REPO_ROOT, writeEvent = null } = options;
+  await prepareProjectProcessDirectory(cwd);
 
   return await new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`], {
-      cwd,
-      env: buildHostedWorkspaceProcessEnvironment({
-        workspaceDir: cwd,
-        ci: '0',
-      }),
-    });
+    const child = spawnProjectProcess(
+      'bash',
+      ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`],
+      {
+        cwd,
+        env: buildHostedWorkspaceProcessEnvironment({
+          workspaceDir: cwd,
+          ci: '0',
+        }),
+      },
+    );
 
     let stdout = '';
     let stderr = '';
@@ -4748,6 +4798,8 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 }
 
 export async function prepareHostedWorkspaceForStart(session, options = {}) {
+  await prepareProjectProcessDirectory(session.dir);
+
   const {
     writeEvent = null,
     startCommand = '',
@@ -4828,7 +4880,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
 
       try {
         await new Promise((resolve, reject) => {
-          const child = spawn('bash', ['-lc', dependencyInstallCommand], {
+          const child = spawnProjectProcess('bash', ['-lc', dependencyInstallCommand], {
             cwd: session.dir,
             env: buildHostedWorkspaceProcessEnvironment({
               workspaceDir: session.dir,
@@ -4927,13 +4979,17 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     });
 
     await new Promise((resolve, reject) => {
-      const child = spawn('bash', ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`], {
-        cwd: session.dir,
-        env: buildHostedWorkspaceProcessEnvironment({
-          workspaceDir: session.dir,
-          ci: '0',
-        }),
-      });
+      const child = spawnProjectProcess(
+        'bash',
+        ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`],
+        {
+          cwd: session.dir,
+          env: buildHostedWorkspaceProcessEnvironment({
+            workspaceDir: session.dir,
+            ci: '0',
+          }),
+        },
+      );
 
       let stderr = '';
       child.stderr.on('data', (chunk) => {
@@ -5470,6 +5526,22 @@ function getRequestOrigin(req) {
   return `${proto}://${host}`;
 }
 
+const previewOrigins = createPreviewOrigin({
+  template: process.env.BOLT_PREVIEW_ORIGIN_TEMPLATE,
+  secret: process.env.BOLT_PREVIEW_SIGNING_SECRET,
+  lookup: (id) => sessions.get(id),
+  healthy: (session) =>
+    Boolean(session.previewDiagnostics?.healthy && isPreviewPortOwnedBySession(session, session.preview?.port)),
+  onError: (session, error) =>
+    schedulePreviewAutoRestore(session, {
+      type: 'error',
+      title: 'Preview Error',
+      source: 'preview',
+      description: redactProjectConnectionError(error.message),
+      content: redactProjectConnectionError(error.stack || error.message),
+    }),
+});
+
 export function updateSessionPreview(session, req, port) {
   if (!Number.isFinite(Number(port)) || Number(port) <= 0) {
     return session.preview || null;
@@ -5608,7 +5680,11 @@ export function shouldServePreviewHandoffPage(options) {
   return upstreamPath === '/' || upstreamPath.startsWith('/?');
 }
 
-export function buildPreviewRepairPage(session, detail = 'The preview server is warming up or being repaired.') {
+export function buildPreviewRepairPage(
+  session,
+  detail = 'The preview server is warming up or being repaired.',
+  isolated = false,
+) {
   const escapeHtml = (value) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -5617,7 +5693,7 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
   const recoveryMessage =
     session.previewRecovery?.message ||
     'bolt.gives detected a preview problem and is automatically applying repairs until the app is previewable.';
-  const statusUrl = `/runtime/sessions/${encodeURIComponent(session.id)}/preview-status`;
+  const statusUrl = isolated ? '/__bolt/health' : `/runtime/sessions/${encodeURIComponent(session.id)}/preview-status`;
 
   return `<!doctype html>
 <html lang="en">
@@ -5666,9 +5742,14 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
 </html>`;
 }
 
-function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
-  res.writeHead(200, buildPreviewRepairHeaders());
-  res.end(buildPreviewRepairPage(session, detail));
+function sendPreviewRepairPage(
+  res,
+  session,
+  detail = 'The preview server is warming up or being repaired.',
+  isolated = false,
+) {
+  res.writeHead(200, applyPreviewResponseHeaders(buildPreviewRepairHeaders(), isolated));
+  res.end(buildPreviewRepairPage(session, detail, isolated));
 }
 
 function getRequestHost(req) {
@@ -5762,9 +5843,10 @@ async function ensureCloudflareProjectDeploymentProject(projectName) {
   return await fetchCloudflareProjectDeploymentProject(projectName);
 }
 
-function runProjectBuildCommand(command, args, options = {}) {
+async function runProjectBuildCommand(command, args, options = {}) {
+  await prepareProjectProcessDirectory(options.cwd);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawnProjectProcess(command, args, {
       cwd: options.cwd,
       env: buildHostedWorkspaceProcessEnvironment({
         workspaceDir: options.cwd,
@@ -7410,7 +7492,11 @@ export async function terminateSessionProcesses(session, options = {}) {
   cancelPendingPreviewAutostart(session);
 
   for (const [, handle] of session.processes.entries()) {
-    terminateSessionProcessHandle(handle);
+    const result = await terminateSessionProcessHandle(handle);
+
+    if (result?.stopped === false) {
+      throw new Error('The previous isolated process could not be stopped safely. Its Preview port remains reserved.');
+    }
   }
 
   session.processes.clear();
@@ -7434,14 +7520,18 @@ export async function terminateSessionProcesses(session, options = {}) {
 function terminateSessionProcessHandle(handle, signal = 'SIGTERM') {
   const child = handle?.process;
 
+  if (typeof child?.terminateProject === 'function') {
+    return child.terminateProject();
+  }
+
   if (!child || !Number.isFinite(Number(child.pid))) {
-    return;
+    return undefined;
   }
 
   if (handle.detached) {
     try {
       process.kill(-child.pid, signal);
-      return;
+      return undefined;
     } catch {
       // Fall back to the direct child below when the process group has already exited.
     }
@@ -7452,6 +7542,8 @@ function terminateSessionProcessHandle(handle, signal = 'SIGTERM') {
   } catch {
     // The process may already be gone.
   }
+
+  return undefined;
 }
 
 async function handleRunCommand(req, res, session, body) {
@@ -7637,10 +7729,13 @@ async function handleRunCommand(req, res, session, body) {
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
 
-  const child = spawn('bash', ['-lc', effectiveCommand], {
+  await prepareProjectProcessDirectory(session.dir);
+
+  const child = spawnProjectProcess('bash', ['-lc', effectiveCommand], {
     cwd: session.dir,
     env,
     detached: kind === 'start',
+    ...(kind === 'start' ? { previewPort } : {}),
   });
 
   const processKey = kind === 'start' ? 'preview' : `command-${Date.now()}`;
@@ -7894,7 +7989,12 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       accept: req.headers.accept,
     })
   ) {
-    sendPreviewRepairPage(res, session, 'The previous preview is handing off to the updated project runtime.');
+    sendPreviewRepairPage(
+      res,
+      session,
+      'The previous preview is handing off to the updated project runtime.',
+      req.boltIsolatedPreview,
+    );
     return;
   }
 
@@ -7954,7 +8054,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
           schedulePreviewAutoRestore(session, alert);
         }
 
-        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers, req.boltIsolatedPreview));
         upstreamRes.pipe(res);
 
         return;
@@ -7966,13 +8066,18 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       });
       upstreamRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        const rewritten = rewritePreviewAssetUrls(body, previewBasePath);
+        let rewritten = rewritePreviewAssetUrls(body, previewBasePath);
+
+        if (req.boltIsolatedPreview && /text\/html/.test(contentType)) {
+          rewritten = injectPreviewBrowserMonitor(rewritten);
+        }
+
         recordPreviewResponse(session, rewritten, statusCode, upstreamPath, contentType);
 
         delete headers['content-length'];
         delete headers['content-encoding'];
 
-        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers, req.boltIsolatedPreview));
         res.end(rewritten);
       });
     },
@@ -7996,7 +8101,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       source: 'preview',
     };
     schedulePreviewAutoRestore(session, alert);
-    sendPreviewRepairPage(res, session, `Preview proxy failed: ${error.message}`);
+    sendPreviewRepairPage(res, session, `Preview proxy failed: ${error.message}`, req.boltIsolatedPreview);
   });
 
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -8162,6 +8267,10 @@ async function readJsonBody(req) {
 
 export function createRuntimeServer() {
   return http.createServer(async (req, res) => {
+    if (previewOrigins?.handle(req, res, proxyPreviewRequest)) {
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
@@ -8827,7 +8936,27 @@ export function createRuntimeServer() {
     }
 
     if (pathname.startsWith('/runtime/preview/')) {
+      if (previewOrigins) {
+        const target = parsePreviewProxyRequestTarget(req.url);
+        const session = target && sessions.get(target.sessionId);
+
+        if (!session?.preview?.port) {
+          sendText(res, 404, 'Preview is not running.');
+          return;
+        }
+
+        res.writeHead(307, {
+          Location: previewOrigins.url(session.id, session.preview.port),
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+        });
+        res.end();
+
+        return;
+      }
+
       proxyPreviewRequest(req, res, pathname);
+
       return;
     }
 
@@ -10890,6 +11019,20 @@ export function createRuntimeServer() {
 const server = createRuntimeServer();
 
 server.on('upgrade', (req, socket, head) => {
+  if (previewOrigins?.isHost(req.headers.host)) {
+    const access = previewOrigins.authorize(req);
+
+    if (!access || req.headers.origin !== access.url.origin) {
+      writeUpgradeError(socket, 403, 'Forbidden');
+      return;
+    }
+
+    req.url = `/runtime/preview/${access.value.sessionId}/${access.session.preview.port}${access.upstreamUrl}`;
+    proxyPreviewUpgrade(req, socket, head);
+
+    return;
+  }
+
   if ((req.url || '').startsWith('/runtime/preview/')) {
     proxyPreviewUpgrade(req, socket, head);
     return;

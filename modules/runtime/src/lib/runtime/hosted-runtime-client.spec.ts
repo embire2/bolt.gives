@@ -18,6 +18,19 @@ afterEach(() => {
 });
 
 describe('hosted runtime client', () => {
+  it('never moves a verified isolated Preview URL back onto platform storage', () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://bolt-gives.pages.dev',
+        hostname: 'bolt-gives.pages.dev',
+        host: 'bolt-gives.pages.dev',
+        protocol: 'https:',
+      },
+    });
+
+    const isolated = 'https://pv-fixture.preview.example.com/runtime/preview/one/4100/?__bolt_isolated=1';
+    expect(normalizeHostedRuntimePreviewBaseUrlForBrowser(isolated)).toBe(isolated);
+  });
   it('uses the local runtime service for localhost', () => {
     expect(
       resolveHostedRuntimeBaseUrl({

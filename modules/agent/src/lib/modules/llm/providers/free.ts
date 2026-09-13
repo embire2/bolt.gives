@@ -337,7 +337,11 @@ function createHostedFreeResponseEventStream(
   });
 }
 
-export const hostedFreeFetch: typeof fetch = async (input, init) => {
+async function hostedFreeFetchWithActivity(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  onActivity?: () => void,
+): Promise<Response> {
   let requestInit = init;
   let requestedStream = false;
   let bridgeBuildActions = false;
@@ -365,7 +369,7 @@ export const hostedFreeFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, requestInit);
 
   if (bridgeBuildActions && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-    return normalizeHostedFreeResponsesSse(response);
+    return normalizeHostedFreeResponsesSse(response, onActivity);
   }
 
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
@@ -396,7 +400,9 @@ export const hostedFreeFetch: typeof fetch = async (input, init) => {
     statusText: response.statusText,
     headers,
   });
-};
+}
+
+export const hostedFreeFetch: typeof fetch = (input, init) => hostedFreeFetchWithActivity(input, init);
 
 export function normalizeHostedFreeClaudeStreamEvent(payload: unknown): unknown {
   if (!isJsonRecord(payload) || payload.type !== 'message_start' || !isJsonRecord(payload.message)) {
@@ -808,6 +814,7 @@ export default class FreeProvider extends BaseProvider {
     serverEnv: Env;
     apiKeys?: Record<string, string>;
     providerSettings?: Record<string, IProviderSetting>;
+    onStreamActivity?: () => void;
   }): LanguageModelV1 {
     const { serverEnv, apiKeys, providerSettings } = options;
     const { apiKey } = this.getProviderBaseUrlAndKey({
@@ -838,7 +845,9 @@ export default class FreeProvider extends BaseProvider {
       apiKey,
       baseURL: FREE_HOSTED_API_BASE_URL,
       compatibility: 'strict',
-      fetch: hostedFreeFetch,
+      fetch: options.onStreamActivity
+        ? (input, init) => hostedFreeFetchWithActivity(input, init, options.onStreamActivity)
+        : hostedFreeFetch,
     });
 
     return magnetApi.responses(resolvedModel) as LanguageModelV1;

@@ -1205,11 +1205,8 @@ EOF
 write_caddy_site() {
   local host_name="$1"
   local root_redirect="$2"
-  local runtime_upstream="${RUNTIME_PORT}"
-  if [[ "$(read_env_value "${INSTALL_DIR}/.env.local" BOLT_SELF_HOST_MODE)" == "single-user" ]]; then
-    # Owner authentication must run before runtime HTTP and WebSocket traffic.
-    runtime_upstream="${APP_PORT}"
-  fi
+  # Profile and origin authorization must run for hosted and single-user requests alike.
+  local runtime_upstream="${APP_PORT}"
 
   cat <<EOF
 ${host_name} {

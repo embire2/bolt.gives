@@ -49,6 +49,8 @@
     "e2e:preview-recovery": "node scripts/e2e-preview-auto-recovery.mjs",
     "e2e:calendar": "node scripts/e2e-calendar-build.mjs",
     "e2e:free-startup": "node scripts/e2e-free-startup-label.mjs",
+    "e2e:runtime-isolation": "node scripts/e2e-project-process.mjs",
+    "e2e:isolated-generation": "BOLT_E2E_ROOTLESS=1 BOLT_E2E_ORIGIN_ISOLATION=1 node scripts/e2e-phase1-local.mjs",
     "smoke:live": "node scripts/live-release-smoke.mjs",
     "smoke:free-provider": "node scripts/free-provider-live-smoke.mjs",
     "smoke:template-packs": "BOLT_TEMPLATE_PREVIEW_SMOKE=1 vitest --run tests/first-party-template-preview-smoke.spec.ts",

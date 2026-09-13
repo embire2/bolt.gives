@@ -1851,6 +1851,7 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
         }
 
         const options: StreamingOptions = {
+          onProviderActivity: markRunActivity,
           supabaseConnection: supabase,
           databaseConnection: requestPayload.databaseConnection,
           toolChoice: 'auto',

@@ -1,6 +1,7 @@
 // Local test harness only: resolve the reserved test hostname inside Node too.
 import dns from 'node:dns';
 import fs from 'node:fs';
+import { hookReplayResponse } from './e2e-hook-replay.mjs';
 import { startProductionServer, resolveProductionServerConfig } from './start-pages-production.mjs';
 
 const lookup = dns.lookup;
@@ -10,6 +11,13 @@ globalThis.fetch = async (...args) => {
   const url = new URL(typeof args[0] === 'object' && 'url' in args[0] ? args[0].url : String(args[0]));
   const observe = url.hostname === 'magnetapi.org' || url.hostname.endsWith('.magnetapi.org');
   const started = Date.now();
+
+  if (observe && process.env.BOLT_E2E_HOOK_REPLAY === '1') {
+    fs.writeSync(1, JSON.stringify({ kind: 'fixture-hook-replay', simulatedProvider: true }) + '\n');
+    await new Promise((resolve) => setTimeout(resolve, Number(process.env.BOLT_E2E_REPLAY_DELAY_MS) || 1000));
+
+    return hookReplayResponse(args[1]?.body);
+  }
 
   if (/\/sessions\/[^/]+\/sync$/.test(url.pathname) && typeof args[1]?.body === 'string') {
     const body = JSON.parse(args[1].body);
@@ -38,6 +46,73 @@ globalThis.fetch = async (...args) => {
         1,
         `${JSON.stringify({ kind: 'fixture-upstream', path: url.pathname, status: response.status, elapsedMs: Date.now() - started })}\n`,
       );
+
+      if (response.body && response.headers.get('Content-Type')?.includes('text/event-stream')) {
+        let buffer = '';
+        let bytes = 0;
+        let lastLog = 0;
+        const counts = {};
+        const decoder = new TextDecoder();
+        const stream = response.body.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              bytes += chunk.length;
+              buffer += decoder.decode(chunk, { stream: true });
+
+              const blocks = buffer.split(/\r?\n\r?\n/);
+              buffer = blocks.pop() || '';
+
+              for (const block of blocks) {
+                const line = block.split(/\r?\n/).find((line) => line.startsWith('data:'));
+
+                if (!line) {
+                  continue;
+                }
+
+                try {
+                  const event = JSON.parse(line.slice(5));
+                  counts[event.type || 'unknown'] = (counts[event.type || 'unknown'] || 0) + 1;
+
+                  if (/response\.(completed|incomplete|failed)|^error$/.test(event.type)) {
+                    fs.writeSync(
+                      1,
+                      JSON.stringify({
+                        kind: 'fixture-provider-terminal',
+                        type: event.type,
+                        status: event.response?.status,
+                        incomplete: event.response?.incomplete_details?.reason,
+                        usage: event.response?.usage,
+                        outputTypes: event.response?.output?.map((item) => item.type),
+                      }) + '\n',
+                    );
+                  }
+                } catch {}
+              }
+
+              if (buffer.length > 1_000_000) {
+                buffer = '';
+              }
+
+              if (Date.now() - lastLog > 10_000) {
+                lastLog = Date.now();
+                fs.writeSync(
+                  1,
+                  JSON.stringify({
+                    kind: 'fixture-provider-progress',
+                    elapsedMs: Date.now() - started,
+                    bytes,
+                    counts,
+                  }) + '\n',
+                );
+              }
+
+              controller.enqueue(chunk);
+            },
+          }),
+        );
+
+        return new Response(stream, { status: response.status, headers: response.headers });
+      }
     }
 
     return response;

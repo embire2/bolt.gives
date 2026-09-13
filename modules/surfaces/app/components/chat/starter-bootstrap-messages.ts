@@ -72,3 +72,18 @@ export function findPendingStarterRequest(messages: Message[]): string | null {
 
   return null;
 }
+
+export function findLatestVisibleUserRequest(messages: Message[]): string {
+  return (
+    [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === 'user' &&
+          !message.annotations?.includes('hidden') &&
+          typeof message.content === 'string' &&
+          message.content.trim(),
+      )
+      ?.content.trim() || ''
+  );
+}
