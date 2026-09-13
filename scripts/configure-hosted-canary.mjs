@@ -27,6 +27,7 @@ const env = parse(await fs.readFile(filename, 'utf8'));
 Object.assign(env, {
   RUNTIME_MANAGED_INSTANCE_SOURCE_BRANCH: branch,
   RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS: '0',
+  RUNTIME_MANAGED_INSTANCE_ENABLED: 'true',
   BOLT_RELEASE_SHA: sha,
   BOLT_MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN: 'https://alpha1.bolt.gives',
   BOLT_MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime',

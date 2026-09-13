@@ -17,8 +17,9 @@ export function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}) {
   const configured =
     runtimeEnv.BOLT_RUNTIME_CONTROL_URL?.trim() ||
     runtimeEnv.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim() ||
-    (typeof process !== 'undefined'
-      ? process.env?.BOLT_RUNTIME_CONTROL_URL?.trim() || process.env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim()
+    (typeof globalThis.process !== 'undefined'
+      ? globalThis.process.env?.BOLT_RUNTIME_CONTROL_URL?.trim() ||
+        globalThis.process.env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim()
       : '');
 
   if (configured) {
