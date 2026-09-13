@@ -64,18 +64,44 @@ with nine skipped before the subsequent Calendar interaction and redirect fixes.
 Calendar interaction failed against the original template and then passed,
 including creating an event, reload persistence and mini-calendar geometry.
 
-The Cloudflare canary has not yet completed clean generation, follow-up and
-publishing acceptance. Earlier failure logs remain retained. No stable release
-or completed fleet rollout is implied by creating the instance.
+The subsequent trace found the remaining repeated-repair cause: scanning an
+escaped JSON follow-up with two quoted labels invented three additional UI
+requirements from the surrounding sentence. Decoding the envelope first fixes
+the reproduced regression. A separate fix normalizes streamed Preview-ready
+events before callbacks can navigate to the unauthenticated central hostname.
+
+The final normal Chromium canary journey passed generation, follow-up, saved
+history and public publishing in 127 seconds. Both chat streams completed with
+one artifact each, no recovery continuation and no manual intervention. The
+fixture now fails on chat cancellation and all browser exceptions, rather than
+silently treating canceled chat as benign. Public root/deep-link checks passed;
+event creation and reload persistence were also exercised on the published app.
+Earlier failures and their raw traces remain retained privately.
+
+The canary was rolled back to its previous healthy Cloudflare deployment and
+then restored to the candidate; canonical deployment identities and HTTP 200
+health were verified after each operation. This tests operator rollback on the
+owned canary, not automatic production-runtime rollback. The final full suite
+passed 1,371 tests with nine skipped; typecheck, lint, strict boundaries and the
+production build passed. The unsafe legacy Linux update script now delegates
+to the guarded installer, with an executable quoted-path/options regression.
+
+Both disposable canary projects and their assignment/profile records were
+removed after acceptance, together with the two superseded public fixtures.
+The [final static Calendar demo](https://release-app-1789323614575.instances.bolt.gives)
+is intentionally retained for review. All test Preview containers were stopped;
+the private evidence and source snapshots remain available to operators.
 
 ## Remaining Release Work
 
-- Validate an assigned Cloudflare canary, including generation, restore and public publishing.
 - Complete production migration, rollback and fleet health checks.
+- Configure scalable wildcard Preview TLS with the authoritative DNS operator. The Cloudflare account configured here is not authoritative for bolt.gives; successful per-project staging certificates are not a fleet-scale certificate plan.
 - Keep the earlier intermittent browser hook crash under investigation; passing repeats alone are not a deterministic root-cause proof.
 - The optional remote SSH workspace node currently times out; rootless hosted Preview does not depend on it.
 - Native Windows rewrite and Windows/WSL reboot-resume are separate, unverified acceptance work, not certified by Linux browser tests.
 
 Private local evidence is under `output/playwright/alpha-isolated-calendar-6`,
-`output/playwright/stripe-checkout` and `output/playwright/release-canonical-preview-3`.
+`output/playwright/stripe-checkout`, `output/playwright/release-canonical-preview-3`
+and `output/playwright/managed-canary-quoted-followup`. Canary rollback evidence
+is in `output/canary-rollback-acceptance.log`.
 Do not commit browser session exports or customer/operator records.

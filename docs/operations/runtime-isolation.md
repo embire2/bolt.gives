@@ -1,7 +1,10 @@
 # Runtime Isolation Rollout
 
 This describes the **unreleased** isolation implementation after v4.1.0-beta.1.
-It is not confirmation that production, alpha, or managed instances have been migrated.
+Alpha and the owned Cloudflare canary have passed live isolation/generation
+acceptance; production and customer fleet migration remain pending. See the
+[current evidence](../quality/2026-09-13-alpha-acceptance.md), not older checkpoint
+statements, for the latest validated scope.
 
 ## Boundaries
 

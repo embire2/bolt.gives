@@ -4,6 +4,10 @@
 
 ### Runtime and Recovery
 
+- Normalize streamed Preview-ready events before subscribers navigate the iframe, preserving each Cloudflare instance's authenticated origin instead of requesting alpha's URL without its login cookie.
+- Decode JSON message envelopes before checking quoted UI requirements. Follow-ups containing two quoted labels no longer invent extra requirements and enter false repair after a verified Preview.
+- Make Calendar browser acceptance fail on aborted chat streams and browser exceptions; capture diagnostic streams passively without changing network cancellation behavior.
+- Replace the unsafe recursive-copy legacy Linux updater with the guarded installer entrypoint, preserving quoted paths and release options.
 - Preserve managed-instance runtime and FREE relay routing across Wrangler deployments, keep stale-port redirects on the client's authenticated hostname, and resolve registration settings from the request's runtime.
 - Treat zero automatic-refresh interval as manual-only at startup as well as during periodic refresh. Block the private tenant-admin API at public gateways while retaining server-side admin operations.
 - Fix the Calendar template's inactive Create event button, calendar filtering, impossible dates and overflowing mini-calendar. Event creation and reload persistence now run in the real Chromium template smoke, not only a screenshot check.
