@@ -95,6 +95,7 @@ the private evidence and source snapshots remain available to operators.
 ## Remaining Release Work
 
 - Complete production migration, rollback and fleet health checks.
+- Production registration currently refuses rollouts because its deployed `ca133420` source does not match `origin/main`. The difference includes application/runtime changes, not just documentation. Do not bypass the guard by changing `BOLT_RELEASE_SHA` without deploying and verifying the matching source.
 - Configure scalable wildcard Preview TLS with the authoritative DNS operator. The Cloudflare account configured here is not authoritative for bolt.gives; successful per-project staging certificates are not a fleet-scale certificate plan.
 - Keep the earlier intermittent browser hook crash under investigation; passing repeats alone are not a deterministic root-cause proof.
 - The optional remote SSH workspace node currently times out; rootless hosted Preview does not depend on it.

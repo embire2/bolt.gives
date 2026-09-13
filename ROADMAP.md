@@ -34,7 +34,9 @@ checks on both transitions. The published Calendar also passed event creation
 and reload persistence. The full suite now passes 1,371 tests, with nine skipped.
 Real USD 5 monthly Stripe Checkout navigation passed without charging a card;
 signed webhook checks and disposable PostgreSQL fulfillment/replay tests passed.
-Production and fleet rollout remain pending. Historical checkpoint statements
+Production and fleet rollout remain pending; production registration still
+refuses deployment because its source SHA differs from `origin/main`. This is a
+real application/runtime difference, not a metadata-only fix. Historical checkpoint statements
 below describe their dates, not the current alpha deployment. See the
 [13 September alpha evidence](docs/quality/2026-09-13-alpha-acceptance.md).
 
