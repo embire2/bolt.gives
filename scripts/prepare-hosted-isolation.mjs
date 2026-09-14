@@ -139,6 +139,7 @@ Object.assign(env, {
   BOLT_PREVIEW_ORIGIN_TEMPLATE: `https://{id}.${target === 'alpha' ? 'alpha-preview' : 'preview'}.instances.bolt.gives`,
   BOLT_PREVIEW_SIGNING_SECRET: existing.BOLT_PREVIEW_SIGNING_SECRET || crypto.randomBytes(48).toString('base64url'),
   BOLT_UPDATE_DISABLED: 'true',
+  RUNTIME_MANAGED_INSTANCE_SYNC_INTERVAL_MS: '0',
 });
 
 const temporary = `${envFile}.${crypto.randomUUID()}.tmp`;

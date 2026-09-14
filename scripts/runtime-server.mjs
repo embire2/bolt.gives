@@ -12,6 +12,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { previewRequestHeaders } from '@bolt/runtime/server/preview-request-headers.mjs';
+import { disableManagedPreviewHmr } from '@bolt/runtime/server/preview-hmr.mjs';
 import { prepareProjectProcessDirectory, spawnProjectProcess } from '@bolt/runtime/server/project-process.mjs';
 import { createPreviewOrigin } from '@bolt/runtime/server/preview-origin.mjs';
 import { injectPreviewBrowserMonitor } from '@bolt/runtime/server/preview-browser-monitor.mjs';
@@ -8070,7 +8071,8 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
         const body = Buffer.concat(chunks).toString('utf8');
 
         // Dedicated origins use native asset URLs, avoiding duplicate modules during Vite optimization.
-        let rewritten = req.boltIsolatedPreview ? body : rewritePreviewAssetUrls(body, previewBasePath);
+        const managedBody = disableManagedPreviewHmr(body, upstreamPath);
+        let rewritten = req.boltIsolatedPreview ? managedBody : rewritePreviewAssetUrls(managedBody, previewBasePath);
 
         if (req.boltIsolatedPreview && /text\/html/.test(contentType)) {
           rewritten = injectPreviewBrowserMonitor(rewritten);
