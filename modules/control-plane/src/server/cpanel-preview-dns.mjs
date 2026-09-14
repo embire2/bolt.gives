@@ -65,7 +65,8 @@ export function cpanelPreviewDnsConfig(env) {
   return { origin: origin.origin, username, token, zone, domains };
 }
 
-const decode = (value) => Buffer.from(String(value || ''), 'base64').toString('ascii');
+// ASCII decoding masks high bits and could turn a foreign TXT record into the ACME value.
+const decode = (value) => Buffer.from(String(value || ''), 'base64').toString('latin1');
 
 export function parseCpanelZone(data, zone) {
   if (!Array.isArray(data)) {
