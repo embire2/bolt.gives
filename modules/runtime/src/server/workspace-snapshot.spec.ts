@@ -25,13 +25,75 @@ describe('snapshot budgets', () => {
     expect(Object.keys(await readWorkspaceSnapshot(dir))).toEqual(['/home/project/source.txt']);
   });
 
-  it.each(['ENOENT', 'ENOTDIR'])('returns retryable conflict for a concurrent source removal (%s)', async (code) => {
+  it.each(['ENOENT', 'ENOTDIR'])('retries a transient concurrent source removal (%s)', async (code) => {
     const dir = await fixture();
     const previous = { saved: { content: 'last complete source' } };
     const session = { dir, currentFileMap: previous };
     vi.spyOn(fs, 'open').mockRejectedValueOnce(Object.assign(new Error('concurrent source mutation'), { code }));
+    await expect(reconcileWorkspaceSnapshot(session)).resolves.toHaveProperty('/home/project/source.txt');
+    expect(session.currentFileMap).not.toBe(previous);
+  });
+
+  it('does not make simultaneous readers conflict with each other', async () => {
+    const dir = await fixture();
+    const session = { dir, currentFileMap: {} };
+    const snapshots = await Promise.all(Array.from({ length: 8 }, () => reconcileWorkspaceSnapshot(session)));
+    expect(snapshots).toHaveLength(8);
+
+    for (const snapshot of snapshots) {
+      expect(snapshot['/home/project/source.txt']).toMatchObject({ type: 'file', content: 'content' });
+    }
+  });
+
+  it('bounds retries and retains the previous complete cache while files keep changing', async () => {
+    const dir = await fixture();
+    const previous = { saved: { content: 'last complete source' } };
+    const session = { dir, currentFileMap: previous };
+    const open = vi.spyOn(fs, 'open').mockRejectedValue(Object.assign(new Error('removed'), { code: 'ENOENT' }));
     await expect(reconcileWorkspaceSnapshot(session)).rejects.toMatchObject({ status: 409 });
+    expect(open).toHaveBeenCalledTimes(3);
     expect(session.currentFileMap).toBe(previous);
+  });
+
+  it('does not overwrite a newer mutation and retries from the current disk', async () => {
+    const dir = await fixture('old');
+    const session = { dir, currentFileMap: {}, workspaceMutationId: 1 };
+    const originalOpen = fs.open.bind(fs);
+    vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
+      session.workspaceMutationId++;
+      await fs.writeFile(path.join(dir, 'source.txt'), 'new');
+
+      return originalOpen(...args);
+    });
+
+    const result = await reconcileWorkspaceSnapshot(session);
+    expect(result['/home/project/source.txt']).toMatchObject({ type: 'file', content: 'new' });
+    expect(session.currentFileMap).toBe(result);
+  });
+
+  it('can cancel a queued reader without aborting another request', async () => {
+    const dir = await fixture();
+    const session = { dir, currentFileMap: {} };
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const originalOpen = fs.open.bind(fs);
+    const open = vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
+      await pending;
+      return originalOpen(...args);
+    });
+    const first = reconcileWorkspaceSnapshot(session);
+    const controller = new AbortController();
+    const second = reconcileWorkspaceSnapshot(session, { signal: controller.signal });
+    controller.abort();
+    await expect(second).rejects.toThrow();
+
+    const third = reconcileWorkspaceSnapshot(session);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+    release();
+    await expect(first).resolves.toHaveProperty('/home/project/source.txt');
+    await expect(third).resolves.toHaveProperty('/home/project/source.txt');
   });
 
   it('does not disguise permissions failures as a retryable mutation', async () => {

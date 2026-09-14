@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { isWorkspaceSourcePath } from '@bolt/core/lib/workspace-source.mjs';
 
 export class WorkspaceSnapshotError extends Error {
@@ -177,7 +178,27 @@ async function readSourceSnapshot(root, workDir, options) {
   return files;
 }
 
-export async function reconcileWorkspaceSnapshot(session, options = {}) {
+const snapshotReads = new WeakMap();
+
+async function waitForSnapshotRead(previous, signal) {
+  signal.throwIfAborted();
+
+  let abort;
+
+  try {
+    await Promise.race([
+      previous.catch(() => undefined),
+      new Promise((_resolve, reject) => {
+        abort = () => reject(signal.reason);
+        signal.addEventListener('abort', abort, { once: true });
+      }),
+    ]);
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
+async function reconcileSnapshotOnce(session, options) {
   const before = session.currentFileMap;
   const revision = session.workspaceMutationId;
   const files = await readWorkspaceSnapshot(session.dir, options.workDir, options);
@@ -192,4 +213,54 @@ export async function reconcileWorkspaceSnapshot(session, options = {}) {
   session.currentFileMap = files;
 
   return files;
+}
+
+export async function reconcileWorkspaceSnapshot(session, options = {}) {
+  const limits = { ...snapshotLimits(), ...options };
+  const deadline = Date.now() + limits.timeoutMs;
+  const previous = snapshotReads.get(session) || Promise.resolve();
+  const controller = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+  const timer = setTimeout(
+    () => controller.abort(new WorkspaceSnapshotError('Workspace snapshot timed out.', 409)),
+    limits.timeoutMs,
+  );
+  const operation = (async () => {
+    // A read updates the reconciled cache; concurrent reads must not invalidate each other.
+    await waitForSnapshotRead(previous, signal);
+
+    for (let attempt = 0; ; attempt++) {
+      signal.throwIfAborted();
+
+      try {
+        return await reconcileSnapshotOnce(session, {
+          ...limits,
+          signal,
+          timeoutMs: Math.max(1, deadline - Date.now()),
+        });
+      } catch (error) {
+        if (!(error instanceof WorkspaceSnapshotError) || error.status !== 409 || attempt >= 2) {
+          throw error;
+        }
+
+        await delay(50 * (attempt + 1), undefined, { signal });
+      }
+    }
+  })();
+
+  // An aborted waiter must not release readers still ahead of it in the queue.
+  const settledOperation = operation.catch(() => undefined);
+  const queued = previous.catch(() => undefined).then(() => settledOperation);
+  snapshotReads.set(session, queued);
+  void queued.then(() => {
+    if (snapshotReads.get(session) === queued) {
+      snapshotReads.delete(session);
+    }
+  });
+
+  try {
+    return await operation;
+  } finally {
+    clearTimeout(timer);
+  }
 }
