@@ -4,6 +4,7 @@
 
 ### Runtime and Recovery
 
+- Mark intentional process shutdown before awaiting container exit. The liveness monitor no longer mistakes that close for a crash and restarts a stopped Preview; real unexpected exits still trigger recovery. Calendar acceptance checks the stopped state for five seconds after cleanup rather than trusting HTTP 200 alone.
 - Stop requests wait for the attached Podman client to exit and its container to be removed. A real immediate-stop regression exposed `stop --ignore` reporting success before container creation; bounded retries now close that race without preventing later retries after failure.
 - Preserve hard-linked dependencies when preparing isolated runtime copies, copy only tracked application source plus explicit build/dependencies, and verify source/private records independently of rebuildable dependency caches. Existing targets remain guarded against overwrite.
 - Disable the pinned Vite client's unmanaged socket bootstrap while retaining its CSS/module helpers. Imports of those helpers no longer reopen failing HMR connections during managed Preview restarts.

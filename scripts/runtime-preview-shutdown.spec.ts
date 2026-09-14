@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { observeUnexpectedPreviewExit } from '@bolt/runtime/server/preview-process-exit.mjs';
 import { recordPreviewResponse, syncWorkspaceSnapshot, terminateSessionProcesses } from './runtime-server.mjs';
 
 const directories: string[] = [];
@@ -45,6 +47,41 @@ async function fixture() {
 }
 
 describe('intentional Preview shutdown', () => {
+  it('does not treat an awaited container shutdown as an unexpected exit', async () => {
+    const session = await fixture();
+    const child = Object.assign(new EventEmitter(), {
+      terminateProject: async () => {
+        await Promise.resolve();
+        child.emit('close', 0);
+
+        return { stopped: true };
+      },
+    });
+    session.processes.set('preview', { process: child });
+
+    const restart = vi.fn();
+    observeUnexpectedPreviewExit(session, 'preview', child, restart);
+    await terminateSessionProcesses(session);
+    expect(restart).not.toHaveBeenCalled();
+    expect(session.processes.size).toBe(0);
+    expect(session.preview).toBeUndefined();
+  });
+
+  it('still reports a current unexpected exit, but ignores a superseded process', async () => {
+    const session = await fixture();
+    const oldChild = new EventEmitter();
+    const child = new EventEmitter();
+    const restart = vi.fn();
+    session.processes.set('preview', { process: child });
+    observeUnexpectedPreviewExit(session, 'preview', oldChild, restart);
+    observeUnexpectedPreviewExit(session, 'preview', child, restart);
+    oldChild.emit('close', 0);
+    expect(restart).not.toHaveBeenCalled();
+    child.emit('close', 1);
+    expect(restart).toHaveBeenCalledOnce();
+    expect(restart).toHaveBeenCalledWith(1);
+  });
+
   it('does not schedule a source rollback for late proxy failures after shutdown', async () => {
     vi.useFakeTimers();
 

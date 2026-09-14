@@ -13,6 +13,7 @@ import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { previewRequestHeaders } from '@bolt/runtime/server/preview-request-headers.mjs';
 import { disableManagedPreviewHmr } from '@bolt/runtime/server/preview-hmr.mjs';
+import { observeUnexpectedPreviewExit } from '@bolt/runtime/server/preview-process-exit.mjs';
 import { prepareProjectProcessDirectory, spawnProjectProcess } from '@bolt/runtime/server/project-process.mjs';
 import { createPreviewOrigin } from '@bolt/runtime/server/preview-origin.mjs';
 import { injectPreviewBrowserMonitor } from '@bolt/runtime/server/preview-browser-monitor.mjs';
@@ -7495,6 +7496,11 @@ export async function terminateSessionProcesses(session, options = {}) {
   cancelPendingPreviewVerification(session);
   cancelPendingPreviewAutostart(session);
 
+  // Mark every handle before awaiting a close; intentional exits must not enqueue recovery.
+  for (const handle of session.processes.values()) {
+    handle.intentionalStop = true;
+  }
+
   for (const [, handle] of session.processes.entries()) {
     const result = await terminateSessionProcessHandle(handle);
 
@@ -7767,13 +7773,7 @@ async function handleRunCommand(req, res, session, body) {
       return;
     }
 
-    child.once('close', (exitCode) => {
-      const activeHandle = session.processes.get(processKey);
-
-      if (!activeHandle || activeHandle.process !== child) {
-        return;
-      }
-
+    observeUnexpectedPreviewExit(session, processKey, child, (exitCode) => {
       session.processes.delete(processKey);
 
       if (!retainSessionPreviewPortForRecovery(session)) {

@@ -52,7 +52,7 @@ and constrained Caddy reloads are repaired; the latest suite passes 1,424 tests.
 Production migration and remaining release acceptance are not complete. See the
 [preparation evidence](docs/quality/2026-09-14-release-preparation.md).
 
-Latest continuation: 1,448 tests pass, nine skipped. Vite helper imports no longer
+Latest continuation: 1,450 tests pass, nine skipped. Vite helper imports no longer
 start unmanaged HMR reconnects; concurrent snapshot readers no longer produce
 false conflicts. Eight real container shutdown checks cover graceful flushing
 and stop-before-creation races. Alpha, Cloudflare and the copied production
@@ -62,6 +62,12 @@ stream retry/restart plus 30 cold reloads passed. The production source and
 private-data copy is checksum-verified, but production traffic remains on 4.0.1.
 Final service/routing rollback, the B15 investigation and remaining acceptance
 are still open; preparing a verified copy does not close those gates.
+
+The post-test container audit caught a second stop defect: an intentional close
+was triggering the crash monitor and auto-starting Preview again. Handles are
+now marked before waiting for shutdown; current crashes still recover and stale
+process exits are ignored. Calendar cleanup acceptance now checks five seconds
+of actual idle state. This is separate from the earlier Podman creation race.
 
 Independent Desktop release:
 

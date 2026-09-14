@@ -218,7 +218,27 @@ async function terminateRuntimeSession(requestContext, sessionId) {
 
   return await requestContext
     .delete(cleanupUrl, { timeout: runtimeFetchTimeoutMs })
-    .then((response) => ({ ok: response.ok(), status: response.status() }))
+    .then(async (response) => {
+      if (!response.ok() || (await response.json()).ok !== true) {
+        return { ok: false, status: response.status() };
+      }
+
+      // An HTTP success is insufficient: a close monitor used to restart the stopped Preview.
+      const statusUrl = new URL(`/runtime/sessions/${encodeURIComponent(sessionId)}/preview-status`, baseUrl);
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const result = await requestContext.get(statusUrl.toString(), { timeout: runtimeFetchTimeoutMs });
+        const state = await result.json();
+
+        if (!result.ok() || state.preview || state.healthy || state.status !== 'idle') {
+          return { ok: false, status: response.status(), error: 'Preview did not remain stopped after cleanup.' };
+        }
+      }
+
+      return { ok: true, status: response.status(), remainedStopped: true };
+    })
     .catch((error) => ({
       ok: false,
       status: 0,

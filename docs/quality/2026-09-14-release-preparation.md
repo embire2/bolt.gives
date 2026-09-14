@@ -147,3 +147,24 @@ Private evidence: `output/release-20260914-alpha-snapshot-fixed.log`,
 `output/release-20260914-early-stop-before.log`,
 `output/release-20260914-shutdown-final-eight.log`, and
 `output/release-20260914-production-final-source-copy.log`.
+
+## Intentional-Exit Monitor Regression
+
+The next alpha and Cloudflare journeys completed Preview, follow-up and history
+restore, but an independent container audit found the alpha fixture running
+again after HTTP 200 cleanup. A direct DELETE reproduced `starting` after 500 ms
+and `ready` after two seconds. The Podman stop itself had succeeded: the Preview
+liveness monitor queued recovery while `terminateSessionProcesses` awaited the
+child's close. This is distinct from the earlier stop-before-creation race.
+
+Shutdown now marks every handle before awaiting any close. The monitor ignores
+intentional and superseded exits while retaining current unexpected-exit
+recovery. Two regressions cover those cases; the full suite passes 1,450 tests,
+with nine skipped. Calendar cleanup now requires five seconds of idle/no-Preview
+state after a JSON-confirmed successful stop. Earlier generation passes remain
+valid for generation, but are not claimed as verified shutdown acceptance.
+
+Private evidence: `output/release-20260914-intentional-stop-before.log`,
+`output/release-20260914-intentional-stop-tests-fixed.log`, and
+`output/release-20260914-stop-monitor-full-tests.log`. Live acceptance of this
+additional fix must be recorded before promotion.

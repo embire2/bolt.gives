@@ -49,6 +49,12 @@ retries within a deadline and permits a later retry after failure. Shutdown
 acceptance includes three immediate-stop cases in addition to five graceful
 SIGTERM/state-flush checks.
 
+Mark every process handle as intentionally stopping before awaiting any exit.
+The Preview close monitor must ignore those handles as well as superseded
+children. Otherwise it can queue recovery during shutdown and recreate a
+container after DELETE has returned success. Verify the session stays idle after
+the response; a successful stop command alone does not certify cleanup.
+
 ## cPanel Certificate Hook
 
 `scripts/preview-dns-challenge.mjs` is an operator-only DNS-01 hook, not a public
