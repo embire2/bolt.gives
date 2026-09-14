@@ -246,6 +246,7 @@ export function resolveRuntimeWorkspaceRoot(
   return path.resolve(path.dirname(repoRoot), `${path.basename(repoRoot)}-runtime-workspaces`);
 }
 
+const RUNTIME_VERSION = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
 const PERSIST_ROOT = resolveRuntimeWorkspaceRoot();
 const singleUserProfiles = createSingleUserProfiles({ root: path.join(PERSIST_ROOT, 'owner-auth') });
 const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6142';
@@ -8334,12 +8335,26 @@ export function createRuntimeServer() {
     }
 
     if (pathname === '/health') {
-      sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      sendJson(res, 200, {
+        ok: true,
+        version: RUNTIME_VERSION,
+        protocolVersion: 1,
+        host: HOST,
+        port: PORT,
+        sessions: sessions.size,
+      });
       return;
     }
 
     if (pathname === '/runtime/health') {
-      sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      sendJson(res, 200, {
+        ok: true,
+        version: RUNTIME_VERSION,
+        protocolVersion: 1,
+        host: HOST,
+        port: PORT,
+        sessions: sessions.size,
+      });
       return;
     }
 

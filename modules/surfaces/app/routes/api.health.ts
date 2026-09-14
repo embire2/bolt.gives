@@ -1,5 +1,7 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { APP_VERSION } from '@bolt/core/lib/version';
+import { checkRuntimeReadiness } from '@bolt/runtime/lib/.server/runtime-readiness';
+import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 
 /*
  * Split health endpoint.
@@ -20,36 +22,7 @@ import { APP_VERSION } from '@bolt/core/lib/version';
 
 const START_TIME = Date.now();
 
-type DependencyResult = {
-  name: string;
-  ok: boolean;
-  durationMs: number;
-  error?: string;
-};
-
-async function timedCheck(name: string, run: () => Promise<void>, timeoutMs: number): Promise<DependencyResult> {
-  const start = Date.now();
-
-  try {
-    await Promise.race([
-      run(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`${name} check timed out after ${timeoutMs}ms`)), timeoutMs),
-      ),
-    ]);
-
-    return { name, ok: true, durationMs: Date.now() - start };
-  } catch (error) {
-    return {
-      name,
-      ok: false,
-      durationMs: Date.now() - start,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-export const loader = async ({ request }: LoaderFunctionArgs) => {
+export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const wantsReadiness = url.searchParams.has('ready') || url.searchParams.has('readiness');
 
@@ -66,21 +39,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  // Readiness: optional downstream probes, each bounded.
-  const checks: DependencyResult[] = [];
-
-  // Self-check: are we inside a Remix loader and can we resolve env?
-  checks.push(
-    await timedCheck(
-      'runtime',
-      async () => {
-        if (typeof fetch !== 'function') {
-          throw new Error('fetch is unavailable in this runtime');
-        }
-      },
-      250,
-    ),
-  );
+  const checks = [await checkRuntimeReadiness(APP_VERSION, resolveRuntimeEnvFromContext(context))];
 
   const ok = checks.every((c) => c.ok);
 
