@@ -4,6 +4,9 @@
 
 ### Runtime and Recovery
 
+- Stop rootless project containers gracefully and remove them only after the attached process settles. This fixes the reproduced Podman `died not found` / exit 127 shutdown race and allows SIGTERM handlers to flush project state.
+- Refuse isolation-copy migration when a destination or protected environment already exists, either source service is not confirmed stopped, or a destination has a symlink ancestor. A retry cannot overwrite a newer active workspace with its original copy.
+- Add an operator-only cPanel DNS-01 hook restricted to explicitly configured Preview namespaces. It preserves zone backups, uses SOA serial checks and bounded retries, removes only matching challenge values, and verifies TXT propagation. Live certificate issuance still requires the cPanel account username and acceptance; no DNS change or production rollout is implied by the hook's unit tests.
 - Normalize streamed Preview-ready events before subscribers navigate the iframe, preserving each Cloudflare instance's authenticated origin instead of requesting alpha's URL without its login cookie.
 - Decode JSON message envelopes before checking quoted UI requirements. Follow-ups containing two quoted labels no longer invent extra requirements and enter false repair after a verified Preview.
 - Make Calendar browser acceptance fail on aborted chat streams and browser exceptions; capture diagnostic streams passively without changing network cancellation behavior.

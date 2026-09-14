@@ -6,6 +6,10 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parse } from 'dotenv';
+import {
+  assertFreshMigrationTargets,
+  assertMigrationServicesStopped,
+} from '@bolt/runtime/server/isolation-migration.mjs';
 
 const run = promisify(execFile);
 const target = process.argv[2];
@@ -20,6 +24,24 @@ const prefix = target === 'alpha' ? 'bolt-gives-alpha' : 'bolt-gives';
 const oldRoot = `/srv/${prefix}-runtime-workspaces`;
 const root = `/srv/${prefix}-isolated-workspaces`;
 const checkout = `/srv/${prefix}-isolated`;
+const envFile = `/etc/bolt-gives/${target}-isolated.env`;
+await assertFreshMigrationTargets({ source: oldRoot, destinations: [checkout, root], environmentFile: envFile });
+
+const serviceStates = [];
+
+for (const service of [`${prefix}-app.service`, `${prefix}-runtime.service`]) {
+  const result = await run('systemctl', ['show', service, '--property=LoadState,ActiveState']);
+  const properties = Object.fromEntries(
+    result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => line.split('=')),
+  );
+  serviceStates.push({ loadState: properties.LoadState, activeState: properties.ActiveState });
+}
+
+assertMigrationServicesStopped(serviceStates);
+
 const shared = parse(await fs.readFile('/etc/bolt-gives/runtime.env', 'utf8'));
 const env = { ...shared, ...(target === 'alpha' ? parse(await fs.readFile('/etc/bolt-gives/alpha.env', 'utf8')) : {}) };
 const uid = Number((await run('id', ['-u', 'bolt-runtime-agent'])).stdout.trim());
@@ -88,7 +110,6 @@ if (env.BOLT_RUNTIME_NODE_SSH_KEY_PATH) {
   env.BOLT_RUNTIME_NODE_SSH_KEY_PATH = keyPath;
 }
 
-const envFile = `/etc/bolt-gives/${target}-isolated.env`;
 const existing = await fs
   .readFile(envFile, 'utf8')
   .then(parse)

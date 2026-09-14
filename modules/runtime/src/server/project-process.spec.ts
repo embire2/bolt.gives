@@ -42,6 +42,7 @@ describe('project execution boundary', () => {
       0,
     );
     expect(invocation.options.uid).toBe(1002);
+    expect(invocation.args).not.toContain('--rm');
     expect(invocation.args).toContain('1002:1002');
     expect(invocation.args).toContain('/srv/projects/one:/srv/projects/one:rw');
     expect(invocation.args.filter((arg: string) => arg === '--volume')).toHaveLength(1);

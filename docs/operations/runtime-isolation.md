@@ -35,9 +35,40 @@ BOLT_PREVIEW_SIGNING_SECRET=<independent-random-secret-at-least-32-characters>
 
 Keep the signing secret stable across restarts. Neither it nor provider credentials belong in generated projects, public metadata or browser bundles. Do not log bootstrap query strings.
 
+The runtime owns container cleanup after the attached process closes. Do not add
+Podman's `--rm` back to the launcher: on the tested Ubuntu Podman version it races
+exit-status retrieval during stop and produces exit 127. Normal stop sends
+SIGTERM with a five-second forced-stop deadline, allowing applications to flush
+state. `node scripts/e2e-project-shutdown.mjs` exercises five real shutdowns with
+the same protected runner configuration as the isolation tests.
+
+## cPanel Certificate Hook
+
+`scripts/preview-dns-challenge.mjs` is an operator-only DNS-01 hook, not a public
+runtime endpoint. Store its configuration outside the checkout in a root-owned
+mode-0600 file without symlink ancestors. See the commented cPanel variables in
+`.env.example`; set `BOLT_CPANEL_DNS_ENV_FILE` to that file's absolute path.
+The API token requires its owning cPanel username, not the server's SSH username.
+
+Run `node scripts/preview-dns-challenge.mjs check` before requesting a certificate.
+This reads the configured zone and verifies its SOA without changing DNS. The
+`auth` and `cleanup` modes read Certbot's `CERTBOT_DOMAIN` and
+`CERTBOT_VALIDATION` variables. Only `_acme-challenge` TXT records for the exact
+configured Preview namespaces are permitted. Existing A/MX records and other
+challenge values are left alone; a delegated CNAME causes an explicit refusal.
+Every attempted mutation gets a mode-0600 zone backup beside the configuration.
+Authentication waits up to ten minutes for authoritative/public TXT visibility.
+
+Wire these commands into Certbot's manual auth/cleanup hooks only after the
+read-only check succeeds. Complete a staging-CA issuance and renewal rehearsal,
+then issue the public wildcard and configure certificate installation plus a
+validated Caddy reload. Keep keys readable only by the certificate service and
+Caddy. The hook alone is not a configured renewal service or live TLS acceptance.
+
 ## Migration Gates
 
 1. Stop accepting writes on the staging runtime. Retain the old application tree, service configuration, workspace tree and separate database connection records as a rollback target. Do not rotate credentials or alter the originals.
+   The one-time copy script refuses any existing destination/environment and requires both source units to be loaded and inactive. Do not delete an active or partial destination merely to bypass this guard; inspect it and preserve newer work before planning recovery.
 2. Copy source and metadata to a new private runtime tree, verify file checksums, and assign only the new copy to the runner. Explicitly handle separately configured connection-record paths. Do not recursively chown the original workspace tree or silently drop database records.
 3. Run the trusted runtime as the prepared runner against that copy. Audit control-plane operations that formerly depended on root, including service updates, CLI provisioning and Caddy domain management. Container execution working alone does not certify these operations.
 4. Route platform `/runtime/*` requests through the application authorization layer, not directly from public Caddy to the runtime port. The installer now generates this route for both owner-only and hosted-profile installations.

@@ -59,7 +59,8 @@ export function projectProcessInvocation(command, args, options, config, hostUid
   };
   const podmanArgs = [
     'run',
-    '--rm',
+
+    // Cleanup belongs to the close handler, after the attached client has read the exit status.
     '--init',
     '--stop-timeout=5',
     '--pull=never',
@@ -175,7 +176,8 @@ export function spawnProjectProcess(command, args, options, config = projectProc
     let stopping;
     child.terminateProject = () =>
       (stopping ||= new Promise((resolve) => {
-        const stop = spawn('/usr/bin/podman', ['rm', '--force', '--ignore', invocation.name], {
+        // Let the app flush on SIGTERM; Podman enforces a bounded SIGKILL fallback.
+        const stop = spawn('/usr/bin/podman', ['stop', '--ignore', '--time=5', invocation.name], {
           ...invocation.options,
           detached: false,
           stdio: 'ignore',

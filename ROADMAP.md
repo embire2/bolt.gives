@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 Status legend:
 
@@ -39,6 +39,15 @@ refuses deployment because its source SHA differs from `origin/main`. This is a
 real application/runtime difference, not a metadata-only fix. Historical checkpoint statements
 below describe their dates, not the current alpha deployment. See the
 [13 September alpha evidence](docs/quality/2026-09-13-alpha-acceptance.md).
+
+14 September preparation: the reproduced rootless Podman shutdown race is fixed;
+five real containers flushed state and exited cleanly. One-time migration now
+refuses existing targets and running/missing service units. A real FREE/Luna
+browser repeat passed Preview, follow-up, Code selection, history and runtime
+restart. The full suite passes 1,396 tests, nine skipped. A scoped cPanel DNS-01
+hook has regression coverage, but live DNS access still needs the token owner's
+cPanel username. Production migration, wildcard issuance and remaining release
+acceptance are not complete. See the [preparation evidence](docs/quality/2026-09-14-release-preparation.md).
 
 Independent Desktop release:
 
