@@ -1,0 +1,16 @@
+[Unit]
+Description=Synchronize only the bolt.gives cPanel DNS zone
+After=network-online.target named.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/flock -n /run/bolt-gives-dns-sync.lock /usr/bin/node /usr/local/lib/bolt-gives-dns-sync/scripts/sync-cpanel-secondary.mjs
+TimeoutStartSec=180
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/cache/bind/bolt.gives-cpanel /run
+NoNewPrivileges=true
+UMask=0077

@@ -87,6 +87,7 @@ import {
   sendProfileLoginLink,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
+import { reloadProjectCaddy } from '@bolt/control-plane/server/project-caddy-reload.mjs';
 import {
   buildRuntimeNodeDatabaseTunnelInvocation,
   buildRuntimeNodeConfig,
@@ -6543,8 +6544,10 @@ async function ensureProjectCaddyHost(hostname, options = {}) {
       await fs.writeFile(PROJECT_CADDYFILE_PATH, caddyfile, 'utf8');
     }
 
-    await runShellCommand('caddy', ['fmt', '--overwrite', PROJECT_CADDYFILE_PATH]).catch(() => undefined);
-    await runShellCommand('caddy', ['reload', '--config', PROJECT_CADDYFILE_PATH]);
+    await reloadProjectCaddy(
+      { configPath: PROJECT_CADDYFILE_PATH, service: process.env.BOLT_PROJECT_CADDY_RELOAD_SERVICE },
+      runShellCommand,
+    );
 
     const httpsReady = await waitForProjectHttpsReady(hostname);
 

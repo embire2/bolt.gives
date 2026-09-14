@@ -37,6 +37,43 @@ Private evidence:
 
 ## Remaining Gates
 
+### Later Operator Continuation
+
+The supplied cPanel username authenticated successfully. Live API responses
+exposed the direct HTTPS envelope and relative DNS names, both now covered by
+regressions. Six explicit routing records preserve the `instances.bolt.gives`
+parent and both Preview namespaces without changing existing mail/site records.
+
+The registrar's second server, `pns2.day.co.za`, refused this zone because its
+DNS daemon had no `bolt.gives` zone. Existing authorized access to the same
+`webhotel.cloud` host allowed repair without changing registrar delegation or
+other hosted zones. The primary refuses AXFR, so a root-owned, cPanel-fed mirror
+updates only this zone every 30 seconds. Candidate files pass `named-checkzone`,
+serials cannot move backwards, and the daemon's served serial is checked after
+reload. This caught and fixed a restrictive-umask problem that left BIND serving
+old data even though `rndc reload` returned zero. The original `webhotel.cloud`
+zone still answers with its unchanged serial.
+
+The initial certificate attempt returned a staging certificate despite failed
+propagation hooks; that is not counted as acceptance. A fresh staging account
+then passed both propagation hooks and cleanup. Public Let's Encrypt issuance
+also passed, and an unknown alpha Preview hostname completes trusted TLS and
+returns the expected authorization-safe 404. A certificate/key install hook
+checks matching keys, required wildcard names and expiry, switches them
+atomically and restores the previous pair if validated Caddy reload fails.
+
+Non-root mail settings reproduced EACCES against the root service file. Mutable
+settings now live separately with mode 0600; omitted SMTP passwords are preserved
+and explicit clearing shadows inherited values. SMTP authentication passed
+without sending mail. A narrowly delegated oneshot validates/reloads Caddy; a
+real invocation as the non-root runner passed. The suite now passes 1,424 tests,
+nine skipped. Production application migration is still pending.
+
+Private evidence: `output/preview-certbot-staging-verified.log`,
+`output/preview-certbot-public.log`, `output/preview-certbot-renewal.log` and
+`output/release-20260914-dns-sync-*.log`. The earlier missing-username notes below
+describe the initial checkpoint, not the current access or DNS state.
+
 The cPanel endpoint is reachable over verified HTTPS, and the token is stored
 outside the repository with mode 0600. Its owning account username is still
 required. Do not guess it from the domain or reuse the machine's SSH username.

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   assertCpanelPreviewRouting,
   cpanelPreviewDnsConfig,
+  cpanelZoneNameservers,
   parseCpanelZone,
   readCpanelPreviewZone,
   updateCpanelPreviewChallenge,
@@ -34,6 +35,44 @@ const value = 'a'.repeat(43);
 const input = { domain: 'preview.example.com', value };
 
 describe('scoped cPanel Preview DNS challenge', () => {
+  it('uses current apex nameservers, excluding child delegations and absent stale entries', () => {
+    const zone = parseCpanelZone(
+      [soa(), record('@', ['ns1.example.net.'], 'NS'), record('child', ['child.example.net.'], 'NS')],
+      'example.com',
+    );
+    expect(cpanelZoneNameservers(zone, 'example.com')).toEqual(['ns1.example.net']);
+    expect(() => cpanelZoneNameservers({ records: [] }, 'example.com')).toThrow('No authoritative nameservers');
+  });
+  it('reads the direct HTTPS UAPI envelope and normalizes relative zone names', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 1,
+          data: [soa(), record('*.preview', ['192.0.2.10'], 'A'), record('_acme-challenge.preview', [value])],
+        }),
+      ),
+    );
+    const zone = await readCpanelPreviewZone(config, { fetchImpl });
+    expect(() => assertCpanelPreviewRouting(zone, 'preview.example.com')).not.toThrow();
+    expect(Buffer.from(zone.records[2].dname_b64, 'base64').toString()).toBe('_acme-challenge.preview.example.com.');
+  });
+
+  it('removes a relative-name challenge returned directly by HTTPS', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 1, data: [soa(), record('_acme-challenge.preview', [value])] })),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 1, data: {} })));
+    expect((await updateCpanelPreviewChallenge(config, { ...input, remove: true }, { fetchImpl })).changed).toBe(true);
+    expect(fetchImpl.mock.calls[1][0].searchParams.get('remove-0')).toBe('8');
+  });
+
+  it('rejects a refused direct HTTPS response without exposing its errors', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 0, errors: [config.token] })));
+    await expect(readCpanelPreviewZone(config, { fetchImpl })).rejects.toThrow('API permissions');
+  });
+
   it.each([
     ['preview.example.com', 'A', '192.0.2.10'],
     ['*.preview.example.com', 'CNAME', 'runtime.example.com.'],
@@ -70,6 +109,11 @@ describe('scoped cPanel Preview DNS challenge', () => {
   });
   it('rejects a mismatching or absent SOA instead of editing an unknown zone', () => {
     expect(() => parseCpanelZone([soa()], 'another.example.com')).toThrow('valid SOA');
+  });
+  it('refuses changed zone origins instead of expanding relative names under the wrong zone', () => {
+    expect(() =>
+      parseCpanelZone([soa(), { type: 'control', text_b64: b64('$ORIGIN delegated.example.com.') }], 'example.com'),
+    ).toThrow('origin directives');
   });
   it('adds only the allowlisted ACME TXT and keeps the token out of the URL', async () => {
     const fetchImpl = vi

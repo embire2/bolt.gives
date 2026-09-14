@@ -45,9 +45,12 @@ five real containers flushed state and exited cleanly. One-time migration now
 refuses existing targets and running/missing service units. A real FREE/Luna
 browser repeat passed Preview, follow-up, Code selection, history and runtime
 restart. The full suite passes 1,400 tests, nine skipped. A scoped cPanel DNS-01
-hook has regression coverage, but live DNS access still needs the token owner's
-cPanel username. Production migration, wildcard issuance and remaining release
-acceptance are not complete. See the [preparation evidence](docs/quality/2026-09-14-release-preparation.md).
+hook now passes live cPanel access and public wildcard issuance after fixing the
+actual response envelope and restoring the missing secondary DNS zone. The
+secondary verifies the served serial after each update. Non-root mail settings
+and constrained Caddy reloads are repaired; the latest suite passes 1,424 tests.
+Production migration and remaining release acceptance are not complete. See the
+[preparation evidence](docs/quality/2026-09-14-release-preparation.md).
 
 Independent Desktop release:
 

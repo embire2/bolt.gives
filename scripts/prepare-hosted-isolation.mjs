@@ -24,8 +24,13 @@ const prefix = target === 'alpha' ? 'bolt-gives-alpha' : 'bolt-gives';
 const oldRoot = `/srv/${prefix}-runtime-workspaces`;
 const root = `/srv/${prefix}-isolated-workspaces`;
 const checkout = `/srv/${prefix}-isolated`;
+const controlRoot = `/srv/${prefix}-isolated-control-plane`;
 const envFile = `/etc/bolt-gives/${target}-isolated.env`;
-await assertFreshMigrationTargets({ source: oldRoot, destinations: [checkout, root], environmentFile: envFile });
+await assertFreshMigrationTargets({
+  source: oldRoot,
+  destinations: [checkout, root, controlRoot],
+  environmentFile: envFile,
+});
 
 const serviceStates = [];
 
@@ -51,7 +56,7 @@ if (!uid || !gid) {
   throw new Error('A non-root runtime agent is required.');
 }
 
-for (const destination of [checkout, root]) {
+for (const destination of [checkout, root, controlRoot]) {
   await fs.mkdir(destination, { recursive: true, mode: 0o700 });
   await fs.chown(destination, uid, gid);
 }
@@ -101,7 +106,7 @@ for (const [key, value] of Object.entries(env)) {
   }
 }
 
-const keyPath = '/srv/bolt-runtime-agent/runtime-node-agent';
+const keyPath = `${controlRoot}/runtime-node-agent`;
 
 if (env.BOLT_RUNTIME_NODE_SSH_KEY_PATH) {
   await fs.copyFile(env.BOLT_RUNTIME_NODE_SSH_KEY_PATH, keyPath);
@@ -114,12 +119,18 @@ const existing = await fs
   .readFile(envFile, 'utf8')
   .then(parse)
   .catch(() => ({}));
+const settingsPath = `${controlRoot}/runtime-settings.env`;
+const previousSettings = env.BOLT_RUNTIME_ENV_FILE ? await fs.readFile(env.BOLT_RUNTIME_ENV_FILE, 'utf8') : '';
+await fs.writeFile(settingsPath, previousSettings, { mode: 0o600, flag: 'wx' });
+await fs.chown(settingsPath, uid, gid);
 Object.assign(env, {
+  BOLT_RUNTIME_ENV_FILE: settingsPath,
   RUNTIME_WORKSPACE_DIR: root,
   BOLT_PROJECT_DATABASE_SECRET_ROOT: destinationDatabaseRoot,
   BOLT_PROJECT_DATABASE_ENABLED: 'false',
   BOLT_PROJECT_DATABASE_CONTAINER_HOST: '10.203.0.1',
   BOLT_PROJECT_CADDY_SNIPPET_DIR: '/etc/caddy/bolt-gives-isolated-projects',
+  BOLT_PROJECT_CADDY_RELOAD_SERVICE: 'bolt-gives-caddy-reload.service',
   BOLT_PROJECT_EXECUTION_MODE: 'podman',
   BOLT_PROJECT_RUNNER_UID: String(uid),
   BOLT_PROJECT_RUNNER_GID: String(gid),

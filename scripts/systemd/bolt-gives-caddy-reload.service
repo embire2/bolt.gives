@@ -1,0 +1,14 @@
+[Unit]
+Description=Validate and reload bolt.gives Caddy configuration
+After=caddy.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/caddy validate --config /etc/caddy/Caddyfile
+ExecStart=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStartSec=30
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true

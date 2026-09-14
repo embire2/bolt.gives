@@ -73,7 +73,21 @@ export function parseCpanelZone(data, zone) {
     throw new Error('cPanel returned an invalid DNS zone.');
   }
 
-  const soa = data.find(
+  if (data.some((record) => record.type === 'control' && /^\s*\$ORIGIN\s/i.test(decode(record.text_b64)))) {
+    throw new Error('DNS zones with explicit origin directives require operator review.');
+  }
+
+  const records = data.map((record) => {
+    if (!record.record_type || !record.dname_b64) {
+      return record;
+    }
+
+    const name = decode(record.dname_b64);
+    const absolute = name === '@' ? `${zone}.` : name.endsWith('.') ? name : `${name}.${zone}.`;
+
+    return { ...record, dname_b64: Buffer.from(absolute, 'latin1').toString('base64') };
+  });
+  const soa = records.find(
     (record) => record.record_type === 'SOA' && decode(record.dname_b64).toLowerCase() === `${zone}.`,
   );
   const serial = decode(soa?.data_b64?.[2]);
@@ -82,7 +96,7 @@ export function parseCpanelZone(data, zone) {
     throw new Error('cPanel returned no valid SOA serial for the configured zone.');
   }
 
-  return { serial, records: data };
+  return { serial, records };
 }
 
 export function assertCpanelPreviewRouting(zone, domain) {
@@ -99,6 +113,20 @@ export function assertCpanelPreviewRouting(zone, domain) {
   if (!explicitRoute) {
     throw new Error(`Configure explicit wildcard Preview routing for ${name} before adding certificate TXT records.`);
   }
+}
+
+export function cpanelZoneNameservers(zone, zoneName) {
+  const names = zone.records
+    .filter(
+      (record) => record.record_type === 'NS' && decode(record.dname_b64).toLowerCase() === `${hostname(zoneName)}.`,
+    )
+    .map((record) => hostname(decode(record.data_b64?.[0])));
+
+  if (!names.length) {
+    throw new Error('No authoritative nameservers exist in the configured zone.');
+  }
+
+  return [...new Set(names)];
 }
 
 async function request(config, operation, parameters, fetchImpl) {
@@ -133,8 +161,11 @@ async function request(config, operation, parameters, fetchImpl) {
     throw new Error('cPanel DNS response was invalid or exceeded the size limit.');
   }
 
-  if (payload.result?.status !== 1) {
-    const conflict = /serial/i.test(JSON.stringify(payload.result?.errors || []));
+  // HTTPS /execute calls return the result directly; the CLI wraps it in `result`.
+  const result = payload?.result ?? payload;
+
+  if (result?.status !== 1) {
+    const conflict = /serial/i.test(JSON.stringify(result?.errors || []));
     const error = new Error(
       conflict
         ? 'DNS zone changed during validation. Retry with a fresh serial.'
@@ -144,7 +175,7 @@ async function request(config, operation, parameters, fetchImpl) {
     throw error;
   }
 
-  return payload.result.data;
+  return result.data;
 }
 
 export async function readCpanelPreviewZone(config, { fetchImpl = fetch } = {}) {

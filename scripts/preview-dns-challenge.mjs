@@ -7,6 +7,7 @@ import { parse } from 'dotenv';
 import {
   assertCpanelPreviewRouting,
   cpanelPreviewDnsConfig,
+  cpanelZoneNameservers,
   readCpanelPreviewZone,
   updateCpanelPreviewChallenge,
 } from '@bolt/control-plane/server/cpanel-preview-dns.mjs';
@@ -56,7 +57,12 @@ if (mode === 'check') {
 
   if (mode === 'auth') {
     const discovery = new Resolver({ timeout: 5000, tries: 1 });
-    const nameservers = await discovery.resolveNs(config.zone);
+
+    /*
+     * Recursive NS caches can retain a removed, non-serving secondary for a day.
+     * Probe every server in the freshly authenticated zone, not that stale list.
+     */
+    const nameservers = cpanelZoneNameservers(await readCpanelPreviewZone(config), config.zone);
     const addresses = [];
 
     for (const ns of nameservers) {
