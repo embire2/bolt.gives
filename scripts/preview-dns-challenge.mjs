@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { parse } from 'dotenv';
 import {
+  assertCpanelPreviewRouting,
   cpanelPreviewDnsConfig,
   readCpanelPreviewZone,
   updateCpanelPreviewChallenge,
@@ -29,6 +30,10 @@ const config = cpanelPreviewDnsConfig(parse(await fs.readFile(filename, 'utf8'))
 
 if (mode === 'check') {
   const zone = await readCpanelPreviewZone(config);
+
+  for (const domain of config.domains) {
+    assertCpanelPreviewRouting(zone, domain);
+  }
   console.log(
     JSON.stringify({ connected: true, zone: config.zone, serial: zone.serial, previewNamespaces: config.domains }),
   );
@@ -39,6 +44,10 @@ if (mode === 'check') {
     { domain: process.env.CERTBOT_DOMAIN, value, remove: mode === 'cleanup' },
     {
       beforeChange: async (zone) => {
+        if (mode === 'auth') {
+          assertCpanelPreviewRouting(zone, process.env.CERTBOT_DOMAIN);
+        }
+
         const backup = path.join(path.dirname(filename), `zone-before-${Date.now()}-${crypto.randomUUID()}.json`);
         await fs.writeFile(backup, JSON.stringify(zone), { mode: 0o600, flag: 'wx' });
       },

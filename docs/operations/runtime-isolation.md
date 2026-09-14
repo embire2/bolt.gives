@@ -51,7 +51,12 @@ mode-0600 file without symlink ancestors. See the commented cPanel variables in
 The API token requires its owning cPanel username, not the server's SSH username.
 
 Run `node scripts/preview-dns-challenge.mjs check` before requesting a certificate.
-This reads the configured zone and verifies its SOA without changing DNS. The
+This reads the configured zone and verifies its SOA and explicit wildcard
+Preview routing without changing DNS. Configure `*.preview.example.com` (and
+the staging namespace) explicitly before certificate challenges: an ACME child
+record creates a closer DNS encloser and can prevent inheritance from a broader
+wildcard, as described in [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592.html#section-3.3.1).
+The hook refuses mutation when that routing prerequisite is missing. The
 `auth` and `cleanup` modes read Certbot's `CERTBOT_DOMAIN` and
 `CERTBOT_VALIDATION` variables. Only `_acme-challenge` TXT records for the exact
 configured Preview namespaces are permitted. Existing A/MX records and other

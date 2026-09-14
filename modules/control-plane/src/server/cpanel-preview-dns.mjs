@@ -85,6 +85,22 @@ export function parseCpanelZone(data, zone) {
   return { serial, records: data };
 }
 
+export function assertCpanelPreviewRouting(zone, domain) {
+  const name = `*.${hostname(String(domain).replace(/^\*\./, ''))}.`;
+  const explicitRoute = zone.records.some(
+    (record) =>
+      ['A', 'AAAA', 'CNAME'].includes(record.record_type) &&
+      decode(record.dname_b64).toLowerCase() === name &&
+      Array.isArray(record.data_b64) &&
+      record.data_b64.length > 0,
+  );
+
+  // An ACME child creates a closer DNS encloser, preventing fallback to a broader wildcard.
+  if (!explicitRoute) {
+    throw new Error(`Configure explicit wildcard Preview routing for ${name} before adding certificate TXT records.`);
+  }
+}
+
 async function request(config, operation, parameters, fetchImpl) {
   const url = new URL(`/execute/DNS/${operation}`, config.origin);
 
@@ -135,10 +151,13 @@ export async function readCpanelPreviewZone(config, { fetchImpl = fetch } = {}) 
   return parseCpanelZone(await request(config, 'parse_zone', {}, fetchImpl), config.zone);
 }
 
+/** @type {(zone: ReturnType<typeof parseCpanelZone>) => Promise<void>} */
+const unchangedZone = async () => undefined;
+
 export async function updateCpanelPreviewChallenge(
   config,
   { domain, value, remove = false },
-  { fetchImpl = fetch, beforeChange = async () => undefined } = {},
+  { fetchImpl = fetch, beforeChange = unchangedZone } = {},
 ) {
   const normalized = hostname(String(domain).replace(/^\*\./, ''));
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertCpanelPreviewRouting,
   cpanelPreviewDnsConfig,
   parseCpanelZone,
   readCpanelPreviewZone,
@@ -33,6 +34,26 @@ const value = 'a'.repeat(43);
 const input = { domain: 'preview.example.com', value };
 
 describe('scoped cPanel Preview DNS challenge', () => {
+  it.each([
+    ['preview.example.com', 'A', '192.0.2.10'],
+    ['*.preview.example.com', 'CNAME', 'runtime.example.com.'],
+  ])('accepts explicit wildcard routing for %s', (domain, type, data) => {
+    expect(() =>
+      assertCpanelPreviewRouting({ records: [record('*.preview.example.com.', [data], type)] }, domain),
+    ).not.toThrow();
+  });
+
+  it('refuses certificate mutation when a namespace only inherits a broader wildcard', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(ok([soa(), record('*.example.com.', ['192.0.2.10'], 'A')]));
+
+    await expect(
+      updateCpanelPreviewChallenge(config, input, {
+        fetchImpl,
+        beforeChange: async (zone) => assertCpanelPreviewRouting(zone, input.domain),
+      }),
+    ).rejects.toThrow('explicit wildcard Preview routing');
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
   it('requires the owning username rather than guessing it from the token', () => {
     expect(() => cpanelPreviewDnsConfig({ ...env, CPANEL_API_USERNAME: '' })).toThrow('CPANEL_API_USERNAME');
   });

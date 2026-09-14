@@ -7,7 +7,7 @@ v4.1.0-beta.1 on the validation branch and alpha.
 
 - A real rootless container reproduced `Could not retrieve exit code from event: died not found` and returned exit 127 during shutdown. Graceful stop alone did not fix it. Removing competing Podman auto-removal and leaving cleanup to the attached-process close handler did. Five repeats flushed a SIGTERM marker, returned exit zero and produced no event-lookup error. No test containers remain.
 - The migration copy tool now refuses pre-existing destinations or environment records, nested/symlinked targets, and source services that are active, missing or not confirmed inactive. Its real alpha invocation refused before writes. The original and active workspace trees remain untouched by that check.
-- The cPanel DNS-01 hook has 15 mocked API regressions covering username requirements, HTTPS/redirect boundaries, zone identity, namespace scoping, byte-exact cleanup, concurrent serial changes, bounded retries and credential-safe errors. Final review caught ASCII decoding masking high TXT bits; byte-preserving decoding now prevents unrelated binary TXT values from matching an ACME challenge. It stores backups outside source. API authentication, authoritative mutation, wildcard issuance and renewal remain untested without the token owner's cPanel username.
+- The cPanel DNS-01 hook has 18 mocked API regressions covering username requirements, HTTPS/redirect boundaries, zone identity, namespace scoping, explicit wildcard routing, byte-exact cleanup, concurrent serial changes, bounded retries and credential-safe errors. Final review caught ASCII decoding masking high TXT bits; byte-preserving decoding now prevents unrelated binary TXT values from matching an ACME challenge. The hook also refuses changes without an explicit wildcard route for each namespace: adding a TXT child can otherwise disable an inherited broader wildcard. It stores backups outside source. API authentication, authoritative mutation, wildcard issuance and renewal remain untested without the token owner's cPanel username.
 
 ## Browser and Runtime Evidence
 
@@ -24,7 +24,7 @@ The real rootless process suite again verified UID/GID, private/sibling-file and
 symlink isolation, CPU/RAM/PID limits, project-only environment injection,
 host-loopback protection and the assigned Preview listener.
 
-The full unprivileged suite passed 1,397 tests with nine skipped. Production
+The full unprivileged suite passed 1,400 tests with nine skipped. Production
 build/bundle budget, typecheck, lint and strict module boundaries passed. Lint
 retains ten existing warnings and no errors. Runtime and control-plane module checks passed too.
 

@@ -44,7 +44,7 @@ below describe their dates, not the current alpha deployment. See the
 five real containers flushed state and exited cleanly. One-time migration now
 refuses existing targets and running/missing service units. A real FREE/Luna
 browser repeat passed Preview, follow-up, Code selection, history and runtime
-restart. The full suite passes 1,397 tests, nine skipped. A scoped cPanel DNS-01
+restart. The full suite passes 1,400 tests, nine skipped. A scoped cPanel DNS-01
 hook has regression coverage, but live DNS access still needs the token owner's
 cPanel username. Production migration, wildcard issuance and remaining release
 acceptance are not complete. See the [preparation evidence](docs/quality/2026-09-14-release-preparation.md).
