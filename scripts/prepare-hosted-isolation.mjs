@@ -9,6 +9,7 @@ import { parse } from 'dotenv';
 import {
   assertFreshMigrationTargets,
   assertMigrationServicesStopped,
+  copyIsolationTree,
 } from '@bolt/runtime/server/isolation-migration.mjs';
 
 const run = promisify(execFile);
@@ -61,20 +62,18 @@ for (const destination of [checkout, root, controlRoot]) {
   await fs.chown(destination, uid, gid);
 }
 
-const rsync = async (source, destination, extra = []) =>
-  run('rsync', ['-a', `--chown=${uid}:${gid}`, ...extra, `${source}/`, `${destination}/`], { maxBuffer: 1024 * 1024 });
-await rsync(process.cwd(), checkout, [
-  '--exclude=.git',
-  '--exclude=.env*',
-  '--exclude=.dev.vars*',
-  '--exclude=output',
-  '--exclude=test-results',
-  '--exclude=.codex',
-  '--exclude=CLAUDE.md',
-  '--exclude=caddy',
-  '--exclude=replit.png',
-  '--exclude=.wrangler',
-]);
+const rsync = (source, destination, extra = []) => copyIsolationTree(source, destination, { uid, gid, extra });
+const sourceFiles = path.join(controlRoot, 'migration-source-files');
+const tracked = await run('git', ['ls-files', '-z'], { maxBuffer: 4 * 1024 * 1024 });
+await fs.writeFile(sourceFiles, tracked.stdout, { mode: 0o600, flag: 'wx' });
+
+try {
+  await rsync(process.cwd(), checkout, ['--from0', `--files-from=${sourceFiles}`]);
+  await rsync(path.join(process.cwd(), 'node_modules'), path.join(checkout, 'node_modules'));
+  await rsync(path.join(process.cwd(), 'build'), path.join(checkout, 'build'));
+} finally {
+  await fs.rm(sourceFiles, { force: true });
+}
 await rsync(oldRoot, root);
 
 // Verify copied bytes, not only timestamps, before any service is repointed.
@@ -92,10 +91,11 @@ await fs.mkdir(destinationDatabaseRoot, { recursive: true, mode: 0o700 });
 await fs.chown(destinationDatabaseRoot, uid, gid);
 
 if (
-  await fs
+  databaseRoot !== destinationDatabaseRoot &&
+  (await fs
     .stat(databaseRoot)
     .then(() => true)
-    .catch(() => false)
+    .catch(() => false))
 ) {
   await rsync(databaseRoot, destinationDatabaseRoot);
 }

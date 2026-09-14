@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { assertFreshMigrationTargets, assertMigrationServicesStopped } from './isolation-migration.mjs';
+import {
+  assertFreshMigrationTargets,
+  assertMigrationServicesStopped,
+  copyIsolationTree,
+} from './isolation-migration.mjs';
 
 const fixtures: string[] = [];
 afterEach(async () => {
@@ -23,6 +27,27 @@ async function fixture() {
 }
 
 describe('one-time hosted isolation migration', () => {
+  it('preserves dependency hard links and private destination permissions', async () => {
+    const options = await fixture();
+    const source = path.join(options.source, 'project.txt');
+    await fs.link(source, path.join(options.source, 'shared-dependency.txt'));
+    await fs.chmod(options.source, 0o755);
+
+    const destination = options.destinations[0];
+    await copyIsolationTree(options.source, destination, {
+      uid: process.getuid!() || 1002,
+      gid: process.getgid!() || 1002,
+    });
+
+    const first = await fs.stat(path.join(destination, 'project.txt'));
+    const second = await fs.stat(path.join(destination, 'shared-dependency.txt'));
+    expect(first.ino).toBe(second.ino);
+    expect(first.nlink).toBe(2);
+    expect((await fs.stat(destination)).mode & 0o777).toBe(0o700);
+    expect(await fs.readFile(source, 'utf8')).toBe('old source');
+    expect((await fs.stat(options.source)).mode & 0o777).toBe(0o755);
+  });
+
   it('allows fresh separate targets without creating or modifying them', async () => {
     const options = await fixture();
     await expect(assertFreshMigrationTargets(options)).resolves.toBeUndefined();

@@ -1,5 +1,21 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+
+export async function copyIsolationTree(source, destination, { uid, gid, extra = [] }) {
+  if (!Number.isSafeInteger(uid) || uid <= 0 || !Number.isSafeInteger(gid) || gid <= 0) {
+    throw new Error('Isolation copies require a non-root owner.');
+  }
+
+  // pnpm workspaces share dependency inodes; plain archive copies multiply storage and downtime.
+  await run('rsync', ['-aH', `--chown=${uid}:${gid}`, ...extra, `${source}/`, `${destination}/`], {
+    maxBuffer: 1024 * 1024,
+  });
+  await fs.chmod(destination, 0o700);
+}
 
 export async function assertFreshMigrationTargets({ source, destinations, environmentFile }) {
   const paths = [source, ...destinations, environmentFile];
