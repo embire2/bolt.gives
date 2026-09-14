@@ -86,7 +86,10 @@ describe('scoped cPanel Preview DNS challenge', () => {
     const binary = record('_acme-challenge.preview.example.com.', [value]);
     binary.data_b64 = [Buffer.alloc(43, 0xe1).toString('base64')];
 
-    const fetchImpl = vi.fn().mockResolvedValueOnce(ok([soa(), binary])).mockResolvedValueOnce(ok({}));
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(ok([soa(), binary]))
+      .mockResolvedValueOnce(ok({}));
 
     expect((await updateCpanelPreviewChallenge(config, { ...input, remove: true }, { fetchImpl })).changed).toBe(false);
     expect(fetchImpl).toHaveBeenCalledOnce();
