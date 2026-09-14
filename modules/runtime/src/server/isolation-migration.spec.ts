@@ -6,6 +6,7 @@ import {
   assertFreshMigrationTargets,
   assertMigrationServicesStopped,
   copyIsolationTree,
+  verifyIsolationSourceCopy,
 } from './isolation-migration.mjs';
 
 const fixtures: string[] = [];
@@ -27,6 +28,24 @@ async function fixture() {
 }
 
 describe('one-time hosted isolation migration', () => {
+  it('verifies source and private records without rehashing rebuildable dependency caches', async () => {
+    const options = await fixture();
+    const target = options.destinations[0];
+    await fs.cp(options.source, target, { recursive: true });
+    await fs.mkdir(path.join(options.source, 'node_modules'));
+    await fs.writeFile(path.join(options.source, 'node_modules', 'cache'), 'rebuildable');
+    await expect(verifyIsolationSourceCopy(options.source, target)).resolves.toBeUndefined();
+    await fs.mkdir(path.join(options.source, 'project-connections'));
+    await fs.writeFile(path.join(options.source, 'project-connections', 'private.json'), 'private fixture');
+    await expect(verifyIsolationSourceCopy(options.source, target)).rejects.toThrow('checksum verification failed');
+    await fs.cp(path.join(options.source, 'project-connections'), path.join(target, 'project-connections'), {
+      recursive: true,
+    });
+    await expect(verifyIsolationSourceCopy(options.source, target)).resolves.toBeUndefined();
+    await fs.writeFile(path.join(target, 'project.txt'), 'new source');
+    await expect(verifyIsolationSourceCopy(options.source, target)).rejects.toThrow('checksum verification failed');
+  });
+
   it('preserves dependency hard links and private destination permissions', async () => {
     const options = await fixture();
     const source = path.join(options.source, 'project.txt');

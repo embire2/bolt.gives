@@ -364,9 +364,11 @@ try {
   });
   page.on('response', async (response) => {
     const url = new URL(response.url());
+    const isolatedProject =
+      originIsolation && url.hostname.endsWith('.localhost') && url.hostname !== 'phase1.localhost';
 
     if (
-      !url.pathname.startsWith('/runtime/preview/') ||
+      !(isolatedProject || url.pathname.startsWith('/runtime/preview/')) ||
       !/(?:\/src\/(?:App|main)\.|\/node_modules\/\.vite\/deps\/(?:react|chunk))/.test(url.pathname) ||
       !response.ok()
     ) {
@@ -381,6 +383,7 @@ try {
 
     const body = await response.text().catch(() => '');
     report.previewModules.push({
+      origin: url.origin,
       url: redact(`${url.pathname}${url.search}`),
       imports: [...body.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => redact(match[1])).slice(0, 30),
     });
@@ -403,8 +406,13 @@ try {
     }
   });
   page.on('response', async (response) => {
-    if (response.status() >= 400 && new URL(response.url()).hostname === 'phase1.localhost') {
-      const entry = `${response.status()} ${new URL(response.url()).pathname}`;
+    const responseUrl = new URL(response.url());
+
+    if (
+      response.status() >= 400 &&
+      (responseUrl.hostname === 'phase1.localhost' || (originIsolation && responseUrl.hostname.endsWith('.localhost')))
+    ) {
+      const entry = `${response.status()} ${responseUrl.origin}${responseUrl.pathname}`;
       (expectedFailure ||
       (response.status() === 409 && new URL(response.url()).pathname.endsWith('/snapshot')) ||
       (response.status() === 403 && securityProbeRequests.has(response.request())) ||

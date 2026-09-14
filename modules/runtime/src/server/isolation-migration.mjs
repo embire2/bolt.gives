@@ -1,9 +1,33 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
-const run = promisify(execFile);
+const run = (command, args, options) =>
+  new Promise((resolve, reject) => {
+    execFile(command, args, options, (error, stdout, stderr) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+
+export async function verifyIsolationSourceCopy(source, destination) {
+  // Dependency caches are copied with hard links but are rebuildable, not customer source/data.
+  const result = await run(
+    'rsync',
+    ['-nrcl', '--delete', '--exclude=node_modules/', '--out-format=%i %n', `${source}/`, `${destination}/`],
+    {
+      maxBuffer: 1024 * 1024,
+      timeout: 180_000,
+    },
+  );
+
+  if (result.stdout.trim()) {
+    throw new Error('Workspace source/data checksum verification failed; originals remain unchanged.');
+  }
+}
 
 export async function copyIsolationTree(source, destination, { uid, gid, extra = [] }) {
   if (!Number.isSafeInteger(uid) || uid <= 0 || !Number.isSafeInteger(gid) || gid <= 0) {

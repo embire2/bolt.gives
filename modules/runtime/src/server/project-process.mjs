@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { attachProjectLifecycle } from './project-process-lifecycle.mjs';
 
 const SAFE_ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -173,41 +174,27 @@ export function spawnProjectProcess(command, args, options, config = projectProc
   const child = spawn(invocation.command, invocation.args, invocation.options);
 
   if (invocation.name) {
-    let stopping;
-    child.terminateProject = () =>
-      (stopping ||= new Promise((resolve) => {
-        // Let the app flush on SIGTERM; Podman enforces a bounded SIGKILL fallback.
-        const stop = spawn('/usr/bin/podman', ['stop', '--ignore', '--time=5', invocation.name], {
+    const control = (args, signal) =>
+      new Promise((resolve) => {
+        const operation = spawn('/usr/bin/podman', [...args, invocation.name], {
           ...invocation.options,
           detached: false,
+          signal,
+          killSignal: 'SIGKILL',
+          env: {
+            PATH: '/usr/bin:/bin',
+            HOME: config.home,
+            XDG_RUNTIME_DIR: `/run/user/${config.uid}`,
+            DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${config.uid}/bus`,
+          },
           stdio: 'ignore',
         });
-        const finish = (stopped) => {
-          clearTimeout(deadline);
-          resolve({ stopped });
-        };
-        const deadline = setTimeout(() => {
-          stop.kill('SIGKILL');
-          finish(false);
-        }, 15_000);
-        stop.once('error', () => finish(false));
-        stop.once('close', (code) => finish(code === 0));
-      }));
-
-    // SIGKILL/timeout must not leave a detached container serving an abandoned Preview.
-    child.once('close', () => {
-      const cleanup = spawn('/usr/bin/podman', ['rm', '--force', '--ignore', invocation.name], {
-        ...invocation.options,
-        detached: false,
-        env: {
-          PATH: '/usr/bin:/bin',
-          HOME: config.home,
-          XDG_RUNTIME_DIR: `/run/user/${config.uid}`,
-          DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${config.uid}/bus`,
-        },
-        stdio: 'ignore',
+        operation.once('error', () => resolve(false));
+        operation.once('close', (code) => resolve(code === 0));
       });
-      cleanup.on('error', () => undefined);
+    attachProjectLifecycle(child, {
+      stop: (signal) => control(['stop', '--ignore', '--time=5'], signal),
+      remove: (signal) => control(['rm', '--force', '--ignore'], signal),
     });
   }
 

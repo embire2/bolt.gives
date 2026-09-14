@@ -10,6 +10,7 @@ import {
   assertFreshMigrationTargets,
   assertMigrationServicesStopped,
   copyIsolationTree,
+  verifyIsolationSourceCopy,
 } from '@bolt/runtime/server/isolation-migration.mjs';
 
 const run = promisify(execFile);
@@ -77,13 +78,7 @@ try {
 await rsync(oldRoot, root);
 
 // Verify copied bytes, not only timestamps, before any service is repointed.
-const verification = await run('rsync', ['-nrcl', '--out-format=%n', `${oldRoot}/`, `${root}/`], {
-  maxBuffer: 1024 * 1024,
-});
-
-if (verification.stdout.trim()) {
-  throw new Error('Workspace checksum verification failed; originals remain unchanged.');
-}
+await verifyIsolationSourceCopy(oldRoot, root);
 
 const databaseRoot = env.BOLT_PROJECT_DATABASE_SECRET_ROOT || `${oldRoot}/project-databases`;
 const destinationDatabaseRoot = `${root}/project-databases`;

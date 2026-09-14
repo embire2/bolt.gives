@@ -19,17 +19,17 @@
 
 The beta is an opt-in test publication, **not a completed Phase 2 or stable v4.1.0**. Use a disposable private VM with test credentials only, not a shared/customer-facing server. [Pinned installation instructions, checksums and outstanding gates](docs/releases/v4.1.0-beta.1.md) accompany the release. Default `main` installers and production/fleet deployments remain on the stable channel.
 
-**Validation:** 1,424 tests pass, with nine skipped. Build, typecheck, lint and strict module boundaries pass. All six template packs pass real Chromium Preview smoke tests; Calendar now also tests event creation, persistence and layout. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34719193742) covers Ubuntu 22.04/24.04 clean/repair paths with and without platform PostgreSQL and PowerShell 5.1/7 contracts. The legacy Linux updater now delegates to the guarded installer rather than recursively copying its own checkout. Windows/WSL reboot-resume and the separate native desktop rewrite remain unverified.
+**Validation:** 1,448 tests pass, with nine skipped. All six template packs pass real Chromium Preview smoke tests; Calendar also tests event creation, persistence and layout. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34719193742) covers Ubuntu 22.04/24.04 clean/repair paths with and without platform PostgreSQL and PowerShell 5.1/7 contracts. The legacy Linux updater delegates to the guarded installer rather than recursively copying its own checkout. Windows/WSL reboot-resume and the separate native desktop rewrite remain unverified.
 
-**Latest fixes:** a reproduced container shutdown race no longer reports exit 127 for a successful stop; five real shutdown checks passed, including saving state before exit. Migration refuses to overwrite an existing isolated workspace. A real FREE/Luna browser journey passed Preview, follow-up, Code selection, history and runtime restart. Live cPanel access exposed response-envelope and relative-name bugs, now fixed. The missing secondary DNS zone has been restored with verified synchronization, and public wildcard Preview certificates were issued after fresh staging validation. Non-root mail settings and constrained Caddy reloads are also repaired.
+**Latest fixes:** stop no longer succeeds before a rootless container finishes starting, and graceful shutdown preserves application state. Five graceful and three immediate-stop checks pass. Managed Preview no longer opens Vite's failing background HMR connection; concurrent snapshot readers no longer create false conflicts. Readiness checks the real runtime protocol/version instead of merely checking whether `fetch` exists. Agent status badges are readable in light mode. The missing secondary DNS zone, wildcard Preview TLS/renewal, non-root mail settings and constrained Caddy reloads are repaired.
 
-**Live staging:** alpha1 uses non-root services, rootless project containers and publicly trusted project-specific HTTPS Preview. An assigned Cloudflare instance completed real FREE/Luna generation, follow-up, history restore and public publishing in 127 seconds, without aborted chat streams or unexpected browser/HTTP errors. Its rollback and restoration were also checked. This found and fixed cross-host Preview authentication failures and an exact-text parser that repeatedly tried to repair already-complete follow-ups. The published Calendar accepted an event and retained it after reload.
+**Live staging:** alpha1 uses non-root services, rootless project containers and publicly trusted project-specific HTTPS Preview. An assigned Cloudflare instance completed real FREE/Luna generation, follow-up, history restore and public publishing in 159.4 seconds, without aborted chat streams or fatal browser/network errors. Rollback/restoration and the [published Calendar's event persistence](https://release-app-1789412097975.instances.bolt.gives) passed too. A copied production candidate passed the same generation/history flow in 96.1 seconds and recovered automatically from an injected source error. A separate real-provider retry/restart journey passed 30 cold reloads. These are staging checks, not a customer-fleet rollout.
 
 **Stripe:** the Upgrade button opened a real USD 5 monthly Checkout, which was expired without paying. Signed webhook rejection/replay and disposable PostgreSQL fulfillment tests pass. No card was charged. The dedicated production webhook remains disabled until the production runtime is migrated; this is not completed live-payment acceptance.
 
 **CI maintenance after the beta:** the unavailable Codeball PR-review workflow has been removed from the development branch. Tests, security analysis, builds, installer recovery and release/E2E workflows are retained unchanged. Codeball was not a required merge check; removing it does not waive the release gates above or deploy the application.
 
-**Still open:** production isolation migration and rollback, the remaining acceptance matrix, and the earlier intermittent B15 hook crash. Passing repeats alone do not prove that crash's root cause. Native Windows work remains a separate release lane. See [ROADMAP.md](ROADMAP.md) before promoting the validation branch.
+**Still open:** the isolated production copy and protected configuration are prepared, with source/private-data checksums verified. Production traffic has not switched; service/routing rollback and remaining acceptance checks must pass first. The earlier intermittent B15 hook crash is still untraced: passing repeats alone do not establish its cause. Native Windows work remains a separate release lane. See [ROADMAP.md](ROADMAP.md) before promoting the validation branch.
 
 ## What You Can Do
 
@@ -78,6 +78,12 @@ The combined beta was tested with a real FREE/Luna task board, an interactive Ad
 The latest staging screenshot shows a real Cloudflare-assigned instance after a Calendar follow-up and saved-history restore. Its generated app was also published and exercised in a normal browser. It is staging evidence, not a screenshot of the current stable release.
 
 ![Cloudflare instance with a restored Calendar and compact follow-up composer](docs/screenshots/agent-mode-cloudflare-v4.1-staging.png)
+
+This 14 September capture shows the copied production configuration after a
+real follow-up and history restore. The isolated preflight passed; production
+traffic has not switched to it.
+
+![Verified production preflight with readable Agent status and restored Calendar](docs/screenshots/production-preflight-v4.1.png)
 
 ### Connect data only when the app needs it
 

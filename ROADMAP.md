@@ -52,6 +52,17 @@ and constrained Caddy reloads are repaired; the latest suite passes 1,424 tests.
 Production migration and remaining release acceptance are not complete. See the
 [preparation evidence](docs/quality/2026-09-14-release-preparation.md).
 
+Latest continuation: 1,448 tests pass, nine skipped. Vite helper imports no longer
+start unmanaged HMR reconnects; concurrent snapshot readers no longer produce
+false conflicts. Eight real container shutdown checks cover graceful flushing
+and stop-before-creation races. Alpha, Cloudflare and the copied production
+candidate passed prompt/follow-up/history browser journeys; the Cloudflare
+run also published a working app. Injected source repair and real-provider
+stream retry/restart plus 30 cold reloads passed. The production source and
+private-data copy is checksum-verified, but production traffic remains on 4.0.1.
+Final service/routing rollback, the B15 investigation and remaining acceptance
+are still open; preparing a verified copy does not close those gates.
+
 Independent Desktop release:
 
 - [x] `Desktop v1.10.2`
@@ -94,8 +105,8 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 
 **New release blocker found during Phase 1 review: B13.** Hosted Preview shares the product origin and permits scripts plus same-origin access. Filtering forwarded platform cookies is not a complete generated-browser-code isolation boundary. Keep the following task open for the next approved scope; do not mistake functional E2E success for complete security isolation.
 
-- [~] B13: Signed per-project HTTPS Preview is running on alpha with trusted public certificates. Browser tests reject platform storage/document/cookie access and cross-origin mutation; follow-up and history/restart continuity pass. The canary also exposed and fixed streamed ready events bypassing authenticated instance routing. Production routing, scalable wildcard certificates, WebSocket/database/mobile acceptance and remaining rollout checks are still required. See [runtime isolation rollout](docs/operations/runtime-isolation.md).
-- [~] B14: Alpha services and projects now run non-root with single-project Podman mounts, resource limits and loopback-only Preview ports. Real container tests deny operator/sibling-file and host-loopback access. Existing database credentials work through the private bridge without changes. Production remains unmigrated; privileged updater/CLI control-plane operations and production rollback still require verification. The optional SSH node is currently unreachable; hosted Preview and publishing do not depend on it.
+- [~] B13: Signed per-project HTTPS Preview runs on alpha and the production preflight with trusted wildcard certificates and tested renewal. Browser tests reject platform storage/document/cookie access and cross-origin mutation; follow-up/history/restart pass. Production traffic routing, broader WebSocket/database/mobile acceptance and rollout checks remain. See [runtime isolation rollout](docs/operations/runtime-isolation.md).
+- [~] B14: Alpha and production preflight services/projects run non-root with single-project Podman mounts, quotas and loopback-only Preview ports. Process tests deny operator/sibling-file and host-loopback access; eight real shutdown cases pass. Production source/private records are copied and verified, but traffic still uses the original tree. Production service/routing rollback and privileged updater/CLI checks remain. The optional SSH node is unreachable; hosted Preview and publishing do not depend on it.
 - [ ] B15: Trace the intermittent `Cannot read properties of null (reading 'useState')` browser crash seen at 10:36 UTC on 13 September. Capture exact stack, frame and module identity; distinguish product render failure from generated-app failure; add deterministic reproduction and a regression. The instrumented 10:37 repeat passed, which is not proof that the intermittent issue is resolved.
 - [~] B17: A later real FREE run timed out without producing code and failed to resume. Fixed empty-assistant history navigation that could unmount Chat before queued recovery, restored the visible user objective on initialization, and added activity callbacks for buffered file arguments. The injected empty failure dispatched continuation in under one second and reached an interactive real-provider Preview; both that journey and a real upstream-stall retry passed follow-up/history/restart plus 20 cold reloads each. These fixes are not live. See the [1,347-test isolation/recovery checkpoint](docs/quality/2026-09-13-isolation-checkpoint.md).
 - [~] B16: Stop browser-build environment credential exposure. Exact public-name allowlisting and bundled secret fixtures are implemented. The old GitHub token found in live assets returns 401, but existing live/cached assets still require replacement during the stable rollout; never reactivate/reuse exposed credentials.
@@ -127,10 +138,10 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 
 ### Release Evidence, Not Screenshot-Only Success
 
-- [ ] B11a: Replace stale Workspace-tab/prompt locators and overlay-bypassing fixtures with normal v4 onboarding/Agent Mode interactions.
+- [~] B11a: Automatic-recovery E2E now uses normal onboarding, the visible Agent Mode composer and cross-origin frame locators; injected source repair passed on the production preflight. Finish migrating remaining screenshot-only/legacy fixtures before treating them as acceptance tests.
 - [~] B11b: Calendar now rejects aborted chat streams and all browser exceptions; prompt, follow-up, saved history and public publishing pass on a real canary. Passive CDP traces confirmed both streams completed. Keep interaction/Code selection and the wider release matrix mandatory.
-- [ ] I01: Reproduce Code-switch timeout and snapshot 502 with CPU/heap/network evidence, then enforce measured performance non-regression after B01/B02.
-- [ ] I02: Add app/runtime capability and revision checks; verify mixed-version failures and health-checked atomic rollout/rollback.
+- [~] I01: Concurrent snapshot conflicts are reproduced and fixed; Code selection and 30 cold reloads pass. The latest fixture read 43,369 source bytes in 22 ms with runtime high-water RSS 89,416 KiB. Fleet-scale profiling and enforced non-regression budgets remain.
+- [~] I02: Readiness now verifies runtime protocol/version with a deadline. Real mixed-version processes returned 503/200 as expected; Cloudflare rollback/restoration passed. Same-version revision enforcement and production service/routing rollback remain.
 - [ ] I03: Complete the pending Luna/MagnetAPI BYOK browser matrix, actual catalog IDs, model switching, and credential separation.
 - [x] I04: Assigned Cloudflare registration, real FREE generation, follow-up, history restore, public assets/deep links, update and rollback/restoration passed. Both owned canary assignments and the two superseded published fixtures were removed afterward; the final static demo is intentionally retained for review. This does not authorize customer fleet refresh before production gates pass.
 - [ ] I05: Exercise account isolation, OTP lifecycle, quota resets, Stripe test-mode fulfillment, domain ownership, tenant permissions, and collaboration reconnect with owned test accounts.

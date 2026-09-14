@@ -42,6 +42,13 @@ SIGTERM with a five-second forced-stop deadline, allowing applications to flush
 state. `node scripts/e2e-project-shutdown.mjs` exercises five real shutdowns with
 the same protected runner configuration as the isolation tests.
 
+A stop must wait for attached-client close and successful container removal,
+not merely a zero `podman stop --ignore` status: that command also succeeds
+before an in-flight `podman run` creates its container. The lifecycle controller
+retries within a deadline and permits a later retry after failure. Shutdown
+acceptance includes three immediate-stop cases in addition to five graceful
+SIGTERM/state-flush checks.
+
 ## cPanel Certificate Hook
 
 `scripts/preview-dns-challenge.mjs` is an operator-only DNS-01 hook, not a public
@@ -120,6 +127,23 @@ certificate being returned; only the fresh-account repeat with successful
 propagation and cleanup counted as acceptance.
 
 ### Migration Sequence
+
+Production now has a prepared but inactive copy at `/srv/bolt-gives-isolated`
+and `/srv/bolt-gives-isolated-workspaces`, plus the protected
+`/etc/bolt-gives/production-isolated.env`. Do not run the fresh-target script
+over them. `/srv/bolt-gives-production-checkpoints/20260914-pre-isolation`
+retains original configuration/database backups and archived owned test projects.
+Source/private-data checksums passed with the original services stopped on
+14 September; original services restarted after about two seconds. Reconcile
+later writes before promotion. The earlier failed copy and restoration are
+recorded in the release-preparation evidence, not counted as a successful rollout.
+
+Use hard-link-preserving copies for dependency caches. Verify all source/private
+records independently with `verifyIsolationSourceCopy`; only rebuildable
+`node_modules` directories are excluded from its checksum walk. Do not expand
+that exclusion to private connection records, hidden source or arbitrary data.
+Copy only tracked application source plus explicit build/dependency trees, not
+ignored operator logs, credentials, fixtures or archived downloads.
 
 1. Stop accepting writes on the staging runtime. Retain the old application tree, service configuration, workspace tree and separate database connection records as a rollback target. Do not rotate credentials or alter the originals.
    The one-time copy script refuses any existing destination/environment and requires both source units to be loaded and inactive. Do not delete an active or partial destination merely to bypass this guard; inspect it and preserve newer work before planning recovery.

@@ -60,6 +60,30 @@ try {
       clearTimeout(timeout);
     }
   }
+
+  for (let index = 0; index < 3; index++) {
+    child = spawnProjectProcess('node', ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, env: {} }, config);
+    child.stdout.resume();
+    child.stderr.resume();
+
+    const closed = once(child, 'close');
+
+    try {
+      const stopped = await child.terminateProject();
+      assert.equal(stopped.stopped, true);
+      assert(
+        child.exitCode !== null || child.signalCode !== null,
+        'Stop succeeded before the attached container client closed.',
+      );
+      await closed;
+      console.log(`PASS: immediate stop ${index + 1}, no successful stop before container creation/exit settles.`);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+        await closed;
+      }
+    }
+  }
 } finally {
   if (child?.exitCode === null) {
     await child.terminateProject();
