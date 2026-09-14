@@ -60,10 +60,10 @@ export function AgentModeShell({
           className={classNames(
             'ml-auto flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium',
             isStreaming
-              ? 'border-sky-500/35 bg-sky-500/10 text-sky-300'
+              ? 'border-sky-500/35 bg-sky-500/10 text-sky-800 dark:text-sky-300'
               : statusLabel.toLowerCase().includes('repair') || statusLabel.toLowerCase().includes('attention')
-                ? 'border-amber-500/35 bg-amber-500/10 text-amber-300'
-                : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300',
+                ? 'border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
           )}
           aria-live="polite"
         >
