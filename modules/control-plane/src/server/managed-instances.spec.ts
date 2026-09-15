@@ -3,6 +3,7 @@ import {
   appendManagedInstanceRolloutHistory,
   buildManagedInstanceFleetSummary,
   buildManagedInstancePagesEnvConfig,
+  buildManagedInstancePagesProjectUpdate,
   buildManagedInstanceHostname,
   claimManagedInstanceTrial,
   createManagedInstanceTrialExpiry,
@@ -14,6 +15,21 @@ import {
 } from './managed-instances.mjs';
 
 describe('managed instance registry helpers', () => {
+  it('moves the canonical production branch with an explicitly selected release branch', () => {
+    const routing = {
+      hostedFreeRelayOrigin: 'https://alpha1.bolt.gives',
+      runtimeControlPublicUrl: 'https://alpha1.bolt.gives/runtime',
+    };
+    expect(buildManagedInstancePagesProjectUpdate({ sourceBranch: 'fix/release', ...routing })).toEqual({
+      production_branch: 'fix/release',
+      deployment_configs: buildManagedInstancePagesEnvConfig(routing),
+    });
+  });
+
+  it('restores main without erasing existing bindings when no routing override is configured', () => {
+    expect(buildManagedInstancePagesProjectUpdate()).toEqual({ production_branch: 'main' });
+  });
+
   it('creates a single experimental trial instance claim per client identity', () => {
     const registry = normalizeManagedInstanceRegistry({});
 

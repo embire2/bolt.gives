@@ -196,6 +196,15 @@ export function buildManagedInstancePagesEnvConfig({ hostedFreeRelayOrigin = '',
   };
 }
 
+export function buildManagedInstancePagesProjectUpdate({ sourceBranch = 'main', ...routing } = {}) {
+  return {
+    production_branch: sourceBranch,
+    ...(routing.hostedFreeRelayOrigin || routing.runtimeControlPublicUrl
+      ? { deployment_configs: buildManagedInstancePagesEnvConfig(routing) }
+      : {}),
+  };
+}
+
 export function createManagedInstanceSessionSecret() {
   return crypto.randomBytes(24).toString('hex');
 }

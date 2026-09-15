@@ -2,6 +2,8 @@
 
 ## v4.1.1 - 2026-09-15
 
+- Keep a managed instance's canonical Cloudflare production branch aligned with its configured release source. Changing validation/release branches can no longer upload only a preview while leaving the assigned hostname stale.
+- Complete native profile onboarding through normal registration in screenshot acceptance; do not hide a modal and then attempt to interact with an inert page.
 - Fix Cloudflare readiness returning HTTP 503 even when its runtime is healthy. Workers rejects Fetch's `redirect: "error"`; use supported manual redirects and still reject every non-2xx response without following another origin. Keep the deadline, protocol and app/runtime version checks intact.
 - Make the release gate distinguish actual error-page titles/headings from changelog prose describing a previously fixed server error. Keep HTTP, version, screenshot and rendered-error assertions, with regressions for both cases.
 - This patch follows the already published v4.1.0 tag rather than rewriting release history. It includes all v4.1.0 reliability, isolation and billing changes.
