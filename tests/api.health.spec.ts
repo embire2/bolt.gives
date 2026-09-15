@@ -36,7 +36,7 @@ describe('/api/health loader', () => {
     expect(fetch).toHaveBeenCalledWith(
       'http://runtime.fixture:4321/runtime/health',
       expect.objectContaining({
-        redirect: 'error',
+        redirect: 'manual',
         signal: expect.any(AbortSignal),
       }),
     );
