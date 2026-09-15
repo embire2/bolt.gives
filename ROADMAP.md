@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 Status legend:
 
@@ -10,7 +10,35 @@ Status legend:
 
 Current stable release:
 
-- [x] `v4.0.1`
+- [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
+
+## v4.1.0 Release Outcome
+
+- [x] B01/B02: bounded current-source snapshots, concurrent reconciliation, account-scoped history and follow-up preservation.
+- [x] B03/B09: pricing SSR, authenticated Checkout and signed transactional billing fulfillment. Production webhook enabled; real unpaid USD 5 monthly Checkout and signed replay pass. The operator's paid test remains explicit below.
+- [x] B04/B05: database-free private-owner installation and account-owned provider keys, with Ubuntu repair CI and two-profile/two-tab browser checks.
+- [x] B06/B07/B08: truthful Supabase status, safe replacement/disconnection, scrollable onboarding and contained keyboard focus.
+- [x] B10/B11/B12: event-derived state, strict browser acceptance and protected public browsing.
+- [x] B13/B14: production app/runtime cut over to isolated non-root services after source/private-record checksum verification. Public Preview uses separate signed TLS origins. Service/routing rollback was rehearsed; originals and backups remain intact.
+- [x] B15: deterministically reproduced a browser hook failure plus late HTML response cancelling repair while source remained broken. Fixed the state boundary and passed the same Chromium reproduction and full Agent Mode injected-failure test. The original historical stack was not retained; see [causal evidence](docs/quality/2026-09-15-browser-recovery.md).
+- [x] B16/B17/B18: exact browser environment allowlisting, bounded stream continuation, stable history navigation and JSON-aware follow-up requirement checks.
+- [x] Rootless shutdown races, unwanted stop-triggered restarts, unmanaged Vite HMR sockets, and false concurrent snapshot conflicts are fixed with regression coverage.
+
+## Follow-Up Work
+
+These are explicit remaining acceptance limits or separate product work, not a
+claim that every platform/provider combination is certified by web v4.1.0.
+
+- [ ] F01: Operator completes a real paid Stripe subscription and confirms the account balance, renewal and cancellation against the live endpoint. Automated tests never charge real cards.
+- [ ] F02: Complete Windows/WSL first installation and reboot-resume on a clean Windows machine; retain passing PowerShell and Ubuntu clean/repair CI.
+- [ ] F03: Complete account-specific MagnetAPI BYOK/model-switching combinations and periodically verify upstream catalog availability without using the funded FREE key as a personal-key fallback.
+- [ ] F04: Restore connectivity to the optional SSH CLI node and validate its dedicated-user lifecycle. Keep unavailable CLI provisioning explicitly failed; hosted Preview/publishing must remain independent.
+- [ ] F05: Extend fleet-scale CPU/RAM/bundle profiling, collaboration reconnect, OTP expiry, mobile/database and cross-version acceptance matrices.
+- [ ] F06: Replace the disabled legacy process-local self-updater on hosted rootless servers with an independently authorized, health-verified operator update service. Hosted releases use the validated deployment/control-plane path; no unrestricted sudo or false in-app update success.
+- [ ] W01-W07: Build and test the private native Windows rewrite in its independent lane below. Do not force an unverified desktop replacement.
+
+<details>
+<summary>Historical pre-release checkpoints (superseded by the outcome above)</summary>
 
 Combined opt-in test publication:
 
@@ -69,6 +97,8 @@ now marked before waiting for shutdown; current crashes still recover and stale
 process exits are ignored. Calendar cleanup acceptance now checks five seconds
 of actual idle state. This is separate from the earlier Podman creation race.
 
+</details>
+
 Independent Desktop release:
 
 - [x] `Desktop v1.10.2`
@@ -91,7 +121,14 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
-## v4.1.0 - Bug-Fix Release Plan
+## Historical v4.1.0 Audit Plan
+
+The dated checklist below preserves the original investigation/acceptance plan.
+Its pre-release statuses are historical. The release outcome and follow-up work
+above are the current status; links retain the actual failed and passing runs.
+
+<details>
+<summary>Original audit, phase checkpoints and acceptance backlog</summary>
 
 Release theme: make the existing agentic coding workflow reliable, responsive, and testable before adding more product scope. Develop the native Windows replacement in a separate, privately maintained release lane.
 
@@ -158,6 +195,8 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 
 - [~] `main` contains database-free generated projects, Supabase quick connect, private user-owned PostgreSQL connections, optional-database CLI workspaces/installer, and session-scoped runtime cleanup. B01/B02/B04/B06 and I02/I06 must close their remaining contract gaps.
 - [~] The checkout contains Luna medium-effort labelling, separate user-key MagnetAPI discovery, a dismissible banner, and shell changes. These are not marked shipped until I03 and staging verification pass.
+
+</details>
 
 ## Native Windows Rewrite - Separate Release Lane
 

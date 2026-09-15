@@ -2,9 +2,8 @@
 
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
-[![Current release](https://img.shields.io/badge/release-v4.0.1-173f5f)](https://github.com/embire2/bolt.gives/releases)
-[![Test prerelease](https://img.shields.io/badge/prerelease-v4.1.0--beta.1-d97706)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0-beta.1)
-[![Next release](https://img.shields.io/badge/roadmap-v4.1.0-d97706)](ROADMAP.md)
+[![Current release](https://img.shields.io/badge/release-v4.1.0-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0)
+[![Roadmap](https://img.shields.io/badge/roadmap-reliability%20%26%20native%20Windows-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
 [![pnpm](https://img.shields.io/badge/pnpm-9.14.4-f69220)](package.json)
@@ -13,25 +12,17 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
-> **Release status, 14 September 2026:** v4.0.1 remains the stable production release. v4.1 reliability fixes are running on alpha1 and have been tested on a disposable Cloudflare instance; they are not a completed production/fleet rollout. The [audit](docs/quality/2026-09-12-v4.1-audit.md), [live staging evidence](docs/quality/2026-09-13-alpha-acceptance.md) and [latest release preparation](docs/quality/2026-09-14-release-preparation.md) distinguish fixed bugs, passing checks and remaining deployment gates. Descriptions below include development work; stable instances may differ.
+> **v4.1.0, 15 September 2026:** the two reliability phases are combined in the stable web/server release. Production now runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Release notes and installation](docs/releases/v4.1.0.md) describe the shipped scope and validation limits.
 
-**Combined test prerelease, 13 September 2026:** [v4.1.0-beta.1](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0-beta.1) brings together Phase 1 and the implemented Phase 2 work from [PR #19](https://github.com/embire2/bolt.gives/pull/19): current/bounded snapshots, pricing SSR repair, private database-free owner login, account-owned provider keys, protected browsing, honest database/payment status, accessible onboarding, and recoverable Linux/PowerShell installers. It removes a blocking 30-second FREE model probe and prevents repair from overwriting a saved follow-up during runtime shutdown. Preview refresh and history reload preserve current runtime source. Tagged-install repair and beta-to-stable version comparison are also corrected.
+**What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.
 
-The beta is an opt-in test publication, **not a completed Phase 2 or stable v4.1.0**. Use a disposable private VM with test credentials only, not a shared/customer-facing server. [Pinned installation instructions, checksums and outstanding gates](docs/releases/v4.1.0-beta.1.md) accompany the release. Default `main` installers and production/fleet deployments remain on the stable channel.
+**The stuck-repair bug is reproduced and fixed.** A browser hook crash followed by a late successful HTML response could cancel repair and falsely report Ready while source was broken. That race now preserves Repairing, restores the last-good source, and then restores visible Preview. [Before/after evidence](docs/quality/2026-09-15-browser-recovery.md) distinguishes the injected browser error from real-provider generation. Intentional stop also no longer triggers an unwanted Preview restart.
 
-**Validation:** 1,450 tests pass, with nine skipped. All six template packs pass real Chromium Preview smoke tests; Calendar also tests event creation, persistence and layout. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34719193742) covers Ubuntu 22.04/24.04 clean/repair paths with and without platform PostgreSQL and PowerShell 5.1/7 contracts. The legacy Linux updater delegates to the guarded installer rather than recursively copying its own checkout. Windows/WSL reboot-resume and the separate native desktop rewrite remain unverified.
+**Validation:** 1,462 tests pass, nine are skipped, and boundaries, typecheck, production build and bundle budgets pass. Lint has zero errors and ten existing warnings. Real Chromium journeys cover FREE/Luna generation, follow-up, saved history and publishing; recovery tests inject actual source/browser failures. Six first-party template packs pass real Preview smoke checks, including persisted Calendar event identities. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34972966963) covers Ubuntu 22.04/24.04 clean/repair contracts and PowerShell 5.1/7.
 
-**Latest fixes:** stop no longer succeeds before a rootless container finishes starting, and graceful shutdown preserves application state. Five graceful and three immediate-stop checks pass. Managed Preview no longer opens Vite's failing background HMR connection; concurrent snapshot readers no longer create false conflicts. Readiness checks the real runtime protocol/version instead of merely checking whether `fetch` exists. Agent status badges are readable in light mode. The missing secondary DNS zone, wildcard Preview TLS/renewal, non-root mail settings and constrained Caddy reloads are repaired.
+**Billing is active:** production Upgrade opens a USD 5 monthly Stripe subscription Checkout. The dedicated signed webhook is enabled; unsigned/tampered requests are rejected, replay is tested, and disposable PostgreSQL tests cover activation, renewal and duplicate events. The live test Checkout was expired without charging a card. A real paid transaction is reserved for the operator's acceptance test.
 
-An additional live check found the process-exit monitor restarting Preview after a successful intentional stop. Shutdown now marks all affected handles before waiting for exit, so normal stop/restart is not treated as a crash. Unexpected exits still trigger recovery. Calendar E2E now requires Preview to remain idle for five seconds after cleanup, not merely an HTTP 200 response.
-
-**Live staging:** alpha1 uses non-root services, rootless project containers and publicly trusted project-specific HTTPS Preview. An assigned Cloudflare instance completed real FREE/Luna generation, follow-up, history restore and public publishing in 159.4 seconds, without aborted chat streams or fatal browser/network errors. Rollback/restoration and the [published Calendar's event persistence](https://release-app-1789412097975.instances.bolt.gives) passed too. A copied production candidate passed the same generation/history flow in 96.1 seconds and recovered automatically from an injected source error. A separate real-provider retry/restart journey passed 30 cold reloads. These are staging checks, not a customer-fleet rollout.
-
-**Stripe:** the Upgrade button opened a real USD 5 monthly Checkout, which was expired without paying. Signed webhook rejection/replay and disposable PostgreSQL fulfillment tests pass. No card was charged. The dedicated production webhook remains disabled until the production runtime is migrated; this is not completed live-payment acceptance.
-
-**CI maintenance after the beta:** the unavailable Codeball PR-review workflow has been removed from the development branch. Tests, security analysis, builds, installer recovery and release/E2E workflows are retained unchanged. Codeball was not a required merge check; removing it does not waive the release gates above or deploy the application.
-
-**Still open:** the isolated production copy and protected configuration are prepared, with source/private-data checksums verified. Production traffic has not switched; service/routing rollback and remaining acceptance checks must pass first. The earlier intermittent B15 hook crash is still untraced: passing repeats alone do not establish its cause. Native Windows work remains a separate release lane. See [ROADMAP.md](ROADMAP.md) before promoting the validation branch.
+**Open-source installation and feedback:** try the Linux installer below, bring your own provider key, and [open an Issue](https://github.com/embire2/bolt.gives/issues/new/choose) with your version and reproduction steps. PostgreSQL is not required for generated projects. The Windows native rewrite, full Windows/WSL reboot-resume acceptance and optional remote CLI-node availability are tracked separately, not presented as completed by this web release. Codeball is removed; required tests, builds and security scans remain.
 
 ## What You Can Do
 
@@ -105,9 +96,9 @@ Version 4 replaced separate, competing Chat and Workspace routes with one contin
 - The selected model can change during a project without discarding history.
 - Recovery is bounded. The UI shows a stable repairing state instead of looping forever between Working and Needs Repair.
 
-The test prerelease and current alpha show the hosted FREE default as **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without embedding the operator credential in the browser bundle or generated project. Stable fleet instances have not yet received this rollout.
+The hosted FREE default is **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without embedding the operator credential in the browser bundle or generated project.
 
-The beta's user-funded integration adds **MagnetAPI** to the provider dropdown. Users sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a User API Key in its dashboard, and enter it in bolt.gives. Choices include ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1; actual upstream IDs and account-specific discovery still require the full I03 release matrix. MagnetAPI advertises these inference routes at 10% of standard direct-provider cost. Personal MagnetAPI requests must never fall back to bolt.gives' operator-funded FREE key.
+The separate **MagnetAPI** provider uses your own User API Key. Sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a key and enter it in bolt.gives. The dropdown includes ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5 and Fable 5.1 compatibility labels, plus account-specific model discovery. Availability depends on the upstream account; personal requests never fall back to the operator-funded FREE key. MagnetAPI's advertised discount is its pricing claim, not a bolt.gives price guarantee.
 
 ## What Version 4 Includes
 
@@ -166,7 +157,7 @@ The PostgreSQL database used by bolt.gives itself for profiles or operator data 
 4. Paste the **Project URL** and **Publishable key** or legacy **anon key**.
 5. Select **Connect Supabase**, then restart an existing Preview to apply the new environment.
 
-In the v4.1 development build, Supabase reports **configured, not verified**. Saving a URL/key is not proof of network access, permissions, or RLS correctness. Test a real database operation in your app. Use **Replace credentials** for rotation; an unsuccessful replacement preserves the previous record. Restart Preview after replacement or disconnection because existing processes retain their old environment.
+Supabase reports **configured, not verified**. Saving a URL/key is not proof of network access, permissions, or RLS correctness. Test a real database operation in your app. Use **Replace credentials** for rotation; an unsuccessful replacement preserves the previous record. Restart Preview after replacement or disconnection because existing processes retain their old environment.
 
 The runtime provides these variables to the project:
 
@@ -199,15 +190,15 @@ bolt.gives began as a browser-focused AI code generator. The v3 release line tur
 
 That work exposed a product problem: Chat and Workspace competed for the screen, recovery could move the user between views, and important follow-up controls became difficult to find. v3.5 focused on first-pass Preview reliability and lower browser overhead. v4 then unified the complete flow into Agent Mode and made verified Preview the completion contract.
 
-`v4.0.1` is the current stable web release. It retains v4's Agent Mode and fixes Cloudflare Pages' HTML fallback for omitted favicon requests so a healthy published project remains console-clean.
+`v4.0.1` corrected published-app favicon fallback. **v4.1.0** combines both reliability phases and the production runtime-isolation migration, retaining v4's Agent Mode while fixing source preservation, recovery, account safety, browsing, billing and installation.
 
 The complete release record is in [CHANGELOG.md](CHANGELOG.md).
 
-## v4.1.0 Plan
+## v4.1.0 Reliability Work
 
 **Make the existing workflow dependable before expanding it.** The [September audit](docs/quality/2026-09-12-v4.1-audit.md) combines six-module code tracing, isolated contract reproductions, 32 real-browser route visits, and hosted FREE project generation. It does not claim exhaustive coverage or error-free software.
 
-| Finding                                                                             | How v4.1.0 will tackle it                                                                                            |
+| Original finding                                                                    | Implemented correction                                                                                               |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | B01: Package caches and nested dependencies enter source snapshots, increasing work | Filter generated trees consistently and bound snapshot bytes, file counts, and reads; measure browser/transport cost |
 | B02: Disk edits with unchanged file counts can return stale source                  | Reconcile revisions, changes, deletions, and renames; test follow-up context and restore against the latest source   |
@@ -222,11 +213,11 @@ The complete release record is in [CHANGELOG.md](CHANGELOG.md).
 | B11: Screenshot/version gates and stale E2E selectors miss broken journeys          | Make normal onboarding, first Preview, interaction, follow-up, restore, and browser-error checks mandatory           |
 | B12: Browsing fallback has a weaker destination-validation policy                   | Unify safe network validation, redirect handling, limits, and test doubles across browse transports                  |
 
-The first audit run hit a Code/Preview switching timeout. A second completed the task-board journey, including an Add task interaction, follow-up subtitle, saved-project URL, and reload, but logged a snapshot 502. These errors remain investigation tasks, not a clean E2E pass. Typecheck and strict module boundaries passed; lint had zero errors and seven warnings; **1,167 tests passed, nine were skipped, and all six template Preview smokes passed**. Full Windows testing, a new managed-instance/publication journey, live billing, and real clean-OS installation were not performed in this audit.
+The first audit recorded a Code/Preview timeout and snapshot 502; these failures are retained in historical evidence, not counted as passes. The final web acceptance adds real source/follow-up/history checks, isolated Preview, rootless processes, public publishing, signed billing and deterministic browser-error recovery. Test evidence has grown from 1,167 to 1,462 passing tests.
 
-[ROADMAP.md](ROADMAP.md) divides each finding into owned, reviewable subtasks with acceptance tests. Existing database-optional and MagnetAPI work must pass those gates before release. New feature expansion is deferred. A version number, screenshot, or HTTP 200 alone will not qualify v4.1.0 for release.
+[ROADMAP.md](ROADMAP.md) separates shipped corrections from remaining validation and follow-up work. Windows/WSL reboot-resume, the native Windows rewrite, broader model/account matrices and fleet-scale performance profiling are not claimed complete. New feature expansion stays secondary to measurable reliability.
 
-Work is split into two checkpoints. **Phase 1** addresses B01/B02/B03/B04/B05/B12. **Phase 2 is authorized and in progress**, addressing B06-B10 plus installer recovery and broader release evidence. Permission to deploy does not waive the Preview-origin security blocker or turn local tests into fleet, payment, clean-OS, or native-Windows certification.
+Both implementation checkpoints are combined in v4.1.0. The production app/runtime migration is complete, and original source, private records and host configuration remain available for rollback. Paid Stripe acceptance remains an explicit operator test; no automated test charged a real card.
 
 ### A Truly Native Windows Client
 
@@ -286,7 +277,7 @@ The public [install.ps1](install.ps1) installs the **open-source server in Ubunt
 
 WSL installation requests administrator approval when needed. If a reboot or first-run Linux user setup is required, the script stops with instructions and can be rerun; it never silently restarts Windows or deletes a distribution. Ubuntu must use a non-root user with sudo and active systemd. See Microsoft's [WSL installation](https://learn.microsoft.com/en-us/windows/wsl/install) and [systemd configuration](https://learn.microsoft.com/en-us/windows/wsl/wsl-config#systemd-support) guidance. Downloads have bounded retries; nonzero Linux exit codes remain failures. No operator credentials are embedded.
 
-Local PowerShell parser/contract tests pass; a full Windows/WSL installation and reboot-resume journey remains a release gate. The new CI workflow exercises Windows PowerShell 5.1/7 contracts and disposable Ubuntu 22.04/24.04 clean/repair installations with and without platform PostgreSQL. A workflow definition is not a passing CI run.
+PowerShell 5.1/7 and Ubuntu 22.04/24.04 clean/repair CI pass. Full Windows/WSL installation and reboot-resume remain unverified; treat Windows setup as a supported bootstrap path with that explicit acceptance limitation, not a newly released native desktop client.
 
 ### Single-Owner Mode (Unreleased)
 
@@ -431,7 +422,7 @@ Good first contributions include installer portability reports, accessible UI fi
 
 Do not report vulnerabilities in a public Issue. Follow the repository's private security-reporting path where available, and never include production credentials, session cookies, database URLs, SSH material, or customer data in a report.
 
-Generated code and model output are untrusted. The runtime includes path/command validation, workspace isolation, recovery bounds, and secret-handling controls. The [audit](docs/quality/2026-09-12-v4.1-audit.md) identifies remaining snapshot-filtering, credential-lifecycle, and browse-validation gaps; these must be fixed and tested rather than treated as already complete.
+Generated code and model output are untrusted. v4.1.0 addresses the [audit's](docs/quality/2026-09-12-v4.1-audit.md) snapshot-filtering, credential-lifecycle and browse-validation findings. Hosted production additionally uses rootless project containers and separate signed HTTPS Preview origins. These controls and their tests reduce risk; they are not a claim that arbitrary generated code is safe or that no undiscovered bugs remain.
 
 ## License
 

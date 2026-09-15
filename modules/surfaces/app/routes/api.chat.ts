@@ -25,6 +25,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import { MCPService } from '@bolt/project/lib/services/mcpService';
 import { AgentRecoveryController } from '@bolt/agent/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '@bolt/agent/lib/.server/llm/stream-recovery';
+import { describeStreamError } from '@bolt/agent/lib/.server/llm/stream-error';
 import { enforceDataStreamDeadline } from '@bolt/agent/lib/.server/llm/data-stream-deadline';
 import { recordAgentRunMetrics } from '@bolt/agent/lib/.server/llm/run-metrics';
 import {
@@ -3111,20 +3112,20 @@ Next: I am sending the final result now.`,
         stopHeartbeatIfRunning();
 
         const elapsedMs = Date.now() - requestStartedAt;
-        logger.error(
+        const errorMessage = describeStreamError(error, envVars);
+
+        console.error(
           `chat stream onError ${JSON.stringify({
             ...requestDebugContext,
             elapsedMs,
             resolvedProvider: resolvedSelectionForLogs.provider,
             resolvedModel: resolvedSelectionForLogs.model,
             errorName: error?.name,
-            errorMessage: error?.message || String(error),
+            errorMessage,
           })}`,
         );
 
         // Provide more specific error messages for common issues
-        const errorMessage = error.message || 'Unknown error';
-
         if (errorMessage.includes('model') && errorMessage.includes('not found')) {
           return 'Custom error: Invalid model selected. Please check that the model name is correct and available.';
         }

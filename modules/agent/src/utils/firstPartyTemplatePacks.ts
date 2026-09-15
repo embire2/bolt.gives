@@ -401,11 +401,11 @@ const monthOffset = (new Date(today.getFullYear(), today.getMonth(), 1).getDay()
 const hours = ['8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM'];
 const calendars = ['Personal', 'Team', 'Launch', 'Focus'];
 const initialEvents = [
-  { day: days[0], time: '9 AM', title: 'Design sync', calendar: 'Team', span: 2 },
-  { day: days[1], time: '11 AM', title: 'Content review', calendar: 'Launch', span: 1 },
-  { day: days[2], time: '1 PM', title: 'Deep work block', calendar: 'Focus', span: 2 },
-  { day: days[3], time: '10 AM', title: 'Partner demo', calendar: 'Team', span: 1 },
-  { day: days[4], time: '2 PM', title: 'Weekly planning', calendar: 'Personal', span: 2 },
+  { id: 'seed-1', day: days[0], time: '9 AM', title: 'Design sync', calendar: 'Team', span: 2 },
+  { id: 'seed-2', day: days[1], time: '11 AM', title: 'Content review', calendar: 'Launch', span: 1 },
+  { id: 'seed-3', day: days[2], time: '1 PM', title: 'Deep work block', calendar: 'Focus', span: 2 },
+  { id: 'seed-4', day: days[3], time: '10 AM', title: 'Partner demo', calendar: 'Team', span: 1 },
+  { id: 'seed-5', day: days[4], time: '2 PM', title: 'Weekly planning', calendar: 'Personal', span: 2 },
 ];
 
 export default function App() {
@@ -415,7 +415,7 @@ export default function App() {
   const [events, setEvents] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('calendar-events') || 'null');
-      return Array.isArray(saved) ? saved as typeof initialEvents : initialEvents;
+      return Array.isArray(saved) ? saved.filter((event) => event && typeof event.title === 'string').map((event, index) => ({ ...event, id: event.id || 'saved-' + index })) as typeof initialEvents : initialEvents;
     } catch { return initialEvents; }
   });
   useEffect(() => {
@@ -433,7 +433,7 @@ export default function App() {
           const form = new FormData(event.currentTarget);
           const title = String(form.get('title') || '').trim();
           if (!title) return;
-          setEvents((current) => [...current, { day: selectedDay, time: String(form.get('time')), title, calendar: 'Personal', span: 1 }]);
+          setEvents((current) => [...current, { id: crypto.randomUUID(), day: selectedDay, time: String(form.get('time')), title, calendar: 'Personal', span: 1 }]);
           setCreating(false);
         }}>
           <label>Event title<input name="title" required maxLength={120} autoFocus /></label>

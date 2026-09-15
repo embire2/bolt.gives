@@ -1,9 +1,16 @@
 # Changelog
 
-## Unreleased - After v4.1.0-beta.1
+## v4.1.0 - 2026-09-15
+
+Combines both reliability phases and the following post-beta corrections. Hosted
+production now uses the verified isolated app/workspace trees, non-root services,
+authenticated runtime routing and trusted per-project Preview TLS. The dedicated
+production Stripe webhook is enabled. Prior beta caveats below describe the beta
+publication, not the current stable deployment. Desktop remains independent.
 
 ### Runtime and Recovery
 
+- Give initial, restored and newly created Calendar events persistent IDs before model edits reuse browser storage. Preserve string/enveloped stream errors for bounded retry classification, redact credentials, and retain server-side error diagnostics even when routine logging is disabled.
 - Preserve browser-error repair across late successful HTML responses and autostart completions. A deterministic Chromium invalid-hook reproduction previously cancelled repair and reported Ready while source was still broken; the same race now restores the last-good source and visible Preview. Add five state-transition regressions and an explicit hook-failure browser acceptance mode.
 - Mark intentional process shutdown before awaiting container exit. The liveness monitor no longer mistakes that close for a crash and restarts a stopped Preview; real unexpected exits still trigger recovery. Calendar acceptance checks the stopped state for five seconds after cleanup rather than trusting HTTP 200 alone.
 - Stop requests wait for the attached Podman client to exit and its container to be removed. A real immediate-stop regression exposed `stop --ignore` reporting success before container creation; bounded retries now close that race without preventing later retries after failure.
@@ -31,10 +38,10 @@
 - Use host-prefixed production authentication cookies consistently in the separately compiled gateway and application; skip account connection lookups before sign-in.
 - Added opt-in rootless Podman execution for generated commands, dependency installation/repair, builds and Preview. Containers mount only the project, drop capabilities, use a read-only image and enforce CPU/RAM/PID limits. Root execution is rejected, and unmigrated source ownership fails explicitly rather than being silently changed.
 - Await isolated process termination before releasing/reusing its Preview port, preventing restart collisions with an old container. Reserve operator-storage names so they cannot be selected as project session IDs.
-- Added a signed per-project HTTPS Preview gateway with host-only, HTTP-only partitioned capabilities, cross-project/origin rejection, bounded browser-error reporting and project-scoped repair readiness. Generated servers cannot set parent-domain/platform cookies or permissive cross-project CORS headers. Public wildcard TLS is verified; production traffic migration remains pending.
+- Added a signed per-project HTTPS Preview gateway with host-only, HTTP-only partitioned capabilities, cross-project/origin rejection, bounded browser-error reporting and project-scoped repair readiness. Generated servers cannot set parent-domain/platform cookies or permissive cross-project CORS headers. Public wildcard TLS and production traffic migration are verified.
 - Require authenticated hosted runtime/Preview access and reject cross-origin runtime calls. The Linux installer routes both hosted and private-owner runtime traffic through application authorization rather than exposing the runtime directly.
 - Keep Chat mounted after an empty failed assistant stream so navigation cannot discard queued recovery; restore the user's latest visible request on Chat initialization. Count real buffered FREE file-argument progress toward stream activity without publishing partial artifacts or synthetic commentary.
-- Added real rootless process acceptance and combined HTTPS/browser prompt, follow-up, history, restart and injected-stream-failure fixtures. Production and managed instances are unchanged; see `ROADMAP.md` for outstanding gates.
+- Added real rootless process acceptance and combined HTTPS/browser prompt, follow-up, history, restart and injected-stream-failure fixtures. See `ROADMAP.md` for the remaining validation matrix and independent Windows work.
 
 ### Billing
 
@@ -45,7 +52,7 @@
 
 ### Removed
 
-- Removed the optional Codeball PR-review workflow after both Cloudflare DNS (`1.1.1.1`) and the authoritative nameserver returned `NXDOMAIN` for its API hostname. Tests, security scans, build validation, installer recovery and release/E2E workflows are unchanged. This CI-only maintenance does not update the running application or resolve the outstanding production-release blockers.
+- Removed the optional Codeball PR-review workflow after both Cloudflare DNS (`1.1.1.1`) and the authoritative nameserver returned `NXDOMAIN` for its API hostname. Tests, security scans, build validation, installer recovery and release/E2E workflows remain required.
 
 ## v4.1.0-beta.1 (2026-09-13) - Test Prerelease
 
