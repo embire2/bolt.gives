@@ -12,6 +12,7 @@ const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
 const secure = baseUrl.startsWith('https://');
 const token = `AUTO_RECOVERY_${Date.now().toString(36)}`;
 const subtitle = 'Auto recovery baseline';
+const hookFailure = process.env.E2E_RECOVERY_FAILURE === 'hook';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,7 +112,11 @@ const unexpectedErrors = [];
 const injectedErrors = [];
 const chatStreams = [];
 page.on('pageerror', (error) => {
-  if (expectedBreak && /Unexpected token|Unexpected.*["'];["']/.test(error.message)) {
+  if (
+    expectedBreak &&
+    (/Unexpected token|Unexpected.*["'];["']/.test(error.message) ||
+      (hookFailure && /Cannot read properties of null \(reading ['"]useState['"]\)/.test(error.message)))
+  ) {
     injectedErrors.push(error.message);
   } else {
     unexpectedErrors.push(error.message);
@@ -202,7 +207,9 @@ try {
 
   const [targetPath, targetDirent] = selectBreakTarget(snapshotResponse.payload.files);
   const originalContent = targetDirent.content;
-  const brokenContent = `${originalContent}\nconst __bolt_auto_recovery_break = ;\n`;
+  const brokenContent = hookFailure
+    ? `${originalContent}\nimport { useState as __boltInvalidHook } from 'react';\n__boltInvalidHook(0);\n`
+    : `${originalContent}\nconst __bolt_auto_recovery_break = ;\n`;
 
   expectedBreak = true;
 
@@ -239,6 +246,35 @@ try {
 
   if (!breakApplied) {
     throw new Error('Intentional preview break never reached the hosted runtime snapshot.');
+  }
+
+  if (hookFailure) {
+    const frame = await page.locator('iframe[title="preview"]').first().contentFrame();
+    await frame
+      .locator('body')
+      .evaluate(() => window.location.reload())
+      .catch(() => {});
+
+    const errorDeadline = Date.now() + 30000;
+
+    while (!injectedErrors.some((error) => /null.*useState/.test(error)) && Date.now() < errorDeadline) {
+      await delay(100);
+    }
+
+    if (!injectedErrors.some((error) => /null.*useState/.test(error))) {
+      throw new Error('The injected hook failure did not execute in the generated browser Preview.');
+    }
+
+    // Reproduce late document responses while browser-error repair is queued.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await frame
+        .locator('html')
+        .evaluate(async () => {
+          await (await fetch('/')).text();
+        })
+        .catch(() => {});
+      await delay(200);
+    }
   }
 
   const deadline = Date.now() + 180000;
@@ -362,6 +398,7 @@ try {
         baseUrl,
         providerName,
         modelName,
+        failureMode: hookFailure ? 'browser-hook-with-late-html' : 'syntax',
         sessionId,
         targetPath,
         token,

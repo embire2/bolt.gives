@@ -3073,12 +3073,23 @@ function broadcastPreviewState(session) {
 }
 
 function touchPreviewDiagnostics(session, nextState) {
+  // HTTP readiness cannot disprove an outstanding browser or compiler failure.
+  if (
+    nextState.healthy === true &&
+    ['error', 'repairing'].includes(session.previewDiagnostics?.status) &&
+    !canClearPreviewAlertAfterHealthyResponse(session, session.previewDiagnostics.alert, '')
+  ) {
+    return false;
+  }
+
   session.previewDiagnostics = {
     ...session.previewDiagnostics,
     ...nextState,
     updatedAt: new Date().toISOString(),
   };
   broadcastPreviewState(session);
+
+  return true;
 }
 
 function clearPreviewDiagnostics(session, status = 'idle') {
@@ -3113,12 +3124,17 @@ export function settleHealthyQueuedPreviewRepair(session, probe) {
     return false;
   }
 
+  if (
+    !touchPreviewDiagnostics(session, {
+      status: session.preview ? 'ready' : 'idle',
+      healthy: true,
+      alert: null,
+    })
+  ) {
+    return false;
+  }
+
   clearPreviewRecoveryState(session);
-  touchPreviewDiagnostics(session, {
-    status: session.preview ? 'ready' : 'idle',
-    healthy: true,
-    alert: null,
-  });
   appendPreviewDiagnosticEntries(
     session,
     'recovery',
@@ -3777,7 +3793,7 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath, c
     statusCode < 400 &&
     shouldInspectForAlerts &&
     !(
-      session.previewDiagnostics?.status === 'error' &&
+      ['error', 'repairing'].includes(session.previewDiagnostics?.status) &&
       session.previewDiagnostics?.alert &&
       !canClearPreviewAlertAfterHealthyResponse(session, session.previewDiagnostics.alert, normalizedBody)
     )
@@ -5252,13 +5268,11 @@ export function settleSuccessfulHostedAutostart(session, mutationId) {
     return false;
   }
 
-  touchPreviewDiagnostics(session, {
+  return touchPreviewDiagnostics(session, {
     status: 'ready',
     healthy: true,
     alert: null,
   });
-
-  return true;
 }
 
 function scheduleHostedAutoStartAfterSync(session) {

@@ -4,6 +4,7 @@
 
 ### Runtime and Recovery
 
+- Preserve browser-error repair across late successful HTML responses and autostart completions. A deterministic Chromium invalid-hook reproduction previously cancelled repair and reported Ready while source was still broken; the same race now restores the last-good source and visible Preview. Add five state-transition regressions and an explicit hook-failure browser acceptance mode.
 - Mark intentional process shutdown before awaiting container exit. The liveness monitor no longer mistakes that close for a crash and restarts a stopped Preview; real unexpected exits still trigger recovery. Calendar acceptance checks the stopped state for five seconds after cleanup rather than trusting HTTP 200 alone.
 - Stop requests wait for the attached Podman client to exit and its container to be removed. A real immediate-stop regression exposed `stop --ignore` reporting success before container creation; bounded retries now close that race without preventing later retries after failure.
 - Preserve hard-linked dependencies when preparing isolated runtime copies, copy only tracked application source plus explicit build/dependencies, and verify source/private records independently of rebuildable dependency caches. Existing targets remain guarded against overwrite.
