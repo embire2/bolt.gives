@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { chromium } from 'playwright';
-import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
+import { completeProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const chatUrl = new URL('/chat', baseUrl).toString();
@@ -52,7 +52,7 @@ try {
   ]);
 
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
 
   const promptInput = getPromptLocator();
 

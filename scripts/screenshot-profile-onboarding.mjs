@@ -1,8 +1,14 @@
 export const PROFILE_ONBOARDING_SELECTOR = '[role="dialog"][aria-labelledby="profile-onboarding-title"]';
 
-export async function completeProfileOnboardingForScreenshot(page) {
+export async function completeProfileOnboardingForScreenshot(
+  page,
+  ownerAccessToken = process.env.BOLT_E2E_OWNER_ACCESS_TOKEN,
+) {
   const dialog = page
-    .locator('dialog[aria-labelledby="profile-onboarding-title"], ' + PROFILE_ONBOARDING_SELECTOR)
+    .locator(
+      'dialog[aria-labelledby="owner-login-title"], dialog[aria-labelledby="profile-onboarding-title"], ' +
+        PROFILE_ONBOARDING_SELECTOR,
+    )
     .first();
   const visible = await dialog.waitFor({ state: 'visible', timeout: 3000 }).then(
     () => true,
@@ -11,6 +17,18 @@ export async function completeProfileOnboardingForScreenshot(page) {
 
   if (!visible) {
     return false;
+  }
+
+  if ((await dialog.getAttribute('aria-labelledby')) === 'owner-login-title') {
+    if (!ownerAccessToken) {
+      throw new Error('Set BOLT_E2E_OWNER_ACCESS_TOKEN for an explicitly authorized self-host screenshot test.');
+    }
+
+    await dialog.getByLabel('Owner access token').fill(ownerAccessToken);
+    await dialog.getByRole('button', { name: 'Open my workspace' }).click();
+    await dialog.waitFor({ state: 'hidden', timeout: 15000 });
+
+    return true;
   }
 
   await dialog.getByLabel('Name and Surname').fill('Release Screenshot');

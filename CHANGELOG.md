@@ -2,6 +2,7 @@
 
 ## v4.1.1 - 2026-09-15
 
+- Start mandatory installer acceptance for every PR head, instead of waiting indefinitely for a path-filtered workflow that never ran. Clean release CI uses a disposable no-database owner and normal login, never operator credentials or hidden authentication modals.
 - Keep a managed instance's canonical Cloudflare production branch aligned with its configured release source. Changing validation/release branches can no longer upload only a preview while leaving the assigned hostname stale.
 - Complete native profile onboarding through normal registration in screenshot acceptance; do not hide a modal and then attempt to interact with an inert page.
 - Fix Cloudflare readiness returning HTTP 503 even when its runtime is healthy. Workers rejects Fetch's `redirect: "error"`; use supported manual redirects and still reject every non-2xx response without following another origin. Keep the deadline, protocol and app/runtime version checks intact.
