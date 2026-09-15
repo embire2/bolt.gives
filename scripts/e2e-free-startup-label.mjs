@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { completeProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8788';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
@@ -31,6 +32,7 @@ try {
   const chatUrl = getChatUrl(baseUrl);
 
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await completeProfileOnboardingForScreenshot(page);
   await page.waitForFunction(
     () => {
       const comboboxText = Array.from(document.querySelectorAll('[role="combobox"]')).map(
@@ -105,12 +107,12 @@ try {
   await modelSelect.selectOption('gpt-5.6-sol');
 
   const providerSelect = page.locator('[role="combobox"][aria-controls="provider-listbox"]');
-  await providerSelect.evaluate((element) => element.click());
-  await page.getByRole('option', { name: 'MagnetAPI', exact: true }).evaluate((element) => element.click());
+  await providerSelect.click();
+  await page.getByRole('option', { name: 'MagnetAPI', exact: true }).click();
   await page.getByText(/Sign in to MagnetAPI, buy a plan, create a User API Key/i).waitFor({ timeout: 30000 });
 
   const magnetModelSelect = page.locator('[role="combobox"][aria-controls="model-listbox"]');
-  await magnetModelSelect.evaluate((element) => element.click());
+  await magnetModelSelect.click();
 
   const magnetModelLabels = (await page.locator('#model-listbox [role="option"]').allTextContents()).map((label) =>
     label.trim(),
@@ -123,11 +125,7 @@ try {
     }
   }
 
-  await page
-    .locator('#model-listbox [role="option"]')
-    .filter({ hasText: 'ChatGPT-5.6 Ultra' })
-    .first()
-    .evaluate((element) => element.click());
+  await page.locator('#model-listbox [role="option"]').filter({ hasText: 'ChatGPT-5.6 Ultra' }).first().click();
 
   const selectedMagnetModel = (await magnetModelSelect.textContent())?.trim() || '';
 
