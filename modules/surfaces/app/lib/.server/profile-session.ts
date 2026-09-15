@@ -1,6 +1,7 @@
 import { createCookie } from '@remix-run/cloudflare';
-import { fetchRuntimeControlJson } from '@bolt/runtime/lib/.server/runtime-control';
+import { fetchRuntimeControlJson, RuntimeControlError } from '@bolt/runtime/lib/.server/runtime-control';
 import type { UserProfile } from '~/lib/profile-context';
+import { isSingleUserMode } from './self-host';
 
 type ProfileCookieValue = {
   id: string;
@@ -72,13 +73,16 @@ function getProfileCookieSecret(runtimeEnv: RuntimeEnv = {}) {
 }
 
 export function createProfileCookie(runtimeEnv: RuntimeEnv = {}) {
-  return createCookie('bolt_profile_session', {
+  /*
+   * Both the separately compiled Pages gateway and Remix must choose the same name.
+   * Build-time replacement of process.env.NODE_ENV can otherwise split authentication.
+   */
+  const secure = !['development', 'test'].includes(runtimeEnv.NODE_ENV || '');
+  return createCookie(secure ? '__Host-bolt_profile_session' : 'bolt_profile_session', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure:
-      runtimeEnv.NODE_ENV === 'production' ||
-      (typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true),
+    secure,
     maxAge: 60 * 60 * 24 * 365,
     secrets: [getProfileCookieSecret(runtimeEnv)],
   });
@@ -105,6 +109,7 @@ export async function readProfileCredentials(request: Request, runtimeEnv: Runti
 export async function resolveProfileSession(
   request: Request,
   runtimeEnv: RuntimeEnv = {},
+  options: { failOnUnavailable?: boolean } = {},
 ): Promise<UserProfile | null> {
   const value = await readProfileCredentials(request, runtimeEnv);
 
@@ -123,7 +128,11 @@ export async function resolveProfileSession(
       runtimeEnv,
     );
     return payload.profile;
-  } catch {
+  } catch (error) {
+    if (options.failOnUnavailable && !(error instanceof RuntimeControlError && [401, 403].includes(error.status))) {
+      throw new Error('The profile runtime is temporarily unavailable. Please retry shortly.');
+    }
+
     return null;
   }
 }
@@ -197,6 +206,10 @@ export async function clearProfileSession(runtimeEnv: RuntimeEnv = {}) {
 }
 
 export async function getProfileBillingStatus(request: Request, runtimeEnv: RuntimeEnv = {}) {
+  if (isSingleUserMode(runtimeEnv)) {
+    return null;
+  }
+
   const credentials = await readProfileCredentials(request, runtimeEnv);
 
   if (!credentials) {

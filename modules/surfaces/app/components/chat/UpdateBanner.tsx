@@ -313,7 +313,7 @@ export function UpdateBanner() {
   return (
     <>
       {shouldShowBanner ? (
-        <div className="fixed left-0 right-0 top-0 z-[1200] border-b border-amber-300 bg-amber-50/95 px-3 py-2 text-sm text-amber-950 shadow-lg backdrop-blur dark:border-amber-500/40 dark:bg-amber-950/95 dark:text-amber-50">
+        <div className="relative z-[1200] shrink-0 border-b border-amber-300 bg-amber-50/95 px-3 py-2 text-sm text-amber-950 shadow-lg backdrop-blur dark:border-amber-500/40 dark:bg-amber-950/95 dark:text-amber-50">
           <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2">
               <div className="i-ph:arrow-circle-up-bold mt-0.5 text-lg text-amber-700 dark:text-amber-300" />

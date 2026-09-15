@@ -6,7 +6,9 @@ import type { ModelInfo } from '@bolt/agent/lib/modules/llm/types';
 import {
   FREE_HOSTED_API_BASE_URL,
   FREE_HOSTED_API_TOKEN_KEY,
+  FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
+  FREE_HOSTED_MODEL_REASONING_EFFORT,
   FREE_HOSTED_MODEL_MAX_TOKENS,
   FREE_HOSTED_MODELS,
   FREE_PROVIDER_NAME,
@@ -18,6 +20,7 @@ import {
   HOSTED_FREE_RESPONSES_WRITE_TOOL,
   normalizeHostedFreeResponsesSse,
 } from './hosted-free-responses-build';
+import { normalizeHostedFreeFileContent } from './hosted-free-file-content';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -123,10 +126,19 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     }
   }
 
+  const isLunaModel = payload.model === FREE_HOSTED_MODEL;
   const normalizedPayload = {
     ...payload,
     instructions: instructions.filter(Boolean).join('\n\n'),
     input: conversation.join('\n\n'),
+    ...(isLunaModel
+      ? {
+          reasoning: {
+            ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
+            effort: FREE_HOSTED_MODEL_REASONING_EFFORT,
+          },
+        }
+      : {}),
   };
 
   if (
@@ -140,6 +152,7 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
 
   return {
     ...normalizedPayload,
+    instructions: `${normalizedPayload.instructions}\nThe write_file tool is the only output transport. Its content must be the raw complete file, not boltArtifact/codyArtifact/action tags, Markdown fences, or an explanation. Do not nest the artifact output contract inside the file content.`,
     tools: [
       {
         type: 'function',
@@ -163,7 +176,7 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     parallel_tool_calls: false,
     reasoning: {
       ...(isJsonRecord(payload.reasoning) ? payload.reasoning : {}),
-      effort: 'low',
+      effort: isLunaModel ? FREE_HOSTED_MODEL_REASONING_EFFORT : 'low',
     },
     text: {
       ...(isJsonRecord(payload.text) ? payload.text : {}),
@@ -324,7 +337,11 @@ function createHostedFreeResponseEventStream(
   });
 }
 
-const hostedFreeFetch: typeof fetch = async (input, init) => {
+async function hostedFreeFetchWithActivity(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  onActivity?: () => void,
+): Promise<Response> {
   let requestInit = init;
   let requestedStream = false;
   let bridgeBuildActions = false;
@@ -352,7 +369,7 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, requestInit);
 
   if (bridgeBuildActions && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-    return normalizeHostedFreeResponsesSse(response);
+    return normalizeHostedFreeResponsesSse(response, onActivity);
   }
 
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
@@ -383,7 +400,9 @@ const hostedFreeFetch: typeof fetch = async (input, init) => {
     statusText: response.statusText,
     headers,
   });
-};
+}
+
+export const hostedFreeFetch: typeof fetch = (input, init) => hostedFreeFetchWithActivity(input, init);
 
 export function normalizeHostedFreeClaudeStreamEvent(payload: unknown): unknown {
   if (!isJsonRecord(payload) || payload.type !== 'message_start' || !isJsonRecord(payload.message)) {
@@ -563,7 +582,11 @@ function buildBoltArtifactFromHostedFreeClaudeToolInput(input: unknown, workspac
     return '';
   }
 
-  return `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${content}</boltAction>\n</boltArtifact>`;
+  const normalizedContent = normalizeHostedFreeFileContent(path, content);
+
+  return normalizedContent === null
+    ? ''
+    : `<boltArtifact id="free-claude-file" title="Project update">\n<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${normalizedContent}</boltAction>\n</boltArtifact>`;
 }
 
 function normalizeHostedFreeClaudeSseBlock(block: string, state: HostedFreeClaudeToolStreamState): string | null {
@@ -729,7 +752,7 @@ function normalizeHostedFreeClaudeSse(response: Response, workspaceFiles = new M
   });
 }
 
-const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
+export const hostedFreeClaudeFetch: typeof fetch = async (input, init) => {
   const requestHeaders = typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined;
   const headers = new Headers(requestHeaders);
 
@@ -791,6 +814,7 @@ export default class FreeProvider extends BaseProvider {
     serverEnv: Env;
     apiKeys?: Record<string, string>;
     providerSettings?: Record<string, IProviderSetting>;
+    onStreamActivity?: () => void;
   }): LanguageModelV1 {
     const { serverEnv, apiKeys, providerSettings } = options;
     const { apiKey } = this.getProviderBaseUrlAndKey({
@@ -821,7 +845,9 @@ export default class FreeProvider extends BaseProvider {
       apiKey,
       baseURL: FREE_HOSTED_API_BASE_URL,
       compatibility: 'strict',
-      fetch: hostedFreeFetch,
+      fetch: options.onStreamActivity
+        ? (input, init) => hostedFreeFetchWithActivity(input, init, options.onStreamActivity)
+        : hostedFreeFetch,
     });
 
     return magnetApi.responses(resolvedModel) as LanguageModelV1;

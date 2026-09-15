@@ -9,12 +9,9 @@ import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { APP_VERSION } from '@bolt/core/lib/version';
 import { normalizeProfileReturnTo } from '@bolt/control-plane/server/profile-auth.mjs';
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
-import {
-  consumeProfileLogin,
-  requestProfileLogin,
-  resolveProfileSession,
-  serializeProfileSession,
-} from '~/lib/.server/profile-session';
+import { consumeProfileLogin, requestProfileLogin, resolveProfileSession } from '~/lib/.server/profile-session';
+import { isSingleUserMode } from '~/lib/.server/self-host';
+import { profileLoginHeaders } from '~/lib/.server/profile-response';
 
 export const meta: MetaFunction = () => [{ title: `Login | bolt.gives v${APP_VERSION}` }];
 
@@ -22,6 +19,11 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const returnTo = normalizeProfileReturnTo(url.searchParams.get('returnTo'));
   const token = String(url.searchParams.get('token') || '');
+
+  if (isSingleUserMode(resolveRuntimeEnvFromContext(context))) {
+    return redirect(`/chat?returnTo=${encodeURIComponent(returnTo)}`);
+  }
+
   const profile = await resolveProfileSession(request, resolveRuntimeEnvFromContext(context));
 
   if (profile && !token) {
@@ -32,6 +34,10 @@ export async function loader({ context, request }: LoaderFunctionArgs) {
 }
 
 export async function action({ context, request }: ActionFunctionArgs) {
+  if (request.headers.get('Origin') && request.headers.get('Origin') !== new URL(request.url).origin) {
+    return json({ message: null, error: 'Login must be submitted from this site.' }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
   const returnTo = normalizeProfileReturnTo(formData.get('returnTo'));
@@ -52,9 +58,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
     if (intent === 'consume-link') {
       const result = await consumeProfileLogin(String(formData.get('token') || ''), runtimeEnv);
       return redirect(returnTo, {
-        headers: {
-          'Set-Cookie': await serializeProfileSession(result.session, runtimeEnv),
-        },
+        headers: await profileLoginHeaders(result.session, runtimeEnv),
       });
     }
 
@@ -75,9 +79,9 @@ export default function LoginPage() {
   const actionData = useActionData<typeof action>();
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#10231d] px-4 py-12 text-[#10231d]">
+    <main className="relative grid h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#10231d] px-4 py-8 text-[#10231d]">
       <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(#c9f36a_1px,transparent_1px),linear-gradient(90deg,#c9f36a_1px,transparent_1px)] [background-size:48px_48px]" />
-      <div className="relative w-full max-w-lg rounded-[2rem] border border-[#10231d] bg-[#fffdf5] p-8 shadow-[14px_14px_0_#c9f36a] sm:p-10">
+      <div className="relative m-auto w-full max-w-lg rounded-[2rem] border border-[#10231d] bg-[#fffdf5] p-8 shadow-[14px_14px_0_#c9f36a] sm:p-10">
         <a href="/" className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#527065]">
           bolt.gives / v{APP_VERSION}
         </a>
@@ -125,12 +129,18 @@ export default function LoginPage() {
         )}
 
         {actionData?.message ? (
-          <div className="mt-6 rounded-xl border border-emerald-700/30 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
+          <div
+            role="status"
+            className="mt-6 rounded-xl border border-emerald-700/30 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900"
+          >
             {actionData.message}
           </div>
         ) : null}
         {actionData?.error ? (
-          <div className="mt-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
+          >
             {actionData.error}
           </div>
         ) : null}

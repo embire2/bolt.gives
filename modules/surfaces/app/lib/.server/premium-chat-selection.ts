@@ -1,6 +1,6 @@
 import { generateId } from 'ai';
 import type { Messages } from '@bolt/agent/lib/.server/llm/stream-text';
-import { ensureFreeProviderAvailability } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
+import { validateFreeProviderSelection } from '@bolt/agent/lib/.server/llm/free-provider-validation';
 import {
   resolvePreferredModelProvider,
   sanitizeSelectionWithApiKeys,
@@ -49,7 +49,7 @@ export async function preparePremiumChatSelection(options: {
     selectedProviderCookie: options.selectedProvider,
   });
 
-  await ensureFreeProviderAvailability({
+  validateFreeProviderSelection({
     providerName: selection.provider,
     modelName: selection.model,
     apiKey: options.apiKeys[selection.provider],

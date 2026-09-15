@@ -6,9 +6,9 @@ import { classNames } from '@bolt/core/utils/classNames';
 import { PROVIDER_LIST } from '@bolt/agent/utils/constants';
 import {
   getApiKeysFromCookies,
-  loadApiKeysFromSecureStorage,
   removeApiKeysCookie,
   setApiKeysCookie,
+  subscribeToApiKeyChanges,
 } from '@bolt/agent/lib/runtime/api-key-storage';
 import { ChatBox } from './ChatBox';
 import * as Tooltip from '@radix-ui/react-tooltip';
@@ -279,7 +279,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const profile = useProfile();
     const firstName = getProfileFirstName(profile);
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 132 : 136;
-    const [apiKeys, setApiKeys] = useState<Record<string, string>>(getApiKeysFromCookies());
+    const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => getApiKeysFromCookies(profile?.id));
+    useEffect(() => {
+      const refresh = () => setApiKeys(getApiKeysFromCookies(profile?.id));
+      refresh();
+
+      return subscribeToApiKeyChanges(refresh);
+    }, [profile?.id]);
+
     const hasAnyApiKey = Object.values(apiKeys).some((v) => typeof v === 'string' && v.trim().length > 0);
     const [modelList, setModelList] = useState<ModelInfo[]>([]);
     const [isModelSettingsCollapsed, setIsModelSettingsCollapsed] = useState(false);
@@ -392,19 +399,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       let parsedApiKeys: Record<string, string> | undefined = {};
 
       try {
-        parsedApiKeys = getApiKeysFromCookies();
+        parsedApiKeys = getApiKeysFromCookies(profile?.id);
         setApiKeys(parsedApiKeys);
-
-        if (Object.keys(parsedApiKeys).length === 0) {
-          void loadApiKeysFromSecureStorage().then((secureApiKeys) => {
-            if (disposed || Object.keys(secureApiKeys).length === 0) {
-              return;
-            }
-
-            setApiKeys(secureApiKeys);
-            setApiKeysCookie(secureApiKeys);
-          });
-        }
       } catch (error) {
         console.error('Error loading API keys from cookies:', error);
         removeApiKeysCookie();
@@ -444,7 +440,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       const normalizedApiKey = apiKey.trim();
       const newApiKeys = { ...apiKeys, [providerName]: normalizedApiKey };
       setApiKeys(newApiKeys);
-      setApiKeysCookie(newApiKeys, 365);
+      setApiKeysCookie(newApiKeys, 365, profile?.id);
 
       setIsModelLoading(providerName);
 
@@ -780,12 +776,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       Getting started with your bolt.gives profile
                     </div>
                     <div className="mt-1 space-y-1 text-bolt-elements-textSecondary">
-                      <div>
-                        1. Start with FREE and choose ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, or Fable 5. No API key is
-                        required.
-                      </div>
+                      <div>1. Start with FREE using ChatGPT-Luna at medium effort. No API key is required.</div>
                       <div>2. Or pick your own provider (OpenAI, Anthropic, Google, OpenRouter, Ollama, etc.).</div>
-                      <div>3. For another cloud provider, add its API key in the chat box or Settings.</div>
+                      <div>
+                        3. For MagnetAPI or another cloud provider, add your own API key in the chat box or Settings.
+                      </div>
                       <div className="mt-2 text-xs">
                         Note: keys you supply for other providers stay in your browser and are sent only with requests
                         to that provider. The hosted FREE key remains server-side.

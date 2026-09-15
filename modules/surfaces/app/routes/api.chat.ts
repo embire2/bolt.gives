@@ -25,6 +25,7 @@ import type { DesignScheme } from '@bolt/core/types/design-scheme';
 import { MCPService } from '@bolt/project/lib/services/mcpService';
 import { AgentRecoveryController } from '@bolt/agent/lib/.server/llm/agent-recovery';
 import { StreamRecoveryManager } from '@bolt/agent/lib/.server/llm/stream-recovery';
+import { describeStreamError } from '@bolt/agent/lib/.server/llm/stream-error';
 import { enforceDataStreamDeadline } from '@bolt/agent/lib/.server/llm/data-stream-deadline';
 import { recordAgentRunMetrics } from '@bolt/agent/lib/.server/llm/run-metrics';
 import {
@@ -41,7 +42,7 @@ import { enforceCommentaryContract } from '@bolt/agent/lib/runtime/commentary-co
 import { extractCheckpointEvents, extractExecutionFailure } from '@bolt/agent/lib/runtime/checkpoint-events';
 import {
   COMMENTARY_HEARTBEAT_INTERVAL_MS,
-  buildCommentaryHeartbeat,
+  createCommentaryHeartbeatReporter,
 } from '@bolt/agent/lib/runtime/commentary-heartbeat';
 import {
   buildHostedPreviewRecoveryPrompt,
@@ -51,7 +52,7 @@ import {
 } from '@bolt/runtime/lib/runtime/hosted-preview-recovery';
 import { LLMManager } from '@bolt/agent/lib/modules/llm/manager';
 import { hydrateApiKeysFromRuntimeEnv, mergeAndSanitizeApiKeys } from '@bolt/agent/lib/.server/llm/api-key-utils';
-import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-preflight';
+import { isHostedFreeCreditsExhausted } from '@bolt/agent/lib/.server/llm/free-provider-validation';
 import { hydrateWebsiteSourceContext } from '@bolt/agent/lib/.server/llm/web-context';
 import {
   buildDeterministicHostedFreeSummary,
@@ -81,7 +82,7 @@ import { applyHostedRuntimeAssistantActions } from '~/lib/.server/hosted-runtime
 import { createProfileFreeUsageMeter } from '~/lib/.server/profile-free-usage';
 import { createUsageLimitResponse } from '~/lib/.server/profile-billing-response';
 import { extractLatestUserGoal, findLatestUserMessage, hasMessageAnnotation } from '@bolt/agent/lib/runtime/user-goal';
-import { normalizeArtifactFilePath } from '@bolt/core/lib/runtime/file-paths';
+import { summarizeRestoredHostedRuntimeHandoffMismatchForRequest } from '@bolt/runtime/lib/.server/hosted-handoff-verification';
 import { requestLikelyNeedsProjectFileChanges } from '@bolt/agent/lib/runtime/mutating-intent';
 import {
   isLongThinkModel,
@@ -417,7 +418,22 @@ export function resolveContinuationFiles(options: {
 }
 
 export function extractRequiredVisibleTextLiterals(request: string | undefined): string[] {
-  const source = String(request || '').replace(/\\(["'`])/g, '$1');
+  let source = String(request || '');
+
+  // Decode message envelopes before scanning quotes, not by removing their escapes.
+  if (source.trim().startsWith('{')) {
+    try {
+      const envelope = JSON.parse(source);
+
+      if (envelope && typeof envelope === 'object' && ('content' in envelope || 'parts' in envelope)) {
+        source = extractUserRequestTextFromMessage(envelope);
+      }
+    } catch {
+      // A plain-English request may start with a non-JSON brace.
+    }
+  }
+
+  source = source.replace(/\\(["'`])/g, '$1');
 
   if (!source.trim()) {
     return [];
@@ -728,83 +744,6 @@ export function shouldContinueForMissingRequiredVisibleText(options: {
   );
 }
 
-const HOSTED_HANDOFF_PERSISTENCE_FILE_RE =
-  /(^|\/)(?:src|app|components?|pages|routes)(?:\/|$)|(^|\/)(?:index\.html|App\.(?:tsx?|jsx?)|main\.(?:tsx?|jsx?))$/i;
-
-function normalizeComparableFileContent(content: string | undefined) {
-  return String(content || '')
-    .replace(/\r\n/g, '\n')
-    .trimEnd();
-}
-
-function toProjectRelativePath(filePath: string) {
-  return normalizeArtifactFilePath(filePath).replace(/^\/home\/project\/?/i, '');
-}
-
-export function detectRestoredHostedRuntimeHandoffMismatch(options: {
-  status?: HostedRuntimePreviewStatus | null;
-  snapshot?: FileMap | null;
-  appliedFiles?: Array<{ path: string; content: string }> | null;
-}): string | null {
-  if (options.status?.recovery?.state !== 'restored') {
-    return null;
-  }
-
-  const appliedFiles = options.appliedFiles || [];
-
-  if (appliedFiles.length === 0) {
-    return null;
-  }
-
-  if (!options.snapshot || Object.keys(options.snapshot).length === 0) {
-    return 'The hosted preview recovered by restoring a prior workspace, but the runtime snapshot could not be loaded to confirm the latest generated files were retained.';
-  }
-
-  const criticalFiles = appliedFiles.filter((file) => HOSTED_HANDOFF_PERSISTENCE_FILE_RE.test(file.path));
-  const filesToVerify = criticalFiles.length > 0 ? criticalFiles : appliedFiles;
-
-  for (const appliedFile of filesToVerify) {
-    const normalizedPath = normalizeArtifactFilePath(appliedFile.path);
-    const snapshotEntry = options.snapshot[normalizedPath] ?? options.snapshot[appliedFile.path];
-
-    if (!snapshotEntry || snapshotEntry.type !== 'file' || snapshotEntry.isBinary) {
-      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
-        appliedFile.path,
-      )} is no longer present. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
-    }
-
-    if (normalizeComparableFileContent(snapshotEntry.content) !== normalizeComparableFileContent(appliedFile.content)) {
-      return `The hosted runtime restored the last known working snapshot, and the latest generated update to ${toProjectRelativePath(
-        appliedFile.path,
-      )} was not retained. Continue from the restored workspace and reapply the requested change with a compiling fix.`;
-    }
-  }
-
-  return null;
-}
-
-async function summarizeRestoredHostedRuntimeHandoffMismatchForRequest(options: {
-  requestUrl: string;
-  sessionId: string;
-  status?: HostedRuntimePreviewStatus | null;
-  appliedFiles?: Array<{ path: string; content: string }> | null;
-}) {
-  if (options.status?.recovery?.state !== 'restored') {
-    return null;
-  }
-
-  const snapshot = await fetchHostedRuntimeSnapshotForRequest({
-    requestUrl: options.requestUrl,
-    sessionId: options.sessionId,
-  }).catch(() => null);
-
-  return detectRestoredHostedRuntimeHandoffMismatch({
-    status: options.status,
-    snapshot,
-    appliedFiles: options.appliedFiles,
-  });
-}
-
 export function shouldAttemptHostedPreviewVerification(options: {
   chatMode?: 'discuss' | 'build';
   previewCheckpointObserved: boolean;
@@ -982,6 +921,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     selectedProvider: selectedProviderBody,
   } = requestPayload;
 
+  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   let files = requestFiles;
   const cookieHeader = request.headers.get('Cookie');
   const parsedCookies = parseCookies(cookieHeader || '');
@@ -992,6 +932,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   if (typeof hostedRuntimeSessionId === 'string' && hostedRuntimeSessionId.trim().length > 0) {
     try {
       const hostedRuntimeSnapshot = await fetchHostedRuntimeSnapshotForRequest({
+        runtimeEnv: runtimeEnv as Record<string, string | undefined>,
+        headers: request.headers,
         requestUrl: request.url,
         sessionId: hostedRuntimeSessionId,
       });
@@ -1014,7 +956,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const selectedProviderCookie = parsedCookies.selectedProvider;
   const selectedModel = selectedModelBody || selectedModelCookie;
   const selectedProvider = selectedProviderBody || selectedProviderCookie;
-  const runtimeEnv = resolveRuntimeEnvFromContext(context);
   const desktopProfileCredentials = parseProfileAuthorizationHeader(request.headers.get('Authorization'));
 
   if (desktopProfileCredentials && !(await resolveProfileSession(request, runtimeEnv))) {
@@ -1218,8 +1159,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             message: effectiveMessage,
             detail,
           });
-          const keyChanges = contracted.detail.match(/Key changes:\s*([\s\S]*?)(?=\nNext:|$)/i)?.[1]?.trim();
-          const nextStep = contracted.detail.match(/Next:\s*([\s\S]*?)$/i)?.[1]?.trim();
 
           const payload: AgentCommentaryAnnotation = {
             type: 'agent-commentary',
@@ -1233,15 +1172,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           };
 
           if (!options?.heartbeat) {
-            if (keyChanges) {
-              lastVisibleResultForHeartbeat = keyChanges;
-            } else {
-              lastVisibleResultForHeartbeat = contracted.message;
-            }
-
-            if (nextStep) {
-              lastProgressMessageForHeartbeat = nextStep;
-            }
+            lastVisibleResultForHeartbeat = contracted.message;
           }
 
           dataStream.writeData({
@@ -1253,19 +1184,25 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           }
         };
 
+        const reportHeartbeat = createCommentaryHeartbeatReporter();
         const startCommentaryHeartbeat = () => {
           if (commentaryHeartbeat) {
             return;
           }
 
           commentaryHeartbeat = setInterval(() => {
-            const heartbeat = buildCommentaryHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase, {
+            const heartbeat = reportHeartbeat(Date.now() - requestStartedAt, lastCommentaryPhase, {
               goal: latestUserGoal,
               currentStep: lastProgressMessageForHeartbeat,
               lastVisibleResult: lastVisibleResultForHeartbeat,
             });
+
+            if (!heartbeat) {
+              return;
+            }
+
             writeCommentary(heartbeat.phase, heartbeat.message, 'in-progress', heartbeat.detail, {
-              usePool: true,
+              usePool: false,
               trackRunActivity: false,
               heartbeat: true,
             });
@@ -1855,6 +1792,7 @@ Next: I am continuing with the main coding flow and will keep you updated.`,
         }
 
         const options: StreamingOptions = {
+          onProviderActivity: markRunActivity,
           supabaseConnection: supabase,
           databaseConnection: requestPayload.databaseConnection,
           toolChoice: 'auto',
@@ -2088,6 +2026,8 @@ Next: I am sending the final result now.`,
               typeof hostedRuntimeSessionId === 'string' &&
               hostedRuntimeSessionId.trim().length > 0
                 ? await fetchHostedRuntimeSnapshotForRequest({
+                    runtimeEnv: envVars,
+                    headers: request.headers,
                     requestUrl: request.url,
                     sessionId: hostedRuntimeSessionId,
                   }).catch(() => null)
@@ -2131,6 +2071,8 @@ Next: I am starting the managed preview from that synced workspace before report
                 );
 
                 const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                  runtimeEnv: envVars,
+                  headers: request.headers,
                   requestUrl: request.url,
                   sessionId: hostedRuntimeSessionId!,
                   assistantContent: content,
@@ -2178,6 +2120,8 @@ Next: I am waiting for the hosted preview to confirm the generated app is runnin
 
                   hostedRuntimeSnapshot =
                     (await fetchHostedRuntimeSnapshotForRequest({
+                      runtimeEnv: envVars,
+                      headers: request.headers,
                       requestUrl: request.url,
                       sessionId: hostedRuntimeSessionId!,
                     }).catch(() => null)) || hostedRuntimeSnapshot;
@@ -2237,6 +2181,8 @@ Next: I am keeping the server-side recovery loop active so the next pass can rep
               let lastDirectPreviewVerificationStatus = '';
 
               let directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                runtimeEnv: envVars,
+                headers: request.headers,
                 requestUrl: request.url,
                 sessionId: hostedRuntimeSessionId!,
                 timeoutMs:
@@ -2331,6 +2277,8 @@ Next: I am giving the recovered local dev server a short settle window so the ru
                 );
 
                 directHostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                  runtimeEnv: envVars,
+                  headers: request.headers,
                   requestUrl: request.url,
                   sessionId: hostedRuntimeSessionId!,
                   timeoutMs: recoverySettleTimeoutMs,
@@ -2390,6 +2338,8 @@ Next: I am waiting for it to become healthy before deciding whether another repa
 
               let verifiedHostedPreviewOutcome = directHostedPreviewVerification.outcome;
               const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                runtimeEnv: envVars,
+                headers: request.headers,
                 requestUrl: request.url,
                 sessionId: hostedRuntimeSessionId!,
                 status: directHostedPreviewVerification.status,
@@ -2589,6 +2539,8 @@ Next: I am returning the finished result with the verified preview ready for ins
                 if (hasHostedRuntimeSession) {
                   try {
                     const hostedHandoffResult = await applyHostedRuntimeAssistantActions({
+                      runtimeEnv: envVars,
+                      headers: request.headers,
                       requestUrl: request.url,
                       sessionId: hostedRuntimeSessionId,
                       assistantContent: content,
@@ -2647,6 +2599,8 @@ Next: I am waiting for the hosted preview to confirm the updated app is running.
                       let lastHostedPreviewVerificationCommentaryAt = 0;
                       let lastHostedPreviewVerificationStatus = '';
                       const hostedPreviewVerification = await waitForHostedRuntimePreviewVerificationForRequest({
+                        runtimeEnv: envVars,
+                        headers: request.headers,
                         requestUrl: request.url,
                         sessionId: hostedRuntimeSessionId,
                         timeoutMs:
@@ -2701,6 +2655,8 @@ Next: I am waiting for the hosted browser preview to switch from the starter she
 
                       let hostedPreviewVerificationOutcome = hostedPreviewVerification.outcome;
                       const restoredHandoffMismatch = await summarizeRestoredHostedRuntimeHandoffMismatchForRequest({
+                        runtimeEnv: envVars,
+                        headers: request.headers,
                         requestUrl: request.url,
                         sessionId: hostedRuntimeSessionId,
                         status: hostedPreviewVerification.status,
@@ -3156,20 +3112,20 @@ Next: I am sending the final result now.`,
         stopHeartbeatIfRunning();
 
         const elapsedMs = Date.now() - requestStartedAt;
-        logger.error(
+        const errorMessage = describeStreamError(error, envVars);
+
+        console.error(
           `chat stream onError ${JSON.stringify({
             ...requestDebugContext,
             elapsedMs,
             resolvedProvider: resolvedSelectionForLogs.provider,
             resolvedModel: resolvedSelectionForLogs.model,
             errorName: error?.name,
-            errorMessage: error?.message || String(error),
+            errorMessage,
           })}`,
         );
 
         // Provide more specific error messages for common issues
-        const errorMessage = error.message || 'Unknown error';
-
         if (errorMessage.includes('model') && errorMessage.includes('not found')) {
           return 'Custom error: Invalid model selected. Please check that the model name is correct and available.';
         }
@@ -3233,7 +3189,7 @@ Next: I am sending the final result now.`,
         }
 
         if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
-          return 'Custom error: Network error. Please check your internet connection and try again.';
+          return 'Custom error: Network error while contacting the coding service. Your project is preserved; retry or choose another provider.';
         }
 
         return `Custom error: ${errorMessage}`;

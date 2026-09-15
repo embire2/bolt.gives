@@ -1,48 +1,13 @@
 #!/usr/bin/env node
 import http from 'node:http';
 import { chromium } from 'playwright';
+import { isAllowedUrl } from '@bolt/core/lib/public-web-url.mjs';
+import { publicWebFetch, protectBrowserContext, WebDestinationError } from './public-web-fetch.mjs';
 
 const HOST = process.env.WEB_BROWSE_HOST || '127.0.0.1';
 const PORT = Number(process.env.WEB_BROWSE_PORT || '4179');
 const NAVIGATION_TIMEOUT_MS = Number(process.env.WEB_BROWSE_TIMEOUT_MS || '30000');
 const DEFAULT_MAX_CONTENT_CHARS = Number(process.env.WEB_BROWSE_MAX_CONTENT_CHARS || '20000');
-
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^0\.0\.0\.0$/,
-];
-
-const BLOCKED_HOSTNAMES = new Set(['localhost', '[::1]', '0.0.0.0']);
-
-function isAllowedUrl(rawUrl) {
-  let url;
-
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    return false;
-  }
-
-  const hostname = url.hostname.toLowerCase();
-
-  if (BLOCKED_HOSTNAMES.has(hostname)) {
-    return false;
-  }
-
-  if (PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(hostname))) {
-    return false;
-  }
-
-  return true;
-}
 
 function sendJson(res, statusCode, data) {
   const payload = JSON.stringify(data);
@@ -140,15 +105,31 @@ async function getBrowser() {
 async function withPage(handler) {
   const browser = await getBrowser();
   const context = await browser.newContext({
+    serviceWorkers: 'block',
+    acceptDownloads: false,
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   });
+
+  const signal = AbortSignal.timeout(NAVIGATION_TIMEOUT_MS);
+  const checkDestination = await protectBrowserContext(context, { signal });
+  const abort = () => {
+    void context.close().catch(() => {});
+  };
+  signal.addEventListener('abort', abort, { once: true });
 
   const page = await context.newPage();
   page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
 
   try {
-    return await handler(page);
+    const result = await handler(page);
+    checkDestination();
+
+    return result;
+  } catch (error) {
+    checkDestination();
+    throw error;
   } finally {
+    signal.removeEventListener('abort', abort);
     await page.close().catch(() => {});
     await context.close().catch(() => {});
   }
@@ -176,7 +157,7 @@ async function browsePage(payload) {
   }
 
   if (!isAllowedUrl(url)) {
-    throw new Error('URL is not allowed');
+    throw new WebDestinationError();
   }
 
   const maxChars = Math.max(1000, Math.min(Number(payload?.maxChars || DEFAULT_MAX_CONTENT_CHARS), 40000));
@@ -352,16 +333,10 @@ async function searchWeb(payload) {
        * Captcha/challenge pages sometimes block direct scraping on server IP ranges.
        * Fallback to Jina's readable mirror of DDG results to keep web search usable.
        */
-      const fallbackResponse = await fetch(jinaSearchUrl, {
-        method: 'GET',
-        headers: {
-          'user-agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        },
-      });
+      const fallbackResponse = await publicWebFetch(jinaSearchUrl, { timeoutMs: 10_000 });
 
-      if (fallbackResponse.ok) {
-        const fallbackText = await fallbackResponse.text();
+      if (fallbackResponse.status >= 200 && fallbackResponse.status < 300) {
+        const fallbackText = fallbackResponse.body.toString('utf8');
         results = parseJinaSearchMarkdown(fallbackText, maxResults);
       }
     }
@@ -374,7 +349,15 @@ async function searchWeb(payload) {
   });
 }
 
+let activeRequests = 0;
 const server = http.createServer(async (req, res) => {
+  if (activeRequests >= 4) {
+    sendJson(res, 503, { error: 'Web browsing is busy. Try again shortly.' });
+    return;
+  }
+
+  activeRequests++;
+
   try {
     if (req.method === 'GET' && req.url === '/health') {
       sendJson(res, 200, { ok: true });
@@ -404,7 +387,11 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: 'Not found' });
   } catch (error) {
-    sendJson(res, 500, { error: error instanceof Error ? error.message : 'Unknown error' });
+    sendJson(res, error?.status || 502, {
+      error: error?.status ? error.message : 'Unable to read the public website within the browsing limits.',
+    });
+  } finally {
+    activeRequests--;
   }
 });
 

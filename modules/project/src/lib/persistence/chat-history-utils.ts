@@ -43,6 +43,18 @@ export function shouldNavigateAfterPersistedMessage(
     return false;
   }
 
+  /*
+   * A failed stream can leave an empty assistant message. Navigating now remounts
+   * Chat and discards its queued recovery before the continuation can be sent.
+   */
+  if (
+    latestAssistant &&
+    !latestAssistant.content.trim() &&
+    !latestAssistant.parts?.some((part) => part.type === 'text' && part.text.trim())
+  ) {
+    return false;
+  }
+
   if (hasWorkbenchArtifact) {
     return true;
   }

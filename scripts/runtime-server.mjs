@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import http from 'node:http';
+import { endFailedCommandResponse } from '../modules/runtime/src/server/command-response.mjs';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
@@ -10,6 +11,26 @@ import { spawn } from 'node:child_process';
 import net from 'node:net';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
+import { previewRequestHeaders } from '@bolt/runtime/server/preview-request-headers.mjs';
+import { disableManagedPreviewHmr } from '@bolt/runtime/server/preview-hmr.mjs';
+import { observeUnexpectedPreviewExit } from '@bolt/runtime/server/preview-process-exit.mjs';
+import { prepareProjectProcessDirectory, spawnProjectProcess } from '@bolt/runtime/server/project-process.mjs';
+import { createPreviewOrigin } from '@bolt/runtime/server/preview-origin.mjs';
+import { injectPreviewBrowserMonitor } from '@bolt/runtime/server/preview-browser-monitor.mjs';
+import {
+  GENERATED_WORKSPACE_DIRECTORIES,
+  filterWorkspaceSource,
+  isWorkspaceSourcePath,
+} from '@bolt/core/lib/workspace-source.mjs';
+import {
+  createSingleUserProfiles,
+  handleSingleUserProfileRequest,
+} from '@bolt/control-plane/server/single-user-profile.mjs';
+import {
+  readWorkspaceSnapshot,
+  reconcileWorkspaceSnapshot,
+  walkWorkspaceSource,
+} from '@bolt/runtime/server/workspace-snapshot.mjs';
 import {
   createPreviewProbeCoordinator,
   extractConfiguredStartPort,
@@ -68,6 +89,7 @@ import {
   sendProfileLoginLink,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
+import { reloadProjectCaddy } from '@bolt/control-plane/server/project-caddy-reload.mjs';
 import {
   buildRuntimeNodeDatabaseTunnelInvocation,
   buildRuntimeNodeConfig,
@@ -84,6 +106,7 @@ import {
 import {
   buildProjectDatabaseConfig,
   buildProjectDatabaseEnvironment,
+  readExistingProjectDatabase,
   ensureProjectDatabase,
   sanitizeProjectDatabase,
 } from './project-databases.mjs';
@@ -224,7 +247,9 @@ export function resolveRuntimeWorkspaceRoot(
   return path.resolve(path.dirname(repoRoot), `${path.basename(repoRoot)}-runtime-workspaces`);
 }
 
+const RUNTIME_VERSION = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
 const PERSIST_ROOT = resolveRuntimeWorkspaceRoot();
+const singleUserProfiles = createSingleUserProfiles({ root: path.join(PERSIST_ROOT, 'owner-auth') });
 const NODE_OPTIONS = process.env.RUNTIME_NODE_OPTIONS || '--max-old-space-size=6142';
 const MANAGED_INSTANCE_NODE_OPTIONS = process.env.RUNTIME_MANAGED_INSTANCE_NODE_OPTIONS || '--max-old-space-size=1024';
 const MANAGED_INSTANCE_GOMAXPROCS = process.env.RUNTIME_MANAGED_INSTANCE_GOMAXPROCS || '1';
@@ -257,7 +282,7 @@ const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROB
 const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_WINDOW_MS || '12000');
 const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
 const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500, 3000, 4000, 5000, 7000, 8000];
-const PRESERVED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
+const PRESERVED_DIRS = GENERATED_WORKSPACE_DIRECTORIES;
 const VITE_MAIN_ENTRY_SRC_RE =
   /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
 const PREVIEW_ERROR_PATTERNS = [
@@ -481,7 +506,6 @@ const STYLE_IMPORT_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
 const STARTER_ENTRY_FILE_RE =
   /(^|\/)(src\/App\.(?:[jt]sx?|vue|svelte)|app\/page\.(?:[jt]sx?)|src\/main\.(?:[jt]sx?))$/i;
 const STARTER_PLACEHOLDER_TEXT = 'Your fallback starter is ready.';
-const SNAPSHOT_TEXT_FILE_BYTES_LIMIT = Number(process.env.RUNTIME_SNAPSHOT_TEXT_FILE_BYTES_LIMIT || '1048576');
 const LEGACY_TAILWIND_DIRECTIVE_RE =
   /^\s*(?:@import\s+['"]tailwindcss\/(?:base|components|utilities)['"]\s*;|@tailwind\s+(?:base|components|utilities)\s*;)\s*$/gim;
 const HOSTED_VITE_BOOTSTRAP_PACKAGE_VERSIONS = {
@@ -1457,7 +1481,8 @@ export async function ensureProjectDatabaseForSession(session, options = {}) {
   const config = options.config || PROJECT_DATABASE_CONFIG;
 
   if (!config.supported) {
-    return null;
+    session.projectDatabase = await readExistingProjectDatabase(session.id, config);
+    return session.projectDatabase;
   }
 
   if (session.projectDatabase) {
@@ -2692,7 +2717,7 @@ async function reportShoutboxMessage({ messageId, reporter = 'anonymous', reason
   return report;
 }
 
-export function applyPreviewResponseHeaders(rawHeaders = {}) {
+export function applyPreviewResponseHeaders(rawHeaders = {}, isolated = false) {
   const headers = { ...rawHeaders };
 
   delete headers['x-frame-options'];
@@ -2702,11 +2727,38 @@ export function applyPreviewResponseHeaders(rawHeaders = {}) {
   delete headers['content-security-policy-report-only'];
   delete headers['Content-Security-Policy-Report-Only'];
 
+  if (isolated) {
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase().startsWith('access-control-')) {
+        delete headers[name];
+        continue;
+      }
+
+      if (['referrer-policy', 'origin-agent-cluster', 'cache-control', 'set-cookie'].includes(name.toLowerCase())) {
+        const value = headers[name];
+        delete headers[name];
+
+        if (name.toLowerCase() === 'set-cookie') {
+          const cookies = (Array.isArray(value) ? value : [value])
+            .filter((cookie) => !/^\s*(?:(?:__Host-)?bolt[_:-]|csrf_token=|apiKeys=|providers=)/i.test(String(cookie)))
+            .map((cookie) => String(cookie).replace(/;\s*domain=[^;]*/gi, ''));
+
+          if (cookies.length) {
+            headers['set-cookie'] = cookies;
+          }
+        }
+      }
+    }
+  }
+
   return {
     ...headers,
-    'Cross-Origin-Resource-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': isolated ? 'cross-origin' : 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Opener-Policy': 'same-origin',
+    ...(isolated
+      ? { 'Referrer-Policy': 'no-referrer', 'Origin-Agent-Cluster': '?1', 'Cache-Control': 'no-store' }
+      : {}),
   };
 }
 
@@ -3021,12 +3073,23 @@ function broadcastPreviewState(session) {
 }
 
 function touchPreviewDiagnostics(session, nextState) {
+  // HTTP readiness cannot disprove an outstanding browser or compiler failure.
+  if (
+    nextState.healthy === true &&
+    ['error', 'repairing'].includes(session.previewDiagnostics?.status) &&
+    !canClearPreviewAlertAfterHealthyResponse(session, session.previewDiagnostics.alert, '')
+  ) {
+    return false;
+  }
+
   session.previewDiagnostics = {
     ...session.previewDiagnostics,
     ...nextState,
     updatedAt: new Date().toISOString(),
   };
   broadcastPreviewState(session);
+
+  return true;
 }
 
 function clearPreviewDiagnostics(session, status = 'idle') {
@@ -3061,12 +3124,17 @@ export function settleHealthyQueuedPreviewRepair(session, probe) {
     return false;
   }
 
+  if (
+    !touchPreviewDiagnostics(session, {
+      status: session.preview ? 'ready' : 'idle',
+      healthy: true,
+      alert: null,
+    })
+  ) {
+    return false;
+  }
+
   clearPreviewRecoveryState(session);
-  touchPreviewDiagnostics(session, {
-    status: session.preview ? 'ready' : 'idle',
-    healthy: true,
-    alert: null,
-  });
   appendPreviewDiagnosticEntries(
     session,
     'recovery',
@@ -3077,7 +3145,9 @@ export function settleHealthyQueuedPreviewRepair(session, probe) {
 }
 
 function cloneFileMap(fileMap) {
-  return JSON.parse(JSON.stringify(fileMap || {}));
+  return Object.fromEntries(
+    Object.entries(filterWorkspaceSource(fileMap || {})).map(([key, value]) => [key, value ? { ...value } : value]),
+  );
 }
 
 function getFileMapEntry(fileMap, filePath) {
@@ -3234,7 +3304,7 @@ export function mergeWorkspaceFileMap(currentFileMap, incomingFileMap, options =
   const { prune = false } = options;
   const nextFileMap = prune ? {} : cloneFileMap(currentFileMap || {});
 
-  for (const [filePath, dirent] of Object.entries(incomingFileMap || {})) {
+  for (const [filePath, dirent] of Object.entries(filterWorkspaceSource(incomingFileMap || {}))) {
     if (dirent === undefined || dirent === null) {
       delete nextFileMap[filePath];
       continue;
@@ -3554,7 +3624,7 @@ export async function restoreSessionLastKnownGoodWorkspace(session, reason = 'pr
 }
 
 function schedulePreviewAutoRestore(session, alert) {
-  if (!session.restorePointFileMap) {
+  if (!session.preview || !session.restorePointFileMap) {
     touchPreviewDiagnostics(session, {
       status: 'error',
       healthy: false,
@@ -3585,13 +3655,13 @@ function schedulePreviewAutoRestore(session, alert) {
     session.autoRestoreTimer = null;
 
     void (async () => {
-      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+      if (!session.preview || session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
         return;
       }
 
       const probe = await probeSessionPreviewHealth(session);
 
-      if (session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
+      if (!session.preview || session.autoRestoreInFlight || session.workspaceMutationId !== mutationId) {
         return;
       }
 
@@ -3723,7 +3793,7 @@ export function recordPreviewResponse(session, body, statusCode, upstreamPath, c
     statusCode < 400 &&
     shouldInspectForAlerts &&
     !(
-      session.previewDiagnostics?.status === 'error' &&
+      ['error', 'repairing'].includes(session.previewDiagnostics?.status) &&
       session.previewDiagnostics?.alert &&
       !canClearPreviewAlertAfterHealthyResponse(session, session.previewDiagnostics.alert, normalizedBody)
     )
@@ -3742,6 +3812,21 @@ export function normalizeSessionId(sessionId) {
 
   if (!normalized) {
     throw new Error('Missing runtime session id');
+  }
+
+  if (
+    [
+      'tenants',
+      'owner-auth',
+      'project-connections',
+      'project-databases',
+      'cloudflare-deployments',
+      'node_modules',
+      'projects',
+      'runtime-node-workspaces',
+    ].includes(normalized.toLowerCase())
+  ) {
+    throw new Error('Reserved runtime session id');
   }
 
   return normalized;
@@ -3988,15 +4073,20 @@ export function extractUnavailablePackageVersionRepair(stderr = '') {
 
 async function resolveLatestPackageVersion(packageName, options = {}) {
   const { cwd = REPO_ROOT, writeEvent = null } = options;
+  await prepareProjectProcessDirectory(cwd);
 
   return await new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`], {
-      cwd,
-      env: buildHostedWorkspaceProcessEnvironment({
-        workspaceDir: cwd,
-        ci: '0',
-      }),
-    });
+    const child = spawnProjectProcess(
+      'bash',
+      ['-lc', `pnpm view ${shellEscapeSingleArgument(packageName)} version --json`],
+      {
+        cwd,
+        env: buildHostedWorkspaceProcessEnvironment({
+          workspaceDir: cwd,
+          ci: '0',
+        }),
+      },
+    );
 
     let stdout = '';
     let stderr = '';
@@ -4731,6 +4821,8 @@ export async function repairHostedWorkspaceSupportFilesAfterSync(session) {
 }
 
 export async function prepareHostedWorkspaceForStart(session, options = {}) {
+  await prepareProjectProcessDirectory(session.dir);
+
   const {
     writeEvent = null,
     startCommand = '',
@@ -4811,7 +4903,7 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
 
       try {
         await new Promise((resolve, reject) => {
-          const child = spawn('bash', ['-lc', dependencyInstallCommand], {
+          const child = spawnProjectProcess('bash', ['-lc', dependencyInstallCommand], {
             cwd: session.dir,
             env: buildHostedWorkspaceProcessEnvironment({
               workspaceDir: session.dir,
@@ -4910,13 +5002,17 @@ export async function prepareHostedWorkspaceForStart(session, options = {}) {
     });
 
     await new Promise((resolve, reject) => {
-      const child = spawn('bash', ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`], {
-        cwd: session.dir,
-        env: buildHostedWorkspaceProcessEnvironment({
-          workspaceDir: session.dir,
-          ci: '0',
-        }),
-      });
+      const child = spawnProjectProcess(
+        'bash',
+        ['-lc', `pnpm add ${missingPackages.map((pkg) => `"${pkg}"`).join(' ')}`],
+        {
+          cwd: session.dir,
+          env: buildHostedWorkspaceProcessEnvironment({
+            workspaceDir: session.dir,
+            ci: '0',
+          }),
+        },
+      );
 
       let stderr = '';
       child.stderr.on('data', (chunk) => {
@@ -5172,13 +5268,11 @@ export function settleSuccessfulHostedAutostart(session, mutationId) {
     return false;
   }
 
-  touchPreviewDiagnostics(session, {
+  return touchPreviewDiagnostics(session, {
     status: 'ready',
     healthy: true,
     alert: null,
   });
-
-  return true;
 }
 
 function scheduleHostedAutoStartAfterSync(session) {
@@ -5233,50 +5327,14 @@ function scheduleHostedAutoStartAfterSync(session) {
   }, 300);
 }
 
-async function walkWorkspace(rootDir, relativeDir = '') {
-  const absoluteDir = path.join(rootDir, relativeDir);
-  let entries = [];
-
-  try {
-    entries = await fs.readdir(absoluteDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
+async function walkWorkspace(rootDir) {
   const results = [];
 
-  for (const entry of entries) {
-    const relativePath = relativeDir ? path.posix.join(relativeDir, entry.name) : entry.name;
-
-    if (PRESERVED_DIRS.has(entry.name) && !relativeDir) {
-      continue;
-    }
-
-    if (entry.isDirectory()) {
-      results.push({ path: relativePath, type: 'dir' });
-      results.push(...(await walkWorkspace(rootDir, relativePath)));
-    } else if (entry.isFile()) {
-      results.push({ path: relativePath, type: 'file' });
-    }
+  for await (const entry of walkWorkspaceSource(rootDir)) {
+    results.push(entry);
   }
 
   return results;
-}
-
-function isBinaryWorkspaceBuffer(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
-    return false;
-  }
-
-  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
-
-  for (const value of sample) {
-    if (value === 0) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function fileMapContainsStarterPlaceholder(fileMap) {
@@ -5294,72 +5352,11 @@ function fileMapContainsStarterPlaceholder(fileMap) {
 }
 
 export async function buildWorkspaceFileMapFromDisk(session) {
-  const entries = await walkWorkspace(session.dir);
-  const nextFiles = {};
-
-  for (const entry of entries) {
-    const absolutePath = path.join(session.dir, entry.path);
-    const workbenchPath = path.posix.join(WORK_DIR, entry.path);
-
-    if (entry.type === 'dir') {
-      nextFiles[workbenchPath] = {
-        type: 'folder',
-      };
-      continue;
-    }
-
-    const buffer = await fs.readFile(absolutePath);
-    const isBinary = isBinaryWorkspaceBuffer(buffer);
-    const content = isBinary
-      ? buffer.toString('base64')
-      : buffer.subarray(0, SNAPSHOT_TEXT_FILE_BYTES_LIMIT).toString('utf8');
-
-    nextFiles[workbenchPath] = {
-      type: 'file',
-      content,
-      isBinary,
-    };
-  }
-
-  return nextFiles;
+  return readWorkspaceSnapshot(session.dir, WORK_DIR);
 }
 
-export async function resolveSessionSnapshotFiles(session) {
-  const currentFiles = session.currentFileMap || {};
-  const currentFileCount = Object.keys(currentFiles).length;
-  const currentHasStarterPlaceholder = fileMapContainsStarterPlaceholder(currentFiles);
-
-  let diskFiles = null;
-
-  try {
-    diskFiles = await buildWorkspaceFileMapFromDisk(session);
-  } catch {
-    diskFiles = null;
-  }
-
-  if (!diskFiles) {
-    return currentFiles;
-  }
-
-  const diskFileCount = Object.keys(diskFiles).length;
-
-  if (diskFileCount === 0) {
-    return currentFiles;
-  }
-
-  const diskHasStarterPlaceholder = fileMapContainsStarterPlaceholder(diskFiles);
-  const shouldUseDiskSnapshot =
-    currentFileCount === 0 ||
-    diskFileCount > currentFileCount ||
-    (currentHasStarterPlaceholder && !diskHasStarterPlaceholder);
-
-  if (!shouldUseDiskSnapshot) {
-    return currentFiles;
-  }
-
-  session.currentFileMap = cloneFileMap(diskFiles);
-
-  return diskFiles;
+export async function resolveSessionSnapshotFiles(session, options = {}) {
+  return reconcileWorkspaceSnapshot(session, { ...options, workDir: WORK_DIR });
 }
 
 function toRelativeWorkspacePath(filePath) {
@@ -5386,7 +5383,7 @@ function collectComparableWorkspaceFiles(fileMap) {
 
     const relativePath = toRelativeWorkspacePath(filePath);
 
-    if (!relativePath) {
+    if (!relativePath || !isWorkspaceSourcePath(relativePath)) {
       continue;
     }
 
@@ -5438,7 +5435,7 @@ export async function syncWorkspaceSnapshot(session, fileMap, options = {}) {
   const desiredFiles = new Map();
   const desiredDirs = new Set();
 
-  for (const [absolutePath, dirent] of Object.entries(fileMap || {})) {
+  for (const [absolutePath, dirent] of Object.entries(filterWorkspaceSource(fileMap || {}))) {
     if (!dirent) {
       continue;
     }
@@ -5472,13 +5469,17 @@ export async function syncWorkspaceSnapshot(session, fileMap, options = {}) {
   const existingEntries = await walkWorkspace(session.dir);
 
   if (prune) {
-    for (const entry of existingEntries) {
+    for (const entry of existingEntries.reverse()) {
       if (entry.type === 'file' && !desiredFiles.has(entry.path)) {
         await fs.rm(path.join(session.dir, entry.path), { force: true });
       }
 
       if (entry.type === 'dir' && !desiredDirs.has(entry.path)) {
-        await fs.rm(path.join(session.dir, entry.path), { recursive: true, force: true });
+        await fs.rmdir(path.join(session.dir, entry.path)).catch((error) => {
+          if (!['ENOTEMPTY', 'ENOENT'].includes(error.code)) {
+            throw error;
+          }
+        });
       }
     }
   }
@@ -5545,6 +5546,22 @@ function getRequestOrigin(req) {
 
   return `${proto}://${host}`;
 }
+
+const previewOrigins = createPreviewOrigin({
+  template: process.env.BOLT_PREVIEW_ORIGIN_TEMPLATE,
+  secret: process.env.BOLT_PREVIEW_SIGNING_SECRET,
+  lookup: (id) => sessions.get(id),
+  healthy: (session) =>
+    Boolean(session.previewDiagnostics?.healthy && isPreviewPortOwnedBySession(session, session.preview?.port)),
+  onError: (session, error) =>
+    schedulePreviewAutoRestore(session, {
+      type: 'error',
+      title: 'Preview Error',
+      source: 'preview',
+      description: redactProjectConnectionError(error.message),
+      content: redactProjectConnectionError(error.stack || error.message),
+    }),
+});
 
 export function updateSessionPreview(session, req, port) {
   if (!Number.isFinite(Number(port)) || Number(port) <= 0) {
@@ -5684,7 +5701,11 @@ export function shouldServePreviewHandoffPage(options) {
   return upstreamPath === '/' || upstreamPath.startsWith('/?');
 }
 
-export function buildPreviewRepairPage(session, detail = 'The preview server is warming up or being repaired.') {
+export function buildPreviewRepairPage(
+  session,
+  detail = 'The preview server is warming up or being repaired.',
+  isolated = false,
+) {
   const escapeHtml = (value) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -5693,7 +5714,7 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
   const recoveryMessage =
     session.previewRecovery?.message ||
     'bolt.gives detected a preview problem and is automatically applying repairs until the app is previewable.';
-  const statusUrl = `/runtime/sessions/${encodeURIComponent(session.id)}/preview-status`;
+  const statusUrl = isolated ? '/__bolt/health' : `/runtime/sessions/${encodeURIComponent(session.id)}/preview-status`;
 
   return `<!doctype html>
 <html lang="en">
@@ -5742,9 +5763,14 @@ export function buildPreviewRepairPage(session, detail = 'The preview server is 
 </html>`;
 }
 
-function sendPreviewRepairPage(res, session, detail = 'The preview server is warming up or being repaired.') {
-  res.writeHead(200, buildPreviewRepairHeaders());
-  res.end(buildPreviewRepairPage(session, detail));
+function sendPreviewRepairPage(
+  res,
+  session,
+  detail = 'The preview server is warming up or being repaired.',
+  isolated = false,
+) {
+  res.writeHead(200, applyPreviewResponseHeaders(buildPreviewRepairHeaders(), isolated));
+  res.end(buildPreviewRepairPage(session, detail, isolated));
 }
 
 function getRequestHost(req) {
@@ -5838,9 +5864,10 @@ async function ensureCloudflareProjectDeploymentProject(projectName) {
   return await fetchCloudflareProjectDeploymentProject(projectName);
 }
 
-function runProjectBuildCommand(command, args, options = {}) {
+async function runProjectBuildCommand(command, args, options = {}) {
+  await prepareProjectProcessDirectory(options.cwd);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawnProjectProcess(command, args, {
       cwd: options.cwd,
       env: buildHostedWorkspaceProcessEnvironment({
         workspaceDir: options.cwd,
@@ -6534,8 +6561,10 @@ async function ensureProjectCaddyHost(hostname, options = {}) {
       await fs.writeFile(PROJECT_CADDYFILE_PATH, caddyfile, 'utf8');
     }
 
-    await runShellCommand('caddy', ['fmt', '--overwrite', PROJECT_CADDYFILE_PATH]).catch(() => undefined);
-    await runShellCommand('caddy', ['reload', '--config', PROJECT_CADDYFILE_PATH]);
+    await reloadProjectCaddy(
+      { configPath: PROJECT_CADDYFILE_PATH, service: process.env.BOLT_PROJECT_CADDY_RELOAD_SERVICE },
+      runShellCommand,
+    );
 
     const httpsReady = await waitForProjectHttpsReady(hostname);
 
@@ -6578,6 +6607,7 @@ async function createStripeCustomDomainCheckout({ deployment, customDomain, req,
   const body = new URLSearchParams(encodeStripeForm(payload));
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -6614,6 +6644,7 @@ async function createStripeProfileBillingCheckout({ profile }) {
   });
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -6668,6 +6699,7 @@ async function retrieveStripeSubscription(subscriptionId) {
   }
 
   const response = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
     },
@@ -6743,28 +6775,22 @@ async function applyProfileBillingStripeEvent(event) {
     metadata = { ...(subscription?.metadata || {}), ...metadata };
   }
 
-  const profileId = String(metadata.profileId || object.client_reference_id || '');
-  let billing = await findProfileBillingByStripe({
-    profileId: profileId || null,
-    checkoutSessionId: object.object === 'checkout.session' ? object.id : null,
-    subscriptionId,
-  });
-  const isProfileBillingEvent = metadata.kind === 'bolt-profile-custom-domain' || Boolean(billing);
-
-  if (!isProfileBillingEvent) {
+  if (metadata.application && metadata.application !== 'bolt-gives-open-source') {
     return { handled: false, duplicate: false };
   }
 
-  if (billing?.lastStripeEventId === event.id) {
-    return { handled: true, duplicate: true };
-  }
+  const profileId = String(metadata.profileId || object.client_reference_id || '');
+  let billing = await findProfileBillingByStripe({
+    profileId: metadata.application === 'bolt-gives-open-source' ? profileId || null : null,
+    checkoutSessionId: object.object === 'checkout.session' ? object.id : null,
+    subscriptionId,
+  });
+  const isProfileBillingEvent =
+    (metadata.application === 'bolt-gives-open-source' && metadata.kind === 'bolt-profile-custom-domain') ||
+    Boolean(billing);
 
-  if (!billing && profileId && object.object === 'checkout.session') {
-    billing = await upsertPendingProfileBilling({
-      profileId,
-      checkoutSessionId: object.id,
-      tokensAllowance: Number(metadata.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
-    });
+  if (!isProfileBillingEvent) {
+    return { handled: false, duplicate: false };
   }
 
   if (!billing) {
@@ -6772,17 +6798,23 @@ async function applyProfileBillingStripeEvent(event) {
   }
 
   let status = billing.status;
+  const paid =
+    ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType) &&
+    !(eventType.startsWith('checkout.') && object.payment_status === 'unpaid');
 
-  if (['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'invoice.paid'].includes(eventType)) {
-    status = eventType.startsWith('checkout.') && object.payment_status === 'unpaid' ? 'pending' : 'active';
+  if (paid) {
+    status = 'active';
   } else {
-    status = resolvePremiumStripeEventStatus(eventType, object.status) || status;
+    const nextStatus = resolvePremiumStripeEventStatus(eventType, object.status);
+
+    // Subscription state alone is not payment evidence and must not grant a new allowance.
+    status = nextStatus === 'active' ? billing.status : nextStatus || billing.status;
   }
 
   subscriptionId = subscriptionId || billing.stripeSubscriptionId;
   subscription = subscription || (await retrieveStripeSubscription(subscriptionId));
 
-  const period = getStripeSubscriptionPeriod(subscription || object);
+  const period = paid ? getStripeSubscriptionPeriod(subscription || object) : {};
   billing = await updateProfileBillingFromStripe({
     profileId: billing.profileId,
     checkoutSessionId: object.object === 'checkout.session' ? object.id : billing.stripeCheckoutSessionId,
@@ -6796,6 +6828,7 @@ async function applyProfileBillingStripeEvent(event) {
     status,
     tokensAllowance: Number(metadata.tokensAllowance || billing.tokensAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
     eventId: event.id,
+    eventCreated: !paid && status === billing.status ? billing.lastStripeEventCreated : event.created,
     ...period,
   });
 
@@ -6806,7 +6839,7 @@ async function applyProfileBillingStripeEvent(event) {
     );
 
     if (attached) {
-      if (status === 'active') {
+      if (billing.status === 'active') {
         activatePremiumEntitlement(attached, {
           eventId: event.id,
           subscriptionId: billing.stripeSubscriptionId,
@@ -6815,7 +6848,7 @@ async function applyProfileBillingStripeEvent(event) {
           periodEnd: billing.periodEnd,
         });
       } else {
-        updatePremiumEntitlementStatus(attached, status, event.id);
+        updatePremiumEntitlementStatus(attached, billing.status, event.id);
       }
 
       appendPremiumEntitlementEvent(premiumRegistry, {
@@ -6859,28 +6892,17 @@ async function applyPremiumStripeEvent(event) {
     metadata = { ...(subscription?.metadata || {}), ...metadata };
   }
 
-  const sessionId = String(metadata.sessionId || object.client_reference_id || '');
-  let entitlement =
+  const entitlement =
     registry.entitlements.find((entry) => entry.stripeCheckoutSessionId === object.id) ||
-    registry.entitlements.find((entry) => subscriptionId && entry.stripeSubscriptionId === subscriptionId) ||
-    registry.entitlements.find((entry) => sessionId && entry.sessionId === sessionId);
-  const isWebCoderEvent = metadata.kind === 'webcoder-premium' || Boolean(entitlement);
+    registry.entitlements.find((entry) => subscriptionId && entry.stripeSubscriptionId === subscriptionId);
+  const isWebCoderEvent =
+    Boolean(entitlement) && (!metadata.application || metadata.application === 'bolt-gives-open-source');
 
   if (!isWebCoderEvent) {
     registry.processedStripeEventIds = [...registry.processedStripeEventIds.slice(-999), event.id];
     await writePremiumEntitlementRegistry(registry);
 
     return { duplicate: false, handled: false };
-  }
-
-  if (!entitlement && sessionId && metadata.deploymentId) {
-    entitlement = upsertPendingPremiumEntitlement(registry, {
-      sessionId,
-      deploymentId: String(metadata.deploymentId),
-      customDomain: String(metadata.customDomain || ''),
-      stripeCheckoutSessionId: object.object === 'checkout.session' ? object.id : null,
-      creditsAllowance: Number(metadata.tokensAllowance || metadata.creditsAllowance || CUSTOM_DOMAIN_TOKEN_ALLOWANCE),
-    });
   }
 
   if (!entitlement) {
@@ -6912,19 +6934,8 @@ async function applyPremiumStripeEvent(event) {
   } else {
     const status = resolvePremiumStripeEventStatus(eventType, object.status);
 
-    if (status) {
+    if (status && status !== 'active') {
       updatePremiumEntitlementStatus(entitlement, status, event.id);
-
-      if (status === 'active') {
-        const period = getStripeSubscriptionPeriod(object);
-        activatePremiumEntitlement(entitlement, {
-          eventId: event.id,
-          subscriptionId: object.id,
-          customerId: typeof object.customer === 'string' ? object.customer : null,
-          ...period,
-        });
-        await markPremiumProjectDomainPaid(entitlement);
-      }
     }
   }
 
@@ -6976,7 +6987,7 @@ async function proxyPublishedProjectRequest(req, res, deployment) {
       method: req.method,
       path: req.url || '/',
       headers: {
-        ...req.headers,
+        ...previewRequestHeaders(req.headers),
         host: `${HOST}:${port}`,
       },
     },
@@ -7354,6 +7365,20 @@ export async function resolveRuntimeNodeDatabaseEnvironmentForCommand(session, o
     return buildProjectConnectionEnvironment(projectConnection);
   }
 
+  const legacyDatabase = projectDatabaseConfig.supported
+    ? null
+    : await readExistingProjectDatabase(session.id, projectDatabaseConfig);
+
+  if (legacyDatabase) {
+    session.projectDatabase = legacyDatabase;
+
+    const containerHost = process.env.BOLT_PROJECT_DATABASE_CONTAINER_HOST;
+    const host =
+      containerHost && ['127.0.0.1', 'localhost'].includes(legacyDatabase.host) ? containerHost : legacyDatabase.host;
+
+    return buildProjectDatabaseEnvironment({ ...legacyDatabase, host });
+  }
+
   if (projectDatabaseConfig.supported) {
     writeEvent({
       type: 'status',
@@ -7476,13 +7501,26 @@ async function waitForPreview(port) {
   throw new Error(`Preview did not become ready on port ${port}`);
 }
 
-async function terminateSessionProcesses(session, options = {}) {
+export async function terminateSessionProcesses(session, options = {}) {
   const preservePreviewPort = Number(options.preservePreviewPort || 0);
+
+  // Invalidate asynchronous health probes before the intentional disconnect.
+  session.workspaceMutationId = Number(session.workspaceMutationId || 0) + 1;
   cancelPendingPreviewAutoRestore(session);
   cancelPendingPreviewVerification(session);
+  cancelPendingPreviewAutostart(session);
+
+  // Mark every handle before awaiting a close; intentional exits must not enqueue recovery.
+  for (const handle of session.processes.values()) {
+    handle.intentionalStop = true;
+  }
 
   for (const [, handle] of session.processes.entries()) {
-    terminateSessionProcessHandle(handle);
+    const result = await terminateSessionProcessHandle(handle);
+
+    if (result?.stopped === false) {
+      throw new Error('The previous isolated process could not be stopped safely. Its Preview port remains reserved.');
+    }
   }
 
   session.processes.clear();
@@ -7506,14 +7544,18 @@ async function terminateSessionProcesses(session, options = {}) {
 function terminateSessionProcessHandle(handle, signal = 'SIGTERM') {
   const child = handle?.process;
 
+  if (typeof child?.terminateProject === 'function') {
+    return child.terminateProject();
+  }
+
   if (!child || !Number.isFinite(Number(child.pid))) {
-    return;
+    return undefined;
   }
 
   if (handle.detached) {
     try {
       process.kill(-child.pid, signal);
-      return;
+      return undefined;
     } catch {
       // Fall back to the direct child below when the process group has already exited.
     }
@@ -7524,6 +7566,8 @@ function terminateSessionProcessHandle(handle, signal = 'SIGTERM') {
   } catch {
     // The process may already be gone.
   }
+
+  return undefined;
 }
 
 async function handleRunCommand(req, res, session, body) {
@@ -7709,10 +7753,13 @@ async function handleRunCommand(req, res, session, body) {
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
 
-  const child = spawn('bash', ['-lc', effectiveCommand], {
+  await prepareProjectProcessDirectory(session.dir);
+
+  const child = spawnProjectProcess('bash', ['-lc', effectiveCommand], {
     cwd: session.dir,
     env,
     detached: kind === 'start',
+    ...(kind === 'start' ? { previewPort } : {}),
   });
 
   const processKey = kind === 'start' ? 'preview' : `command-${Date.now()}`;
@@ -7740,13 +7787,7 @@ async function handleRunCommand(req, res, session, body) {
       return;
     }
 
-    child.once('close', (exitCode) => {
-      const activeHandle = session.processes.get(processKey);
-
-      if (!activeHandle || activeHandle.process !== child) {
-        return;
-      }
-
+    observeUnexpectedPreviewExit(session, processKey, child, (exitCode) => {
       session.processes.delete(processKey);
 
       if (!retainSessionPreviewPortForRecovery(session)) {
@@ -7966,7 +8007,12 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       accept: req.headers.accept,
     })
   ) {
-    sendPreviewRepairPage(res, session, 'The previous preview is handing off to the updated project runtime.');
+    sendPreviewRepairPage(
+      res,
+      session,
+      'The previous preview is handing off to the updated project runtime.',
+      req.boltIsolatedPreview,
+    );
     return;
   }
 
@@ -7996,7 +8042,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       method: req.method,
       path: upstreamPath,
       headers: {
-        ...req.headers,
+        ...previewRequestHeaders(req.headers),
         host: `${HOST}:${port}`,
       },
     },
@@ -8026,7 +8072,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
           schedulePreviewAutoRestore(session, alert);
         }
 
-        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers, req.boltIsolatedPreview));
         upstreamRes.pipe(res);
 
         return;
@@ -8038,13 +8084,21 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       });
       upstreamRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        const rewritten = rewritePreviewAssetUrls(body, previewBasePath);
+
+        // Dedicated origins use native asset URLs, avoiding duplicate modules during Vite optimization.
+        const managedBody = disableManagedPreviewHmr(body, upstreamPath);
+        let rewritten = req.boltIsolatedPreview ? managedBody : rewritePreviewAssetUrls(managedBody, previewBasePath);
+
+        if (req.boltIsolatedPreview && /text\/html/.test(contentType)) {
+          rewritten = injectPreviewBrowserMonitor(rewritten);
+        }
+
         recordPreviewResponse(session, rewritten, statusCode, upstreamPath, contentType);
 
         delete headers['content-length'];
         delete headers['content-encoding'];
 
-        res.writeHead(statusCode, applyPreviewResponseHeaders(headers));
+        res.writeHead(statusCode, applyPreviewResponseHeaders(headers, req.boltIsolatedPreview));
         res.end(rewritten);
       });
     },
@@ -8068,7 +8122,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
       source: 'preview',
     };
     schedulePreviewAutoRestore(session, alert);
-    sendPreviewRepairPage(res, session, `Preview proxy failed: ${error.message}`);
+    sendPreviewRepairPage(res, session, `Preview proxy failed: ${error.message}`, req.boltIsolatedPreview);
   });
 
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -8125,10 +8179,7 @@ function proxyUpgradeToPreviewPort(req, socket, head, { portRaw, upstreamPath })
   const upstreamSocket = net.connect(Number(portRaw), HOST, () => {
     const headerLines = [`GET ${upstreamPath} HTTP/1.1`];
 
-    for (let index = 0; index < req.rawHeaders.length; index += 2) {
-      const name = req.rawHeaders[index];
-      const value = req.rawHeaders[index + 1];
-
+    for (const [name, value] of Object.entries(previewRequestHeaders(req.headers))) {
       if (!name || value === undefined) {
         continue;
       }
@@ -8237,6 +8288,20 @@ async function readJsonBody(req) {
 
 export function createRuntimeServer() {
   return http.createServer(async (req, res) => {
+    if (req.url?.startsWith('/runtime/preview-certificate?')) {
+      const domain = new URL(req.url, 'http://localhost').searchParams.get('domain');
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      const permitted = req.method === 'GET' && local && previewOrigins?.permitsCertificate(domain);
+      res.writeHead(permitted ? 204 : 403, { 'Cache-Control': 'no-store' });
+      res.end();
+
+      return;
+    }
+
+    if (previewOrigins?.handle(req, res, proxyPreviewRequest)) {
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
@@ -8268,8 +8333,10 @@ export function createRuntimeServer() {
         }
 
         const event = JSON.parse(rawBody);
-        const profileResult = await applyProfileBillingStripeEvent(event);
-        const result = profileResult.handled ? profileResult : await applyPremiumStripeEvent(event);
+        const result = await runPremiumEntitlementMutation(async () => {
+          const profileResult = await applyProfileBillingStripeEvent(event);
+          return profileResult.handled ? profileResult : await applyPremiumStripeEvent(event);
+        });
         sendJson(res, 200, { received: true, ...result });
       } catch (error) {
         sendText(res, 400, error instanceof Error ? error.message : 'Stripe webhook processing failed.');
@@ -8282,12 +8349,40 @@ export function createRuntimeServer() {
     }
 
     if (pathname === '/health') {
-      sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      sendJson(res, 200, {
+        ok: true,
+        version: RUNTIME_VERSION,
+        protocolVersion: 1,
+        host: HOST,
+        port: PORT,
+        sessions: sessions.size,
+      });
       return;
     }
 
     if (pathname === '/runtime/health') {
-      sendJson(res, 200, { ok: true, host: HOST, port: PORT, sessions: sessions.size });
+      sendJson(res, 200, {
+        ok: true,
+        version: RUNTIME_VERSION,
+        protocolVersion: 1,
+        host: HOST,
+        port: PORT,
+        sessions: sessions.size,
+      });
+      return;
+    }
+
+    if (
+      await handleSingleUserProfileRequest({
+        profiles: singleUserProfiles,
+        req,
+        res,
+        pathname,
+        readJsonBody,
+        sendJson,
+        sendText,
+      })
+    ) {
       return;
     }
 
@@ -8888,7 +8983,27 @@ export function createRuntimeServer() {
     }
 
     if (pathname.startsWith('/runtime/preview/')) {
+      if (previewOrigins) {
+        const target = parsePreviewProxyRequestTarget(req.url);
+        const session = target && sessions.get(target.sessionId);
+
+        if (!session?.preview?.port) {
+          sendText(res, 404, 'Preview is not running.');
+          return;
+        }
+
+        res.writeHead(307, {
+          Location: previewOrigins.url(session.id, session.preview.port),
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+        });
+        res.end();
+
+        return;
+      }
+
       proxyPreviewRequest(req, res, pathname);
+
       return;
     }
 
@@ -10364,14 +10479,21 @@ export function createRuntimeServer() {
         const session = getSession(requestedSessionId);
         void ensureRuntimeNodeWorkspaceForSession(session);
 
-        const files = await resolveSessionSnapshotFiles(session);
+        const controller = new AbortController();
+        res.once('close', () => controller.abort());
+
+        const files = await resolveSessionSnapshotFiles(session, { signal: controller.signal });
         sendJson(res, 200, {
           sessionId: requestedSessionId,
           files,
           recovery: session.previewRecovery,
         });
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Failed to inspect runtime snapshot');
+        sendText(
+          res,
+          error.status || 500,
+          error instanceof Error ? error.message : 'Failed to inspect runtime snapshot',
+        );
       }
       return;
     }
@@ -10841,7 +10963,7 @@ export function createRuntimeServer() {
         const requestedSessionId = normalizeSessionId(syncMatch[1]);
         const session = getSession(requestedSessionId);
         const body = await readJsonBody(req);
-        const incomingFiles = body.files || {};
+        const incomingFiles = filterWorkspaceSource(body.files || {});
         const prune = body.prune === true;
         let workspaceChanged = false;
         void ensureRuntimeNodeWorkspaceForSession(session);
@@ -10917,7 +11039,7 @@ export function createRuntimeServer() {
         void ensureRuntimeNodeWorkspaceForSession(session);
         await runSessionOperation(session, () => handleRunCommand(req, res, session, body));
       } catch (error) {
-        sendText(res, 500, error instanceof Error ? error.message : 'Runtime command failed');
+        endFailedCommandResponse(res, redactProjectDatabaseError(error));
       }
       return;
     }
@@ -10944,6 +11066,20 @@ export function createRuntimeServer() {
 const server = createRuntimeServer();
 
 server.on('upgrade', (req, socket, head) => {
+  if (previewOrigins?.isHost(req.headers.host)) {
+    const access = previewOrigins.authorize(req);
+
+    if (!access || req.headers.origin !== access.url.origin) {
+      writeUpgradeError(socket, 403, 'Forbidden');
+      return;
+    }
+
+    req.url = `/runtime/preview/${access.value.sessionId}/${access.session.preview.port}${access.upstreamUrl}`;
+    proxyPreviewUpgrade(req, socket, head);
+
+    return;
+  }
+
   if ((req.url || '').startsWith('/runtime/preview/')) {
     proxyPreviewUpgrade(req, socket, head);
     return;
@@ -10969,6 +11105,18 @@ function startServer() {
 
     if (!rolloutGuard.allowed) {
       console.warn(`[runtime] managed rollout guard active: ${rolloutGuard.reason}`);
+    }
+
+    const { automaticManagedRolloutEnabled } =
+      await import('../modules/control-plane/src/server/managed-rollout-policy.mjs');
+
+    if (
+      !automaticManagedRolloutEnabled({
+        enabled: MANAGED_INSTANCE_PUBLIC_ENABLED,
+        intervalMs: MANAGED_INSTANCE_SYNC_INTERVAL_MS,
+      })
+    ) {
+      return;
     }
 
     void runSerializedManagedInstanceRollout(

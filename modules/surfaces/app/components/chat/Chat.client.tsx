@@ -79,6 +79,8 @@ import type {
   UsageDataEvent,
 } from '@bolt/core/types/context';
 import {
+  findMergeableStreamIndex,
+  hasGeneratedWorkspaceChanges,
   hasHealthyRuntimePreviewForCurrentObjective,
   isCommentaryHeartbeatEvent,
   shouldFinalizeVerifiedPreviewAtDeadline,
@@ -87,13 +89,19 @@ import {
 import { hasFallbackStarterPlaceholder, STARTER_PLACEHOLDER_TEXT } from '@bolt/agent/lib/runtime/starter-placeholder';
 import { getHiddenContinuationDelay } from '@bolt/agent/lib/runtime/continuation-dispatch';
 import { getApiKeysFromCookies, setApiKeysCookie } from '@bolt/agent/lib/runtime/api-key-storage';
+import { useProfileApiKeys } from '~/lib/hooks/useProfileApiKeys';
+import { useProfile } from '~/lib/profile-context';
 import {
   classifyRecoverableStreamError,
   isHostedFreeFundingError,
   shouldIgnoreDisconnectAfterCompletedRun,
 } from '@bolt/agent/lib/runtime/recovery-errors';
 import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
-import { buildStarterBootstrapMessages, findPendingStarterRequest } from './starter-bootstrap-messages';
+import {
+  buildStarterBootstrapMessages,
+  findPendingStarterRequest,
+  findLatestVisibleUserRequest,
+} from './starter-bootstrap-messages';
 import {
   getStarterBootstrapRuntimeActionStatus,
   selectMissingStarterBootstrapRuntimeActions,
@@ -297,10 +305,6 @@ function persistProjectMemory(projectContextId: string, memory: ProjectMemoryDat
   window.localStorage.setItem(getProjectMemoryStorageKey(projectContextId), JSON.stringify(memory));
 }
 
-function getApiKeysFromCookiesSafe(): Record<string, string> {
-  return getApiKeysFromCookies();
-}
-
 function getProviderSettingsFromCookiesSafe(): Record<string, IProviderSetting> {
   try {
     const raw = Cookies.get('providers');
@@ -342,30 +346,6 @@ async function fetchProviderModels(providerName: string): Promise<ModelInfo[]> {
 
 let bufferedStepRunnerEvents: InteractiveStepRunnerEvent[] = [];
 let stepRunnerFlushHandle: ReturnType<typeof setTimeout> | null = null;
-
-function findMergeableStreamIndex(events: InteractiveStepRunnerEvent[], incoming: InteractiveStepRunnerEvent): number {
-  if (incoming.type !== 'stdout' && incoming.type !== 'stderr') {
-    return -1;
-  }
-
-  for (let index = events.length - 1; index >= 0; index--) {
-    const candidate = events[index];
-
-    if (candidate.stepIndex !== incoming.stepIndex) {
-      continue;
-    }
-
-    if (candidate.type === 'step-end' || candidate.type === 'error' || candidate.type === 'complete') {
-      break;
-    }
-
-    if (candidate.type === incoming.type) {
-      return index;
-    }
-  }
-
-  return -1;
-}
 
 function mergeOrAppendStepRunnerEvent(
   events: InteractiveStepRunnerEvent[],
@@ -480,6 +460,7 @@ function appendArchitectTimelineEvent(event: Omit<InteractiveStepRunnerEvent, 't
 }
 
 export function Chat() {
+  const profile = useProfile();
   renderLogger.trace('Chat');
 
   const { ready, chatKey, initialMessages, storeMessageHistory, importChat, exportChat } = useHistory();
@@ -508,7 +489,7 @@ export function Chat() {
     <>
       {ready && preparedReloadKey === reloadPreparationKey && (
         <ChatImpl
-          key={chatKey}
+          key={`${profile?.id || 'guest'}:${chatKey}`}
           description={title}
           initialMessages={initialMessages}
           exportChat={exportChat}
@@ -530,6 +511,7 @@ interface ChatProps {
 
 export const ChatImpl = memo(
   ({ description, initialMessages, storeMessageHistory, importChat, exportChat }: ChatProps) => {
+    const profile = useProfile();
     useShortcuts();
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -584,7 +566,7 @@ export const ChatImpl = memo(
     const { showChat } = useStore(chatStore);
     const autonomyMode = useStore(workbenchStore.autonomyMode);
     const [animationScope, animate] = useAnimate();
-    const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => getApiKeysFromCookiesSafe());
+    const [apiKeys, setApiKeys] = useProfileApiKeys();
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | undefined>();
@@ -714,6 +696,7 @@ export const ChatImpl = memo(
     } = useChat({
       api: '/api/chat',
       fetch: securedFetch,
+      headers: { 'X-Bolt-Selected-Provider': provider.name },
       body: {
         apiKeys,
         providerSettings: getProviderSettingsFromCookiesSafe(),
@@ -789,7 +772,10 @@ export const ChatImpl = memo(
           providerName: runContextRef.current.providerName,
           chatMode,
           assistantContent: currentRequestAssistantContent,
-          workspaceChanged: workbenchStore.files.get() !== requestWorkspaceBaselineRef.current,
+          workspaceChanged: hasGeneratedWorkspaceChanges(
+            workbenchStore.files.get(),
+            requestWorkspaceBaselineRef.current,
+          ),
         });
 
         if (shouldRecoverEmptyBuild) {
@@ -861,7 +847,7 @@ export const ChatImpl = memo(
     const requestAssistantBaselineSignatureRef = useRef('');
     const requestWorkspaceBaselineRef = useRef(workbenchStore.files.get());
     const userObjectiveWorkspaceBaselineRef = useRef(requestWorkspaceBaselineRef.current);
-    const latestUserRequestRef = useRef('');
+    const latestUserRequestRef = useRef(findLatestVisibleUserRequest(initialMessages));
     const requestLifecycleStartedAtRef = useRef(Date.now());
     const userObjectiveStartedAtRef = useRef(requestLifecycleStartedAtRef.current);
     const lastRunCompletedAtRef = useRef<number | null>(null);
@@ -1255,7 +1241,10 @@ Requirements:
 
           if (!shouldFinalizeVerifiedPreview && hostedRuntimeEnabled) {
             const sessionId = workbenchStore.hostedRuntimeSessionId;
-            const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+            const workspaceChanged = hasGeneratedWorkspaceChanges(
+              workbenchStore.files.get(),
+              userObjectiveWorkspaceBaselineRef.current,
+            );
 
             if (sessionId && workspaceChanged) {
               try {
@@ -1831,7 +1820,7 @@ Requirements:
       let cancelled = false;
 
       const bootstrapSelection = async () => {
-        const nextApiKeys = getApiKeysFromCookiesSafe();
+        const nextApiKeys = getApiKeysFromCookies(profile?.id);
         setApiKeys(nextApiKeys);
 
         const instanceSelection =
@@ -2136,7 +2125,10 @@ Requirements:
           (timeoutLikeError || disconnectLikeError)
         ) {
           const sessionId = workbenchStore.hostedRuntimeSessionId;
-          const workspaceChanged = workbenchStore.files.get() !== userObjectiveWorkspaceBaselineRef.current;
+          const workspaceChanged = hasGeneratedWorkspaceChanges(
+            workbenchStore.files.get(),
+            userObjectiveWorkspaceBaselineRef.current,
+          );
 
           if (sessionId && workspaceChanged) {
             try {
@@ -3672,8 +3664,11 @@ CONTINUE IMMEDIATELY:
 
     const handleApiKeysUpdated = useCallback(
       async ({ apiKeys: updatedApiKeys, providerName, apiKey, providerModels }: ApiKeysUpdatePayload) => {
+        if (!setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS, profile?.id)) {
+          return;
+        }
+
         setApiKeys(updatedApiKeys);
-        setApiKeysCookie(updatedApiKeys, CHAT_SELECTION_COOKIE_EXPIRY_DAYS);
 
         const normalizedKey = apiKey.trim();
         cachedModelCatalog = null;

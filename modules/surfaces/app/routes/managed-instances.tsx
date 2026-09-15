@@ -10,6 +10,7 @@ import { Form, useActionData, useLoaderData } from '@remix-run/react';
 import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import { fetchRuntimeControlJson } from '@bolt/runtime/lib/.server/runtime-control';
+import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 import type { ManagedInstanceRecord, ManagedInstanceSupport } from '@bolt/control-plane/lib/managed-instances';
 import { APP_VERSION } from '@bolt/core/lib/version';
 
@@ -24,22 +25,30 @@ type ManagedInstanceSession = {
   currentGitSha?: string | null;
 };
 
-function getManagedInstanceCookieSecret() {
-  if (typeof process !== 'undefined' && process.env?.BOLT_MANAGED_INSTANCE_COOKIE_SECRET?.trim()) {
-    return process.env.BOLT_MANAGED_INSTANCE_COOKIE_SECRET.trim();
+function getManagedInstanceCookieSecret(env: Record<string, string | undefined>) {
+  const secret =
+    env.BOLT_MANAGED_INSTANCE_COOKIE_SECRET || env.BOLT_PROFILE_COOKIE_SECRET || env.BOLT_HOSTED_FREE_RELAY_SECRET;
+
+  if (secret?.trim()) {
+    return secret.trim();
+  }
+
+  if (!['development', 'test'].includes(env.NODE_ENV || '')) {
+    throw new Error('Managed-instance session signing is not configured.');
   }
 
   return 'bolt-managed-instance-dev-secret-change-me';
 }
 
-function createManagedInstanceCookie() {
-  return createCookie('bolt_managed_instance', {
+function createManagedInstanceCookie(env: Record<string, string | undefined>) {
+  const secure = !['development', 'test'].includes(env.NODE_ENV || '');
+  return createCookie(secure ? '__Host-bolt_managed_instance' : 'bolt_managed_instance', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
+    secure,
     maxAge: 60 * 60 * 24 * 365,
-    secrets: [getManagedInstanceCookieSecret()],
+    secrets: [getManagedInstanceCookieSecret(env)],
   });
 }
 
@@ -55,8 +64,9 @@ export function formatManagedInstanceDateTime(value: string) {
   return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const sessionCookie = createManagedInstanceCookie();
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const env = resolveRuntimeEnvFromContext(context) as Record<string, string | undefined>;
+  const sessionCookie = createManagedInstanceCookie(env);
   const session = (await sessionCookie.parse(request.headers.get('Cookie'))) as ManagedInstanceSession | undefined;
 
   let support: ManagedInstanceSupport = {
@@ -69,7 +79,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let instance: ManagedInstanceRecord | null = null;
 
   try {
-    support = await fetchRuntimeControlJson<ManagedInstanceSupport>('/managed-instances/config');
+    support = await fetchRuntimeControlJson<ManagedInstanceSupport>('/managed-instances/config', undefined, env);
   } catch (error) {
     support = {
       supported: false,
@@ -85,6 +95,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     try {
       const payload = await fetchRuntimeControlJson<{ ok: boolean; instance: ManagedInstanceRecord }>(
         `/managed-instances/session?sessionToken=${encodeURIComponent(session.sessionToken)}`,
+        undefined,
+        env,
       );
       instance = payload.instance;
     } catch {
@@ -142,8 +154,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   );
 }
 
-export async function action({ request }: ActionFunctionArgs) {
-  const sessionCookie = createManagedInstanceCookie();
+export async function action({ request, context }: ActionFunctionArgs) {
+  const env = resolveRuntimeEnvFromContext(context) as Record<string, string | undefined>;
+  const sessionCookie = createManagedInstanceCookie(env);
   const session = (await sessionCookie.parse(request.headers.get('Cookie'))) as ManagedInstanceSession | undefined;
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
@@ -176,22 +189,26 @@ export async function action({ request }: ActionFunctionArgs) {
         ok: boolean;
         sessionToken: string;
         instance: ManagedInstanceRecord;
-      }>('/managed-instances/spawn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          email,
-          subdomain,
-          company,
-          role,
-          phone,
-          country,
-          useCase,
-          sourceHost,
-          sessionToken: session?.sessionToken || undefined,
-        }),
-      });
+      }>(
+        '/managed-instances/spawn',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            email,
+            subdomain,
+            company,
+            role,
+            phone,
+            country,
+            useCase,
+            sourceHost,
+            sessionToken: session?.sessionToken || undefined,
+          }),
+        },
+        env,
+      );
 
       return redirect('/managed-instances', {
         headers: {
@@ -228,6 +245,7 @@ export async function action({ request }: ActionFunctionArgs) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionToken: session.sessionToken }),
         },
+        env,
       );
     } catch (error) {
       return json(
@@ -252,6 +270,7 @@ export async function action({ request }: ActionFunctionArgs) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionToken: session.sessionToken }),
         },
+        env,
       );
     } catch (error) {
       return json(
@@ -541,8 +560,8 @@ export default function ManagedInstancesPage() {
                   <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                   <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
                   <li>
-                    FREE boots with ChatGPT-5.6 SOL selected and lets users switch to Opus 4.8, Sonnet 5, or Fable 5
-                    without leaving their project.
+                    FREE boots with ChatGPT-Luna at medium effort without requiring a provider key. Users can connect a
+                    personal MagnetAPI key for its broader Frontier model catalog without leaving their project.
                   </li>
                   <li>
                     Your registration profile, including your email address, is stored in the private admin panel for

@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh bolt.gives authoritative DNS every 30 seconds
+
+[Timer]
+OnBootSec=20
+OnUnitActiveSec=30
+AccuracySec=1
+Unit=bolt-gives-dns-sync.service
+
+[Install]
+WantedBy=timers.target

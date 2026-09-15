@@ -2,9 +2,10 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { IconButton } from '~/components/ui/IconButton';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { recordPreviewVerification } from '@bolt/project/lib/runtime/preview-verification-event';
+import { reconcileRuntimeSnapshot } from '@bolt/project/lib/runtime/reconcile-runtime-snapshot';
 import {
   extractHostedRuntimeSessionIdFromPreviewBaseUrl,
-  fetchHostedRuntimeSnapshot,
   type HostedRuntimePreviewStatus,
   type HostedRuntimePreviewSummary,
   fetchHostedRuntimePreviewStatus,
@@ -274,10 +275,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         status.healthy &&
         status.preview &&
         typeof status.preview.revision === 'number' &&
-        lastAppliedHostedSnapshotRevisionRef.current !== status.preview.revision
+        lastAppliedHostedSnapshotRevisionRef.current !== status.preview.revision &&
+        (await reconcileRuntimeSnapshot(workbenchStore, previewSessionId))
       ) {
-        const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
-        await workbenchStore.restoreSnapshot(snapshotFiles);
         lastAppliedHostedSnapshotRevisionRef.current = status.preview.revision;
       }
 
@@ -285,10 +285,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
         previewSessionId &&
         status.recovery?.state === 'restored' &&
         typeof status.recovery.token === 'number' &&
-        lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token
+        lastAppliedHostedRecoveryTokenRef.current !== status.recovery.token &&
+        (await reconcileRuntimeSnapshot(workbenchStore, previewSessionId))
       ) {
-        const snapshotFiles = await fetchHostedRuntimeSnapshot(previewSessionId);
-        await workbenchStore.restoreSnapshot(snapshotFiles);
         lastAppliedHostedRecoveryTokenRef.current = status.recovery.token;
         lastAppliedHostedSnapshotRevisionRef.current =
           status.preview?.revision ?? lastAppliedHostedSnapshotRevisionRef.current;
@@ -296,6 +295,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       }
 
       await inspectHostedPreviewIframe(previewSessionId, signature);
+      recordPreviewVerification(status, workbenchStore.stepRunnerEvents, Boolean(lastPreviewAlertSignatureRef.current));
 
       const previewTarget = statusPreview || activePreview;
 
@@ -505,13 +505,11 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       void inspectHostedPreview();
 
       const unsubscribe = subscribeHostedRuntimePreview(previewSessionId, {
-        onMessage: (status) => {
-          if (cancelled) {
-            return;
+        onMessage: async (status) => {
+          if (!cancelled) {
+            hostedPreviewSubscriptionHealthyRef.current = true;
+            await applyHostedPreviewStatus(status);
           }
-
-          hostedPreviewSubscriptionHealthyRef.current = true;
-          void applyHostedPreviewStatus(status);
         },
         onError: () => {
           hostedPreviewSubscriptionHealthyRef.current = false;

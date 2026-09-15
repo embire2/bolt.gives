@@ -27,6 +27,7 @@ type ProviderName =
   | 'HuggingFace'
   | 'Hyperbolic'
   | 'Mistral'
+  | 'MagnetAPI'
   | 'OpenAI'
   | 'OpenRouter'
   | 'Perplexity'
@@ -45,6 +46,7 @@ const PROVIDER_ICONS: Record<ProviderName, IconType> = {
   HuggingFace: SiHuggingface,
   Hyperbolic: TbCloudComputing,
   Mistral: TbBrain,
+  MagnetAPI: FaCloud,
   OpenAI: SiOpenai,
   OpenRouter: FaCloud,
   Perplexity: SiPerplexity,
@@ -57,6 +59,7 @@ const PROVIDER_DESCRIPTIONS: Partial<Record<ProviderName, string>> = {
   Anthropic: 'Access Claude and other Anthropic models',
   Github: 'Use OpenAI models hosted through GitHub infrastructure',
   OpenAI: 'Use GPT-4, GPT-3.5, and other OpenAI models',
+  MagnetAPI: 'Bring your own MagnetAPI key for Frontier coding models',
 };
 
 const CloudProvidersTab = () => {

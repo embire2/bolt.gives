@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readRuntimeEnvFileSync, updateRuntimeEnvFile } from './runtime-env-file.mjs';
+import { readMergedRuntimeEnv, readRuntimeEnvFileSync, updateRuntimeEnvFile } from './runtime-env-file.mjs';
 
 const tempDirs: string[] = [];
 
@@ -39,7 +39,7 @@ describe('runtime-env-file', () => {
     expect(snapshot.values.BOLT_ADMIN_SMTP_PASSWORD).toBe('new-secret');
   });
 
-  it('removes smtp keys when they are cleared', async () => {
+  it('shadows inherited service credentials when smtp keys are explicitly cleared', async () => {
     const envFile = await createTempEnvFile();
 
     await updateRuntimeEnvFile(
@@ -50,7 +50,44 @@ describe('runtime-env-file', () => {
     );
 
     const snapshot = readRuntimeEnvFileSync({ BOLT_RUNTIME_ENV_FILE: envFile });
-    expect(snapshot.values.BOLT_ADMIN_SMTP_PASSWORD).toBeUndefined();
+    expect(snapshot.values.BOLT_ADMIN_SMTP_PASSWORD).toBe('');
     expect(snapshot.values.EXISTING_KEY).toBe('keep');
+    expect(
+      readMergedRuntimeEnv({ BOLT_RUNTIME_ENV_FILE: envFile, BOLT_ADMIN_SMTP_PASSWORD: 'inherited' })
+        .BOLT_ADMIN_SMTP_PASSWORD,
+    ).toBe('');
+  });
+
+  it('preserves a password omitted while saving other mail settings', async () => {
+    const envFile = await createTempEnvFile();
+    const snapshot = await updateRuntimeEnvFile(
+      { BOLT_ADMIN_SMTP_HOST: 'smtp.example.com', BOLT_ADMIN_SMTP_PASSWORD: undefined },
+      { BOLT_RUNTIME_ENV_FILE: envFile },
+    );
+    expect(snapshot.values.BOLT_ADMIN_SMTP_PASSWORD).toBe('old-secret');
+    expect(snapshot.values.BOLT_ADMIN_SMTP_HOST).toBe('smtp.example.com');
+    expect((await fs.stat(envFile)).mode & 0o777).toBe(0o600);
+  });
+
+  it('uses inherited service configuration with a separate writable override file', async () => {
+    const envFile = await createTempEnvFile();
+    const env = {
+      BOLT_RUNTIME_ENV_FILE: envFile,
+      BOLT_ADMIN_SMTP_HOST: 'inherited.example.com',
+      BOLT_ADMIN_SMTP_USER: 'inherited-user',
+    };
+    expect(readMergedRuntimeEnv(env).BOLT_ADMIN_SMTP_HOST).toBe('inherited.example.com');
+    await updateRuntimeEnvFile({ BOLT_ADMIN_SMTP_HOST: 'saved.example.com' }, env);
+    expect(readMergedRuntimeEnv(env).BOLT_ADMIN_SMTP_HOST).toBe('saved.example.com');
+    expect(readMergedRuntimeEnv(env).BOLT_ADMIN_SMTP_USER).toBe('inherited-user');
+  });
+
+  it('rejects setting-name injection before writing', async () => {
+    const envFile = await createTempEnvFile();
+    const original = await fs.readFile(envFile, 'utf8');
+    await expect(
+      updateRuntimeEnvFile({ 'BROKEN\nINJECTED': 'value' }, { BOLT_RUNTIME_ENV_FILE: envFile }),
+    ).rejects.toThrow('Invalid runtime setting');
+    expect(await fs.readFile(envFile, 'utf8')).toBe(original);
   });
 });

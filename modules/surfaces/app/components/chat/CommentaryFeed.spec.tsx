@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { JSONValue } from 'ai';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
+import { shouldUnlockPromptAfterPreviewReady } from './execution-status';
 
 let CommentaryFeed: (typeof import('./CommentaryFeed'))['CommentaryFeed'];
 
@@ -20,6 +21,27 @@ describe('CommentaryFeed', () => {
   afterEach(() => {
     workbenchStore.clearStepRunnerEvents();
     cleanup();
+  });
+
+  it('shows restored health without allowing it to finalize a new prompt', () => {
+    const events = [
+      { type: 'telemetry' as const, timestamp: new Date().toISOString(), description: 'Preview health confirmed' },
+    ];
+    workbenchStore.stepRunnerEvents.set(events);
+    render(<CommentaryFeed />);
+    expect(screen.getByText('Preview is healthy and ready for inspection.')).toBeTruthy();
+    expect(screen.queryByText(/Waiting for the first concrete runtime step/)).toBeNull();
+    expect(shouldUnlockPromptAfterPreviewReady(events, 60_000, 1000)).toBe(false);
+  });
+
+  it('does not keep showing Ready after a later failed health check', () => {
+    workbenchStore.stepRunnerEvents.set([
+      { type: 'telemetry', timestamp: new Date().toISOString(), description: 'Preview verified' },
+      { type: 'telemetry', timestamp: new Date().toISOString(), description: 'Preview health unavailable' },
+    ]);
+    render(<CommentaryFeed />);
+    expect(screen.getByText('Preview has not passed its latest health check.')).toBeTruthy();
+    expect(screen.queryByText(/^Ready$/)).toBeNull();
   });
 
   it('renders commentary cards with contract details', () => {
@@ -143,6 +165,43 @@ describe('CommentaryFeed', () => {
     expect(screen.getByText(/^Ready$/i)).toBeTruthy();
     expect(screen.getByText(/workspace is ready for inspection/i)).toBeTruthy();
     expect(screen.queryByText(/Running Start application now/i)).toBeNull();
+  });
+
+  it('ignores a late transport heartbeat after a healthy Preview', () => {
+    workbenchStore.stepRunnerEvents.set([
+      { type: 'complete', timestamp: '2026-09-12T10:00:00Z' },
+      { type: 'telemetry', timestamp: '2026-09-12T10:00:01Z', description: 'Preview verified' },
+    ]);
+    render(
+      <CommentaryFeed
+        data={[
+          {
+            type: 'agent-commentary',
+            heartbeat: true,
+            phase: 'action',
+            status: 'in-progress',
+            message: 'No new runtime event has landed yet',
+            timestamp: '2026-09-12T10:00:10Z',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/^Ready$/)).toBeTruthy();
+    expect(screen.queryByText(/No new runtime event/)).toBeNull();
+  });
+
+  it('does not call unverified generation Ready or reuse verification before a newer error', () => {
+    workbenchStore.stepRunnerEvents.set([{ type: 'complete', timestamp: '2026-09-12T10:00:00Z' }]);
+
+    const view = render(<CommentaryFeed data={[]} />);
+    expect(screen.getByText(/^Verifying$/)).toBeTruthy();
+    workbenchStore.stepRunnerEvents.set([
+      { type: 'telemetry', timestamp: '2026-09-12T10:00:01Z', description: 'Preview verified' },
+      { type: 'error', timestamp: '2026-09-12T10:00:02Z', error: 'server exited' },
+    ]);
+    view.rerender(<CommentaryFeed data={[]} />);
+    expect(screen.queryByText(/^Ready$/)).toBeNull();
+    expect(screen.getByText(/^Recovery$/)).toBeTruthy();
   });
 
   it('marks older in-progress commentary as superseded after verified completion', () => {

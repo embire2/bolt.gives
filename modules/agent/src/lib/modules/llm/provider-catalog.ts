@@ -6,6 +6,12 @@ import {
   FREE_HOSTED_MODELS,
   FREE_HOSTED_API_TOKEN_KEY,
 } from '@bolt/agent/lib/modules/llm/free-provider-config';
+import {
+  MAGNET_API_MODEL_MAX_COMPLETION_TOKENS,
+  MAGNET_API_MODEL_MAX_TOKENS,
+  MAGNET_API_MODELS,
+  MAGNET_API_USER_TOKEN_KEY,
+} from '@bolt/agent/lib/modules/llm/magnet-api-provider-config';
 
 export const DEFAULT_PROVIDER_NAME = 'FREE';
 export const DEFAULT_MODEL_NAME: string = FREE_HOSTED_MODEL;
@@ -25,6 +31,7 @@ export const PROVIDER_BASE_URL_ENV_KEYS: Record<string, { baseUrlKey?: string; a
   Hyperbolic: { apiTokenKey: 'HYPERBOLIC_API_KEY' },
   LMStudio: { baseUrlKey: 'LMSTUDIO_API_BASE_URL' },
   Mistral: { apiTokenKey: 'MISTRAL_API_KEY' },
+  MagnetAPI: { apiTokenKey: MAGNET_API_USER_TOKEN_KEY },
   Moonshot: { apiTokenKey: 'MOONSHOT_API_KEY' },
   Ollama: { baseUrlKey: 'OLLAMA_API_BASE_URL' },
   OpenAI: { apiTokenKey: 'OPENAI_API_KEY' },
@@ -58,6 +65,18 @@ export const PROVIDER_CATALOG: ProviderInfo[] = [
   },
   { name: 'OpenAI', staticModels: [] },
   { name: 'Anthropic', staticModels: [] },
+  {
+    name: 'MagnetAPI',
+    staticModels: MAGNET_API_MODELS.map((model) => ({
+      ...model,
+      provider: 'MagnetAPI',
+      maxTokenAllowed: MAGNET_API_MODEL_MAX_TOKENS,
+      maxCompletionTokens: MAGNET_API_MODEL_MAX_COMPLETION_TOKENS,
+    })),
+    getApiKeyLink: 'https://magnetapi.org/dashboard',
+    labelForGetApiKey: 'Get MagnetAPI key',
+    icon: 'i-ph:magnet-straight-fill',
+  },
   {
     name: 'OpenRouter',
     staticModels: [],

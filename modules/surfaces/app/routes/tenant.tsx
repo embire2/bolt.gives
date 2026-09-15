@@ -44,11 +44,12 @@ function getTenantCookieSecret() {
 }
 
 function createTenantCookie() {
-  return createCookie('bolt_tenant_session', {
+  const secure = typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true;
+  return createCookie(secure ? '__Host-bolt_tenant_session' : 'bolt_tenant_session', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
+    secure,
     maxAge: 60 * 60 * 12,
     secrets: [getTenantCookieSecret()],
   });

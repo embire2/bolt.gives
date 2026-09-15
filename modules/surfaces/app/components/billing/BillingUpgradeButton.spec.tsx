@@ -11,12 +11,12 @@ vi.mock('@bolt/project/lib/hooks/useCsrf', () => ({
   securedFetch: mocks.securedFetch,
 }));
 
-let BillingUpgradeButton: (typeof import('./BillingUpgradeButton.client'))['BillingUpgradeButton'];
+let BillingUpgradeButton: (typeof import('./BillingUpgradeButton'))['BillingUpgradeButton'];
 
 describe('BillingUpgradeButton', () => {
   beforeAll(async () => {
     (window as { __vite_plugin_react_preamble_installed__?: boolean }).__vite_plugin_react_preamble_installed__ = true;
-    BillingUpgradeButton = (await import('./BillingUpgradeButton.client')).BillingUpgradeButton;
+    BillingUpgradeButton = (await import('./BillingUpgradeButton')).BillingUpgradeButton;
   });
 
   beforeEach(() => {
@@ -45,5 +45,24 @@ describe('BillingUpgradeButton', () => {
       });
     });
     expect(await screen.findByText('Checkout unavailable in test.')).toBeTruthy();
+  });
+
+  it('allows retry after a failed checkout without duplicating an in-flight request', async () => {
+    let finish!: (response: Response) => void;
+    mocks.securedFetch.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(<BillingUpgradeButton>Upgrade</BillingUpgradeButton>);
+
+    const button = screen.getByRole('button', { name: 'Upgrade' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(mocks.securedFetch).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ message: 'Try again' }), { status: 502 }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade' }));
+    await waitFor(() => expect(mocks.securedFetch).toHaveBeenCalledTimes(2));
   });
 });

@@ -1,9 +1,68 @@
 # Changelog
 
-## Unreleased - v4.1.0
+## v4.1.0 - 2026-09-15
+
+Combines both reliability phases and the following post-beta corrections. Hosted
+production now uses the verified isolated app/workspace trees, non-root services,
+authenticated runtime routing and trusted per-project Preview TLS. The dedicated
+production Stripe webhook is enabled. Prior beta caveats below describe the beta
+publication, not the current stable deployment. Desktop remains independent.
+
+### Runtime and Recovery
+
+- Give initial, restored and newly created Calendar events persistent IDs before model edits reuse browser storage. Preserve string/enveloped stream errors for bounded retry classification, redact credentials, and retain server-side error diagnostics even when routine logging is disabled.
+- Preserve browser-error repair across late successful HTML responses and autostart completions. A deterministic Chromium invalid-hook reproduction previously cancelled repair and reported Ready while source was still broken; the same race now restores the last-good source and visible Preview. Add five state-transition regressions and an explicit hook-failure browser acceptance mode.
+- Mark intentional process shutdown before awaiting container exit. The liveness monitor no longer mistakes that close for a crash and restarts a stopped Preview; real unexpected exits still trigger recovery. Calendar acceptance checks the stopped state for five seconds after cleanup rather than trusting HTTP 200 alone.
+- Stop requests wait for the attached Podman client to exit and its container to be removed. A real immediate-stop regression exposed `stop --ignore` reporting success before container creation; bounded retries now close that race without preventing later retries after failure.
+- Preserve hard-linked dependencies when preparing isolated runtime copies, copy only tracked application source plus explicit build/dependencies, and verify source/private records independently of rebuildable dependency caches. Existing targets remain guarded against overwrite.
+- Disable the pinned Vite client's unmanaged socket bootstrap while retaining its CSS/module helpers. Imports of those helpers no longer reopen failing HMR connections during managed Preview restarts.
+- Serialize concurrent snapshot reconciliation and retry transient source conflicts within a bounded deadline. Canceled queued readers cannot unlock active readers; complete current source remains authoritative.
+- Make readiness probe the configured runtime with a deadline and require compatible protocol/version. Mixed-version app/runtime processes return 503 instead of false readiness; liveness stays cheap.
+- Restore readable light-mode Agent status badges, and update automatic-recovery E2E to normal onboarding, Agent Mode and cross-origin iframe inspection. Cold-reload diagnostics now include isolated Preview module and HTTP evidence.
+- Stop rootless project containers gracefully and remove them only after the attached process settles. This fixes the reproduced Podman `died not found` / exit 127 shutdown race and allows SIGTERM handlers to flush project state.
+- Refuse isolation-copy migration when a destination or protected environment already exists, either source service is not confirmed stopped, or a destination has a symlink ancestor. A retry cannot overwrite a newer active workspace with its original copy.
+- Add an operator-only cPanel DNS-01 hook restricted to explicitly configured Preview namespaces. It preserves backups, requires explicit wildcard routing, checks SOA serials, removes only byte-exact challenge values and verifies authoritative/public propagation. Support the actual HTTPS response envelope and relative zone names, not only CLI-shaped mocks.
+- Add a validated cPanel-fed DNS mirror for a missing authoritative secondary, with served-serial verification, forward-serial checks and last-good recovery. Preserve binary TXT bytes and refuse unsupported records rather than dropping them. Public wildcard Preview certificates have an atomic certificate/key installation hook with validated Caddy reload and rollback.
+- Separate writable runtime settings from root-owned service configuration. Preserve omitted SMTP passwords and make explicit clearing override inherited values. Non-root publishing can use a narrowly delegated, validated Caddy reload service instead of requiring unrestricted root access.
+- Normalize streamed Preview-ready events before subscribers navigate the iframe, preserving each Cloudflare instance's authenticated origin instead of requesting alpha's URL without its login cookie.
+- Decode JSON message envelopes before checking quoted UI requirements. Follow-ups containing two quoted labels no longer invent extra requirements and enter false repair after a verified Preview.
+- Make Calendar browser acceptance fail on aborted chat streams and browser exceptions; capture diagnostic streams passively without changing network cancellation behavior.
+- Replace the unsafe recursive-copy legacy Linux updater with the guarded installer entrypoint, preserving quoted paths and release options.
+- Preserve managed-instance runtime and FREE relay routing across Wrangler deployments, keep stale-port redirects on the client's authenticated hostname, and resolve registration settings from the request's runtime.
+- Treat zero automatic-refresh interval as manual-only at startup as well as during periodic refresh. Block the private tenant-admin API at public gateways while retaining server-side admin operations.
+- Fix the Calendar template's inactive Create event button, calendar filtering, impossible dates and overflowing mini-calendar. Event creation and reload persistence now run in the real Chromium template smoke, not only a screenshot check.
+- Wait for required GitHub workflows on the exact PR head instead of racing a missing synthetic-merge check; required failures are no longer marked continue-on-error.
+- Fix recursive public runtime proxying and authenticate server-side snapshot, handoff and Preview verification. Propagate staging FREE relay configuration instead of hardcoding the production origin.
+- Keep existing private database records available when new database provisioning is disabled; use the active workspace root and an optional private container bridge without changing credentials.
+- End failed command streams safely without sending headers twice or crashing the runtime. Use canonical isolated Preview asset URLs to avoid duplicate module aliases.
+- Use host-prefixed production authentication cookies consistently in the separately compiled gateway and application; skip account connection lookups before sign-in.
+- Added opt-in rootless Podman execution for generated commands, dependency installation/repair, builds and Preview. Containers mount only the project, drop capabilities, use a read-only image and enforce CPU/RAM/PID limits. Root execution is rejected, and unmigrated source ownership fails explicitly rather than being silently changed.
+- Await isolated process termination before releasing/reusing its Preview port, preventing restart collisions with an old container. Reserve operator-storage names so they cannot be selected as project session IDs.
+- Added a signed per-project HTTPS Preview gateway with host-only, HTTP-only partitioned capabilities, cross-project/origin rejection, bounded browser-error reporting and project-scoped repair readiness. Generated servers cannot set parent-domain/platform cookies or permissive cross-project CORS headers. Public wildcard TLS and production traffic migration are verified.
+- Require authenticated hosted runtime/Preview access and reject cross-origin runtime calls. The Linux installer routes both hosted and private-owner runtime traffic through application authorization rather than exposing the runtime directly.
+- Keep Chat mounted after an empty failed assistant stream so navigation cannot discard queued recovery; restore the user's latest visible request on Chat initialization. Count real buffered FREE file-argument progress toward stream activity without publishing partial artifacts or synthetic commentary.
+- Added real rootless process acceptance and combined HTTPS/browser prompt, follow-up, history, restart and injected-stream-failure fixtures. See `ROADMAP.md` for the remaining validation matrix and independent Windows work.
+
+### Billing
+
+- Fulfill profile entitlements with a durable event ledger and row-locked transactions; duplicate, delayed and out-of-order events cannot reset used tokens or shorten a paid period.
+- Require confirmed payment before granting quota. Scope Stripe metadata to the open-source application and known checkout/subscription identities so a shared commercial account cannot activate unrelated profiles.
+- Reject malformed webhook signatures, bound upstream billing requests and provide an explicit operator-only dedicated webhook setup tool that preserves unrelated Stripe endpoints.
+- Add disposable PostgreSQL event-replay acceptance and real browser Checkout verification that never submits a payment.
+
+### Removed
+
+- Removed the optional Codeball PR-review workflow after both Cloudflare DNS (`1.1.1.1`) and the authoritative nameserver returned `NXDOMAIN` for its API hostname. Tests, security scans, build validation, installer recovery and release/E2E workflows remain required.
+
+## v4.1.0-beta.1 (2026-09-13) - Test Prerelease
+
+Combines the implemented work from both reliability phases. **Not a stable release or production/fleet deployment.** Preview-origin isolation (B13), non-root per-project execution (B14), and the remaining live acceptance matrix are still open. Test only on a disposable private machine without customer data or production credentials. The native Windows release line is unchanged.
 
 ### Changed
 
+- The managed FREE default is now shown as ChatGPT-Luna with medium reasoning effort while retaining the protected MagnetAPI Responses transport, quota enforcement, and existing project history.
+- Added MagnetAPI as a separate bring-your-own-key provider with authenticated live model discovery, OpenAI Responses and Anthropic Messages routing, and visible ChatGPT-5.6 Ultra, Opus 5, Sonnet 5, and Fable 5.1 choices. Personal requests cannot fall back to the operator-funded FREE credential.
+- Added a compact site-wide MagnetAPI notice with a direct link, verified 90%-less pricing attribution, accessible controls, and persistent browser dismissal.
 - Generated projects now start without a database. Automatic local per-project PostgreSQL provisioning is disabled by default and remains an explicit operator-only compatibility option.
 - The project Database control now offers a two-field Supabase quick connect and a user-owned PostgreSQL connection string. Runtime records are stored outside generated source with mode `0600`, and only redacted connection status returns to the browser.
 - Agent prompts use runtime-injected database variables and no longer tell models to copy Supabase values into generated `.env` files.
@@ -13,17 +72,44 @@
 
 ### Fixed
 
+- Normalize redundant single-file artifact wrappers returned inside FREE tool payloads before emitting actions. A fresh browser test caught an extra wrapper causing an empty `App.tsx` write and missing-default-export Preview failure. The bridge now unwraps matching single-file envelopes, rejects nested commands/path changes and gives the upstream an explicit raw-file-only instruction. Browser and server parsers share regression coverage for the resulting artifact.
+- Repair version-tagged self-host installs without looking for a nonexistent `origin/<tag>` branch. Both branch and tag updates use the exact fetched commit, reject divergence/rewritten tags, and preserve configuration. Added real-Git regressions and repeated tagged repair to Ubuntu CI.
+- Compare prerelease versions correctly so a beta installation can later recognize the stable release as newer. Preserve support for historical four-part web versions and reject malformed/native-desktop version strings.
+- Removed blocking synthetic FREE model probes: a timed-out `Reply with OK` request could fail every new project before actual coding began. Selection still validates credentials and approved models; real generation remains authoritative for upstream authentication, funding and rate-limit errors.
+- Require verified Preview evidence before suppressing a late connection failure. Completed scaffold commands and cloned snapshot objects no longer count as a generated application. Upstream network failures no longer blame the user's internet connection.
+- Invalidate queued/in-flight repair probes and cancel autostart on intentional runtime shutdown. Late proxy errors cannot restore an older source snapshot after the Preview process has deliberately stopped.
+- Exclude temporary atomic-write files from snapshots and classify concurrent source removal as a retryable conflict, preserving the last complete snapshot instead of returning partial source or a generic server error.
+- Phase 1: excluded generated/cache trees at every path depth from runtime sync, source snapshots, and browser persistence; retained real hidden source such as `.github`.
+- Replaced file-count snapshot freshness with bounded disk reconciliation, detected concurrent writes, preserved empty/deleted workspaces, and waited for IndexedDB transaction completion before reporting saved source.
+- Made Preview snapshot pulls read-only: background refresh cannot write old source back into the runtime or override Code selection. Slow results are discarded after project changes, file actions or unsaved edits. History reload prefers current runtime source and uses cached recovery only after an explicit missing-session response, never a generic outage.
+- Fixed `/pricing` server rendering, duplicate Checkout clicks, and error/retry behavior. Phase 2 also derives returned payment status from the billing server, bounds pending checks, and refuses to treat URL parameters or expired billing periods as proof of payment.
+- Phase 2: Supabase settings are labelled configured rather than healthy; PostgreSQL verification is timestamped at save time. Failed credential rotation preserves the previous record, and the UI explains Preview restart requirements after replacement/disconnection.
+- Added scrollable short-window login, a wrapping provider banner, native modal onboarding with inert background and explicit keyboard focus wrapping, and accessible status/error announcements.
+- Removed historical transport heartbeats from commentary cards, deduplicated unchanged timer reports, and stopped previous Preview verification from overriding a newer command/error. Unverified generation is not labelled Ready.
+- Corrected the Linux retry helper's false-zero exit status. Repair preserves checkout/configuration, frozen dependency versions, existing PostgreSQL passwords/ownership, and previous build artifacts on failure. Caddy validation/reload failure restores its previous configuration instead of forcing a shared-proxy restart.
+- Added public Windows PowerShell setup for the open-source server via WSL2, with prerequisite checks, explicit reboot instructions, bounded downloads, and native exit-code propagation. This is not the private native Windows desktop rewrite.
+- Added explicit single-owner no-database authentication for fresh self-hosts, persistent hashed sessions, guarded runtime/Preview access, and installer repair that preserves credentials and existing PostgreSQL configurations.
+- Fixed Node runtime request-body streaming, authenticated Preview WebSocket forwarding, and self-host runtime verification targeting. Runtime outages now return a retryable service-unavailable result at the owner guard instead of a false signed-out response.
+- Awaited asynchronous Preview event reconciliation so failed snapshots enter the existing retry path rather than becoming unhandled browser exceptions during runtime restarts.
+- Removed provider-key writes during editor initialization, rejected delayed old-account saves, cleared keys/editors across logout and tabs, and stopped the signed-out balance badge from loading an old runtime workspace.
+- Made profile timestamps deterministic across server/browser time zones to prevent hydration failures.
 - Replaced the hosted action runner's process-wide `pkill` cleanup with a session-scoped runtime request. Starting one generated project can no longer terminate Wrangler, esbuild, or another tenant's Preview process.
 - Updated the live release smoke to follow v4 Agent Mode directly instead of waiting for the retired Workspace tab.
 
 ### Security
 
+- Replace broad `VITE_*` browser environment exposure with an exact public allowlist. Artifact scanning found an old GitHub token embedded in local and live browser chunks; GitHub returned 401 for that token, but credential embedding remains unacceptable. Direct access and whole-object `import.meta.env` now exclude credential variables, with a real bundled regression test. Public provider base URLs containing credentials, query strings or fragments are omitted. This beta does not replace existing live/cached assets or rotate credentials.
+- Phase 1 public browsing uses shared public-address validation, DNS-pinned connections, bounded responses/deadlines, and revalidated redirect destinations. Removed the unprotected raw-fetch fallback and blocked private Chromium subresources and WebSockets.
+- Removed the unowned encrypted-localStorage provider-key restore path. Generated HTTP/WebSocket Preview requests no longer forward platform session, provider-key, Git-provider, or internal operator headers/cookies to generated application servers.
 - Removed Supabase access-token and credential persistence from browser local storage. Optional account discovery tokens now live only for the current browser session.
 - Supabase quick connect rejects modern secret keys and legacy service-role JWTs before they can be injected into a generated browser application.
 - PostgreSQL connections are verified server-side before storage, redacted from responses, and excluded from static Cloudflare build environments.
 
 ### Validation
 
+- The [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md) records passing Ubuntu clean/repair and Windows PowerShell contract CI, successful browser journeys, failed generation repeats, and remaining gates. No v4.1 production/fleet release is claimed while generation acceptance and Preview/process isolation remain open.
+- Phase 1 review and remaining release prerequisites are recorded in [the review checkpoint](docs/quality/2026-09-12-phase1-review.md). Browser coverage includes a disposable PostgreSQL two-profile/two-tab journey and isolated non-root FREE generation. These are not a production deployment, Stripe payment, clean-OS install, or Windows release certification.
+- Added provider transport, managed-key separation, dynamic model-catalog, medium-effort, banner visibility, and persistent-dismissal regression coverage.
 - Added runtime persistence, redaction, environment-injection, browser Database-control, prompt-context, Ubuntu-version, and database-free installer smoke coverage.
 - Generated a calendar through the real hosted-runtime browser path without a project database and verified its healthy Vite Preview and persisted runtime snapshot.
 

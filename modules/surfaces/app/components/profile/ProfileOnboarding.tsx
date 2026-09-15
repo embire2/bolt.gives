@@ -1,5 +1,7 @@
 import { useFetcher, useLocation } from '@remix-run/react';
-import { useProfile } from '~/lib/profile-context';
+import { useProfile, useSingleUserMode } from '~/lib/profile-context';
+import { SingleUserOnboarding } from './SingleUserOnboarding';
+import { OnboardingDialog } from './OnboardingDialog';
 
 type RegistrationActionData = {
   error?: string;
@@ -9,6 +11,7 @@ export function ProfileOnboarding() {
   const profile = useProfile();
   const fetcher = useFetcher<RegistrationActionData>();
   const location = useLocation();
+  const singleUser = useSingleUserMode();
 
   if (profile) {
     return null;
@@ -17,14 +20,13 @@ export function ProfileOnboarding() {
   const busy = fetcher.state !== 'idle';
   const returnTo = `${location.pathname}${location.search}`;
 
+  if (singleUser) {
+    return <SingleUserOnboarding returnTo={new URLSearchParams(location.search).get('returnTo') || returnTo} />;
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-[400] flex items-center justify-center overflow-y-auto bg-[#10231d]/80 px-4 py-8 backdrop-blur-md"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="profile-onboarding-title"
-    >
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] border border-[#173f32] bg-[#fffdf5] text-[#10231d] shadow-[14px_14px_0_#c9f36a]">
+    <OnboardingDialog titleId="profile-onboarding-title">
+      <div className="relative w-full">
         <div className="grid gap-0 md:grid-cols-[0.8fr_1.2fr]">
           <div className="relative overflow-hidden bg-[#173f32] p-7 text-[#fffdf5] sm:p-9">
             <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full border-[28px] border-[#c9f36a]/20" />
@@ -91,7 +93,10 @@ export function ProfileOnboarding() {
             </label>
 
             {fetcher.data?.error ? (
-              <div className="mt-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+              <div
+                role="alert"
+                className="mt-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
+              >
                 {fetcher.data.error}
               </div>
             ) : null}
@@ -117,6 +122,6 @@ export function ProfileOnboarding() {
           </fetcher.Form>
         </div>
       </div>
-    </div>
+    </OnboardingDialog>
   );
 }

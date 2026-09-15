@@ -1,12 +1,13 @@
 import { cloudflareDevProxyVitePlugin as remixCloudflareDevProxy, vitePlugin as remixVitePlugin } from '@remix-run/dev';
 import UnoCSS from 'unocss/vite';
-import { defineConfig, type ViteDevServer } from 'vite';
+import { defineConfig, loadEnv, type ViteDevServer } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
 import { execSync } from 'child_process';
 import { getManualChunkName } from './build-utils/manual-chunks';
+import { publicEnvironmentDefines } from './build-utils/public-environment';
 import packageJson from './package.json';
 
 // Load environment variables from multiple files
@@ -35,6 +36,7 @@ export default defineConfig((config) => {
 
   return {
     define: {
+      ...publicEnvironmentDefines(loadEnv(config.mode, process.cwd(), '')),
       'process.env.NODE_ENV': JSON.stringify(nodeEnv),
       __COMMIT_HASH: JSON.stringify(getGitHash()),
       __APP_VERSION: JSON.stringify(productVersion),
@@ -93,14 +95,8 @@ export default defineConfig((config) => {
       chrome129IssuePlugin(),
       config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
     ],
-    envPrefix: [
-      'VITE_',
-      'OPENAI_LIKE_API_BASE_URL',
-      'OPENAI_LIKE_API_MODELS',
-      'OLLAMA_API_BASE_URL',
-      'LMSTUDIO_API_BASE_URL',
-      'TOGETHER_API_BASE_URL',
-    ],
+    // Only exact, explicitly public definitions above may enter browser bundles.
+    envPrefix: [],
     css: {
       preprocessorOptions: {
         scss: {

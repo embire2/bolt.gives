@@ -4,7 +4,6 @@ import {
   collectRequestObjectiveCandidatesFromPayload,
   collectUserRequestCandidates,
   collectUserRequestEnvelopeCandidates,
-  detectRestoredHostedRuntimeHandoffMismatch,
   extractRequiredVisibleTextLiterals,
   extractUserRequestTextFromMessage,
   findMissingRequiredVisibleTextLiterals,
@@ -24,6 +23,19 @@ import {
 } from '~/routes/api.chat';
 
 describe('api.chat continuation helpers', () => {
+  it('does not invent visible labels from a JSON envelope containing two quoted requirements', () => {
+    const prompt =
+      'Improve the existing calendar project without restarting from scratch. Keep the exact visible text "CAL_INITIAL" in the app and add another clearly visible label with the exact text "CAL_FOLLOWUP". Continue from the current project and keep preview running.';
+    const request = JSON.stringify({ content: '[Model: gpt-5.6-sol] [Provider: FREE] ' + prompt });
+    expect(extractRequiredVisibleTextLiterals(request)).toEqual(['CAL_INITIAL', 'CAL_FOLLOWUP']);
+    expect(
+      findMissingRequiredVisibleTextLiteralsForRequests({
+        requests: [prompt, request],
+        files: { 'src/App.tsx': { type: 'file', content: '<h1>CAL_INITIAL</h1><p>CAL_FOLLOWUP</p>', isBinary: false } },
+      }),
+    ).toEqual([]);
+  });
+
   it('does not replay a synthesized local runtime handoff when recovery returned no Bolt actions', () => {
     expect(
       shouldReplayLocalRuntimeHandoff({
@@ -496,52 +508,6 @@ describe('api.chat continuation helpers', () => {
         } as any,
       }),
     ).toBe(false);
-  });
-
-  it('treats restored previews as unhealthy when the latest handoff files were rolled back', () => {
-    const mismatch = detectRestoredHostedRuntimeHandoffMismatch({
-      status: {
-        recovery: { state: 'restored' },
-      } as any,
-      snapshot: {
-        '/home/project/src/App.tsx': {
-          type: 'file',
-          content: 'export default function App(){return <h1>old</h1>}\n',
-          isBinary: false,
-        } as any,
-      },
-      appliedFiles: [
-        {
-          path: '/home/project/src/App.tsx',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-        },
-      ],
-    });
-
-    expect(mismatch).toContain('latest generated update to src/App.tsx was not retained');
-  });
-
-  it('accepts restored previews when the runtime snapshot still contains the latest handoff files', () => {
-    const mismatch = detectRestoredHostedRuntimeHandoffMismatch({
-      status: {
-        recovery: { state: 'restored' },
-      } as any,
-      snapshot: {
-        '/home/project/src/App.tsx': {
-          type: 'file',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-          isBinary: false,
-        } as any,
-      },
-      appliedFiles: [
-        {
-          path: '/home/project/src/App.tsx',
-          content: 'export default function App(){return <h1>new</h1>}\n',
-        },
-      ],
-    });
-
-    expect(mismatch).toBeNull();
   });
 
   it('skips planner for architect recovery prompts', () => {

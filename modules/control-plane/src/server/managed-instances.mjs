@@ -167,16 +167,21 @@ export function resolveManagedInstancePagesAddress(project, fallbackProjectName,
 export function buildManagedInstancePagesEnvConfig({ hostedFreeRelayOrigin = '', runtimeControlPublicUrl = '' } = {}) {
   const envVars = {};
 
+  /*
+   * Wrangler replaces remote plain-text vars from wrangler.toml during deploy.
+   * Preserve server routing bindings just like the independently stored relay secret.
+   */
+
   if (String(hostedFreeRelayOrigin || '').trim()) {
     envVars.BOLT_HOSTED_FREE_RELAY_ORIGIN = {
-      type: 'plain_text',
+      type: 'secret_text',
       value: String(hostedFreeRelayOrigin).trim(),
     };
   }
 
   if (String(runtimeControlPublicUrl || '').trim()) {
     envVars.BOLT_RUNTIME_CONTROL_PUBLIC_URL = {
-      type: 'plain_text',
+      type: 'secret_text',
       value: String(runtimeControlPublicUrl).trim(),
     };
   }

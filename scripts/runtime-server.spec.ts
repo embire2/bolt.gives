@@ -670,6 +670,41 @@ describe('runtime server workspace isolation', () => {
     expect(normalizeSessionId('  shared_session_2  ')).toBe('shared_session_2');
   });
 
+  it('never mounts operator registries or credential storage as a generated project', () => {
+    for (const id of [
+      'tenants',
+      'owner-auth',
+      'project-connections',
+      'project-databases',
+      'cloudflare-deployments',
+      'node_modules',
+      'projects',
+      'runtime-node-workspaces',
+    ]) {
+      expect(() => normalizeSessionId(id)).toThrow('Reserved runtime session');
+      expect(() => normalizeSessionId(id.toUpperCase())).toThrow('Reserved runtime session');
+    }
+  });
+
+  it('keeps generated cookies host-only and removes permissive cross-project CORS', () => {
+    const headers = applyPreviewResponseHeaders(
+      {
+        'Access-Control-Allow-Origin': 'https://another-project.example',
+        'Access-Control-Allow-Credentials': 'true',
+        'Set-Cookie': [
+          '__Host-bolt_preview=spoof; Path=/; Secure',
+          'app_session=fixture; Domain=example.com; HttpOnly',
+        ],
+        'Referrer-Policy': 'unsafe-url',
+      },
+      true,
+    );
+    expect(headers).not.toHaveProperty('Access-Control-Allow-Origin');
+    expect(headers).not.toHaveProperty('Access-Control-Allow-Credentials');
+    expect(headers).toHaveProperty('set-cookie', ['app_session=fixture; HttpOnly']);
+    expect(headers['Referrer-Policy']).toBe('no-referrer');
+  });
+
   it('removes iframe-blocking headers from proxied preview responses', () => {
     expect(
       applyPreviewResponseHeaders({
@@ -1050,6 +1085,7 @@ describe('runtime server workspace isolation', () => {
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
         config: { supported: true, databaseEnabled: true },
+        projectDatabaseConfig: { supported: false },
         ensureWorkspaceFn,
         writeEvent: (event: { type: string; message?: string }) => events.push(event),
         now: 1_000,
@@ -1079,6 +1115,7 @@ describe('runtime server workspace isolation', () => {
         },
         {
           config: { supported: true, databaseEnabled: false },
+          projectDatabaseConfig: { supported: false },
           ensureWorkspaceFn,
           writeEvent,
         },
@@ -1170,6 +1207,7 @@ describe('runtime server workspace isolation', () => {
     await expect(
       resolveRuntimeNodeDatabaseEnvironmentForCommand(session, {
         config: { supported: true, databaseEnabled: true },
+        projectDatabaseConfig: { supported: false },
         connectDatabaseFn: async () => {
           throw new Error('ssh: connect timed out for private-password');
         },
@@ -3233,7 +3271,7 @@ The latest release of react-calendar is "6.0.1".`),
           type: 'info',
           title: 'Preview Repair In Progress',
           description: 'Repairing',
-          content: 'Repairing',
+          content: 'ELIFECYCLE Command failed with exit code 1.',
           source: 'preview',
         },
       },

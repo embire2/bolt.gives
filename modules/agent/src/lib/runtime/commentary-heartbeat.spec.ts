@@ -13,9 +13,9 @@ describe('buildCommentaryHeartbeat', () => {
       lastVisibleResult: 'The install finished successfully.',
     });
 
-    expect(heartbeat.message.length).toBeGreaterThan(0);
-    expect(heartbeat.detail).toContain('Starting the preview and checking the generated form flow');
-    expect(heartbeat.detail).toContain('The install finished successfully');
+    expect(heartbeat?.message.length).toBeGreaterThan(0);
+    expect(heartbeat?.detail).toContain('Starting the preview and checking the generated form flow');
+    expect(heartbeat?.detail).toContain('The install finished successfully');
   });
 
   it('prefers command-specific progress wording over generic keep-alive commentary', () => {
@@ -25,8 +25,12 @@ describe('buildCommentaryHeartbeat', () => {
       lastVisibleResult: 'pnpm install exit 0',
     });
 
-    expect(heartbeat.message).toContain('pnpm install');
-    expect(heartbeat.message).not.toContain('still working on your request');
-    expect(heartbeat.detail).toContain('Latest visible result: pnpm install exit 0');
+    expect(heartbeat?.message).toContain('pnpm install exit 0');
+    expect(heartbeat?.message).not.toContain('still running');
+    expect(heartbeat?.detail).toContain('Latest visible result: pnpm install exit 0');
+  });
+  it('does not invent work without evidence or reopen a completed run', () => {
+    expect(buildCommentaryHeartbeat(10_000, 'action', { goal: 'build a calendar' })).toBeNull();
+    expect(buildCommentaryHeartbeat(10_000, 'next-step', { lastVisibleResult: 'Preview ready' })).toBeNull();
   });
 });

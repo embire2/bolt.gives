@@ -76,6 +76,12 @@ You can configure keys in either of these ways:
 2. `.env.local`:
    - Add values to `.env.local` (never commit it)
 
+The hosted FREE choice uses ChatGPT-Luna at medium reasoning effort through the
+operator's protected MagnetAPI route. To use MagnetAPI's wider model catalog,
+select **MagnetAPI**, sign in at `https://magnetapi.org`, buy a plan, create a
+User API Key, and paste it into the provider control. The personal-provider path
+never uses the operator's hosted FREE key.
+
 ## Build (High Memory)
 
 This repo can require a larger Node heap during builds.
@@ -100,6 +106,7 @@ If you deploy this repo via Cloudflare Pages:
 - Build command: `NODE_OPTIONS=--max-old-space-size=6142 pnpm run build`
 - Build output directory: `build/client`
 - If you operate a hosted FREE coder on your own deployment, set `MAGNET_API_KEY` only in the server environment
+- To configure a self-hosted default for the separate user-owned MagnetAPI provider, set `MAGNETAPI_USER_API_KEY`
 - If your build fails with out-of-memory, confirm `NODE_OPTIONS=--max-old-space-size=6142` is set in the Pages build environment
 - For the full step-by-step setup guide, use the `Deploying To Cloudflare Pages` section in `README.md`
 

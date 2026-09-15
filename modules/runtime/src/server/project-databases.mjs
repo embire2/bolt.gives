@@ -42,7 +42,8 @@ export function buildProjectDatabaseConfig(env = process.env) {
   const port = Number(envValue(env, 'BOLT_PROJECT_DATABASE_PORT') || '5432');
   const sslMode = (envValue(env, 'BOLT_PROJECT_DATABASE_SSL') || 'disable').toLowerCase();
   const secretRoot =
-    envValue(env, 'BOLT_PROJECT_DATABASE_SECRET_ROOT') || '/srv/bolt-gives-runtime-workspaces/project-databases';
+    envValue(env, 'BOLT_PROJECT_DATABASE_SECRET_ROOT') ||
+    path.join(envValue(env, 'RUNTIME_WORKSPACE_DIR') || '/srv/bolt-gives-runtime-workspaces', 'project-databases');
   const connectionLimit = Math.max(
     2,
     Math.min(25, Number(envValue(env, 'BOLT_PROJECT_DATABASE_CONNECTION_LIMIT') || '10') || 10),
@@ -162,6 +163,14 @@ async function writeStoredRecord(config, identity, record, fsApi) {
     await fsApi.unlink(temporary).catch(() => undefined);
     throw error;
   }
+}
+
+export async function readExistingProjectDatabase(sessionId, config = buildProjectDatabaseConfig(), fsApi = fs) {
+  if (!config?.secretRoot) {
+    return null;
+  }
+
+  return readStoredRecord(config, buildProjectDatabaseIdentity(sessionId), fsApi);
 }
 
 function createClient(options, dependencies) {

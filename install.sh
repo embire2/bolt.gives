@@ -55,7 +55,7 @@ Usage:
 
 Options:
   --install-dir PATH   Install/update the repo in PATH (default: $HOME/bolt.gives)
-  --branch NAME        Git branch to install (default: main)
+  --branch NAME        Git branch or release tag to install (default: main)
   --repo-url URL       Git repository URL to clone/update
   --app-domain HOST    Public app domain (for example: code.example.com)
   --admin-domain HOST  Public admin/operator domain (for example: admin.example.com)
@@ -103,8 +103,15 @@ warn() {
 }
 
 fail() {
-  printf '[bolt.gives installer] ERROR: %s\n' "$*" >&2
+  printf '[bolt.gives installer] ERROR (%s): %s\n' "${INSTALL_STAGE:-preflight}" "$*" >&2
   exit 1
+}
+
+report_install_failure() {
+  local status="$1"
+  local line="$2"
+  printf '[bolt.gives installer] Stage %s failed (exit %s, line %s). Resolve the reported prerequisite and rerun the same installer; no success was recorded.\n' "${INSTALL_STAGE:-preflight}" "${status}" "${line}" >&2
+  exit "${status}"
 }
 
 retry_command() {
@@ -119,9 +126,9 @@ retry_command() {
   while true; do
     if "$@"; then
       return 0
+    else
+      exit_code=$?
     fi
-
-    exit_code=$?
 
     if (( attempt >= attempts )); then
       warn "${label} failed after ${attempts} attempt(s)"
@@ -490,6 +497,19 @@ normalize_config_inputs() {
     fail "When --app-domain is set, --admin-domain must also be set."
   fi
 
+  local host_name
+  for host_name in "${APP_DOMAIN}" "${ADMIN_DOMAIN}" "${CREATE_DOMAIN}"; do
+    if [[ -n "${host_name}" && ! "${host_name}" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]]; then
+      fail "Invalid domain. Supply a hostname only, without ports, spaces or Caddy directives."
+    fi
+  done
+  [[ "${SERVICE_PREFIX}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]] || fail "Invalid service prefix."
+  [[ "${NODE_MAJOR}" =~ ^[0-9]+$ && "${NODE_HEAP_MB}" =~ ^[0-9]+$ ]] || fail "Node settings must be numeric."
+  for port in "${APP_PORT}" "${COLLAB_PORT}" "${WEBBROWSE_PORT}" "${RUNTIME_PORT}"; do
+    [[ "${port}" =~ ^[0-9]{1,5}$ ]] && (( 10#${port} > 0 && 10#${port} <= 65535 )) || fail "Ports must be between 1 and 65535."
+  done
+  [[ "${INSTALL_DIR}" == /* && "${INSTALL_DIR}" != / && "${INSTALL_DIR}" != *[$'\n\r\t ']* ]] || fail "Use an absolute install path without spaces or control characters."
+
   if [[ "${INSTALL_POSTGRES}" -eq 1 ]]; then
     validate_sql_identifier "${POSTGRES_DB}"
     validate_sql_identifier "${POSTGRES_USER}"
@@ -538,8 +558,8 @@ install_nodejs() {
   log "Installing Node.js ${NODE_MAJOR}.x"
   repair_apt_state
 
-  retry_command 3 5 "NodeSource setup for Node.js ${NODE_MAJOR}" bash -lc \
-    "curl -fsSL 'https://deb.nodesource.com/setup_${NODE_MAJOR}.x' | sudo -E bash -" \
+  retry_command 3 5 "NodeSource setup for Node.js ${NODE_MAJOR}" bash -o pipefail -lc \
+    "curl --connect-timeout 15 --max-time 120 -fsSL 'https://deb.nodesource.com/setup_${NODE_MAJOR}.x' | sudo -E bash -" \
     || fail "Unable to prepare the NodeSource repository for Node.js ${NODE_MAJOR}."
 
   retry_command 3 5 "nodejs package install" sudo apt-get install -y nodejs \
@@ -564,23 +584,56 @@ install_pnpm() {
 }
 
 clone_or_update_repo() {
-  if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    log "Updating existing repository in ${INSTALL_DIR}"
-    if git -C "${INSTALL_DIR}" fetch origin "${BRANCH}" \
-      && git -C "${INSTALL_DIR}" checkout "${BRANCH}" \
-      && git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"; then
-      return
-    fi
+  [[ "${BRANCH}" != -* ]] && git check-ref-format "refs/heads/${BRANCH}" >/dev/null \
+    || fail "Invalid Git branch or tag name."
 
-    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-    warn "Repository update failed; preserving the current tree at ${backup_dir} and recloning"
-    mv "${INSTALL_DIR}" "${backup_dir}"
+  if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    if [[ -n "$(git -C "${INSTALL_DIR}" status --porcelain --untracked-files=no)" ]]; then
+      fail "Tracked files have local changes. Commit or back them up before updating; nothing was overwritten."
+    fi
+    log "Updating existing repository in ${INSTALL_DIR}"
+    local remote_refs ref_name fetch_ref fetched_commit local_commit
+    remote_refs="$(retry_command 3 5 "repository ref lookup" git -C "${INSTALL_DIR}" ls-remote --refs origin \
+      "refs/heads/${BRANCH}" "refs/tags/${BRANCH}")" \
+      || fail "Repository ref lookup failed. The existing checkout was not changed."
+    ref_name="$(printf '%s\n' "${remote_refs}" | awk -v wanted="refs/heads/${BRANCH}" '$2 == wanted {print $2}')"
+    if [[ -z "${ref_name}" ]]; then
+      ref_name="$(printf '%s\n' "${remote_refs}" | awk -v wanted="refs/tags/${BRANCH}" '$2 == wanted {print $2}')"
+    fi
+    [[ -n "${ref_name}" ]] || fail "Requested branch or tag does not exist on origin. Nothing was changed."
+    fetch_ref="${ref_name}"
+    if [[ "${ref_name}" == refs/tags/* ]]; then
+      fetch_ref="${ref_name}:${ref_name}"
+    fi
+    retry_command 3 5 "repository fetch" git -C "${INSTALL_DIR}" fetch --no-tags origin "${fetch_ref}" \
+      || fail "Repository fetch failed. The existing checkout was not changed."
+    fetched_commit="$(git -C "${INSTALL_DIR}" rev-parse --verify 'FETCH_HEAD^{commit}')" \
+      || fail "The requested ref is not a commit."
+    git -C "${INSTALL_DIR}" merge-base --is-ancestor HEAD "${fetched_commit}" \
+      || fail "Update is not fast-forward. Back up/reconcile local commits before retrying; nothing was overwritten."
+
+    if [[ "${ref_name}" == refs/tags/* ]]; then
+      # Release tags are immutable targets, not origin/<tag> tracking branches.
+      git -C "${INSTALL_DIR}" checkout --detach "${fetched_commit}" \
+        || fail "Unable to select the release commit."
+    else
+      if git -C "${INSTALL_DIR}" show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+        local_commit="$(git -C "${INSTALL_DIR}" rev-parse "refs/heads/${BRANCH}")"
+        git -C "${INSTALL_DIR}" merge-base --is-ancestor "${local_commit}" "${fetched_commit}" \
+          || fail "The local target branch has diverged. Nothing was overwritten."
+        git -C "${INSTALL_DIR}" checkout "${BRANCH}" \
+          && git -C "${INSTALL_DIR}" merge --ff-only "${fetched_commit}" \
+          || fail "Unable to fast-forward the requested branch."
+      else
+        git -C "${INSTALL_DIR}" checkout -b "${BRANCH}" "${fetched_commit}" \
+          || fail "Unable to create the requested local branch."
+      fi
+    fi
+    return
   fi
 
   if [[ -e "${INSTALL_DIR}" ]]; then
-    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-    warn "Install directory exists but is not a git repository; moving it to ${backup_dir}"
-    mv "${INSTALL_DIR}" "${backup_dir}"
+    fail "Install directory exists but is not a Git checkout. Choose an empty --install-dir; existing data was not moved."
   fi
 
   log "Cloning ${REPO_URL} into ${INSTALL_DIR}"
@@ -778,6 +831,24 @@ prepare_env_file() {
   upsert_env_line "${env_file}" "BOLT_PROJECT_DATABASE_ENABLED" "false"
   upsert_env_line "${env_file}" "BOLT_PROJECT_CONNECTION_SECRET_ROOT" "${RUNTIME_WORKSPACE_DIR}/project-connections"
 
+  # Preserve the authentication mode of an existing hosted installation.
+  local existing_auth_mode existing_admin_url existing_admin_password owner_token
+  existing_auth_mode="$(read_env_value "${env_file}" "BOLT_SELF_HOST_MODE")"
+  existing_admin_url="$(read_env_value "${env_file}" "BOLT_ADMIN_DATABASE_URL")"
+  existing_admin_password="$(read_env_value "${env_file}" "BOLT_ADMIN_DATABASE_PASSWORD")"
+  if [[ -z "${existing_auth_mode}" && "${INSTALL_POSTGRES}" -eq 0 && -z "${existing_admin_url}${existing_admin_password}" ]]; then
+    existing_auth_mode="single-user"
+    upsert_env_line "${env_file}" "BOLT_SELF_HOST_MODE" "${existing_auth_mode}"
+  fi
+  if [[ "${existing_auth_mode}" == "single-user" ]]; then
+    owner_token="$(read_env_value "${env_file}" "BOLT_SELF_HOST_ACCESS_TOKEN")"
+    if [[ -z "${owner_token}" ]]; then
+      owner_token="$(generate_secret)"
+      upsert_env_line "${env_file}" "BOLT_SELF_HOST_ACCESS_TOKEN" "${owner_token}"
+    fi
+    log "Single-owner login enabled. Read BOLT_SELF_HOST_ACCESS_TOKEN in the protected ${env_file} to sign in."
+  fi
+
   if [[ -n "${BOLT_STRIPE_PUBLISHABLE_KEY:-}" ]]; then
     upsert_env_line "${env_file}" "BOLT_STRIPE_PUBLISHABLE_KEY" "${BOLT_STRIPE_PUBLISHABLE_KEY}"
   fi
@@ -914,17 +985,23 @@ setup_local_postgres() {
     || fail "Unable to start PostgreSQL."
   local postgres_password_sql="${POSTGRES_PASSWORD//\'/\'\'}"
 
-  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'" | grep -q 1; then
-    sudo -u postgres psql -c "ALTER ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
+  local role_exists
+  role_exists="$(sudo -u postgres psql -X -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'")"
+  if [[ "${role_exists}" == "1" ]]; then
+    log "Existing PostgreSQL role retained without changing its password or privileges"
   else
-    sudo -u postgres psql -c "CREATE ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
+    sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE \"${POSTGRES_USER}\" WITH LOGIN PASSWORD '${postgres_password_sql}';" >/dev/null
   fi
 
-  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'" | grep -q 1; then
+  local database_owner
+  database_owner="$(sudo -u postgres psql -X -v ON_ERROR_STOP=1 -tAc "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='${POSTGRES_DB}'")"
+  if [[ -n "${database_owner}" && "${database_owner}" != "${POSTGRES_USER}" ]]; then
+    fail "Existing database belongs to a different role. Choose a dedicated database; existing ownership was not changed."
+  fi
+  if [[ -z "${database_owner}" ]]; then
     sudo -u postgres createdb -O "${POSTGRES_USER}" "${POSTGRES_DB}"
+    sudo -u postgres psql -X -v ON_ERROR_STOP=1 -c "REVOKE CONNECT ON DATABASE \"${POSTGRES_DB}\" FROM PUBLIC; GRANT CONNECT ON DATABASE \"${POSTGRES_DB}\" TO \"${POSTGRES_USER}\";" >/dev/null
   fi
-
-  sudo -u postgres psql -c "REVOKE CONNECT ON DATABASE \"${POSTGRES_DB}\" FROM PUBLIC; GRANT CONNECT ON DATABASE \"${POSTGRES_DB}\" TO \"${POSTGRES_USER}\";" >/dev/null
 
   retry_command 3 2 "postgresql verification" \
     env PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'SELECT 1' >/dev/null \
@@ -943,19 +1020,24 @@ install_dependencies() {
     warn "pnpm install --frozen-lockfile failed; repairing dependency state and retrying"
     repair_repo_dependencies
 
-    if pnpm install --no-frozen-lockfile; then
+    if pnpm install --frozen-lockfile; then
       exit 0
     fi
 
     warn "pnpm install retry failed; removing node_modules and attempting one clean install"
     rm -rf node_modules
     repair_repo_dependencies
-    pnpm install --force --no-frozen-lockfile
+    pnpm install --force --frozen-lockfile
   ) || fail "Unable to install project dependencies after recovery attempts."
 }
 
 build_application() {
   log "Building production bundle with ${NODE_HEAP_MB} MB Node heap"
+  local build_backup
+  build_backup="$(mktemp -d "${INSTALL_DIR}/.build-backup.XXXXXX")"
+  if [[ -d "${INSTALL_DIR}/build" ]]; then
+    cp -a "${INSTALL_DIR}/build" "${build_backup}/build"
+  fi
   (
     cd "${INSTALL_DIR}"
     export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
@@ -967,7 +1049,15 @@ build_application() {
     rm -rf build node_modules/.vite
     repair_repo_dependencies
     pnpm run build
-  ) || fail "Unable to build bolt.gives after recovery attempts."
+  ) || {
+    rm -rf "${INSTALL_DIR}/build"
+    if [[ -d "${build_backup}/build" ]]; then
+      mv "${build_backup}/build" "${INSTALL_DIR}/build"
+    fi
+    rmdir "${build_backup}"
+    fail "Build failed after recovery. Previous build artifacts were restored; services were not restarted."
+  }
+  rm -rf "${build_backup}"
 }
 
 write_launcher_scripts() {
@@ -1074,6 +1164,10 @@ install_systemd_services() {
   retry_command 2 3 "enable/start systemd services" \
     sudo systemctl enable --now "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}" \
     || fail "Unable to enable or start the bolt.gives services."
+  # enable --now does not reload an already running service after an update.
+  retry_command 2 3 "activate updated services" sudo systemctl restart \
+    "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}" \
+    || fail "Updated services failed to restart. Check journalctl before retrying."
 
   local service_name
   for service_name in "${COLLAB_SERVICE}" "${WEBBROWSE_SERVICE}" "${RUNTIME_SERVICE}" "${APP_SERVICE}"; do
@@ -1111,6 +1205,8 @@ EOF
 write_caddy_site() {
   local host_name="$1"
   local root_redirect="$2"
+  # Profile and origin authorization must run for hosted and single-user requests alike.
+  local runtime_upstream="${APP_PORT}"
 
   cat <<EOF
 ${host_name} {
@@ -1125,7 +1221,7 @@ INNER
 fi)
 
 	handle /runtime/* {
-		reverse_proxy 127.0.0.1:${RUNTIME_PORT}
+		reverse_proxy 127.0.0.1:${runtime_upstream}
 	}
 
 	handle_path /collab/* {
@@ -1153,9 +1249,16 @@ configure_caddy() {
   fi
 
   log "Configuring Caddy for ${APP_DOMAIN} and ${ADMIN_DOMAIN}"
-  ensure_caddy_import
-
   local caddy_fragment="/etc/caddy/Caddyfile.d/${SERVICE_PREFIX}.caddy"
+  local backup_dir
+  backup_dir="$(mktemp -d)"
+  if sudo test -f /etc/caddy/Caddyfile; then
+    sudo cp -a /etc/caddy/Caddyfile "${backup_dir}/Caddyfile"
+  fi
+  if sudo test -f "${caddy_fragment}"; then
+    sudo cp -a "${caddy_fragment}" "${backup_dir}/fragment"
+  fi
+  ensure_caddy_import
   local fragment_content
 
   fragment_content="$(write_caddy_site "${APP_DOMAIN}" "")"
@@ -1167,19 +1270,38 @@ configure_caddy() {
     fragment_content+="$(write_caddy_site "${CREATE_DOMAIN}" "/managed-instances")"
   fi
 
-  printf '%s\n' "${fragment_content}" | sudo tee "${caddy_fragment}" >/dev/null
-  sudo caddy fmt --overwrite "${caddy_fragment}" >/dev/null
-  retry_command 2 2 "caddy validate" sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null \
-    || fail "Caddy configuration validation failed."
+  if ! printf '%s\n' "${fragment_content}" | sudo tee "${caddy_fragment}" >/dev/null \
+    || ! sudo caddy fmt --overwrite "${caddy_fragment}" >/dev/null \
+    || ! retry_command 2 2 "caddy validate" sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null; then
+    restore_caddy_config "${backup_dir}" "${caddy_fragment}"
+    fail "Caddy validation failed. Previous configuration restored; the running proxy was not restarted."
+  fi
   retry_command 2 2 "caddy enable/start" sudo systemctl enable --now caddy \
-    || fail "Unable to start Caddy."
+    || { restore_caddy_config "${backup_dir}" "${caddy_fragment}"; fail "Unable to start Caddy; previous configuration restored."; }
 
   if ! retry_command 2 2 "caddy reload" sudo systemctl reload caddy; then
-    warn "Caddy reload failed; attempting a full restart"
-    sudo systemctl restart caddy || fail "Unable to restart Caddy after reload failure."
+    restore_caddy_config "${backup_dir}" "${caddy_fragment}"
+    fail "Caddy reload failed. Previous configuration restored. The shared proxy was not forcibly restarted."
   fi
 
   sudo systemctl is-active --quiet caddy || fail "Caddy is not active after configuration."
+  sudo rm -rf "${backup_dir}"
+}
+
+restore_caddy_config() {
+  local backup_dir="$1"
+  local fragment="$2"
+  if sudo test -f "${backup_dir}/Caddyfile"; then
+    sudo cp -a "${backup_dir}/Caddyfile" /etc/caddy/Caddyfile
+  else
+    sudo rm -f /etc/caddy/Caddyfile
+  fi
+  if sudo test -f "${backup_dir}/fragment"; then
+    sudo cp -a "${backup_dir}/fragment" "${fragment}"
+  else
+    sudo rm -f "${fragment}"
+  fi
+  sudo rm -rf "${backup_dir}"
 }
 
 wait_for_http() {
@@ -1188,7 +1310,7 @@ wait_for_http() {
   local delay="${3:-2}"
 
   for ((i=1; i<=attempts; i++)); do
-    if curl -fsS "${url}" >/dev/null 2>&1; then
+    if curl --connect-timeout 5 --max-time 15 -fsS "${url}" >/dev/null 2>&1; then
       return 0
     fi
     sleep "${delay}"
@@ -1278,10 +1400,16 @@ main() {
   parse_args "$@"
   require_non_root
   require_ubuntu
+  umask 077
+  need_cmd flock
+  exec 9>"${HOME}/.bolt-gives-install.lock"
+  flock -n 9 || fail "Another bolt.gives installation is running for this user. Wait for it to finish before retrying."
+  trap 'report_install_failure "$?" "$LINENO"' ERR
   prompt_for_missing_config
   normalize_config_inputs
 
   if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
+    INSTALL_STAGE=system-dependencies
     install_apt_packages
     install_nodejs
     install_pnpm
@@ -1294,20 +1422,27 @@ main() {
   need_cmd curl
   need_cmd python3
 
+  INSTALL_STAGE=repository
   clone_or_update_repo
+  INSTALL_STAGE=configuration
   prepare_env_file
   seed_operator_registry
   setup_local_postgres
+  INSTALL_STAGE=project-dependencies
   install_dependencies
   write_launcher_scripts
 
   if [[ "${BUILD_APP}" -eq 1 ]]; then
+    INSTALL_STAGE=build
     build_application
   fi
 
   if [[ "${INSTALL_SERVICE}" -eq 1 ]]; then
+    INSTALL_STAGE=services
     install_systemd_services
+    INSTALL_STAGE=https-proxy
     configure_caddy
+    INSTALL_STAGE=health-verification
 
     if ! wait_for_http "http://127.0.0.1:${APP_PORT}" 45 2; then
       warn "Application health check failed after first startup; restarting the service stack once"
@@ -1324,4 +1459,6 @@ main() {
   print_summary
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

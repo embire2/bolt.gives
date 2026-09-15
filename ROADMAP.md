@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-12
+Last updated: 2026-09-15
 
 Status legend:
 
@@ -10,11 +10,94 @@ Status legend:
 
 Current stable release:
 
-- [x] `v4.0.1`
+- [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
+
+## v4.1.0 Release Outcome
+
+- [x] B01/B02: bounded current-source snapshots, concurrent reconciliation, account-scoped history and follow-up preservation.
+- [x] B03/B09: pricing SSR, authenticated Checkout and signed transactional billing fulfillment. Production webhook enabled; real unpaid USD 5 monthly Checkout and signed replay pass. The operator's paid test remains explicit below.
+- [x] B04/B05: database-free private-owner installation and account-owned provider keys, with Ubuntu repair CI and two-profile/two-tab browser checks.
+- [x] B06/B07/B08: truthful Supabase status, safe replacement/disconnection, scrollable onboarding and contained keyboard focus.
+- [x] B10/B11/B12: event-derived state, strict browser acceptance and protected public browsing.
+- [x] B13/B14: production app/runtime cut over to isolated non-root services after source/private-record checksum verification. Public Preview uses separate signed TLS origins. Service/routing rollback was rehearsed; originals and backups remain intact.
+- [x] B15: deterministically reproduced a browser hook failure plus late HTML response cancelling repair while source remained broken. Fixed the state boundary and passed the same Chromium reproduction and full Agent Mode injected-failure test. The original historical stack was not retained; see [causal evidence](docs/quality/2026-09-15-browser-recovery.md).
+- [x] B16/B17/B18: exact browser environment allowlisting, bounded stream continuation, stable history navigation and JSON-aware follow-up requirement checks.
+- [x] Rootless shutdown races, unwanted stop-triggered restarts, unmanaged Vite HMR sockets, and false concurrent snapshot conflicts are fixed with regression coverage.
+
+## Follow-Up Work
+
+These are explicit remaining acceptance limits or separate product work, not a
+claim that every platform/provider combination is certified by web v4.1.0.
+
+- [ ] F01: Operator completes a real paid Stripe subscription and confirms the account balance, renewal and cancellation against the live endpoint. Automated tests never charge real cards.
+- [ ] F02: Complete Windows/WSL first installation and reboot-resume on a clean Windows machine; retain passing PowerShell and Ubuntu clean/repair CI.
+- [ ] F03: Complete account-specific MagnetAPI BYOK/model-switching combinations and periodically verify upstream catalog availability without using the funded FREE key as a personal-key fallback.
+- [ ] F04: Restore connectivity to the optional SSH CLI node and validate its dedicated-user lifecycle. Keep unavailable CLI provisioning explicitly failed; hosted Preview/publishing must remain independent.
+- [ ] F05: Extend fleet-scale CPU/RAM/bundle profiling, collaboration reconnect, OTP expiry, mobile/database and cross-version acceptance matrices.
+- [ ] F06: Replace the disabled legacy process-local self-updater on hosted rootless servers with an independently authorized, health-verified operator update service. Hosted releases use the validated deployment/control-plane path; no unrestricted sudo or false in-app update success.
+- [ ] W01-W07: Build and test the private native Windows rewrite in its independent lane below. Do not force an unverified desktop replacement.
+
+<details>
+<summary>Historical pre-release checkpoints (superseded by the outcome above)</summary>
+
+Combined opt-in test publication:
+
+- [~] `v4.1.0-beta.1`: both implemented reliability phases, not stable deployment or completed Phase 2. See the [release scope and pinned installers](docs/releases/v4.1.0-beta.1.md). B13/B14 and the remaining acceptance gates below are not waived; do not roll this beta out to shared production instances.
+
+CI maintenance after the beta:
+
+- [x] Remove the unavailable optional Codeball review workflow without changing tests, security analysis, builds, installer recovery or release/E2E workflows. Its API hostname is absent from authoritative DNS as well as `1.1.1.1`; changing the production server's DNS resolver is not a fix. This maintenance does not complete the application deployment gates.
 
 Next release target:
 
 - [~] `v4.1.0`
+
+Latest live acceptance: alpha1 now runs the isolated development build with
+non-root services and publicly trusted project Preview TLS. A real FREE/Luna
+Calendar prompt, follow-up and saved-history restore passed in normal Chromium.
+An assigned Cloudflare canary subsequently passed generation, follow-up, restore
+and public publishing in 127 seconds with both chat streams completing normally.
+Its previous deployment was restored and the candidate reactivated, with health
+checks on both transitions. The published Calendar also passed event creation
+and reload persistence. The full suite now passes 1,371 tests, with nine skipped.
+Real USD 5 monthly Stripe Checkout navigation passed without charging a card;
+signed webhook checks and disposable PostgreSQL fulfillment/replay tests passed.
+Production and fleet rollout remain pending; production registration still
+refuses deployment because its source SHA differs from `origin/main`. This is a
+real application/runtime difference, not a metadata-only fix. Historical checkpoint statements
+below describe their dates, not the current alpha deployment. See the
+[13 September alpha evidence](docs/quality/2026-09-13-alpha-acceptance.md).
+
+14 September preparation: the reproduced rootless Podman shutdown race is fixed;
+five real containers flushed state and exited cleanly. One-time migration now
+refuses existing targets and running/missing service units. A real FREE/Luna
+browser repeat passed Preview, follow-up, Code selection, history and runtime
+restart. The full suite passes 1,400 tests, nine skipped. A scoped cPanel DNS-01
+hook now passes live cPanel access and public wildcard issuance after fixing the
+actual response envelope and restoring the missing secondary DNS zone. The
+secondary verifies the served serial after each update. Non-root mail settings
+and constrained Caddy reloads are repaired; the latest suite passes 1,424 tests.
+Production migration and remaining release acceptance are not complete. See the
+[preparation evidence](docs/quality/2026-09-14-release-preparation.md).
+
+Latest continuation: 1,450 tests pass, nine skipped. Vite helper imports no longer
+start unmanaged HMR reconnects; concurrent snapshot readers no longer produce
+false conflicts. Eight real container shutdown checks cover graceful flushing
+and stop-before-creation races. Alpha, Cloudflare and the copied production
+candidate passed prompt/follow-up/history browser journeys; the Cloudflare
+run also published a working app. Injected source repair and real-provider
+stream retry/restart plus 30 cold reloads passed. The production source and
+private-data copy is checksum-verified, but production traffic remains on 4.0.1.
+Final service/routing rollback, the B15 investigation and remaining acceptance
+are still open; preparing a verified copy does not close those gates.
+
+The post-test container audit caught a second stop defect: an intentional close
+was triggering the crash monitor and auto-starting Preview again. Handles are
+now marked before waiting for shutdown; current crashes still recover and stale
+process exits are ignored. Calendar cleanup acceptance now checks five seconds
+of actual idle state. This is separate from the earlier Podman creation race.
+
+</details>
 
 Independent Desktop release:
 
@@ -38,7 +121,14 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
-## v4.1.0 - Bug-Fix Release Plan
+## Historical v4.1.0 Audit Plan
+
+The dated checklist below preserves the original investigation/acceptance plan.
+Its pre-release statuses are historical. The release outcome and follow-up work
+above are the current status; links retain the actual failed and passing runs.
+
+<details>
+<summary>Original audit, phase checkpoints and acceptance backlog</summary>
 
 Release theme: make the existing agentic coding workflow reliable, responsive, and testable before adding more product scope. Develop the native Windows replacement in a separate, privately maintained release lane.
 
@@ -46,43 +136,67 @@ The [2026-09-12 audit](docs/quality/2026-09-12-v4.1-audit.md) records reproducti
 
 Audit baseline: 1,167 tests passed, nine skipped; six template Preview smokes passed. The alpha1 browser journey produced an interactive app, applied a follow-up, and restored it after reload, but recorded a snapshot 502. An earlier Code/Preview switch timed out. `/pricing` returned 500 on production and locally. This is **not** a clean release E2E pass.
 
+### Two Implementation Checkpoints
+
+Phase 1 implements the six Priority 1 packages below in the development checkout. See the [review checkpoint and evidence](docs/quality/2026-09-12-phase1-review.md). `[~]` below means implemented locally with validation/review still open, not deployed. Stripe test-mode payment fulfillment and a clean Ubuntu install are still required before claiming the corresponding release acceptance tests complete.
+
+Phase 2 and both deployments were authorized. The two implemented halves are consolidated on the validation branch and published as an opt-in beta; stable deployment still requires the security and health gates. See the [Phase 2 checkpoint](docs/quality/2026-09-12-phase2-checkpoint.md). Alpha isolation and per-project public TLS now work. Production still needs its migration and scalable wildcard-certificate configuration; authoritative DNS is outside the configured Cloudflare account. Do not merge this test prerelease into the automatic production rollout merely to publish it.
+
+Late acceptance work fixed three additional reliability gaps: a blocking 30-second synthetic FREE probe before actual coding; snapshot-object/scaffold completion mistaken for generated output; and shutdown-triggered repair restoring older source. The 21:02 and final 21:05 UTC browser runs passed interaction, follow-up, navigation, reload and intentional runtime restart with disk-source assertions. B01 also excludes atomic-write files and treats concurrent source removal as a retryable conflict; the final repeat includes that change. That checkpoint passed **1,284 tests, nine skipped**. These fixes are in the **test prerelease only**, and B13/B14 remain open. Publication work also corrects tag-based install/repair, refuses rewritten tags and fixes beta-to-stable update ordering; it does not change either isolation boundary.
+
+Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/typecheck/build/bundle budgets passed, lint has zero errors and ten warnings. The final real-browser FREE/Luna journey passed first Preview, interaction, follow-up, Code selection, navigation, reload, and deliberate runtime restart without unexpected browser errors. The two-profile/two-tab PostgreSQL account journey also passed. No production deployment or release was made.
+
+**New release blocker found during Phase 1 review: B13.** Hosted Preview shares the product origin and permits scripts plus same-origin access. Filtering forwarded platform cookies is not a complete generated-browser-code isolation boundary. Keep the following task open for the next approved scope; do not mistake functional E2E success for complete security isolation.
+
+- [~] B13: Signed per-project HTTPS Preview runs on alpha and the production preflight with trusted wildcard certificates and tested renewal. Browser tests reject platform storage/document/cookie access and cross-origin mutation; follow-up/history/restart pass. Production traffic routing, broader WebSocket/database/mobile acceptance and rollout checks remain. See [runtime isolation rollout](docs/operations/runtime-isolation.md).
+- [~] B14: Alpha and production preflight services/projects run non-root with single-project Podman mounts, quotas and loopback-only Preview ports. Process tests deny operator/sibling-file and host-loopback access; eight real shutdown cases pass. Production source/private records are copied and verified, but traffic still uses the original tree. Production service/routing rollback and privileged updater/CLI checks remain. The optional SSH node is unreachable; hosted Preview and publishing do not depend on it.
+- [ ] B15: Trace the intermittent `Cannot read properties of null (reading 'useState')` browser crash seen at 10:36 UTC on 13 September. Capture exact stack, frame and module identity; distinguish product render failure from generated-app failure; add deterministic reproduction and a regression. The instrumented 10:37 repeat passed, which is not proof that the intermittent issue is resolved.
+- [~] B17: A later real FREE run timed out without producing code and failed to resume. Fixed empty-assistant history navigation that could unmount Chat before queued recovery, restored the visible user objective on initialization, and added activity callbacks for buffered file arguments. The injected empty failure dispatched continuation in under one second and reached an interactive real-provider Preview; both that journey and a real upstream-stall retry passed follow-up/history/restart plus 20 cold reloads each. These fixes are not live. See the [1,347-test isolation/recovery checkpoint](docs/quality/2026-09-13-isolation-checkpoint.md).
+- [~] B16: Stop browser-build environment credential exposure. Exact public-name allowlisting and bundled secret fixtures are implemented. The old GitHub token found in live assets returns 401, but existing live/cached assets still require replacement during the stable rollout; never reactivate/reuse exposed credentials.
+
+- [~] B18: Fixed false repair after two-label follow-ups. JSON-envelope punctuation was interpreted as missing UI text even after Preview was verified. The exact browser prompt now has a failing-before/passing-after regression. The strict Cloudflare repeat completes both streams with no recovery continuation, one generated artifact per request and the same restored runtime identity.
+
+- [~] Beta repeat finding: an upstream file-tool result contained a nested artifact wrapper, causing the browser to commit an empty `App.tsx` before server handoff. Normalize valid single-file envelopes at the provider boundary; reject nested commands/path changes and test browser/server extraction together. Keep the failed 13 September browser run in the evidence, not in the pass count.
+
 ### Priority 1: Access, Source Integrity, and Account Safety
 
-| Task            | Actionable changes                                                                                                       | Owner                        | Exit test                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] B01a / B01b | Exclude package caches and generated trees at every depth; bound snapshot reads/payloads and measure resource use        | runtime/project/core         | No `.cache`, `.local`, or nested dependencies in source snapshots; `.github` retained; reproducible memory/payload limits |
-| [ ] B02a / B02b | Replace file-count freshness decisions; reconcile saved source, external edits, deletions, and current runtime revisions | runtime/project              | Same-count edits, rename/delete, follow-up, reload, and restart all return current source                                 |
-| [ ] B03a / B03b | Fix pricing SSR; verify the real Upgrade/login/Stripe test-mode flow                                                     | surfaces/control-plane       | Direct and client navigation return 200; Checkout does not loop; cancellation/retry work                                  |
-| [ ] B04a / B04b | Make onboarding capability-aware without weakening hosted auth; prove both no-db and platform-db installs                | control-plane/surfaces       | Clean self-host reaches first Preview and saves/restores a project without requiring project PostgreSQL                   |
-| [ ] B05a / B05b | Scope provider keys to their owner and clear legacy browser copies on logout; add multi-profile/tab tests                | agent/control-plane/surfaces | Another account cannot inherit a previous user's key                                                                      |
-| [ ] B12a / B12b | Unify browser/fetch destination validation and bounded transport behavior; add safe redirect/address fixtures            | core/agent/surfaces          | Unsafe destinations fail closed in both transports; public browsing still works                                           |
+| Task            | Actionable changes                                                                                                        | Owner                        | Exit test                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [~] B01a / B01b | Shared source exclusions include atomic-write files; bounded disk/transport reads detect concurrent removal and mutation  | runtime/project/core         | No `.cache`, `.local`, or nested dependencies in source snapshots; `.github` retained; reproducible memory/payload limits |
+| [~] B02a / B02b | Read-only runtime reconciliation, durable IndexedDB completion, and shutdown guards prevent stale source rollback         | runtime/project              | Same-count edits, rename/delete, follow-up, reload, and restart all return current source                                 |
+| [~] B03a / B03b | Fixed SSR and double-submit/retry; real unpaid Stripe Checkout and disposable PostgreSQL fulfillment/replay pass          | surfaces/control-plane       | Production webhook activation and the operator's actual paid acceptance remain after migration                            |
+| [~] B04a / B04b | Added explicit private owner mode, guarded runtime/Preview, and clean/repair configuration tests; clean-OS proof remains  | control-plane/surfaces       | Clean self-host reaches first Preview and saves/restores a project without requiring project PostgreSQL                   |
+| [~] B05a / B05b | Implemented owner-scoped keys, legacy cleanup, stale-tab clearing, and late-callback protection; two-profile browser pass | agent/control-plane/surfaces | Another account cannot inherit a previous user's key                                                                      |
+| [~] B12a / B12b | Implemented DNS-pinned transport, shared public-address policy, redirect/response bounds, and real Chromium fixtures      | core/agent/surfaces          | Unsafe destinations fail closed in both transports; public browsing still works                                           |
 
 ### Priority 2: Honest State and Accessible Controls
 
-| Task            | Actionable changes                                                                                                 | Owner                  | Exit test                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------- |
-| [ ] B06a / B06b | Separate configured from verified Supabase state; test failure, rotation, disconnect, and Preview restart guidance | runtime/surfaces       | An unreachable or invalid connection cannot appear healthy                                  |
-| [ ] B07a / B07b | Fix short-window login scrolling; cover banners, keyboard, phone, and zoom                                         | surfaces               | Submit and errors reachable at 390x500 and 200% zoom                                        |
-| [ ] B08a / B08b | Use accessible onboarding focus management and background inertness                                                | surfaces               | Tab stays in the dialog; login, errors, and all fields remain reachable                     |
-| [ ] B09a / B09b | Confirm payment from server state rather than return-URL text                                                      | control-plane/surfaces | Forged success parameters never claim payment; delayed/duplicate webhooks are handled       |
-| [ ] B10a / B10b | Unify Ready/Working/Recovery commentary and remove generic filler; test event ordering and reload                  | agent/surfaces         | Healthy completed Preview does not retain an Active/waiting summary or flash between states |
+| Task            | Actionable changes                                                                                             | Owner                  | Exit test                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| [~] B06a / B06b | Implemented configured/verified-at-save status, atomic credential rotation, and restart/disconnect guidance    | runtime/surfaces       | Invalid or uncontacted Supabase settings cannot appear healthy; browser matrix in progress      |
+| [~] B07a / B07b | Implemented scrollable login and compact wrapping banner; native Chromium 200% zoom passed                     | surfaces               | Submit reachable at 390x500 and native browser 200% zoom                                        |
+| [~] B08a / B08b | Implemented native modal background inertness and explicit Tab/Shift-Tab wrapping                              | surfaces               | Browser containment/reload matrix must pass before release                                      |
+| [~] B09a / B09b | Server-confirmed billing, bounded pending checks and transactional event ledger; duplicate/stale events tested | control-plane/surfaces | Enable the dedicated production webhook only after migration; operator performs paid acceptance |
+| [~] B10a / B10b | Ignore transport heartbeat cards, deduplicate unchanged reports, and invalidate stale Preview verification     | agent/surfaces         | Event-order regression tests pass; broader recovery soak remains                                |
 
 ### Release Evidence, Not Screenshot-Only Success
 
-- [ ] B11a: Replace stale Workspace-tab/prompt locators and overlay-bypassing fixtures with normal v4 onboarding/Agent Mode interactions.
-- [ ] B11b: Make first Preview, interaction, follow-up, saved history, Code selection, and unexpected-error assertions mandatory release checks.
-- [ ] I01: Reproduce Code-switch timeout and snapshot 502 with CPU/heap/network evidence, then enforce measured performance non-regression after B01/B02.
-- [ ] I02: Add app/runtime capability and revision checks; verify mixed-version failures and health-checked atomic rollout/rollback.
+- [~] B11a: Automatic-recovery E2E now uses normal onboarding, the visible Agent Mode composer and cross-origin frame locators; injected source repair passed on the production preflight. Finish migrating remaining screenshot-only/legacy fixtures before treating them as acceptance tests.
+- [~] B11b: Calendar now rejects aborted chat streams and all browser exceptions; prompt, follow-up, saved history and public publishing pass on a real canary. Passive CDP traces confirmed both streams completed. Keep interaction/Code selection and the wider release matrix mandatory.
+- [~] I01: Concurrent snapshot conflicts are reproduced and fixed; Code selection and 30 cold reloads pass. The latest fixture read 43,369 source bytes in 22 ms with runtime high-water RSS 89,416 KiB. Fleet-scale profiling and enforced non-regression budgets remain.
+- [~] I02: Readiness now verifies runtime protocol/version with a deadline. Real mixed-version processes returned 503/200 as expected; Cloudflare rollback/restoration passed. Same-version revision enforcement and production service/routing rollback remain.
 - [ ] I03: Complete the pending Luna/MagnetAPI BYOK browser matrix, actual catalog IDs, model switching, and credential separation.
-- [ ] I04: Create one disposable assigned Cloudflare instance; generate, iterate, restore, publish, verify public assets/deep links, update/rollback, and clean up only the test fixture.
+- [x] I04: Assigned Cloudflare registration, real FREE generation, follow-up, history restore, public assets/deep links, update and rollback/restoration passed. Both owned canary assignments and the two superseded published fixtures were removed afterward; the final static demo is intentionally retained for review. This does not authorize customer fleet refresh before production gates pass.
 - [ ] I05: Exercise account isolation, OTP lifecycle, quota resets, Stripe test-mode fulfillment, domain ownership, tenant permissions, and collaboration reconnect with owned test accounts.
-- [ ] I06: Add disposable Ubuntu clean-install and partial-repair jobs for both platform-db and no-db modes, including usable onboarding.
+- [~] I06: [Ubuntu 22.04/24.04 clean/repair and Windows PowerShell 5.1/7 CI passed](https://github.com/embire2/bolt.gives/actions/runs/34716586998), covering database-free and optional platform-database installs. Recovery preserves passwords, configuration, lockfiles and previous builds. Real TLS, Windows/WSL reboot-resume and clean-machine prompt generation remain required.
 - [ ] Release gate: no unresolved P1, no unexplained browser/5xx errors, full build/bundle checks, documented P2 disposition, and matching tag/artifacts/deployed manifest before fleet rollout.
 
 ### Existing Work Awaiting Release Validation
 
 - [~] `main` contains database-free generated projects, Supabase quick connect, private user-owned PostgreSQL connections, optional-database CLI workspaces/installer, and session-scoped runtime cleanup. B01/B02/B04/B06 and I02/I06 must close their remaining contract gaps.
 - [~] The checkout contains Luna medium-effort labelling, separate user-key MagnetAPI discovery, a dismissible banner, and shell changes. These are not marked shipped until I03 and staging verification pass.
+
+</details>
 
 ## Native Windows Rewrite - Separate Release Lane
 

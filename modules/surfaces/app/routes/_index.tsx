@@ -6,6 +6,7 @@ import { FREE_HOSTED_MODEL_LABEL, FREE_PROVIDER_NAME } from '@bolt/agent/lib/mod
 import { getCreateRedirectHost, getPublicUrlConfig } from '@bolt/core/lib/public-urls';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 import { ProfileOnboarding } from '~/components/profile/ProfileOnboarding';
+import { useProfile, useSingleUserMode } from '~/lib/profile-context';
 import { APP_VERSION } from '@bolt/core/lib/version';
 
 const SCREENSHOT_BASE_URL = '/screenshots';
@@ -36,7 +37,7 @@ const screenshotCards = [
   },
   {
     title: 'Working prompt-to-preview app',
-    description: 'A real FREE ChatGPT-5.6 SOL run generated and restored this Tideboard Preview on live alpha.',
+    description: 'A real FREE ChatGPT-Luna run generated and restored this Tideboard Preview on live alpha.',
     src: `${SCREENSHOT_BASE_URL}/tideboard-preview-v3.4.1.png`,
   },
   {
@@ -57,7 +58,7 @@ const platformHighlights = [
   'Follow-up prompts stay visible beside files and Preview after a project starts, without automatic Chat/Workspace switching.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
-  `Hosted ${FREE_PROVIDER_NAME} users can switch between ChatGPT-5.6 SOL, Opus 4.8, Sonnet 5, and Fable 5 through the protected server-side path.`,
+  `Hosted ${FREE_PROVIDER_NAME} starts with ChatGPT-Luna at medium effort through the protected server-side path. Users can also connect their own MagnetAPI key for its current Frontier model catalog.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
   'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
   'Projects start database-free and can connect Supabase in two fields or use a user-owned PostgreSQL URL held by the private runtime.',
@@ -328,11 +329,14 @@ function HomeShellFallback() {
 }
 
 export function ChatWorkspace() {
+  const profile = useProfile();
+  const needsOwnerLogin = useSingleUserMode() && !profile;
+
   return (
     <div className="flex h-full w-full flex-col bg-bolt-elements-background-depth-1">
       <BackgroundRays />
       <Header />
-      <ClientOnly fallback={<HomeShellFallback />}>{() => <Chat />}</ClientOnly>
+      {!needsOwnerLogin && <ClientOnly fallback={<HomeShellFallback />}>{() => <Chat />}</ClientOnly>}
       <ProfileOnboarding />
     </div>
   );

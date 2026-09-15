@@ -57,6 +57,16 @@ export async function updateRuntimeEnvFile(
   updates = {},
   env = /** @type {Record<string, string | undefined>} */ (process.env),
 ) {
+  /*
+   * An omitted password means keep it. Explicit clearing must shadow inherited
+   * service values too, so persist an empty value instead of removing the key.
+   */
+  updates = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined));
+
+  if (Object.keys(updates).some((key) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) {
+    throw new Error('Invalid runtime setting name.');
+  }
+
   const snapshot = readRuntimeEnvFileSync(env);
   const filePath = snapshot.path;
   const directory = path.dirname(filePath);
@@ -87,11 +97,7 @@ export async function updateRuntimeEnvFile(
 
     const nextValue = updates[key];
 
-    if (nextValue === null || nextValue === undefined || String(nextValue).trim() === '') {
-      continue;
-    }
-
-    nextLines.push(`${key}=${formatEnvValue(nextValue)}`);
+    nextLines.push(`${key}=${formatEnvValue(nextValue ?? '')}`);
   }
 
   for (const [key, value] of Object.entries(updates)) {
@@ -99,11 +105,7 @@ export async function updateRuntimeEnvFile(
       continue;
     }
 
-    if (value === null || value === undefined || String(value).trim() === '') {
-      continue;
-    }
-
-    nextLines.push(`${key}=${formatEnvValue(value)}`);
+    nextLines.push(`${key}=${formatEnvValue(value ?? '')}`);
   }
 
   const nextSource = `${nextLines

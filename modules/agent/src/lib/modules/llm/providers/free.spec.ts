@@ -11,6 +11,7 @@ import FreeProvider, {
 import {
   FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_LABEL,
+  FREE_HOSTED_MODEL_REASONING_EFFORT,
   FREE_HOSTED_MODELS,
 } from '@bolt/agent/lib/modules/llm/free-provider-config';
 
@@ -484,6 +485,18 @@ describe('FreeProvider', () => {
     });
   });
 
+  it('enforces medium reasoning for the hosted ChatGPT-Luna model', () => {
+    expect(
+      normalizeHostedFreeRequest({
+        model: FREE_HOSTED_MODEL,
+        reasoning: { effort: 'low' },
+        input: [{ role: 'user', content: 'Explain the current project.' }],
+      }),
+    ).toMatchObject({
+      reasoning: { effort: FREE_HOSTED_MODEL_REASONING_EFFORT },
+    });
+  });
+
   it('forces hosted Responses builds through one strict file action', () => {
     const normalized = normalizeHostedFreeRequest({
       model: 'gpt-5.6-sol',
@@ -502,7 +515,7 @@ describe('FreeProvider', () => {
       stream: true,
       tool_choice: { type: 'function', name: 'write_file' },
       parallel_tool_calls: false,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: FREE_HOSTED_MODEL_REASONING_EFFORT },
       text: { verbosity: 'low' },
     });
     expect(normalized).not.toHaveProperty('max_tool_calls');

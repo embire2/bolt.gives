@@ -25,8 +25,16 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(42rem circle at 8% 12%, color-mix(in srgb, var(--bolt-gradient-red), transparent 88%), transparent 68%),
-    radial-gradient(40rem circle at 88% 10%, color-mix(in srgb, var(--bolt-gradient-blue), transparent 90%), transparent 72%);
+    radial-gradient(
+      42rem circle at 8% 12%,
+      color-mix(in srgb, var(--bolt-gradient-red), transparent 88%),
+      transparent 68%
+    ),
+    radial-gradient(
+      40rem circle at 88% 10%,
+      color-mix(in srgb, var(--bolt-gradient-blue), transparent 90%),
+      transparent 72%
+    );
   opacity: 0.85;
   z-index: 0;
 }
@@ -34,6 +42,7 @@ body::before {
 #root {
   position: relative;
   z-index: 1;
+  height: 100%;
 }
 
 .bolt-cursor-glow {
@@ -49,7 +58,11 @@ body::before {
   border-radius: 9999px;
   background:
     radial-gradient(circle, color-mix(in srgb, var(--bolt-gradient-blue), transparent 74%) 0%, transparent 58%),
-    radial-gradient(circle at 62% 38%, color-mix(in srgb, var(--bolt-gradient-red), transparent 76%) 0%, transparent 62%);
+    radial-gradient(
+      circle at 62% 38%,
+      color-mix(in srgb, var(--bolt-gradient-red), transparent 76%) 0%,
+      transparent 62%
+    );
   filter: blur(16px);
   mix-blend-mode: screen;
   z-index: 0;
@@ -83,11 +96,21 @@ body::before {
 
 /* Crimson-Azure Gradient Theme Classes */
 .bg-gradient-crimson-azure {
-  background: linear-gradient(135deg, var(--bolt-gradient-crimson) 0%, var(--bolt-bg-gradient-mid) 50%, var(--bolt-gradient-azure) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--bolt-gradient-crimson) 0%,
+    var(--bolt-bg-gradient-mid) 50%,
+    var(--bolt-gradient-azure) 100%
+  );
 }
 
 .text-gradient-crimson-azure {
-  background: linear-gradient(135deg, var(--bolt-gradient-red) 0%, var(--bolt-gradient-blue) 50%, var(--bolt-gradient-azure) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--bolt-gradient-red) 0%,
+    var(--bolt-gradient-blue) 50%,
+    var(--bolt-gradient-azure) 100%
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -95,8 +118,9 @@ body::before {
 
 .gradient-border-crimson-azure {
   border: 2px solid transparent;
-  background: linear-gradient(var(--bolt-elements-bg-depth-1), var(--bolt-elements-bg-depth-1)) padding-box,
-              linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue), var(--bolt-gradient-azure)) border-box;
+  background:
+    linear-gradient(var(--bolt-elements-bg-depth-1), var(--bolt-elements-bg-depth-1)) padding-box,
+    linear-gradient(135deg, var(--bolt-gradient-red), var(--bolt-gradient-blue), var(--bolt-gradient-azure)) border-box;
 }
 
 .modern-scrollbar {
@@ -145,4 +169,8 @@ body::before {
 
   // Firefox support for inverted colors
   scrollbar-color: color-mix(in srgb, var(--bolt-elements-textPrimary), transparent 50%) transparent;
+}
+.bolt-onboarding-dialog::backdrop {
+  background: rgb(16 35 29 / 90%);
+  backdrop-filter: blur(8px);
 }

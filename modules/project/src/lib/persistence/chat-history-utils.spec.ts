@@ -92,6 +92,16 @@ describe('chat-history-utils', () => {
     expect(shouldNavigateAfterPersistedMessage(starterMessages, false, true)).toBe(false);
     expect(
       shouldNavigateAfterPersistedMessage(
+        [
+          ...starterMessages,
+          { id: 'failed-stream', role: 'assistant', content: '', parts: [{ type: 'text', text: '' }] },
+        ],
+        false,
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      shouldNavigateAfterPersistedMessage(
         [...starterMessages, { id: 'model', role: 'assistant', content: 'Calendar implementation complete.' }],
         false,
         true,

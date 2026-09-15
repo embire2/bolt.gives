@@ -9,7 +9,10 @@ const runtimeMocks = vi.hoisted(() => ({
   fetchHostedProjectConnection: vi.fn(),
   saveHostedProjectConnection: vi.fn(),
   deleteHostedProjectConnection: vi.fn(),
+  useProfile: vi.fn(),
 }));
+
+vi.mock('~/lib/profile-context', () => ({ useProfile: runtimeMocks.useProfile }));
 
 vi.mock('@bolt/runtime/lib/runtime/hosted-runtime-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@bolt/runtime/lib/runtime/hosted-runtime-client')>()),
@@ -43,6 +46,8 @@ describe('project Database control', () => {
   });
 
   beforeEach(() => {
+    runtimeMocks.useProfile.mockReturnValue({ id: 'profile-fixture' });
+    runtimeMocks.fetchHostedProjectConnection.mockClear();
     projectDatabaseConnection.set(null);
     runtimeMocks.fetchHostedProjectConnection.mockResolvedValue(null);
     runtimeMocks.saveHostedProjectConnection.mockReset();
@@ -50,6 +55,12 @@ describe('project Database control', () => {
   });
 
   afterEach(cleanup);
+
+  it('does not issue an unauthorized database lookup before profile login', () => {
+    runtimeMocks.useProfile.mockReturnValue(null);
+    render(<SupabaseConnection />);
+    expect(runtimeMocks.fetchHostedProjectConnection).not.toHaveBeenCalled();
+  });
 
   it('quick-connects Supabase without requiring an account management token', async () => {
     runtimeMocks.saveHostedProjectConnection.mockResolvedValue({

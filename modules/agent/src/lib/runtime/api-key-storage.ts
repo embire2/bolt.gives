@@ -1,228 +1,125 @@
 import Cookies from 'js-cookie';
 
 const API_KEYS_COOKIE_NAME = 'apiKeys';
-const API_KEYS_SECURE_STORAGE_KEY = 'cody-agent:api-keys:v1';
+const OWNER_COOKIE_NAME = 'bolt_api_key_owner';
+const CHANGE_EVENT = 'bolt-api-keys-changed';
+const STORAGE_EVENT_KEY = 'bolt-api-key-change';
+const LEGACY_STORAGE_KEYS = ['cody-agent:api-keys:v1', 'cody-agent:api-keys:key:v1'];
+
+function ownerName(ownerId?: string | null) {
+  return ownerId || 'guest';
+}
+
+function clearLegacyStorage() {
+  try {
+    for (const key of LEGACY_STORAGE_KEYS) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Restricted browser storage must not prevent logout.
+  }
+}
+
+function notifyKeyChange() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+
+  try {
+    localStorage.setItem(STORAGE_EVENT_KEY, crypto.randomUUID());
+  } catch {
+    // Other tabs also recheck cookies when they receive focus.
+  }
+}
+
+export function getApiKeysFromCookies(ownerId?: string | null): Record<string, string> {
+  clearLegacyStorage();
+
+  if (Cookies.get(OWNER_COOKIE_NAME) !== ownerName(ownerId)) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(Cookies.get(API_KEYS_COOKIE_NAME) || '{}');
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    if (Object.values(parsed).some((value) => typeof value !== 'string')) {
+      return {};
+    }
+
+    return parsed as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
 
 /*
- * NOTE: This is best-effort local obfuscation, not XSS-safe key storage.
- *
- * The AES key used to wrap the API keys envelope is persisted in the same
- * browser localStorage bucket as the ciphertext. Any JavaScript running on the
- * same origin (including an XSS payload) can read both values and decrypt the
- * stored API keys. Treat anything that travels through this module as if it
- * were stored in plaintext in localStorage.
- *
- * The only meaningful protection this layer offers is against casual, direct
- * inspection of the ciphertext blob (for example, from a user copying the
- * storage value out-of-band). If proper at-rest protection is required, move
- * key management server-side (HttpOnly endpoint), derive the key from a
- * user-supplied passphrase via a KDF, or use platform credential storage
- * (WebAuthn, OS keystore, IndexedDB with OS-backed protection).
+ * There is deliberately no decrypt-and-restore fallback after logout. Legacy
+ * envelopes have no trustworthy owner and shared-origin encryption was not a vault.
  */
-const BEST_EFFORT_KEYRING_STORAGE_KEY = 'cody-agent:api-keys:key:v1';
-const apiKeyMemoizeCache: Record<string, Record<string, string>> = {};
-
-function canUseSecureStorage() {
-  return (
-    typeof window !== 'undefined' &&
-    typeof localStorage !== 'undefined' &&
-    typeof crypto !== 'undefined' &&
-    typeof crypto.subtle !== 'undefined'
-  );
+export async function loadApiKeysFromSecureStorage(ownerId?: string | null) {
+  return getApiKeysFromCookies(ownerId);
 }
 
-function bytesToBase64(bytes: Uint8Array) {
-  let binary = '';
+export function setApiKeysCookie(apiKeys: Record<string, string>, expiresDays = 365, ownerId?: string | null) {
+  clearLegacyStorage();
 
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  try {
+    const activeOwner = localStorage.getItem('bolt-profile-owner');
 
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index++) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
-/*
- * Best-effort only: persists the symmetric key alongside the ciphertext in
- * localStorage. This is obfuscation, not XSS-safe storage. See the comment on
- * BEST_EFFORT_KEYRING_STORAGE_KEY above for mitigation options.
- */
-async function getOrCreateBestEffortStorageKey() {
-  if (!canUseSecureStorage()) {
-    return null;
-  }
-
-  const storedKey = localStorage.getItem(BEST_EFFORT_KEYRING_STORAGE_KEY);
-
-  if (storedKey) {
-    return base64ToBytes(storedKey);
-  }
-
-  const keyBytes = crypto.getRandomValues(new Uint8Array(32));
-  localStorage.setItem(BEST_EFFORT_KEYRING_STORAGE_KEY, bytesToBase64(keyBytes));
-
-  return keyBytes;
-}
-
-async function importAesKey() {
-  const keyBytes = await getOrCreateBestEffortStorageKey();
-
-  if (!keyBytes) {
-    return null;
-  }
-
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-}
-
-function isValidApiKeyRecord(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  for (const entry of Object.values(value as Record<string, unknown>)) {
-    if (typeof entry !== 'string') {
+    if (activeOwner && activeOwner !== ownerName(ownerId)) {
       return false;
     }
+  } catch {
+    // Session changes still clear the cookies when storage is restricted.
   }
+
+  const options = {
+    expires: expiresDays,
+    path: '/',
+    sameSite: 'Lax' as const,
+    secure: typeof location !== 'undefined' && location.protocol === 'https:',
+  };
+  Cookies.set(OWNER_COOKIE_NAME, ownerName(ownerId), options);
+  Cookies.set(API_KEYS_COOKIE_NAME, JSON.stringify(apiKeys), options);
+  notifyKeyChange();
 
   return true;
 }
 
-async function persistEncryptedApiKeys(apiKeys: Record<string, string>) {
-  if (!canUseSecureStorage()) {
-    return;
-  }
-
-  try {
-    const key = await importAesKey();
-
-    if (!key) {
-      return;
-    }
-
-    const payload = JSON.stringify(apiKeys);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const cipherBuffer = await crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv,
-      },
-      key,
-      new TextEncoder().encode(payload),
-    );
-
-    const encryptedEnvelope = JSON.stringify({
-      iv: bytesToBase64(iv),
-      cipherText: bytesToBase64(new Uint8Array(cipherBuffer)),
-      version: 1,
-    });
-
-    localStorage.setItem(API_KEYS_SECURE_STORAGE_KEY, encryptedEnvelope);
-  } catch {
-    // Best effort only: cookie remains the source of truth.
-  }
-}
-
-export async function loadApiKeysFromSecureStorage() {
-  if (!canUseSecureStorage()) {
-    return {} as Record<string, string>;
-  }
-
-  try {
-    const encryptedEnvelope = localStorage.getItem(API_KEYS_SECURE_STORAGE_KEY);
-
-    if (!encryptedEnvelope) {
-      return {} as Record<string, string>;
-    }
-
-    const parsed = JSON.parse(encryptedEnvelope) as { iv?: string; cipherText?: string };
-
-    if (!parsed.iv || !parsed.cipherText) {
-      return {} as Record<string, string>;
-    }
-
-    const key = await importAesKey();
-
-    if (!key) {
-      return {} as Record<string, string>;
-    }
-
-    const plainBuffer = await crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: base64ToBytes(parsed.iv),
-      },
-      key,
-      base64ToBytes(parsed.cipherText),
-    );
-
-    const decoded = JSON.parse(new TextDecoder().decode(plainBuffer)) as unknown;
-
-    if (!isValidApiKeyRecord(decoded)) {
-      return {} as Record<string, string>;
-    }
-
-    return decoded;
-  } catch {
-    return {} as Record<string, string>;
-  }
-}
-
-export function getApiKeysFromCookies() {
-  const storedApiKeys = Cookies.get(API_KEYS_COOKIE_NAME);
-  let parsedKeys: Record<string, string> = {};
-
-  if (storedApiKeys) {
-    parsedKeys = apiKeyMemoizeCache[storedApiKeys];
-
-    if (!parsedKeys) {
-      try {
-        const decoded = JSON.parse(storedApiKeys) as unknown;
-
-        if (!isValidApiKeyRecord(decoded)) {
-          Cookies.remove(API_KEYS_COOKIE_NAME);
-          return {};
-        }
-
-        parsedKeys = apiKeyMemoizeCache[storedApiKeys] = decoded;
-      } catch {
-        Cookies.remove(API_KEYS_COOKIE_NAME);
-        return {};
-      }
-    }
-
-    void persistEncryptedApiKeys(parsedKeys);
-  }
-
-  return parsedKeys;
-}
-
-export function setApiKeysCookie(apiKeys: Record<string, string>, expiresDays: number = 365) {
-  const serialized = JSON.stringify(apiKeys);
-  apiKeyMemoizeCache[serialized] = apiKeys;
-  Cookies.set(API_KEYS_COOKIE_NAME, serialized, { expires: expiresDays });
-  void persistEncryptedApiKeys(apiKeys);
-}
-
 export function removeApiKeysCookie() {
-  Cookies.remove(API_KEYS_COOKIE_NAME);
+  Cookies.remove(API_KEYS_COOKIE_NAME, { path: '/' });
+  Cookies.remove(OWNER_COOKIE_NAME, { path: '/' });
+  clearLegacyStorage();
+  notifyKeyChange();
+}
 
-  for (const cacheKey of Object.keys(apiKeyMemoizeCache)) {
-    delete apiKeyMemoizeCache[cacheKey];
+export function reconcileApiKeyOwner(ownerId?: string | null) {
+  if (Cookies.get(OWNER_COOKIE_NAME) !== ownerName(ownerId)) {
+    removeApiKeysCookie();
+  } else {
+    clearLegacyStorage();
   }
+}
 
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem(API_KEYS_SECURE_STORAGE_KEY);
-    localStorage.removeItem(BEST_EFFORT_KEYRING_STORAGE_KEY);
-  }
+export function subscribeToApiKeyChanges(listener: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_EVENT_KEY || event.key === null) {
+      listener();
+    }
+  };
+  window.addEventListener(CHANGE_EVENT, listener);
+  window.addEventListener('storage', onStorage);
+  window.addEventListener('focus', listener);
+
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, listener);
+    window.removeEventListener('storage', onStorage);
+    window.removeEventListener('focus', listener);
+  };
 }

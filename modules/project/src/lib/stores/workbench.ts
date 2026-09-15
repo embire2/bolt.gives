@@ -1154,13 +1154,15 @@ export class WorkbenchStore {
     }
   }
 
-  async restoreSnapshot(snapshotFiles: FileMap) {
-    await this.#filesStore.restoreSnapshot(snapshotFiles);
-    this.#editorStore.setDocuments(snapshotFiles);
+  async restoreSnapshot(snapshotFiles: FileMap, fromRuntime = false) {
+    await this.#filesStore.restoreSnapshot(snapshotFiles, fromRuntime);
+    this.#editorStore.setDocuments(this.files.get());
     this.showWorkbench.set(true);
 
-    const hasReadyPreview = this.#previewsStore.previews.get().some((preview) => preview.ready && preview.baseUrl);
-    this.currentView.set(hasReadyPreview ? 'preview' : 'code');
+    if (!fromRuntime) {
+      const hasReadyPreview = this.#previewsStore.previews.get().some((preview) => preview.ready && preview.baseUrl);
+      this.currentView.set(hasReadyPreview ? 'preview' : 'code');
+    }
 
     const selectedFile = this.currentDocument.get()?.filePath;
 

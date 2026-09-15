@@ -2,7 +2,7 @@ name: Preview Deployment
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
     branches: [main]
 
 # Cancel in-progress runs on the same PR
@@ -19,7 +19,8 @@ jobs:
   deploy-preview:
     name: Deploy Preview
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
+    # Draft reliability/security checkpoints must run CI without publishing an app.
+    if: github.event.action != 'closed' && github.event.pull_request.draft == false
     
     steps:
       - name: Check if preview deployment is configured

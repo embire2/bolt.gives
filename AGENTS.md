@@ -53,9 +53,11 @@ Preserve these behaviors unless a product decision explicitly replaces them:
 
 ### Hosted Models and Quotas
 
-The managed `FREE` provider is server-side only. Its supported coding models are `gpt-5.6-sol`, `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5`, with ChatGPT-5.6 SOL as the default. Users may switch model during a project without losing history or runtime context.
+The managed `FREE` provider is server-side only. Its default `gpt-5.6-sol` route is shown as ChatGPT-Luna and always uses medium reasoning effort. The compatibility choices `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5` remain available, and users may switch model during a project without losing history or runtime context.
 
-MagnetAPI.org is the upstream transport: Responses API for ChatGPT-5.6 SOL and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
+MagnetAPI.org is the managed FREE upstream transport: Responses API for ChatGPT-Luna and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. `MagnetAPI` is also a separate user-key provider: hosted users must supply their own MagnetAPI User API Key, and that path must never fall back to the operator-funded FREE credential. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
+
+Validate provider configuration locally; do not gate generation on a separate paid test prompt. Actual generation determines upstream availability. Intentional runtime shutdown must invalidate pending health/repair work, never restore older source in response to the expected disconnect.
 
 Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to useful coding time rather than raw model-token accounting. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month. Entitlements and resets come from signed server-side billing events, not browser redirects.
 
@@ -169,8 +171,8 @@ Custom Domain hosting uses server-side Stripe Checkout and signed webhook fulfil
 On the open-source production host:
 
 - Source checkout: `/root/bolt.gives`
-- Deployed application tree: `/srv/bolt-gives`
-- Hosted runtime workspaces: `/srv/bolt-gives-runtime-workspaces`
+- Deployed app/runtime tree: `/srv/bolt-gives-isolated`
+- Hosted runtime workspaces: `/srv/bolt-gives-isolated-workspaces`
 - Primary services: `bolt-gives-app.service`, `bolt-gives-runtime.service`, `bolt-gives-collab.service`, and `bolt-gives-webbrowse.service`
 - Typical local listeners: app `5173`, runtime `4321`, collaboration `1234`, web browsing `4179`
 
@@ -181,6 +183,16 @@ For runtime changes, validate both app and runtime services. For collaboration o
 Self-host installations support interactive setup, custom app/admin/create domains, optional local PostgreSQL for profile/admin data, and Caddy-managed HTTPS. Generated apps bring their own data service. Installer changes require shell syntax checks plus a realistic clean and repair path.
 
 ## Git, Releases, and Deployment
+
+The v4.1 production app/runtime cutover completed on 15 September after frozen source/private-data checksum verification and a service/routing rollback rehearsal. Production uses `/srv/bolt-gives-isolated`, `/srv/bolt-gives-isolated-workspaces` and root-protected `/etc/bolt-gives/production-isolated.env`; alpha uses its corresponding `-alpha-isolated` trees. Both run as `bolt-runtime-agent` with rootless project containers and public per-project Preview TLS. Original production trees remain rollback material, not the current app/runtime source. Never rerun the fresh-copy migration over active targets or copy old workspaces back onto newer customer state. Preserve `/srv/bolt-gives-production-checkpoints/20260914-pre-isolation` and the 15 September rehearsal/cutover records. `main` pushes trigger Cloudflare deployment; update the protected exact release SHA and verify source checksums before fleet refresh. The dedicated Stripe webhook is enabled; do not disable shared/commercial endpoints or charge test cards without approval. Hosted process-local self-update remains disabled in favor of operator-controlled deployments. Public `install.ps1` bootstraps the server through WSL, not private desktop source. Preserve passwords, configuration and customer data. Current runtime source is authoritative on reload; cached fallback is allowed only after an explicit missing-session response.
+
+For canary deployment, synchronize every tracked source file as well as build output: Cloudflare recompiles `functions/[[path]].ts`, so copying only modules/build can deploy a stale gateway. Keep automatic fleet refresh disabled on staging; zero interval must disable startup refresh too. Preserve streamed Preview URL normalization before event callbacks. Decode JSON request envelopes before extracting quoted UI requirements; never repair a healthy project because envelope punctuation was mistaken for missing app text. Calendar release E2E rejects chat cancellation and browser exceptions; do not weaken those assertions to obtain a pass. `scripts/update.sh` delegates to the guarded Linux installer, not an independent download/copy updater.
+
+Generated commands go through `modules/runtime/src/server/project-process.mjs`. Local execution refuses root; Podman mode requires an explicitly prepared non-root runner, pinned image and correctly owned project directory. Never bypass that guard to make a deployment pass. Preserve the original workspace and private connection records while validating a copied staging migration. Public Preview needs real TLS and application-authorized control-plane routing; local self-signed certificates and a synthetic provider replay are test fixtures only. Run `pnpm e2e:runtime-isolation` and `pnpm e2e:isolated-generation` with the protected runner configuration. Keep real-provider, injected-failure and simulated-replay evidence distinct.
+
+The one-time isolation-copy script refuses existing targets and source units that are not confirmed loaded/inactive. Never remove newer workspace data to bypass that check. Rootless process cleanup happens after the attached client reads its exit status; do not reintroduce Podman's racing `--rm` option. The cPanel DNS hook reads separate root-owned `0600` configuration and changes only allowlisted ACME TXT records. Public wildcard issuance now passes; the missing `bolt.gives` zone on `pns2.day.co.za` was restored through a validated API-fed mirror on the existing `webhotel.cloud` DNS host. Do not alter that host's other zones. Verify served SOA serials, not only reload exit codes. Keep writable runtime settings outside project trees and separate from root service files; Caddy reload uses a narrowly delegated validating oneshot. See `docs/operations/runtime-isolation.md` and `docs/quality/2026-09-14-release-preparation.md` for renewal, rollback and remaining migration gates.
+
+The historical beta is superseded by the stable web release; consult `docs/releases/v4.1.0.md` for shipped scope and remaining validation limits. Tag-based installers must repair the exact fetched commit, reject rewritten tags/divergence and preserve secrets. Keep prereleases out of stable/mandatory updates and the native desktop release line independent. Successful HTML responses cannot clear an outstanding browser/compiler failure while Preview is repairing; only verified source restoration or an explicitly resolved transient lifecycle error may do so. Preserve the deterministic hook/late-HTML regression and keep injected-error evidence distinct from ordinary generation.
 
 1. Start from an up-to-date branch and inspect the dirty worktree.
 2. Keep one logical change per commit unless splitting would break an atomic migration.

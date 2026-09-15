@@ -21,6 +21,7 @@ import HyperbolicProvider from './providers/hyperbolic';
 import AmazonBedrockProvider from './providers/amazon-bedrock';
 import GithubProvider from './providers/github';
 import MoonshotProvider from './providers/moonshot';
+import MagnetApiProvider from './providers/magnet-api';
 import ZaiProvider from './providers/z-ai';
 
 export {
@@ -35,6 +36,7 @@ export {
   HuggingFaceProvider,
   HyperbolicProvider,
   MistralProvider,
+  MagnetApiProvider,
   MoonshotProvider,
   OllamaProvider,
   OpenAIProvider,

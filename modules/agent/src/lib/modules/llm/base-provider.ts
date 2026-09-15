@@ -161,6 +161,7 @@ export abstract class BaseProvider implements ProviderInfo {
     serverEnv?: Env;
     apiKeys?: Record<string, string>;
     providerSettings?: Record<string, IProviderSetting>;
+    onStreamActivity?: () => void;
   }): LanguageModelV1;
 }
 

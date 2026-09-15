@@ -36,8 +36,14 @@ export function buildBoltArtifactFromHostedFreeResponsesToolInput(input: unknown
     return '';
   }
 
+  const content = normalizeHostedFreeFileContent(path, input.content);
+
+  if (content === null) {
+    return '';
+  }
+
   return `<boltArtifact id="free-responses-file" title="Project update">
-<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${input.content}</boltAction>
+<boltAction type="file" filePath="${escapeBoltFilePath(path)}">${content}</boltAction>
 <boltAction type="start">
 pnpm run dev
 </boltAction>
@@ -45,6 +51,7 @@ pnpm run dev
 }
 
 type ToolStreamState = {
+  onActivity?: () => void;
   partialJsonByItemId: Map<string, string>;
   convertedItemIds: Set<string>;
 };
@@ -99,10 +106,15 @@ function normalizeSseBlock(block: string, state: ToolStreamState): string | null
   const itemId = String(payload.item_id || (isJsonRecord(payload.item) ? payload.item.id || '' : ''));
 
   if (payload.type === 'response.function_call_arguments.delta' && state.convertedItemIds.has(itemId)) {
+    if (typeof payload.delta === 'string' && payload.delta.length > 0) {
+      state.onActivity?.();
+    }
+
     state.partialJsonByItemId.set(
       itemId,
       `${state.partialJsonByItemId.get(itemId) || ''}${String(payload.delta || '')}`,
     );
+
     return null;
   }
 
@@ -143,7 +155,7 @@ function normalizeSseBlock(block: string, state: ToolStreamState): string | null
   return formatSseEvent(event, payload);
 }
 
-export function normalizeHostedFreeResponsesSse(response: Response): Response {
+export function normalizeHostedFreeResponsesSse(response: Response, onActivity?: () => void): Response {
   if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
     return response;
   }
@@ -152,6 +164,7 @@ export function normalizeHostedFreeResponsesSse(response: Response): Response {
   const encoder = new TextEncoder();
   let buffer = '';
   const toolState: ToolStreamState = {
+    onActivity,
     partialJsonByItemId: new Map(),
     convertedItemIds: new Set(),
   };
@@ -201,3 +214,4 @@ export function normalizeHostedFreeResponsesSse(response: Response): Response {
     headers,
   });
 }
+import { normalizeHostedFreeFileContent } from './hosted-free-file-content';

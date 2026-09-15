@@ -32,4 +32,16 @@ describe('profile billing database state', () => {
       }),
     ).toBe(false);
   });
+
+  it('never refunds usage for an old, invalid, or differently formatted current period', () => {
+    for (const nextPeriodStart of ['2026-06-01T00:00:00Z', '2026-07-01T00:00:00Z', 'invalid']) {
+      expect(
+        shouldResetProfileBillingUsage({
+          status: 'active',
+          nextPeriodStart,
+          currentPeriodStart: '2026-07-01T00:00:00.000Z',
+        }),
+      ).toBe(false);
+    }
+  });
 });

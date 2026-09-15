@@ -3,14 +3,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { closePageThenCleanupSession, resolveCodingAppUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
 
-const baseUrl = process.env.BASE_URL || 'https://alpha1.bolt.gives';
-const providerName = process.env.E2E_PROVIDER || 'OpenAI';
-const modelName = process.env.E2E_MODEL || 'gpt-5.4';
+const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'https://alpha1.bolt.gives');
+const providerName = process.env.E2E_PROVIDER || 'FREE';
+const modelName = process.env.E2E_MODEL || 'gpt-5.6-sol';
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/playwright';
 const secure = baseUrl.startsWith('https://');
 const token = `AUTO_RECOVERY_${Date.now().toString(36)}`;
 const subtitle = 'Auto recovery baseline';
+const hookFailure = process.env.E2E_RECOVERY_FAILURE === 'hook';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,35 +42,14 @@ function extractSessionDetailsFromPreviewUrl(previewUrl) {
   };
 }
 
-function selectBreakTarget(files) {
-  const preferredPatterns = [
-    /(^|\/)src\/App\.(tsx|jsx|js|ts)$/i,
-    /(^|\/)app\/page\.(tsx|jsx|js|ts)$/i,
-    /(^|\/)src\/main\.(tsx|jsx|js|ts)$/i,
-  ];
-
-  for (const pattern of preferredPatterns) {
-    const match = Object.entries(files).find(([filePath, dirent]) => {
-      return (
-        dirent?.type === 'file' && !dirent.isBinary && typeof dirent.content === 'string' && pattern.test(filePath)
-      );
-    });
-
-    if (match) {
-      return match;
-    }
-  }
-
-  throw new Error('Could not find a generated application entry file to corrupt for recovery testing.');
-}
-
 async function waitForPromptSurface(page) {
-  await page.waitForSelector('textarea[placeholder="How can Bolt help you today?"]', { timeout: 90000 });
+  const prompt = page.locator('textarea:visible').first();
+  await prompt.waitFor({ state: 'visible', timeout: 90000 });
+
+  return prompt;
 }
 
 async function waitForPreviewToRender(page, expectedText) {
-  await page.getByRole('tab', { name: /^Workspace$/i }).click();
-
   const previewButton = page.getByRole('button', { name: /^Preview$/i }).first();
 
   if (await previewButton.isVisible().catch(() => false)) {
@@ -76,16 +57,12 @@ async function waitForPreviewToRender(page, expectedText) {
   }
 
   await page.waitForSelector('iframe[title="preview"]', { timeout: 180000 });
-  await page.waitForFunction(
-    (text) => {
-      const frame = document.querySelector('iframe[title="preview"]');
-      const previewText = frame?.contentDocument?.body?.innerText || '';
-
-      return previewText.includes(text);
-    },
-    expectedText,
-    { timeout: 240000 },
-  );
+  await page
+    .frameLocator('iframe[title="preview"]')
+    .first()
+    .getByText(expectedText, { exact: true })
+    .first()
+    .waitFor({ state: 'visible', timeout: 240000 });
 }
 
 async function runtimeFetch(page, sessionId, suffix, options = {}) {
@@ -129,6 +106,41 @@ const context = await browser.newContext({
   viewport: { width: 1600, height: 1000 },
 });
 const page = await context.newPage();
+let ownedSessionId;
+let expectedBreak = false;
+const unexpectedErrors = [];
+const injectedErrors = [];
+const chatStreams = [];
+page.on('pageerror', (error) => {
+  if (
+    expectedBreak &&
+    (/Unexpected token|Unexpected.*["'];["']/.test(error.message) ||
+      (hookFailure && /Cannot read properties of null \(reading ['"]useState['"]\)/.test(error.message)))
+  ) {
+    injectedErrors.push(error.message);
+  } else {
+    unexpectedErrors.push(error.message);
+  }
+});
+page.on('response', async (response) => {
+  const url = new URL(response.url());
+
+  if (url.pathname === '/api/chat' && response.request().method() === 'POST') {
+    const stream = { status: response.status(), complete: false };
+    chatStreams.push(stream);
+    stream.complete = !(await response.finished());
+  }
+
+  if (response.status() >= 500) {
+    const failure = `${response.status()} ${url.origin}${url.pathname}`;
+
+    if (expectedBreak && /\/src\/|\/runtime\/preview\//.test(url.pathname)) {
+      injectedErrors.push(failure);
+    } else {
+      unexpectedErrors.push(failure);
+    }
+  }
+});
 
 try {
   await fs.mkdir(outDir, { recursive: true });
@@ -154,15 +166,28 @@ try {
   );
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await waitForPromptSurface(page);
+  await page.getByLabel('Name and Surname').fill('Recovery Acceptance');
+  await page.getByLabel('Email address', { exact: true }).fill(`recovery-${Date.now()}@example.invalid`);
+  await page.getByLabel('Country', { exact: true }).fill('South Africa');
+  await page.getByRole('button', { name: 'Create profile and continue' }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
 
-  await page.fill(
-    'textarea[placeholder="How can Bolt help you today?"]',
+  const prompt = await waitForPromptSurface(page);
+
+  await prompt.fill(
     `Build a minimal React app that renders the exact heading "${token}" and the subtitle "${subtitle}". Keep it lightweight and run it.`,
   );
-  await page.press('textarea[placeholder="How can Bolt help you today?"]', 'Enter');
+  await prompt.press('Enter');
 
   await waitForPreviewToRender(page, token);
+  await page
+    .getByRole('button', { name: 'Stop generation', exact: true })
+    .waitFor({ state: 'hidden', timeout: 180000 });
+
+  if (!chatStreams.length || chatStreams.some((stream) => stream.status !== 200 || !stream.complete)) {
+    throw new Error('The baseline chat did not complete normally before recovery injection.');
+  }
+
   await page.screenshot({ path: path.join(outDir, 'preview-auto-recovery-before-break.png'), fullPage: true });
 
   const previewSrc = await page.locator('iframe[title="preview"]').first().getAttribute('src');
@@ -172,6 +197,8 @@ try {
   }
 
   const { sessionId } = extractSessionDetailsFromPreviewUrl(new URL(previewSrc, baseUrl).toString());
+  ownedSessionId = sessionId;
+
   const snapshotResponse = await runtimeFetch(page, sessionId, 'snapshot');
 
   if (!snapshotResponse.ok || !snapshotResponse.payload?.files) {
@@ -180,7 +207,11 @@ try {
 
   const [targetPath, targetDirent] = selectBreakTarget(snapshotResponse.payload.files);
   const originalContent = targetDirent.content;
-  const brokenContent = `${originalContent}\nconst __bolt_auto_recovery_break = ;\n`;
+  const brokenContent = hookFailure
+    ? `${originalContent}\nimport { useState as __boltInvalidHook } from 'react';\n__boltInvalidHook(0);\n`
+    : `${originalContent}\nconst __bolt_auto_recovery_break = ;\n`;
+
+  expectedBreak = true;
 
   const syncResponse = await runtimeFetch(page, sessionId, 'sync', {
     method: 'POST',
@@ -215,6 +246,35 @@ try {
 
   if (!breakApplied) {
     throw new Error('Intentional preview break never reached the hosted runtime snapshot.');
+  }
+
+  if (hookFailure) {
+    const frame = await page.locator('iframe[title="preview"]').first().contentFrame();
+    await frame
+      .locator('body')
+      .evaluate(() => window.location.reload())
+      .catch(() => {});
+
+    const errorDeadline = Date.now() + 30000;
+
+    while (!injectedErrors.some((error) => /null.*useState/.test(error)) && Date.now() < errorDeadline) {
+      await delay(100);
+    }
+
+    if (!injectedErrors.some((error) => /null.*useState/.test(error))) {
+      throw new Error('The injected hook failure did not execute in the generated browser Preview.');
+    }
+
+    // Reproduce late document responses while browser-error repair is queued.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await frame
+        .locator('html')
+        .evaluate(async () => {
+          await (await fetch('/')).text();
+        })
+        .catch(() => {});
+      await delay(200);
+    }
   }
 
   const deadline = Date.now() + 180000;
@@ -254,10 +314,12 @@ try {
       sawRecoveryTokenAdvance = true;
     }
 
-    const livePreviewText = await page.evaluate(() => {
-      const frame = document.querySelector('iframe[title="preview"]');
-      return frame?.contentDocument?.body?.innerText || '';
-    });
+    const livePreviewText = await page
+      .frameLocator('iframe[title="preview"]')
+      .first()
+      .locator('body')
+      .innerText({ timeout: 2000 })
+      .catch(() => '');
 
     if (livePreviewText.includes(token) && livePreviewText.includes(subtitle)) {
       sawRestoredPreview = true;
@@ -269,14 +331,29 @@ try {
       sawRestoredSnapshot = true;
     }
 
-    if (sawError && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy && lastStatus.status === 'ready') {
+    if (
+      (sawError || sawRecoveryTokenAdvance) &&
+      sawRestoredSnapshot &&
+      sawRestoredPreview &&
+      lastStatus.healthy &&
+      lastStatus.status === 'ready'
+    ) {
       break;
     }
 
     await delay(1500);
   }
 
-  if (!lastStatus || !(breakApplied && sawError && sawRestoredSnapshot && sawRestoredPreview && lastStatus.healthy)) {
+  if (
+    !lastStatus ||
+    !(
+      breakApplied &&
+      (sawError || sawRecoveryTokenAdvance) &&
+      sawRestoredSnapshot &&
+      sawRestoredPreview &&
+      lastStatus.healthy
+    )
+  ) {
     throw new Error(
       `Preview did not auto-recover after intentional break. Last status: ${JSON.stringify(
         {
@@ -295,16 +372,9 @@ try {
     );
   }
 
-  await page.waitForFunction(
-    ({ text, expectedSubtitle }) => {
-      const frame = document.querySelector('iframe[title="preview"]');
-      const previewText = frame?.contentDocument?.body?.innerText || '';
-
-      return previewText.includes(text) && previewText.includes(expectedSubtitle);
-    },
-    { text: token, expectedSubtitle: subtitle },
-    { timeout: 180000 },
-  );
+  expectedBreak = false;
+  await waitForPreviewToRender(page, token);
+  await waitForPreviewToRender(page, subtitle);
 
   const restoredSnapshotResponse = await runtimeFetch(page, sessionId, 'snapshot');
 
@@ -316,6 +386,10 @@ try {
     throw new Error('Runtime snapshot did not restore the corrupted file back to the last known good content.');
   }
 
+  if (!(await page.locator('textarea:visible').first().isVisible()) || unexpectedErrors.length) {
+    throw new Error(`Recovery lost the composer or produced unexpected errors: ${JSON.stringify(unexpectedErrors)}`);
+  }
+
   await page.screenshot({ path: path.join(outDir, 'preview-auto-recovery-after-restore.png'), fullPage: true });
   console.log(
     JSON.stringify(
@@ -324,6 +398,7 @@ try {
         baseUrl,
         providerName,
         modelName,
+        failureMode: hookFailure ? 'browser-hook-with-late-html' : 'syntax',
         sessionId,
         targetPath,
         token,
@@ -331,12 +406,26 @@ try {
         sawRunningRecovery,
         sawRestoredRecovery,
         sawRecoveryTokenAdvance,
+        chatStreams,
+        injectedErrors,
+        unexpectedErrors,
       },
       null,
       2,
     ),
   );
 } finally {
+  await closePageThenCleanupSession(
+    () => page.close(),
+    async () => {
+      if (ownedSessionId) {
+        const response = await context.request.delete(
+          new URL(`/runtime/sessions/${ownedSessionId}/command`, baseUrl).toString(),
+        );
+        console.log(JSON.stringify({ cleanup: response.status(), ownedSessionId }));
+      }
+    },
+  );
   await context.close();
   await browser.close();
 }

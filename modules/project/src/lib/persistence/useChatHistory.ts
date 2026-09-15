@@ -28,6 +28,7 @@ import {
   shouldPersistSnapshot,
 } from './chat-history-utils';
 import { rebindHealthyHostedRuntimePreview } from './chat-history-runtime';
+import { resolveHistorySource } from './history-source';
 
 export interface ChatHistoryItem {
   id: string;
@@ -91,6 +92,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?:
       } catch (error) {
         console.error('Failed to save snapshot:', error);
         toast.error('Failed to save chat snapshot.');
+        throw error;
       }
     },
     [db],
@@ -113,7 +115,16 @@ export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?:
       workbenchStore.setHostedRuntimeSessionId(validSnapshot.runtimeSessionId);
     }
 
-    await workbenchStore.restoreSnapshot(validSnapshot.files);
+    const source = await resolveHistorySource(
+      validSnapshot.files,
+      isHostedRuntimeEnabled() ? validSnapshot.runtimeSessionId : undefined,
+    );
+
+    if (!shouldContinue()) {
+      return;
+    }
+
+    await workbenchStore.restoreSnapshot(source.files, source.fromRuntime);
 
     if (!shouldContinue()) {
       return;
@@ -141,7 +152,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?:
       }
     }
 
-    const files = Object.entries(validSnapshot.files)
+    const files = Object.entries(source.files)
       .map(([filePath, value]) => {
         if (value?.type !== 'file') {
           return null;

@@ -7,6 +7,7 @@ import {
   normalizeHostedRuntimePreviewBaseUrlForBrowser,
   reportHostedRuntimePreviewAlert,
   resolveHostedRuntimeBaseUrl,
+  runHostedRuntimeCommand,
   saveHostedProjectConnection,
   subscribeHostedRuntimePreview,
   terminateHostedRuntimeProcesses,
@@ -18,6 +19,52 @@ afterEach(() => {
 });
 
 describe('hosted runtime client', () => {
+  it('normalizes ready events before subscribers can navigate the Preview iframe', async () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://client.pages.dev',
+        hostname: 'client.pages.dev',
+        host: 'client.pages.dev',
+        protocol: 'https:',
+      },
+    });
+
+    const events = [
+      {
+        type: 'ready',
+        preview: { port: 6100, baseUrl: 'https://alpha1.bolt.gives/runtime/preview/one/6100', revision: 2 },
+      },
+      { type: 'exit', exitCode: 0 },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(events.map((event) => JSON.stringify(event)).join('\n') + '\n')),
+    );
+
+    const onEvent = vi.fn();
+
+    const result = await runHostedRuntimeCommand({ sessionId: 'one', command: 'npm run dev', kind: 'start', onEvent });
+
+    expect(onEvent).toHaveBeenCalledWith({
+      type: 'ready',
+      preview: { port: 6100, baseUrl: 'https://client.pages.dev/runtime/preview/one/6100', revision: 2 },
+    });
+    expect(result.preview).toEqual(onEvent.mock.calls[0][0].preview);
+  });
+
+  it('never moves a verified isolated Preview URL back onto platform storage', () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://bolt-gives.pages.dev',
+        hostname: 'bolt-gives.pages.dev',
+        host: 'bolt-gives.pages.dev',
+        protocol: 'https:',
+      },
+    });
+
+    const isolated = 'https://pv-fixture.preview.example.com/runtime/preview/one/4100/?__bolt_isolated=1';
+    expect(normalizeHostedRuntimePreviewBaseUrlForBrowser(isolated)).toBe(isolated);
+  });
   it('uses the local runtime service for localhost', () => {
     expect(
       resolveHostedRuntimeBaseUrl({
@@ -242,9 +289,8 @@ describe('hosted runtime client', () => {
       },
     });
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
         files: {
           '/home/project/src/App.tsx': {
             type: 'file',
@@ -253,7 +299,7 @@ describe('hosted runtime client', () => {
           },
         },
       }),
-    });
+    );
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -446,7 +492,7 @@ describe('hosted runtime client', () => {
     });
   });
 
-  it('subscribes to hosted preview events through EventSource', () => {
+  it('subscribes to hosted preview events and handles rejected async snapshot reconciliation', async () => {
     vi.stubGlobal('window', {
       location: {
         hostname: 'alpha1.bolt.gives',
@@ -509,6 +555,11 @@ describe('hosted runtime client', () => {
 
     source.onmessage?.({ data: 'not-json' });
     expect(onError).toHaveBeenCalled();
+
+    onError.mockClear();
+    onMessage.mockRejectedValueOnce(new Error('Snapshot temporarily unavailable'));
+    await source.onmessage?.({ data: JSON.stringify({ sessionId: 'abc123', status: 'starting', preview: null }) });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Snapshot temporarily unavailable' }));
 
     unsubscribe();
     expect(close).toHaveBeenCalled();

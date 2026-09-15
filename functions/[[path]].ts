@@ -1,5 +1,6 @@
 import type { ServerBuild } from '@remix-run/cloudflare';
 import { createPagesFunctionHandler } from '@remix-run/cloudflare-pages';
+import { resolveProfileSession } from '../modules/surfaces/app/lib/.server/profile-session';
 import {
   createKvRateLimitStore,
   createSecurityHeaders,
@@ -33,6 +34,7 @@ interface PagesEnv {
   BOLT_RUNTIME_CONTROL_PUBLIC_URL?: string;
   BOLT_RUNTIME_CONTROL_URL?: string;
   BOLT_HOSTED_FREE_RELAY_SECRET?: string;
+  BOLT_HOSTED_FREE_RELAY_ORIGIN?: string;
   NODE_ENV?: string;
   [key: string]: unknown;
 }
@@ -91,7 +93,7 @@ export function buildRuntimeProxyTargetUrl(requestUrl: string, runtimeControlBas
   return `${normalizeRuntimeControlBaseUrl(runtimeControlBaseUrl)}${runtimeSuffix}${url.search}`;
 }
 
-export function buildRuntimeProxyHeaders(request: Request) {
+export function buildRuntimeProxyHeaders(request: Request, targetUrl?: string) {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
 
@@ -100,6 +102,14 @@ export function buildRuntimeProxyHeaders(request: Request) {
   headers.set('x-bolt-public-origin', url.origin);
   headers.set('x-forwarded-host', url.host);
   headers.set('x-forwarded-proto', url.protocol.replace(/:$/, ''));
+
+  /*
+   * The entrypoint already checked the browser Origin. The next hop is a server request,
+   * which may traverse the authenticated gateway of a different managed-instance origin.
+   */
+  if (targetUrl && headers.has('Origin')) {
+    headers.set('Origin', new URL(targetUrl).origin);
+  }
 
   return headers;
 }
@@ -149,23 +159,31 @@ export function buildHostedFreeApiProxyHeaders(request: Request, relaySecret: st
 
 async function proxyHostedFreeApiRequest(request: Request, env: PagesEnv) {
   const requestUrl = new URL(request.url);
-  const relayUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, DEFAULT_HOSTED_FREE_RELAY_ORIGIN);
+  const relayUrl = new URL(
+    `${requestUrl.pathname}${requestUrl.search}`,
+    env.BOLT_HOSTED_FREE_RELAY_ORIGIN || DEFAULT_HOSTED_FREE_RELAY_ORIGIN,
+  );
 
   return fetch(relayUrl, {
     method: request.method,
     headers: buildHostedFreeApiProxyHeaders(request, String(env.BOLT_HOSTED_FREE_RELAY_SECRET || '')),
     body: request.body,
+    ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',
   });
 }
 
+export function runtimeProxyBaseUrl(env: PagesEnv) {
+  // Public URLs point back at this gateway on Linux. Always prefer the internal server listener.
+  return (
+    env.BOLT_RUNTIME_CONTROL_URL?.trim() ||
+    env.BOLT_RUNTIME_CONTROL_PUBLIC_URL?.trim() ||
+    DEFAULT_RUNTIME_CONTROL_BASE_URL
+  );
+}
+
 async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
-  const runtimeControlBaseUrl =
-    typeof env?.BOLT_RUNTIME_CONTROL_PUBLIC_URL === 'string' && env.BOLT_RUNTIME_CONTROL_PUBLIC_URL.trim()
-      ? env.BOLT_RUNTIME_CONTROL_PUBLIC_URL
-      : typeof env?.BOLT_RUNTIME_CONTROL_URL === 'string' && env.BOLT_RUNTIME_CONTROL_URL.trim()
-        ? env.BOLT_RUNTIME_CONTROL_URL
-        : DEFAULT_RUNTIME_CONTROL_BASE_URL;
+  const runtimeControlBaseUrl = runtimeProxyBaseUrl(env);
   const targetUrl = buildRuntimeProxyTargetUrl(request.url, runtimeControlBaseUrl);
   const requestOrigin = new URL(request.url).origin;
   const targetOrigin = new URL(targetUrl).origin;
@@ -179,17 +197,77 @@ async function proxyRuntimeRequest(request: Request, env: PagesEnv) {
     });
   }
 
-  return fetch(targetUrl, {
+  const response = await fetch(targetUrl, {
     method: request.method,
-    headers: buildRuntimeProxyHeaders(request),
+    headers: buildRuntimeProxyHeaders(request, targetUrl),
     body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    ...(request.body ? { duplex: 'half' as const } : {}),
     redirect: 'manual',
   });
+
+  // Port-recovery redirects must return through the caller's authenticated gateway.
+  const location = response.headers.get('Location');
+
+  if (location) {
+    const redirected = new URL(location, targetUrl);
+
+    if (redirected.origin === targetOrigin && redirected.pathname.startsWith('/runtime/preview/')) {
+      const headers = new Headers(response.headers);
+      headers.set('Location', `${requestOrigin}${redirected.pathname}${redirected.search}${redirected.hash}`);
+
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+  }
+
+  return response;
 }
 
 export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
+
+  // A generated sibling-origin Preview must not mutate the platform via its runtime proxy.
+  if (url.pathname === '/runtime/tenant-admin' || url.pathname.startsWith('/runtime/tenant-admin/')) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const origin = request.headers.get('Origin');
+
+  if (
+    url.pathname.startsWith('/runtime/') &&
+    origin &&
+    origin !== url.origin &&
+    !url.pathname.startsWith('/runtime/preview/') &&
+    url.pathname !== '/runtime/health'
+  ) {
+    return new Response('Cross-origin runtime request blocked.', { status: 403 });
+  }
+
+  const ownerProtected =
+    (url.pathname.startsWith('/runtime/') && url.pathname !== '/runtime/health') ||
+    ['/api/chat', '/api/llmcall', '/api/enhancer', '/api/web-search'].includes(url.pathname);
+
+  if (
+    (env.BOLT_SELF_HOST_MODE === 'single-user' && ownerProtected) ||
+    url.pathname.startsWith('/runtime/sessions/') ||
+    url.pathname.startsWith('/runtime/preview/')
+  ) {
+    try {
+      if (
+        !(await resolveProfileSession(request, env as Record<string, string | undefined>, { failOnUnavailable: true }))
+      ) {
+        return Response.json(
+          { error: 'Sign in with the owner access token before using this private workspace.' },
+          { status: 401 },
+        );
+      }
+    } catch {
+      return Response.json(
+        { error: 'The runtime is restarting or unavailable. Please retry shortly.' },
+        { status: 503, headers: { 'Retry-After': '2' } },
+      );
+    }
+  }
 
   if (shouldProxyRuntimeRequest(url.pathname)) {
     return proxyRuntimeRequest(request, env);

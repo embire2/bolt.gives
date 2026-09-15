@@ -129,19 +129,19 @@ function formatAdminTimestamp(value: string | null | undefined) {
 }
 
 function getTenantAdminCookieSecret() {
-  if (typeof process !== 'undefined' && process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) {
-    return process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET.trim();
-  }
-
-  return 'bolt-tenant-admin-dev-secret-change-me';
+  return (
+    (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) ||
+    'bolt-tenant-admin-dev-secret-change-me'
+  );
 }
 
 function createAdminSessionCookie() {
-  return createCookie('bolt_tenant_admin', {
+  const secure = typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true;
+  return createCookie(secure ? '__Host-bolt_tenant_admin' : 'bolt_tenant_admin', {
     httpOnly: true,
     path: '/',
     sameSite: 'lax',
-    secure: typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true,
+    secure,
     maxAge: 60 * 60 * 12,
     secrets: [getTenantAdminCookieSecret()],
   });
@@ -176,8 +176,8 @@ function requirePrivilegedAdminSession(
 }
 
 function getRuntimeControlBaseUrl() {
-  if (typeof process !== 'undefined' && process.env?.BOLT_RUNTIME_CONTROL_URL) {
-    return process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
+  if (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_RUNTIME_CONTROL_URL) {
+    return globalThis.process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
   }
 
   return 'http://127.0.0.1:4321/runtime';

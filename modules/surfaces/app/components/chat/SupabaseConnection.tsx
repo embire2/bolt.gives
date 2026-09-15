@@ -12,6 +12,7 @@ import {
   saveHostedProjectConnection,
 } from '@bolt/runtime/lib/runtime/hosted-runtime-client';
 import { Dialog, DialogButton, DialogClose, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
+import { useProfile } from '~/lib/profile-context';
 
 type DatabaseTab = 'supabase' | 'postgresql';
 
@@ -22,6 +23,7 @@ const inputClasses = classNames(
 );
 
 export function SupabaseConnection() {
+  const profileId = useProfile()?.id;
   const {
     connection: supabaseAccount,
     connecting: connectingAccount,
@@ -40,6 +42,7 @@ export function SupabaseConnection() {
   const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
   const [databaseUrl, setDatabaseUrl] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const runtimeSessionId = workbenchStore.hostedRuntimeSessionId;
 
   useEffect(() => {
@@ -52,6 +55,13 @@ export function SupabaseConnection() {
   useEffect(() => {
     let active = true;
     projectDatabaseConnection.set(null);
+    setEditing(false);
+    setSupabaseAnonKey('');
+    setDatabaseUrl('');
+
+    if (!profileId) {
+      return undefined;
+    }
 
     void fetchHostedProjectConnection(runtimeSessionId)
       .then((currentConnection) => {
@@ -66,7 +76,7 @@ export function SupabaseConnection() {
     return () => {
       active = false;
     };
-  }, [runtimeSessionId]);
+  }, [runtimeSessionId, profileId]);
 
   const connectSupabase = async () => {
     setSaving(true);
@@ -83,7 +93,8 @@ export function SupabaseConnection() {
         isConnected: true,
       });
       setSupabaseAnonKey('');
-      toast.success('Supabase is connected to this project');
+      toast.success('Supabase settings saved, not connectivity-verified. Restart Preview to apply them.');
+      setEditing(false);
       setIsDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not connect Supabase');
@@ -109,7 +120,8 @@ export function SupabaseConnection() {
       });
       projectDatabaseConnection.set(nextConnection);
       setSupabaseAnonKey('');
-      toast.success('Supabase is connected to this project');
+      toast.success('Supabase settings saved, not connectivity-verified. Restart Preview to apply them.');
+      setEditing(false);
       setIsDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not connect this Supabase project');
@@ -128,7 +140,8 @@ export function SupabaseConnection() {
       });
       projectDatabaseConnection.set(nextConnection);
       setDatabaseUrl('');
-      toast.success('PostgreSQL is connected to this project');
+      toast.success('PostgreSQL verified at save time. Restart Preview to apply the new connection.');
+      setEditing(false);
       setIsDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not connect PostgreSQL');
@@ -149,7 +162,7 @@ export function SupabaseConnection() {
         project: undefined,
         isConnected: false,
       });
-      toast.success('Database disconnected from this project');
+      toast.success('Database settings removed. Restart Preview to remove the old connection from running commands.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not disconnect the database');
     } finally {
@@ -171,7 +184,12 @@ export function SupabaseConnection() {
       >
         <span className="i-ph:database h-4 w-4 text-[#18a66a]" aria-hidden="true" />
         <span>{connection ? connection.label : 'Database'}</span>
-        {connection ? <span className="h-1.5 w-1.5 rounded-full bg-[#18a66a]" aria-label="Connected" /> : null}
+        {connection ? (
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-amber-500"
+            aria-label={connection.status === 'verified' ? 'Verified at save time' : 'Configured, not verified'}
+          />
+        ) : null}
       </button>
 
       <DialogRoot open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -186,19 +204,32 @@ export function SupabaseConnection() {
               runtime and are not written into generated files.
             </DialogDescription>
 
-            {connection ? (
+            {connection && !editing ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-xl border border-[#18a66a]/40 bg-[#18a66a]/10 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-bolt-elements-textPrimary">
                     <span className="h-2 w-2 rounded-full bg-[#18a66a]" />
-                    {connection.provider === 'supabase' ? 'Supabase' : 'PostgreSQL'} connected
+                    {connection.provider === 'supabase' ? 'Supabase' : 'PostgreSQL'}{' '}
+                    {connection.status === 'verified' ? 'verified at save time' : 'configured, not verified'}
                   </div>
                   <p className="mt-1 text-sm text-bolt-elements-textSecondary">{connection.label}</p>
                   <p className="mt-2 text-xs text-bolt-elements-textTertiary">
-                    The connection is available to the next command and Preview start for this project.
+                    Saved settings are not a live health check. Restart Preview after changing or removing credentials;
+                    an already running process keeps its old environment. Verify database access in your app before
+                    publishing.
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">
+                  <DialogButton
+                    type="secondary"
+                    onClick={() => {
+                      setTab(connection.provider);
+                      setEditing(true);
+                    }}
+                    disabled={saving}
+                  >
+                    Replace credentials
+                  </DialogButton>
                   <DialogClose asChild>
                     <DialogButton type="secondary">Close</DialogButton>
                   </DialogClose>
@@ -209,6 +240,20 @@ export function SupabaseConnection() {
               </div>
             ) : (
               <div className="mt-5">
+                {editing && (
+                  <button
+                    type="button"
+                    className="mb-3 underline"
+                    disabled={saving}
+                    onClick={() => {
+                      setEditing(false);
+                      setSupabaseAnonKey('');
+                      setDatabaseUrl('');
+                    }}
+                  >
+                    Cancel replacement
+                  </button>
+                )}
                 <div className="grid grid-cols-2 gap-2 rounded-lg bg-bolt-elements-background-depth-2 p-1">
                   {(['supabase', 'postgresql'] as const).map((value) => (
                     <button

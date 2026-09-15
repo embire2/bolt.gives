@@ -1,5 +1,6 @@
 import { createScopedLogger } from '@bolt/core/utils/logger';
 import { isAllowedUrl } from '@bolt/core/utils/url';
+import { readBoundedResponse } from '@bolt/core/lib/bounded-response';
 
 const logger = createScopedLogger('web-browse-client');
 
@@ -67,16 +68,16 @@ async function callService<T>(
       'content-type': 'application/json',
     },
     body: JSON.stringify(body),
+    redirect: 'error',
     signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.warn(`Web browse service request failed (${response.status}): ${errorText}`);
-    throw new Error(`Web browsing service error: ${response.status}`);
+    await response.body?.cancel();
+    throw Object.assign(new Error(`Web browsing service error: ${response.status}`), { status: response.status });
   }
 
-  return (await response.json()) as T;
+  return JSON.parse(await readBoundedResponse(response)) as T;
 }
 
 /**
@@ -95,15 +96,16 @@ async function browsePageWithFirecrawl(url: string, apiKey: string, maxChars: nu
       formats: ['markdown'],
       onlyMainContent: true,
     }),
+    redirect: 'error',
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Firecrawl API error (${response.status}): ${errorText}`);
+    await response.body?.cancel();
+    throw new Error(`Firecrawl API error (${response.status})`);
   }
 
-  const result = (await response.json()) as any;
+  const result = JSON.parse(await readBoundedResponse(response)) as any;
 
   if (!result.success || !result.data) {
     throw new Error('Firecrawl returned an unsuccessful response');
@@ -158,6 +160,7 @@ async function browsePageWithReadableFallback(url: string, maxChars: number): Pr
       'user-agent':
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     },
+    redirect: 'error',
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
 
@@ -165,7 +168,7 @@ async function browsePageWithReadableFallback(url: string, maxChars: number): Pr
     throw new Error(`Readable fallback failed (${response.status} ${response.statusText})`);
   }
 
-  const raw = await response.text();
+  const raw = await readBoundedResponse(response);
   const title = raw.match(/^Title:\s*(.+)$/im)?.[1]?.trim() || '';
   const finalUrl = raw.match(/^URL Source:\s*(.+)$/im)?.[1]?.trim() || url;
   const markdownContent = raw.match(/Markdown Content:\s*\n([\s\S]*)$/i)?.[1]?.trim() || raw.trim();
@@ -207,15 +210,16 @@ async function searchWebWithFirecrawl(
       query,
       limit: maxResults,
     }),
+    redirect: 'error',
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Firecrawl search API error (${response.status}): ${errorText}`);
+    await response.body?.cancel();
+    throw new Error(`Firecrawl search API error (${response.status})`);
   }
 
-  const result = (await response.json()) as any;
+  const result = JSON.parse(await readBoundedResponse(response)) as any;
 
   return {
     query,
@@ -286,7 +290,7 @@ export async function browsePageWithPlaywright(
     throw new Error('URL is not allowed. Only public HTTP/HTTPS URLs are accepted.');
   }
 
-  const maxChars = params.maxChars ?? 20_000;
+  const maxChars = Math.max(1000, Math.min(params.maxChars || 20_000, 40_000));
 
   // Try Firecrawl first when API key is available
   const firecrawlKey = getFirecrawlApiKey(options?.env);
@@ -310,7 +314,11 @@ export async function browsePageWithPlaywright(
       options,
     );
   } catch (error) {
-    logger.warn('Playwright browse failed, falling back to readable mirror:', error);
+    if (error && typeof error === 'object' && 'status' in error && error.status === 400) {
+      throw error;
+    }
+
+    logger.warn('Playwright browse failed, falling back to readable mirror.');
 
     try {
       return await browsePageWithReadableFallback(url, maxChars);
