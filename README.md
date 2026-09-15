@@ -72,11 +72,12 @@ The latest staging screenshot shows a real Cloudflare-assigned instance after a 
 
 ![Cloudflare instance with a restored Calendar and compact follow-up composer](docs/screenshots/agent-mode-cloudflare-v4.1-staging.png)
 
-This 14 September capture shows the copied production configuration after a
-real follow-up and history restore. The isolated preflight passed; production
-traffic has not switched to it.
+This 15 September capture is **live production v4.1.0**, after a real FREE/Luna
+follow-up and saved-history reload. The same journey published the application
+and verified that its public page remains available after the coding runtime
+stops. Both chat streams completed normally, with no fatal browser/network errors.
 
-![Verified production preflight with readable Agent status and restored Calendar](docs/screenshots/production-preflight-v4.1.png)
+![Live production v4.1.0 with restored Calendar and visible follow-up composer](docs/screenshots/agent-mode-production-v4.1.0.png)
 
 ### Connect data only when the app needs it
 
