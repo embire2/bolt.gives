@@ -43,7 +43,7 @@ import {
   appendManagedInstanceEvent,
   appendManagedInstanceRolloutHistory,
   buildManagedInstanceFleetSummary,
-  buildManagedInstancePagesEnvConfig,
+  buildManagedInstancePagesProjectUpdate,
   claimManagedInstanceTrial,
   getManagedInstanceBySessionSecret,
   hashManagedInstanceValue,
@@ -2037,8 +2037,9 @@ async function fetchCloudflarePagesProject(projectName) {
   return payload?.result || null;
 }
 
-function buildManagedInstanceDeploymentConfigs() {
-  return buildManagedInstancePagesEnvConfig({
+function buildManagedInstanceProjectUpdate(sourceBranch) {
+  return buildManagedInstancePagesProjectUpdate({
+    sourceBranch,
     hostedFreeRelayOrigin: MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN,
     runtimeControlPublicUrl: MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL,
   });
@@ -2070,10 +2071,6 @@ async function upsertManagedInstanceProjectSecret(instance, secretName, secretVa
 }
 
 async function configureManagedInstanceProject(instance) {
-  if (!MANAGED_INSTANCE_HOSTED_FREE_RELAY_ORIGIN && !MANAGED_INSTANCE_RUNTIME_CONTROL_PUBLIC_URL) {
-    return null;
-  }
-
   const config = getManagedInstanceCloudflareConfig();
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/pages/projects/${encodeURIComponent(instance.projectName)}`,
@@ -2083,9 +2080,7 @@ async function configureManagedInstanceProject(instance) {
         Authorization: `Bearer ${config.apiToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        deployment_configs: buildManagedInstanceDeploymentConfigs(),
-      }),
+      body: JSON.stringify(buildManagedInstanceProjectUpdate(config.sourceBranch)),
     },
   );
   const payload = await response.json();

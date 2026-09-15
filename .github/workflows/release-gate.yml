@@ -37,6 +37,20 @@ jobs:
       - name: Smoke every first-party template Preview
         run: pnpm run smoke:template-packs
 
+      - name: Configure disposable no-database owner
+        shell: bash
+        run: |
+          owner_token="$(openssl rand -hex 32)"
+          cookie_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$owner_token"
+          echo "::add-mask::$cookie_secret"
+          {
+            echo "BOLT_SELF_HOST_MODE=single-user"
+            echo "BOLT_SELF_HOST_ACCESS_TOKEN=$owner_token"
+            echo "BOLT_E2E_OWNER_ACCESS_TOKEN=$owner_token"
+            echo "BOLT_PROFILE_COOKIE_SECRET=$cookie_secret"
+          } >> "$GITHUB_ENV"
+
       - name: Start local runtime stack
         run: |
           pnpm run prepare:devvars

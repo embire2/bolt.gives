@@ -3,12 +3,8 @@ name: Installer Recovery
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - install.sh
-      - install.ps1
-      - scripts/self-host-installer-*.ts
-      - scripts/test-windows-setup.ps1
-      - .github/workflows/installer-recovery.yml
+    # PR Validation requires this workflow on every exact PR head.
+    branches: [main]
 
 permissions:
   contents: read

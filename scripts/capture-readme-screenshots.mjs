@@ -3,8 +3,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { getReleaseHomeReadinessMarkers } from './release-gate-utils.mjs';
-import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
+import { getReleaseHomeReadinessMarkers, hasRenderedServerError } from './release-gate-utils.mjs';
+import { completeProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = process.env.BASE_URL || 'http://localhost:5173';
 const homeUrl = new URL('/', baseUrl).toString();
@@ -58,7 +58,7 @@ function getPromptLocator() {
 
 async function captureHome() {
   await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
 
   const requiredMarkers = getReleaseHomeReadinessMarkers(versionLabel);
 
@@ -90,7 +90,7 @@ async function captureHome() {
 
 async function runPromptCapture({ prompt, token, outputName }) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const promptInput = getPromptLocator();
@@ -114,7 +114,7 @@ async function runPromptCapture({ prompt, token, outputName }) {
 
 async function capturePromptShell(outputName) {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const text = await page.evaluate(() => document.body.innerText || '');
@@ -128,7 +128,7 @@ async function capturePromptShell(outputName) {
 
 async function captureDatabaseConnection() {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const databaseButton = page.getByRole('button', { name: 'Open database connection' }).first();
@@ -140,7 +140,7 @@ async function captureDatabaseConnection() {
 
 async function captureWorkspaceShell() {
   await page.goto(chatUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await hideProfileOnboardingForScreenshot(page);
+  await completeProfileOnboardingForScreenshot(page);
   await waitReady();
 
   const workspaceTab = page.getByRole('tab', { name: /^Workspace$/i }).first();
@@ -168,10 +168,13 @@ async function captureChangelog() {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const versionRegex = new RegExp(`Current\\s+version\\s*:\\s*${escaped}|changelog\\s*\\(${escaped}\\)`, 'i');
 
-    return (
-      versionRegex.test(`${title}\n${text}`) && !/server error|error details|custom error/i.test(`${title}\n${text}`)
-    );
+    return versionRegex.test(`${title}\n${text}`);
   }, versionLabel);
+
+  if (hasRenderedServerError(await page.content())) {
+    throw new Error('Cannot capture changelog.png: rendered server error.');
+  }
+
   await page.screenshot({ path: path.join(outDir, 'changelog.png'), fullPage: true });
 }
 

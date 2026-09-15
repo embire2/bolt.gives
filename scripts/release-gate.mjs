@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { getScreenshotMinimumBytes } from './release-gate-utils.mjs';
+import { getScreenshotMinimumBytes, hasRenderedServerError } from './release-gate-utils.mjs';
 
 const rootDir = path.resolve(new URL('..', import.meta.url).pathname);
 const pkg = JSON.parse(await fs.readFile(path.join(rootDir, 'package.json'), 'utf8'));
@@ -50,14 +50,8 @@ async function checkDomain(domain) {
 
   assert(homeText.includes(`bolt.gives ${versionLabel}`), `${domain}: expected home title/version ${versionLabel}`);
   assert(changelogVersionPattern.test(changelogText), `${domain}: expected changelog version ${versionLabel}`);
-  assert(
-    !/server error|error details|custom error/i.test(homeText),
-    `${domain}: unexpected server error marker on home`,
-  );
-  assert(
-    !/server error|error details|custom error/i.test(changelogText),
-    `${domain}: unexpected server error marker on changelog`,
-  );
+  assert(!hasRenderedServerError(homeText), `${domain}: unexpected server error marker on home`);
+  assert(!hasRenderedServerError(changelogText), `${domain}: unexpected server error marker on changelog`);
 
   return {
     domain,

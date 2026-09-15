@@ -2,7 +2,7 @@
 
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
-[![Current release](https://img.shields.io/badge/release-v4.1.0-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0)
+[![Current release](https://img.shields.io/badge/release-v4.1.1-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.1)
 [![Roadmap](https://img.shields.io/badge/roadmap-reliability%20%26%20native%20Windows-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
@@ -12,13 +12,13 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
-> **v4.1.0, 15 September 2026:** the two reliability phases are combined in the stable web/server release. Production now runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Release notes and installation](docs/releases/v4.1.0.md) describe the shipped scope and validation limits.
+> **v4.1.1, 15 September 2026:** the stable v4.1.0 reliability release plus a Cloudflare readiness compatibility correction found during fleet acceptance. The original v4.1.0 tag remains unchanged. Production runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Current release notes and installation](docs/releases/v4.1.1.md) describe the patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the combined reliability work and validation limits.
 
 **What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.
 
 **The stuck-repair bug is reproduced and fixed.** A browser hook crash followed by a late successful HTML response could cancel repair and falsely report Ready while source was broken. That race now preserves Repairing, restores the last-good source, and then restores visible Preview. [Before/after evidence](docs/quality/2026-09-15-browser-recovery.md) distinguishes the injected browser error from real-provider generation. Intentional stop also no longer triggers an unwanted Preview restart.
 
-**Validation:** 1,462 tests pass, nine are skipped, and boundaries, typecheck, production build and bundle budgets pass. Lint has zero errors and ten existing warnings. Real Chromium journeys cover FREE/Luna generation, follow-up, saved history and publishing; recovery tests inject actual source/browser failures. Six first-party template packs pass real Preview smoke checks, including persisted Calendar event identities. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34972966963) covers Ubuntu 22.04/24.04 clean/repair contracts and PowerShell 5.1/7.
+**Validation:** 1,481 tests pass, nine are skipped, and boundaries, typecheck, production build and bundle budgets pass. Lint has zero errors and ten existing warnings. Real Chromium journeys cover FREE/Luna generation, follow-up, saved history and publishing; recovery tests inject actual source/browser failures. Six first-party template packs pass real Preview smoke checks, including persisted Calendar event identities. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34972966963) covers Ubuntu 22.04/24.04 clean/repair contracts and PowerShell 5.1/7.
 
 **Billing is active:** production Upgrade opens a USD 5 monthly Stripe subscription Checkout. The dedicated signed webhook is enabled; unsigned/tampered requests are rejected, replay is tested, and disposable PostgreSQL tests cover activation, renewal and duplicate events. The live test Checkout was expired without charging a card. A real paid transaction is reserved for the operator's acceptance test.
 

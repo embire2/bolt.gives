@@ -6,7 +6,9 @@ export async function checkRuntimeReadiness(version: string, env: Record<string,
   try {
     const response = await fetch(`${getRuntimeControlBaseUrl(env)}/health`, {
       signal: AbortSignal.timeout(3000),
-      redirect: 'error',
+
+      // Workers supports manual/follow only. Reject 3xx below without following it.
+      redirect: 'manual',
       headers: { Accept: 'application/json' },
     });
 
