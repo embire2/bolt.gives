@@ -2,7 +2,7 @@
 
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
-[![Current release](https://img.shields.io/badge/release-v4.1.0-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.0)
+[![Current release](https://img.shields.io/badge/release-v4.1.1-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.1)
 [![Roadmap](https://img.shields.io/badge/roadmap-reliability%20%26%20native%20Windows-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
@@ -12,7 +12,7 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
-> **v4.1.0, 15 September 2026:** the two reliability phases are combined in the stable web/server release. Production now runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Release notes and installation](docs/releases/v4.1.0.md) describe the shipped scope and validation limits.
+> **v4.1.1, 15 September 2026:** the stable v4.1.0 reliability release plus a Cloudflare readiness compatibility correction found during fleet acceptance. The original v4.1.0 tag remains unchanged. Production runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Current release notes and installation](docs/releases/v4.1.1.md) describe the patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the combined reliability work and validation limits.
 
 **What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.
 

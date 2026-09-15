@@ -184,6 +184,13 @@ Self-host installations support interactive setup, custom app/admin/create domai
 
 ## Git, Releases, and Deployment
 
+Cloudflare readiness must be tested in Workers as well as Node. Workers rejects
+Fetch `redirect: 'error'`; use `manual` and reject non-2xx responses without
+following them. Never waive app/runtime version or protocol checks to refresh a
+fleet. Verify propagated readiness and the canonical deployment SHA, not only a
+successful deploy API response. Published tags are immutable; corrections after
+publication receive a new patch version.
+
 The v4.1 production app/runtime cutover completed on 15 September after frozen source/private-data checksum verification and a service/routing rollback rehearsal. Production uses `/srv/bolt-gives-isolated`, `/srv/bolt-gives-isolated-workspaces` and root-protected `/etc/bolt-gives/production-isolated.env`; alpha uses its corresponding `-alpha-isolated` trees. Both run as `bolt-runtime-agent` with rootless project containers and public per-project Preview TLS. Original production trees remain rollback material, not the current app/runtime source. Never rerun the fresh-copy migration over active targets or copy old workspaces back onto newer customer state. Preserve `/srv/bolt-gives-production-checkpoints/20260914-pre-isolation` and the 15 September rehearsal/cutover records. `main` pushes trigger Cloudflare deployment; update the protected exact release SHA and verify source checksums before fleet refresh. The dedicated Stripe webhook is enabled; do not disable shared/commercial endpoints or charge test cards without approval. Hosted process-local self-update remains disabled in favor of operator-controlled deployments. Public `install.ps1` bootstraps the server through WSL, not private desktop source. Preserve passwords, configuration and customer data. Current runtime source is authoritative on reload; cached fallback is allowed only after an explicit missing-session response.
 
 For canary deployment, synchronize every tracked source file as well as build output: Cloudflare recompiles `functions/[[path]].ts`, so copying only modules/build can deploy a stale gateway. Keep automatic fleet refresh disabled on staging; zero interval must disable startup refresh too. Preserve streamed Preview URL normalization before event callbacks. Decode JSON request envelopes before extracting quoted UI requirements; never repair a healthy project because envelope punctuation was mistaken for missing app text. Calendar release E2E rejects chat cancellation and browser exceptions; do not weaken those assertions to obtain a pass. `scripts/update.sh` delegates to the guarded Linux installer, not an independent download/copy updater.

@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright/test';
 
 if (!process.argv.includes('--live')) {
-  throw new Error('Pass --live to create one disposable assigned Cloudflare instance on staging.');
+  throw new Error('Pass --live to create one disposable assigned Cloudflare instance at the selected BASE_URL.');
 }
 
-const output = 'output/playwright/managed-canary';
+const baseUrl = process.env.BASE_URL || 'https://alpha1.bolt.gives';
+const output = process.env.E2E_OUTPUT_DIR || 'output/playwright/managed-canary';
 await fs.mkdir(output, { recursive: true, mode: 0o700 });
 
 const subdomain = `release-canary-${Date.now()}`;
@@ -17,7 +18,7 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 1000
 const page = await context.newPage();
 
 try {
-  await page.goto('https://alpha1.bolt.gives/managed-instances');
+  await page.goto(new URL('/managed-instances', baseUrl).href);
   await page.getByLabel('Full name', { exact: true }).fill('Release Canary');
   await page.getByLabel('Work email', { exact: true }).fill(email);
   await page.getByLabel('Preferred subdomain', { exact: false }).fill(subdomain);

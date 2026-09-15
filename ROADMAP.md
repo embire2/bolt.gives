@@ -10,6 +10,7 @@ Status legend:
 
 Current stable release:
 
+- [x] `v4.1.1` patch: Cloudflare-compatible no-follow readiness probing and release-gate false-positive correction. The original `v4.1.0` tag is preserved; deploy the patch for managed instances.
 - [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
 
 ## v4.1.0 Release Outcome
