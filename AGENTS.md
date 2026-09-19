@@ -147,6 +147,7 @@ An E2E for prompt-to-preview is complete only when a normal browser submits a pr
 - Treat generated applications and model output as untrusted input. Validate paths, commands, URLs, archive entries, and process arguments before execution.
 - Prevent path traversal and symlink escapes from project roots. Never run a generated project as root.
 - Redact errors before storing or exposing them, but retain a server-side correlation ID and enough structured context for operators.
+- SMTP lives in protected server settings. Runtime SMTP overrides take precedence over service environment values; preserve file ownership and mode `0600` when changing them. Configure sender name and Reply-To separately from the sender address. Verify STARTTLS/authentication without logging credentials or mailing customers as a test.
 
 ## Databases and Runtime Isolation
 

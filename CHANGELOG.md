@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Support a server-configured SMTP sender display name and Reply-To on every email path, including browser and Desktop sign-in. Require STARTTLS for port 587, bound connection timeouts, and refresh the transport after protected credential changes without exposing passwords in admin status.
 - Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. This is a staging environment, not a new stable release.
 - Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.
 - Use the configured FREE streaming relay on custom Cloudflare domains, not only `pages.dev`. Validate caller CSRF before attaching a trusted relay credential; ignore spoofed inbound relay headers during that validation.

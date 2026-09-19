@@ -24,11 +24,14 @@ vi.mock('nodemailer', () => ({
 }));
 
 describe('admin-mailer', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     readMergedRuntimeEnvMock.mockReturnValue({});
     sendMailMock.mockResolvedValue({});
     createTransportMock.mockReturnValue({ sendMail: sendMailMock });
+
+    const { resetAdminMailTransporter } = await import('./admin-mailer.mjs');
+    resetAdminMailTransporter();
   });
 
   it('reports when smtp is not configured', async () => {
@@ -70,6 +73,85 @@ describe('admin-mailer', () => {
     expect(batch.messages).toHaveLength(2);
     expect(batch.messages[0]?.profileEmail).toBe('alice@example.com');
     expect(batch.messages[1]?.profileEmail).toBe('bob@example.com');
+  });
+
+  it('uses the configured sender identity and requires STARTTLS on port 587', async () => {
+    readMergedRuntimeEnvMock.mockReturnValue({
+      BOLT_ADMIN_SMTP_HOST: 'smtp.example.com',
+      BOLT_ADMIN_SMTP_PORT: '587',
+      BOLT_ADMIN_SMTP_SECURE: 'false',
+      BOLT_ADMIN_SMTP_USER: 'mailer',
+      BOLT_ADMIN_SMTP_PASSWORD: 'test-password',
+      BOLT_ADMIN_SMTP_FROM: 'hello@example.com',
+      BOLT_ADMIN_SMTP_FROM_NAME: 'Example Sender',
+      BOLT_ADMIN_SMTP_REPLY_TO: 'replies@example.com',
+    });
+
+    const { sendProfileLoginLink, sendProfileLoginCode, sendAdminEmail, buildAdminMailSupport } =
+      await import('./admin-mailer.mjs');
+    await sendProfileLoginLink({ profileEmail: 'ada@example.com', loginUrl: 'https://example.com/login' });
+    await sendProfileLoginCode({ profileEmail: 'ada@example.com', code: '123456' });
+    await sendAdminEmail({ profileEmail: 'ada@example.com', subject: 'Test', body: 'Configuration check' });
+
+    expect(createTransportMock).toHaveBeenCalledOnce();
+    expect(createTransportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 30_000,
+      }),
+    );
+
+    for (const [message] of sendMailMock.mock.calls as Array<Array<Record<string, unknown>>>) {
+      expect(message).toMatchObject({
+        from: { name: 'Example Sender', address: 'hello@example.com' },
+        replyTo: 'replies@example.com',
+      });
+    }
+    expect(JSON.stringify(buildAdminMailSupport())).not.toContain('test-password');
+  });
+
+  it('honors a configured Reply-To over a report-specific fallback', async () => {
+    readMergedRuntimeEnvMock.mockReturnValue({
+      BOLT_ADMIN_SMTP_HOST: 'smtp.example.com',
+      BOLT_ADMIN_SMTP_USER: 'mailer',
+      BOLT_ADMIN_SMTP_PASSWORD: 'test-password',
+      BOLT_ADMIN_SMTP_FROM: 'hello@example.com',
+      BOLT_ADMIN_SMTP_REPLY_TO: 'replies@example.com',
+    });
+
+    const { sendBugReportNotification } = await import('./admin-mailer.mjs');
+    await sendBugReportNotification({
+      fullName: 'Ada',
+      reporterEmail: 'ada@example.com',
+      summary: 'Test report',
+      issue: 'Test details',
+    } as any);
+    expect(sendMailMock).toHaveBeenCalledWith(expect.objectContaining({ replyTo: 'replies@example.com' }));
+  });
+
+  it('refreshes cached SMTP authentication when runtime settings change', async () => {
+    const config = {
+      BOLT_ADMIN_SMTP_HOST: 'smtp.example.com',
+      BOLT_ADMIN_SMTP_PORT: '465',
+      BOLT_ADMIN_SMTP_USER: 'mailer',
+      BOLT_ADMIN_SMTP_PASSWORD: 'old-password',
+      BOLT_ADMIN_SMTP_FROM: 'hello@example.com',
+    };
+    readMergedRuntimeEnvMock.mockReturnValue(config);
+
+    const { sendProfileLoginCode } = await import('./admin-mailer.mjs');
+    await sendProfileLoginCode({ profileEmail: 'ada@example.com', code: '123456' });
+    readMergedRuntimeEnvMock.mockReturnValue({ ...config, BOLT_ADMIN_SMTP_PASSWORD: 'new-password' });
+    await sendProfileLoginCode({ profileEmail: 'ada@example.com', code: '654321' });
+
+    expect(createTransportMock).toHaveBeenCalledTimes(2);
+    expect(createTransportMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ secure: true, requireTLS: false, auth: { user: 'mailer', pass: 'new-password' } }),
+    );
   });
 
   it('sends a one-time profile login link without recording it in admin mail history', async () => {

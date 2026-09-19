@@ -21,6 +21,8 @@ function readAdminMailConfig(env = null) {
   const user = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_USER');
   const pass = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_PASSWORD');
   const fromAddress = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_FROM');
+  const fromName = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_FROM_NAME');
+  const replyTo = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_REPLY_TO');
   const secure = envValue(effectiveEnv, 'BOLT_ADMIN_SMTP_SECURE') === 'true' || port === 465;
   const configured = Boolean(host && fromAddress && ((user && pass) || (!user && !pass)));
 
@@ -33,6 +35,8 @@ function readAdminMailConfig(env = null) {
     pass: pass || null,
     hasPassword: Boolean(pass),
     fromAddress: fromAddress || null,
+    fromName: fromName || null,
+    replyTo: replyTo || null,
     transportLabel: configured ? `SMTP ${host}:${port}` : null,
     reason: configured ? null : 'SMTP is not configured on the runtime service yet.',
   };
@@ -52,6 +56,8 @@ export function buildAdminMailSupport(env = null) {
     user: config.user,
     hasPassword: config.hasPassword,
     fromAddress: config.fromAddress,
+    fromName: config.fromName,
+    replyTo: config.replyTo,
     transportLabel: config.transportLabel,
     reason: config.reason,
   };
@@ -85,6 +91,10 @@ async function getTransporter() {
         host: config.host,
         port: config.port,
         secure: config.secure,
+        requireTLS: !config.secure && config.port === 587,
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 30_000,
         auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
       }),
     );
@@ -97,6 +107,13 @@ function normalizeMessageBody(body) {
   return String(body || '')
     .replace(/\r\n/g, '\n')
     .trim();
+}
+
+function senderHeaders(support, fallbackReplyTo = undefined) {
+  return {
+    from: support.fromName ? { name: support.fromName, address: support.fromAddress } : support.fromAddress,
+    replyTo: support.replyTo || fallbackReplyTo,
+  };
 }
 
 export function buildProfileLoginEmail({ name, loginUrl, expiresMinutes = 15 } = {}) {
@@ -147,7 +164,7 @@ export async function sendProfileLoginLink({ profileEmail, name, loginUrl } = {}
   const message = buildProfileLoginEmail({ name, loginUrl: normalizedUrl });
 
   await transporter.sendMail({
-    from: support.fromAddress,
+    ...senderHeaders(support),
     to: normalizedEmail,
     subject: 'Your secure bolt.gives sign-in link',
     text: message.text,
@@ -206,7 +223,7 @@ export async function sendProfileLoginCode({ profileEmail, name, code } = {}) {
   const transporter = await getTransporter();
   const message = buildProfileLoginCodeEmail({ name, code });
   await transporter.sendMail({
-    from: support.fromAddress,
+    ...senderHeaders(support),
     to: normalizedEmail,
     subject: `${String(code).trim()} is your bolt.gives Desktop sign-in code`,
     text: message.text,
@@ -216,6 +233,7 @@ export async function sendProfileLoginCode({ profileEmail, name, code } = {}) {
   return { status: 'sent', transport: support.transportLabel };
 }
 
+/** @param {{ profileEmail?: string, subject?: string, body?: string, actor?: string }} [input] */
 export async function sendAdminEmail({ profileEmail, subject, body, actor = 'admin' } = {}) {
   const support = buildAdminMailSupport();
   const normalizedEmail = String(profileEmail || '')
@@ -244,7 +262,7 @@ export async function sendAdminEmail({ profileEmail, subject, body, actor = 'adm
     const transporter = await getTransporter();
 
     await transporter.sendMail({
-      from: support.fromAddress,
+      ...senderHeaders(support),
       to: normalizedEmail,
       subject: normalizedSubject,
       text: normalizedBody,
@@ -436,9 +454,8 @@ export async function sendBugReportNotification({
     });
 
     await transporter.sendMail({
-      from: support.fromAddress,
+      ...senderHeaders(support, normalizedReporterEmail),
       to: recipient,
-      replyTo: normalizedReporterEmail,
       subject: `[Bug Report] ${normalizedSummary}`,
       text: formatted.text,
       html: formatted.html,
@@ -661,16 +678,15 @@ export async function sendContributorApplicationEmails(application = {}) {
     const transporter = await getTransporter();
 
     await transporter.sendMail({
-      from: support.fromAddress,
+      ...senderHeaders(support, email),
       to: recipient,
-      replyTo: email,
       subject: messages.operator.subject,
       text: messages.operator.text,
       html: messages.operator.html,
     });
 
     await transporter.sendMail({
-      from: support.fromAddress,
+      ...senderHeaders(support),
       to: email,
       subject: messages.thankYou.subject,
       text: messages.thankYou.text,

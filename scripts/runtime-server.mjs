@@ -9552,6 +9552,8 @@ export function createRuntimeServer() {
             BOLT_ADMIN_SMTP_USER: null,
             BOLT_ADMIN_SMTP_PASSWORD: null,
             BOLT_ADMIN_SMTP_FROM: null,
+            BOLT_ADMIN_SMTP_FROM_NAME: null,
+            BOLT_ADMIN_SMTP_REPLY_TO: null,
             BOLT_ADMIN_SMTP_SECURE: null,
           });
           resetAdminMailTransporter();

@@ -335,6 +335,24 @@ The detailed checklist is in [docs/fresh-install-checklist.md](docs/fresh-instal
 
 ## Developer Setup
 
+### Outgoing Email
+
+Profile sign-in and operator emails use the server-side `BOLT_ADMIN_SMTP_*`
+settings documented in `.env.example`. Keep real credentials in your protected
+service environment or ignored `.env.local`, never in source or Cloudflare
+browser bindings. Port 587 uses STARTTLS, not implicit TLS; port 465 uses
+implicit TLS. `BOLT_ADMIN_SMTP_FROM` is the sender email address,
+`BOLT_ADMIN_SMTP_FROM_NAME` is its optional display name, and
+`BOLT_ADMIN_SMTP_REPLY_TO` sets an optional default Reply-To across outgoing
+messages. These sender-name and Reply-To settings are part of the next patch.
+
+If the admin panel has saved SMTP overrides, update those too: the protected
+runtime settings file takes precedence over service environment values. Hosted
+instances send email through their runtime; do not distribute an operator's
+SMTP password to managed instances or generated projects.
+
+### Local Development
+
 ```bash
 git clone https://github.com/embire2/bolt.gives.git
 cd bolt.gives
