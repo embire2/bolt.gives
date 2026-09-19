@@ -8,11 +8,96 @@ import {
   isStaticAssetRequest,
   normalizeRuntimeControlBaseUrl,
   shouldProxyRuntimeRequest,
+  shouldProxyCollaborationRequest,
   shouldProxyHostedFreeApiRequest,
   onRequest,
 } from '../functions/[[path]]';
 
 describe('Cloudflare Pages runtime proxy helpers', () => {
+  it('forwards custom-domain collaboration upgrades to the configured test backend', async () => {
+    const upgraded = { status: 101, webSocket: {} } as Response;
+    const transport = vi.spyOn(globalThis, 'fetch').mockResolvedValue(upgraded);
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://alpha.bolt.gives/collab/events?room=owned-fixture', {
+          headers: { Upgrade: 'websocket', Origin: 'https://alpha.bolt.gives' },
+        }),
+        env: { BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://alpha1.bolt.gives/runtime' },
+      } as never);
+      expect(response).toBe(upgraded);
+
+      const [url, options] = transport.mock.calls[0];
+      expect(String(url)).toBe('https://alpha1.bolt.gives/collab/events?room=owned-fixture');
+      expect(new Headers(options?.headers).get('upgrade')).toBe('websocket');
+      expect(new Headers(options?.headers).get('origin')).toBe('https://alpha1.bolt.gives');
+      expect(options?.redirect).toBe('manual');
+    } finally {
+      transport.mockRestore();
+    }
+  });
+  it('rejects cross-origin collaboration requests and self-proxy loops', async () => {
+    const transport = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      for (const [origin, expected] of [
+        ['https://preview.example.com', 403],
+        ['https://bolt.gives', 503],
+      ] as const) {
+        const response = await onRequest({
+          request: new Request('https://bolt.gives/collab/events', { headers: { Origin: origin } }),
+          env: {},
+        } as never);
+        expect(response.status).toBe(expected);
+      }
+      expect(transport).not.toHaveBeenCalled();
+      expect(shouldProxyCollaborationRequest('/collab/events')).toBe(true);
+      expect(shouldProxyCollaborationRequest('/collaboration')).toBe(false);
+    } finally {
+      transport.mockRestore();
+    }
+  });
+  it('uses the configured FREE stream relay on custom domains without relaying back to itself', () => {
+    const request = new Request('https://alpha.bolt.gives/api/chat', {
+      method: 'POST',
+      headers: { 'X-Bolt-Selected-Provider': 'FREE' },
+    });
+    const env = {
+      BOLT_HOSTED_FREE_RELAY_ORIGIN: 'https://alpha1.bolt.gives',
+      BOLT_HOSTED_FREE_RELAY_SECRET: 'fixture-relay-secret',
+    };
+    expect(shouldProxyHostedFreeApiRequest(request, env)).toBe(true);
+    expect(
+      shouldProxyHostedFreeApiRequest(request, { ...env, BOLT_HOSTED_FREE_RELAY_ORIGIN: 'https://alpha.bolt.gives/' }),
+    ).toBe(false);
+    expect(shouldProxyHostedFreeApiRequest(request, { ...env, BOLT_HOSTED_FREE_RELAY_SECRET: '' })).toBe(false);
+    expect(shouldProxyHostedFreeApiRequest(request, { ...env, BOLT_HOSTED_FREE_RELAY_ORIGIN: 'invalid' })).toBe(false);
+  });
+  it('does not attach a trusted relay credential to a cross-origin caller spoofing relay headers', async () => {
+    const transport = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const response = await onRequest({
+        request: new Request('https://alpha.bolt.gives/api/chat', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://preview.example.com',
+            'X-Bolt-Selected-Provider': 'FREE',
+            'X-Bolt-Hosted-Free-Relay': '1',
+            'X-Bolt-Hosted-Free-Relay-Secret': 'spoofed',
+          },
+        }),
+        env: {
+          BOLT_HOSTED_FREE_RELAY_ORIGIN: 'https://alpha1.bolt.gives',
+          BOLT_HOSTED_FREE_RELAY_SECRET: 'fixture-relay-secret',
+        },
+      } as never);
+      expect(response.status).toBe(403);
+      expect(transport).not.toHaveBeenCalled();
+    } finally {
+      transport.mockRestore();
+    }
+  });
   it('keeps stale-port redirects on the authenticated instance rather than losing its cookie at the central host', async () => {
     const transport = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
       String(url).endsWith('/profile/session')

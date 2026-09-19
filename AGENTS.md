@@ -211,7 +211,7 @@ The historical beta is superseded by the stable web release; consult `docs/relea
 8. Verify service status, logs, health endpoints, browser console, chat, runtime, Preview, and affected public domains.
 9. Refresh managed instances only after the live checkout is aligned with the intended release and rollout health checks pass.
 
-Core public surfaces include `https://bolt.gives`, `https://alpha1.bolt.gives`, `https://ahmad.bolt.gives`, `https://bolt-gives.pages.dev`, `https://admin.bolt.gives`, and `https://create.bolt.gives`. Choose the smallest relevant set, but validate a staging target before production for high-risk work.
+Core public surfaces include `https://bolt.gives`, `https://alpha.bolt.gives`, `https://alpha1.bolt.gives`, `https://ahmad.bolt.gives`, `https://bolt-gives.pages.dev`, `https://admin.bolt.gives`, and `https://create.bolt.gives`. Use the dedicated Cloudflare `alpha.bolt.gives` test frontend before production; it shares the existing isolated alpha backend, not production workspace data. Its manual deployment and acceptance rules are in `docs/operations/alpha-staging.md`. Choose the smallest relevant set, but validate a staging target before production for high-risk work.
 
 ## Incident Playbook
 

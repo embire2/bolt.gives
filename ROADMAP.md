@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-15
+Last updated: 2026-09-19
 
 Status legend:
 
@@ -12,6 +12,19 @@ Current stable release:
 
 - [x] `v4.1.1` patch: Cloudflare-compatible readiness, canonical production-branch refresh and release-gate/onboarding acceptance corrections. The original `v4.1.0` tag is preserved; deploy the patch for managed instances.
 - [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
+
+## Next Patch: Bug Fixes Only
+
+No new product features are planned for this pass. Fix and verify existing user journeys on `https://alpha.bolt.gives` before promoting changes to production.
+
+- [x] Create the dedicated Cloudflare Pages alpha test instance with its own custom hostname, valid TLS and the existing isolated alpha runtime. Keep it outside automatic production fleet refreshes.
+- [x] Correct custom-domain collaboration routing and FREE relay handling. Regression tests, a live WebSocket handshake, and the Luna-to-Sonnet browser journey pass on the alpha candidate; not promoted to production.
+- [~] Investigate the FREE/Luna follow-up regression reproduced on alpha: initial Preview loads, but the follow-up label has not appeared. Retain failing evidence; do not count the initial template alone as a complete E2E pass.
+- [ ] Rewrite Supabase connection verification and error handling; test invalid keys, unavailable projects, failed replacement, and project/account switching without losing a working connection.
+- [x] Verify alpha provisioning with generation, a Luna-to-Sonnet follow-up, history restore and public publishing; confirm the published page in an anonymous browser after the coding runtime stops. This does not clear the Luna-only failure above.
+- [ ] Complete the remaining bug fixes and repeat acceptance before release. Update the public website and release notes with verified fixes, not promises of a bug-free platform.
+
+Environment ownership and validation limits: [alpha staging guide](docs/operations/alpha-staging.md).
 
 ## v4.1.0 Release Outcome
 

@@ -12,6 +12,8 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
+> **Next release: reliability first, not new features.** We are testing fixes on the dedicated [alpha test instance](https://alpha.bolt.gives/chat) before production rollout. Alpha may contain unfinished changes: use disposable projects, not important data. See the [test environment guide](docs/operations/alpha-staging.md) and [actionable bug-fix queue](ROADMAP.md#next-patch-bug-fixes-only).
+
 > **v4.1.1, 15 September 2026:** the stable v4.1.0 reliability release plus a Cloudflare readiness compatibility correction found during fleet acceptance. The original v4.1.0 tag remains unchanged. Production runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Current release notes and installation](docs/releases/v4.1.1.md) describe the patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the combined reliability work and validation limits.
 
 **What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.

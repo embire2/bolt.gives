@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. This is a staging environment, not a new stable release.
+- Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.
+- Use the configured FREE streaming relay on custom Cloudflare domains, not only `pages.dev`. Validate caller CSRF before attaching a trusted relay credential; ignore spoofed inbound relay headers during that validation.
+- Keep the next patch focused on reproduced bugs, Supabase reliability and end-to-end acceptance rather than new features. Follow-up/browser failures discovered during staging are still open until verified.
+
 ## v4.1.1 - 2026-09-15
 
 - Start mandatory installer acceptance for every PR head, instead of waiting indefinitely for a path-filtered workflow that never ran. Clean release CI uses a disposable no-database owner and normal login, never operator credentials or hidden authentication modals.

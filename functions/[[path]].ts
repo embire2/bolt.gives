@@ -50,6 +50,34 @@ export function shouldProxyRuntimeRequest(pathname: string) {
   return pathname === '/runtime' || pathname.startsWith('/runtime/');
 }
 
+export function shouldProxyCollaborationRequest(pathname: string) {
+  return pathname === '/collab' || pathname.startsWith('/collab/');
+}
+
+async function proxyCollaborationRequest(request: Request, env: PagesEnv) {
+  const url = new URL(request.url);
+  const origin = request.headers.get('Origin');
+
+  if (origin && origin !== url.origin) {
+    return new Response('Cross-origin collaboration request blocked.', { status: 403 });
+  }
+
+  const backend = new URL(env.BOLT_RUNTIME_CONTROL_PUBLIC_URL || DEFAULT_RUNTIME_CONTROL_BASE_URL);
+
+  if (backend.origin === url.origin) {
+    return new Response('Collaboration gateway is not configured.', { status: 503 });
+  }
+
+  const target = new URL(`${url.pathname}${url.search}`, backend.origin);
+
+  // Return the original response: rebuilding it would discard a Workers WebSocket upgrade.
+  return fetch(target, {
+    method: request.method,
+    headers: buildRuntimeProxyHeaders(request, target.toString()),
+    redirect: 'manual',
+  });
+}
+
 export function isStaticAssetRequest(request: Request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return false;
@@ -135,13 +163,25 @@ export function shouldProxyHostedFreeApiRequest(request: Request, env: PagesEnv)
   const selectedProvider =
     request.headers.get('X-Bolt-Selected-Provider') || readRequestCookie(request, 'selectedProvider');
 
-  return (
-    request.method === 'POST' &&
-    url.hostname.endsWith('.pages.dev') &&
-    HOSTED_FREE_API_PATHS.has(url.pathname) &&
-    selectedProvider.trim().toUpperCase() === 'FREE' &&
-    Boolean(env.BOLT_HOSTED_FREE_RELAY_SECRET?.trim())
-  );
+  if (
+    request.method !== 'POST' ||
+    !HOSTED_FREE_API_PATHS.has(url.pathname) ||
+    selectedProvider.trim().toUpperCase() !== 'FREE' ||
+    !env.BOLT_HOSTED_FREE_RELAY_SECRET?.trim()
+  ) {
+    return false;
+  }
+
+  const relayOrigin = env.BOLT_HOSTED_FREE_RELAY_ORIGIN?.trim();
+
+  try {
+    return (
+      (url.hostname.endsWith('.pages.dev') || Boolean(relayOrigin)) &&
+      new URL(relayOrigin || DEFAULT_HOSTED_FREE_RELAY_ORIGIN).origin !== url.origin
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function buildHostedFreeApiProxyHeaders(request: Request, relaySecret: string) {
@@ -273,7 +313,25 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
     return proxyRuntimeRequest(request, env);
   }
 
+  if (shouldProxyCollaborationRequest(url.pathname)) {
+    return proxyCollaborationRequest(request, env);
+  }
+
   if (shouldProxyHostedFreeApiRequest(request, env)) {
+    const headers = new Headers(request.headers);
+    headers.delete('X-Bolt-Hosted-Free-Relay');
+    headers.delete('X-Bolt-Hosted-Free-Relay-Secret');
+
+    // Validate the caller before adding our trusted server-to-server relay credential.
+    const csrf = enforceCsrf(
+      new Request(request.url, { method: request.method, headers }),
+      env as Record<string, string | undefined>,
+    );
+
+    if (csrf) {
+      return csrf;
+    }
+
     return proxyHostedFreeApiRequest(request, env);
   }
 
