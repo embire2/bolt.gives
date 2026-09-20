@@ -1,8 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFileSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 
 it('serializes concurrent usage, deduplicates retries and refuses a corrupt ledger', async () => {
@@ -10,7 +9,7 @@ it('serializes concurrent usage, deduplicates retries and refuses a corrupt ledg
   const ledger = path.join(root, 'quota.json');
 
   try {
-    const { stdout } = await promisify(execFile)(
+    const stdout = execFileSync(
       process.execPath,
       [
         '--input-type=module',
@@ -36,6 +35,7 @@ it('serializes concurrent usage, deduplicates retries and refuses a corrupt ledg
       ],
       {
         cwd: process.cwd(),
+        encoding: 'utf8',
         env: { ...process.env, RUNTIME_FREE_USAGE_QUOTA_PATH: ledger, BOLT_FREE_DAILY_TOKEN_LIMIT: '20' },
         timeout: 20000,
       },
