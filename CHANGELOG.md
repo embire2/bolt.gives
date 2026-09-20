@@ -2,6 +2,7 @@
 
 ## v4.1.2 - 2026-09-20
 
+- Keep admin status available during long-running fleet deployments by reading an atomic registry snapshot without joining the mutation queue or rewriting assignments. Reject hostile-origin admin POSTs at the gateway on direct production as well as managed domains, avoiding a rendering error on denial.
 - Replace the managed FREE upstream with OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Normalize old FREE selections to the current model while retaining project context. Funded credentials are server-only and cannot be overridden by browser-supplied keys. MagnetAPI and OpenRouter remain separate bring-your-own-key providers.
 - Configure GLM's supported low reasoning effort and an 8,192-token build budget. The real alpha test reproduced reasoning consuming the old 2,048-token budget without emitting code; preserve bounded generation rather than accepting a starter-only result.
 - Set hosted FREE to 20 API credits per GMT+2 day, charged at one credit per minute of server-measured active generation. Preserve consumed time when migrating the previous allowance, serialize ledger writes, and deduplicate repeated usage records. Custom Domain allowances are unchanged.

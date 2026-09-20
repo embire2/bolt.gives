@@ -168,6 +168,8 @@ Runtime-node steady state uses the non-root `bolt-runtime-agent` with SSH keys a
 
 ## Managed Instances and Publishing
 
+Admin status must read a non-mutating atomic fleet snapshot, never wait behind a deployment lock or rewrite assignments. Keep mutations serialized and reject hostile-origin admin POSTs at the gateway before rendering on both direct and managed domains.
+
 `/managed-instances` requires a signed-in profile and derives ownership from that server-verified identity, not the form email. One account receives one instance by default. The operator can toggle `BOLT_MANAGED_INSTANCE_ONE_PER_USER` in `/admin`; overrides are protected runtime settings and existing instances are retained. Show the hostname returned by the control plane, never a guessed hostname. Operators manage profiles, assignments, refreshes, suspensions, rollout history, and email activity through `/admin` on their configured domain; the legacy admin hostname remains supported. Managed Cloudflare `/admin` requests proxy to the configured protected backend, not a copied operator signing secret.
 
 Free project publishing uses the configured protected Cloudflare account and a persistent Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`. Operational and reserved names such as `admin`, `create`, `alpha1`, and `ahmad` cannot be assigned to projects. Verify deployment through the runtime control plane and then load the public application; a successful API response alone is insufficient.

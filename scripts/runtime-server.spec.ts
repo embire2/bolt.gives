@@ -66,6 +66,7 @@ import {
   resolveSessionSnapshotFiles,
   runSerializedManagedInstanceRollout,
   runSerializedManagedInstanceRegistryOperation,
+  readManagedInstanceRegistrySnapshot,
   restoreSessionLastKnownGoodWorkspace,
   runSessionOperation,
   sanitizeLegacyTailwindCss,
@@ -3392,6 +3393,52 @@ The latest release of react-calendar is "6.0.1".`),
     await Promise.all([fleetRefresh, registration]);
 
     expect(assignments).toEqual(['existing', 'refreshed', 'new-client']);
+  });
+
+  it('reads fleet status while a deployment holds the mutation lock without rewriting state', async () => {
+    const root = await makeTempDir('bolt-fleet-status-');
+    const registryPath = path.join(root, 'registry.json');
+    const original = JSON.stringify({ instances: [], events: [], snapshotMarker: 'preserve' });
+    await fs.writeFile(registryPath, original);
+
+    let release!: () => void;
+    let entered!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deployment = runSerializedManagedInstanceRegistryOperation(async () => {
+      entered();
+      await gate;
+    });
+
+    try {
+      await locked;
+
+      const snapshot = await Promise.race([
+        readManagedInstanceRegistrySnapshot(registryPath),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Status blocked behind deployment')), 1000),
+        ),
+      ]);
+      expect(snapshot.instances).toEqual([]);
+      expect(await fs.readFile(registryPath, 'utf8')).toBe(original);
+    } finally {
+      release();
+      await deployment;
+    }
+  });
+
+  it('fails honestly on a corrupt fleet status snapshot instead of replacing assignments', async () => {
+    const root = await makeTempDir('bolt-fleet-corrupt-status-');
+    const registryPath = path.join(root, 'registry.json');
+    await fs.writeFile(registryPath, '{corrupt');
+    await expect(readManagedInstanceRegistrySnapshot(registryPath)).rejects.toThrow();
+    expect(await fs.readFile(registryPath, 'utf8')).toBe('{corrupt');
+    expect((await readManagedInstanceRegistrySnapshot(path.join(root, 'missing.json'))).instances).toEqual([]);
+    await expect(fs.stat(path.join(root, 'missing.json'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('writes synced files atomically without leaving temporary artifacts behind', async () => {

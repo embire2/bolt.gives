@@ -8,6 +8,15 @@ export async function proxyManagedAdmin(request: Request, env: AdminProxyEnv): P
     return null;
   }
 
+  const origin = request.headers.get('Origin');
+
+  if (
+    !['GET', 'HEAD'].includes(request.method) &&
+    ((origin && origin !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site')
+  ) {
+    return new Response('Cross-origin admin request blocked.', { status: 403 });
+  }
+
   const backend = env.BOLT_RUNTIME_CONTROL_PUBLIC_URL;
 
   if (!backend) {
@@ -22,15 +31,6 @@ export async function proxyManagedAdmin(request: Request, env: AdminProxyEnv): P
 
   if (target.protocol !== 'https:') {
     return new Response('Admin gateway requires HTTPS.', { status: 503 });
-  }
-
-  const origin = request.headers.get('Origin');
-
-  if (
-    !['GET', 'HEAD'].includes(request.method) &&
-    ((origin && origin !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site')
-  ) {
-    return new Response('Cross-origin admin request blocked.', { status: 403 });
   }
 
   const headers = new Headers(request.headers);

@@ -14,6 +14,23 @@ import {
 } from '../functions/[[path]]';
 
 describe('Cloudflare Pages runtime proxy helpers', () => {
+  it('rejects hostile admin mutations before rendering on direct and managed origins', async () => {
+    for (const env of [{}, { BOLT_RUNTIME_CONTROL_PUBLIC_URL: 'https://bolt.gives/runtime' }]) {
+      for (const pathname of ['/admin', '/tenant-admin']) {
+        const response = await onRequest({
+          request: new Request(`https://bolt.gives${pathname}`, {
+            method: 'POST',
+            headers: { Origin: 'https://untrusted.example' },
+            body: new URLSearchParams({ intent: 'instance-policy' }),
+          }),
+          env,
+        } as never);
+        expect(response.status).toBe(403);
+        expect(await response.text()).toBe('Cross-origin admin request blocked.');
+      }
+    }
+  });
+
   it('forwards custom-domain collaboration upgrades to the configured test backend', async () => {
     const upgraded = { status: 101, webSocket: {} } as Response;
     const transport = vi.spyOn(globalThis, 'fetch').mockResolvedValue(upgraded);

@@ -1191,6 +1191,24 @@ async function inspectManagedInstanceSupportState() {
   };
 }
 
+// Status reads must not join the deployment lock or rewrite a stale registry snapshot.
+export async function readManagedInstanceRegistrySnapshot(filePath = MANAGED_INSTANCE_REGISTRY_PATH) {
+  let raw;
+
+  try {
+    raw = await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  return normalizeManagedInstanceRegistry(raw ? JSON.parse(raw) : { instances: [], events: [] }, {
+    defaultRootDomain: MANAGED_INSTANCE_ROOT_DOMAIN,
+    defaultTrialDays: MANAGED_INSTANCE_TRIAL_DAYS,
+  });
+}
+
 async function ensureManagedInstanceRegistry() {
   try {
     const raw = await fs.readFile(MANAGED_INSTANCE_REGISTRY_PATH, 'utf8');
@@ -9367,19 +9385,15 @@ export function createRuntimeServer() {
         const mailSupport = buildAdminMailSupport();
 
         if (managedSupport.supported) {
-          await runSerializedManagedInstanceRegistryOperation(async () => {
-            const managedRegistry = await ensureManagedInstanceRegistry();
-            await maybeExpireManagedInstances(managedRegistry, { actor: registry.admin?.username || 'admin' });
-            await syncManagedRegistryToAdminDatabase(managedRegistry);
-            managedFleetSummary = buildManagedInstanceFleetSummary(managedRegistry.instances);
-            managedInstances = managedRegistry.instances
-              .slice()
-              .sort(
-                (left, right) =>
-                  Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt),
-              )
-              .map((instance) => sanitizeManagedInstanceForOperator(instance));
-          });
+          const managedRegistry = await readManagedInstanceRegistrySnapshot();
+          managedFleetSummary = buildManagedInstanceFleetSummary(managedRegistry.instances);
+          managedInstances = managedRegistry.instances
+            .slice()
+            .sort(
+              (left, right) =>
+                Date.parse(right.updatedAt || right.createdAt) - Date.parse(left.updatedAt || left.createdAt),
+            )
+            .map((instance) => sanitizeManagedInstanceForOperator(instance));
         }
 
         if (ADMIN_DB_CONFIG.enabled) {
