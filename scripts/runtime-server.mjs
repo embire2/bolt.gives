@@ -827,7 +827,9 @@ export function normalizeTenantRegistry(input) {
       mustChangePassword: admin.mustChangePassword !== false,
       updatedAt: typeof admin.updatedAt === 'string' && admin.updatedAt ? admin.updatedAt : now,
       passwordUpdatedAt:
-        typeof admin.passwordUpdatedAt === 'string' && admin.passwordUpdatedAt ? admin.passwordUpdatedAt : now,
+        typeof admin.passwordUpdatedAt === 'string' && admin.passwordUpdatedAt
+          ? admin.passwordUpdatedAt
+          : admin.updatedAt || '1970-01-01T00:00:00.000Z',
       lastLoginAt: typeof admin.lastLoginAt === 'string' ? admin.lastLoginAt : null,
     },
     tenants: tenants.map((tenant) => {
@@ -886,29 +888,29 @@ function findTenantByInviteToken(registry, token) {
   return registry.tenants.find((tenant) => tenant.inviteToken === normalized) || null;
 }
 
-async function ensureTenantRegistry() {
+export async function ensureTenantRegistry() {
   try {
     const raw = await fs.readFile(TENANT_REGISTRY_PATH, 'utf8');
-    const registry = normalizeTenantRegistry(JSON.parse(raw));
-    await writeTenantRegistry(registry);
+    return normalizeTenantRegistry(JSON.parse(raw));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw new Error('The tenant registry is unavailable. Existing credentials and accounts were preserved.');
+    }
 
-    return registry;
-  } catch {
     await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
 
     const registry = normalizeTenantRegistry({
       admin: createDefaultTenantAdmin(),
       tenants: [],
     });
-    await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+    await writeTenantRegistry(registry);
 
     return registry;
   }
 }
 
 async function writeTenantRegistry(registry) {
-  await fs.mkdir(path.dirname(TENANT_REGISTRY_PATH), { recursive: true });
-  await fs.writeFile(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+  await writeJsonAtomically(TENANT_REGISTRY_PATH, JSON.stringify(registry, null, 2), 0o600);
 }
 
 function getManagedInstanceCloudflareConfig() {
