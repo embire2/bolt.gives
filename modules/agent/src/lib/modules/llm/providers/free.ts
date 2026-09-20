@@ -834,6 +834,7 @@ export default class FreeProvider extends BaseProvider {
       baseURL: FREE_HOSTED_API_BASE_URL,
     });
 
-    return openRouter.chat(resolvedModel) as LanguageModelV1;
+    // GLM defaults to maximum reasoning; reserve time and tokens for executable output.
+    return openRouter.chat(resolvedModel, { reasoning: { effort: 'low' } }) as LanguageModelV1;
   }
 }

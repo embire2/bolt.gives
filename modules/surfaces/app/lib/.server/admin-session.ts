@@ -3,9 +3,9 @@ import { createCookie } from '@remix-run/cloudflare';
 export type TenantAdminSession = { username: string; issuedAt: string };
 type AdminIdentity = { username: string; mustChangePassword?: boolean; passwordUpdatedAt?: string | null };
 
-export function createAdminSessionCookie() {
-  const development = ['development', 'test'].includes(process.env.NODE_ENV || '');
-  const secret = process.env.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim();
+export function createAdminSessionCookie(env: Record<string, string | undefined> = globalThis.process?.env || {}) {
+  const development = ['development', 'test'].includes(env.NODE_ENV || '');
+  const secret = env.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim();
 
   if (!secret && !development) {
     throw new Error('Admin session signing is not configured.');

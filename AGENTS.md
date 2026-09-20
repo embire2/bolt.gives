@@ -53,7 +53,7 @@ Preserve these behaviors unless a product decision explicitly replaces them:
 
 ### Hosted Models and Quotas
 
-The managed `FREE` provider is server-side only. It uses OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Older persisted FREE model selections normalize to this model without losing project history or runtime context.
+The managed `FREE` provider is server-side only. It uses OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Older persisted FREE model selections normalize to this model without losing project history or runtime context. Use low reasoning effort with an 8,192-token bounded build budget: the upstream defaults to maximum reasoning, which exhausted the old 2,048-token limit before emitting code in alpha acceptance.
 
 The funded OpenRouter key lives in protected `BOLT_FREE_OPENROUTER_API_KEY` server configuration. Never distribute it to managed Pages instances: they use the authenticated FREE relay. `MagnetAPI` and `OpenRouter` are separate user-key providers and must never fall back to the operator-funded credential. Preserve the existing Magnet Responses/Messages normalization and file-action bridge for personal-key compatibility. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
 

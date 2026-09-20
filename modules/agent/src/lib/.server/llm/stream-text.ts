@@ -40,7 +40,9 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 const logger = createScopedLogger('stream-text');
 const LONG_THINK_MODEL_RE = /\b(gpt-5|codex|o1|o3)\b/i;
 const LONG_THINK_BUILD_MAX_COMPLETION_TOKENS = 6000;
-const HOSTED_FREE_BUILD_MAX_COMPLETION_TOKENS = 2048;
+
+// The budget includes mandatory GLM reasoning as well as the complete file action.
+const HOSTED_FREE_BUILD_MAX_COMPLETION_TOKENS = 8192;
 const DEFAULT_HOSTED_FREE_STREAM_RETRIES = 2;
 const DEFAULT_HOSTED_FREE_STREAM_RETRY_DELAY_MS = 900;
 

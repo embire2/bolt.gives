@@ -29,7 +29,7 @@ describe('managed FREE OpenRouter provider', () => {
         apiKey: 'operator-test-key',
         baseURL: 'https://openrouter.ai/api/v1',
       });
-      expect(chat).toHaveBeenCalledWith('z-ai/glm-5.3-flash');
+      expect(chat).toHaveBeenCalledWith('z-ai/glm-5.3-flash', { reasoning: { effort: 'low' } });
       expect(provider.allowsUserApiKey).toBe(false);
     },
   );

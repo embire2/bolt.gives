@@ -19,10 +19,10 @@ describe('resolveBuildCompletionLimit', () => {
       resolveBuildCompletionLimit({
         safeMaxTokens: 8192,
         providerName: 'FREE',
-        modelName: 'gpt-5.6-sol',
+        modelName: 'z-ai/glm-5.3-flash',
         chatMode: 'build',
       }),
-    ).toBe(2048);
+    ).toBe(8192);
   });
 
   it('does not cap discussion responses or user-funded providers with the hosted limit', () => {

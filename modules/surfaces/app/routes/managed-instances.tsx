@@ -474,9 +474,10 @@ export default function ManagedInstancesPage() {
                       <h2 className={`text-xl font-semibold ${titleClass}`}>Request your managed instance</h2>
                       <p className={`mt-2 ${bodyClass}`}>
                         Registration is required before an instance can be provisioned. Your profile is stored in the
-                        private admin panel and linked to the Cloudflare instance assigned to you. One client can hold
-                        one managed instance. Repeating the request from the same browser session returns the same
-                        instance instead of creating a second one.
+                        private admin panel and linked to the Cloudflare instance assigned to you.{' '}
+                        {support.singleInstancePerUser !== false
+                          ? 'Each account can hold one managed instance, including requests from another browser.'
+                          : 'The administrator currently allows additional instances per account.'}
                       </p>
 
                       <div className="mt-5 grid gap-4">

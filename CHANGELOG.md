@@ -3,9 +3,11 @@
 ## v4.1.2 - 2026-09-20
 
 - Replace the managed FREE upstream with OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Normalize old FREE selections to the current model while retaining project context. Funded credentials are server-only and cannot be overridden by browser-supplied keys. MagnetAPI and OpenRouter remain separate bring-your-own-key providers.
+- Configure GLM's supported low reasoning effort and an 8,192-token build budget. The real alpha test reproduced reasoning consuming the old 2,048-token budget without emitting code; preserve bounded generation rather than accepting a starter-only result.
 - Set hosted FREE to 20 API credits per GMT+2 day, charged at one credit per minute of server-measured active generation. Preserve consumed time when migrating the previous allowance, serialize ledger writes, and deduplicate repeated usage records. Custom Domain allowances are unchanged.
 - Require authenticated account identity for managed-instance requests. Default to one instance per account across browser sessions; operators can toggle this policy in `/admin` without removing existing instances.
 - Serve the protected admin panel at each configured instance's `/admin` URL through the configured backend. Keep operator signing keys off Cloudflare fleet instances, reject cross-origin mutations, and invalidate expired/pre-password-change admin sessions. Production no longer accepts a public development signing secret.
+- Read admin credentials and runtime routing from request environment bindings, not a build-time process shim, so the precompiled Pages server can actually serve the protected panel.
 
 - Support a server-configured SMTP sender display name and Reply-To on every email path, including browser and Desktop sign-in. Require STARTTLS for port 587, bound connection timeouts, and refresh the transport after protected credential changes without exposing passwords in admin status.
 - Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. Use disposable projects on staging.

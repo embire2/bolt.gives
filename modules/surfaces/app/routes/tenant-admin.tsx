@@ -35,6 +35,7 @@ import {
 } from '~/lib/.server/admin-session';
 import { InstancePolicy } from '~/components/admin/InstancePolicy';
 import { APP_VERSION } from '@bolt/core/lib/version';
+import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 
 type TenantRecord = {
   id: string;
@@ -134,26 +135,24 @@ function formatAdminTimestamp(value: string | null | undefined) {
   }).format(parsed);
 }
 
-function getRuntimeControlBaseUrl() {
-  if (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_RUNTIME_CONTROL_URL) {
-    return globalThis.process.env.BOLT_RUNTIME_CONTROL_URL.replace(/\/$/, '');
-  }
+function createAdminRuntimeClient(env: Record<string, string>) {
+  const base = (env.BOLT_RUNTIME_CONTROL_URL || 'http://127.0.0.1:4321/runtime').replace(/\/$/, '');
 
-  return 'http://127.0.0.1:4321/runtime';
+  return async <T,>(pathname: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(`${base}${pathname}`, init);
+
+    if (!response.ok) {
+      throw new Error((await response.text()) || `Runtime request failed with status ${response.status}`);
+    }
+
+    return (await response.json()) as T;
+  };
 }
 
-async function fetchRuntimeJson<T>(pathname: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getRuntimeControlBaseUrl()}${pathname}`, init);
-
-  if (!response.ok) {
-    throw new Error((await response.text()) || `Runtime request failed with status ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
-export async function loader({ request }: LoaderFunctionArgs) {
-  const adminSessionCookie = createAdminSessionCookie();
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const env = resolveRuntimeEnvFromContext(context);
+  const fetchRuntimeJson = createAdminRuntimeClient(env);
+  const adminSessionCookie = createAdminSessionCookie(env);
   const session = (await adminSessionCookie.parse(request.headers.get('Cookie'))) as TenantAdminSession | undefined;
   const { adminHost: configuredAdminHost, adminPanelUrl } = getPublicUrlConfig();
   const requestUrl = new URL(request.url);
@@ -302,14 +301,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
+  const env = resolveRuntimeEnvFromContext(context);
+  const fetchRuntimeJson = createAdminRuntimeClient(env);
   const origin = request.headers.get('Origin');
 
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') {
     return json({ error: 'Cross-origin admin request blocked.' }, { status: 403 });
   }
 
-  const adminSessionCookie = createAdminSessionCookie();
+  const adminSessionCookie = createAdminSessionCookie(env);
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
 

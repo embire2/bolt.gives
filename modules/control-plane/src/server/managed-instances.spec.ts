@@ -114,7 +114,7 @@ describe('managed instance registry helpers', () => {
     expect(getManagedInstanceBySessionSecret(registry, sessionSecret)?.id).toBe(claim.instance.id);
   });
 
-  it('does not allow a second browser-session claim to create a new instance under a different email', () => {
+  it('does not expose a previous account instance to a different authenticated account', () => {
     const registry = normalizeManagedInstanceRegistry({});
     const claim = claimManagedInstanceTrial(registry, {
       name: 'Clinic Session Lock',
@@ -137,8 +137,9 @@ describe('managed instance registry helpers', () => {
       sessionSecret: claim.sessionSecret,
     });
 
-    expect(duplicateSession.kind).toBe('existing');
-    expect(duplicateSession.instance.id).toBe(claim.instance.id);
+    expect(duplicateSession.kind).toBe('created');
+    expect(duplicateSession.instance.id).not.toBe(claim.instance.id);
+    expect(duplicateSession.sessionSecret).not.toBe(claim.sessionSecret);
   });
 
   it('sanitizes managed instance state before returning it to the client', () => {

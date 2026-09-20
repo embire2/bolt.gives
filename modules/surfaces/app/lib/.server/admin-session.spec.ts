@@ -8,6 +8,17 @@ describe('admin sessions', () => {
     vi.stubEnv('BOLT_TENANT_ADMIN_COOKIE_SECRET', '');
     expect(() => createAdminSessionCookie()).toThrow('not configured');
   });
+  it('uses protected request bindings even when a compiled process shim has no secrets', async () => {
+    vi.stubEnv('BOLT_TENANT_ADMIN_COOKIE_SECRET', '');
+
+    const cookie = createAdminSessionCookie({
+      NODE_ENV: 'production',
+      BOLT_TENANT_ADMIN_COOKIE_SECRET: 'private-fixture-signing-key',
+    });
+    expect(await cookie.serialize({ username: 'admin', issuedAt: new Date().toISOString() })).toMatch(
+      /^__Host-bolt_tenant_admin=/,
+    );
+  });
   it('rejects expired sessions and sessions issued before a password change', () => {
     const admin = { username: 'admin', passwordUpdatedAt: new Date(Date.now() - 30_000).toISOString() };
     expect(isAuthenticatedAdminSession({ username: 'admin', issuedAt: new Date().toISOString() }, admin)).toBe(true);

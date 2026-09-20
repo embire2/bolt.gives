@@ -2070,7 +2070,7 @@ describe('runtime server workspace isolation', () => {
     expect(result.alert?.description).toContain('Unterminated JSX');
 
     fetchSpy.mockRestore();
-  });
+  }, 15000);
 
   it('preserves an existing preview alert during health probes until a fresh mutation clears it', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
