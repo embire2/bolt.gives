@@ -29,6 +29,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
             country: String(formData.get('country') || ''),
           },
           runtimeEnv,
+          request,
         );
 
     return redirect(returnTo, {

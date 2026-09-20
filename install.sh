@@ -1212,6 +1212,7 @@ write_caddy_site() {
 ${host_name} {
 	encode zstd gzip
 	header {
+		Alt-Svc "clear"
 		Cache-Control "no-store, max-age=0, must-revalidate"
 	}
 $(if [[ -n "${root_redirect}" ]]; then cat <<INNER

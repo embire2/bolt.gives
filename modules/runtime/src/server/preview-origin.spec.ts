@@ -151,6 +151,32 @@ describe('isolated Preview capability gateway', () => {
     }
   });
 
+  it('keeps authenticated repair polling alive while the dev server changes ports', () => {
+    const f = fixture();
+    f.gateway.handle(f.request, f.response, f.proxy);
+    f.request.headers.cookie = f.response.headers['Set-Cookie'].split(';')[0];
+    f.sessions.set('one', { preview: { port: 0 } });
+    f.request.url = '/__bolt/health';
+    expect(f.gateway.authorize({ ...f.request, headers: { ...f.request.headers, cookie: '' } })).toBeNull();
+    expect(f.gateway.authorize({ ...f.request, method: 'POST' })).toBeNull();
+    f.gateway.handle(f.request, f.response, f.proxy);
+    expect(f.response.status).toBe(200);
+    expect(JSON.parse(f.response.end.mock.lastCall![0])).toEqual({
+      healthy: false,
+      previewOwnershipConfirmed: false,
+      preview: null,
+    });
+    f.request.url = '/src/App.tsx';
+    expect(f.gateway.authorize(f.request)).toBeNull();
+    f.request.url = '/__bolt/health';
+    f.sessions.set('one', { preview: { port: 4200 } });
+    f.gateway.handle(f.request, f.response, f.proxy);
+    expect(JSON.parse(f.response.end.mock.lastCall![0]).preview.baseUrl).toBe('/runtime/preview/one/4200/');
+    f.sessions.delete('one');
+    expect(f.gateway.authorize(f.request)).toBeNull();
+    expect(f.proxyCalls).toHaveLength(0);
+  });
+
   it('fails closed for invalid origin/secret configuration', () => {
     expect(createPreviewOrigin({ template: '', secret: '', lookup: () => null })).toBeNull();
 

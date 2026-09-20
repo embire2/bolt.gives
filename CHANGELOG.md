@@ -14,6 +14,10 @@
 - Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.
 - Use the configured FREE streaming relay on custom Cloudflare domains, not only `pages.dev`. Validate caller CSRF before attaching a trusted relay credential; ignore spoofed inbound relay headers during that validation.
 - Replace the unavailable Cloudflare Pages PR-preview action with the pinned Wrangler CLI path, remove a duplicate build, and require a successful bounded HTTP smoke before posting a ready comment.
+- Preserve per-visitor registration rate-limit identity instead of placing every user in the backend's shared IP bucket. Correct the native onboarding dialog selector and stale FREE model wording in instance-creation acceptance.
+- Keep signed project repair health checks available while the development server changes ports, without exposing project files or platform routes. Preserve cross-origin embedding headers on isolated Preview redirects.
+- Serve an authenticated waiting document during initial Preview port handoff rather than an unembeddable error page, and keep its eventual navigation on the caller's gateway instead of a backend loopback address.
+- Clear Caddy's HTTP/3 alternative-service advertisement for application sites so streaming uses the verified HTTP/2 path. Keep unrelated sites and Cloudflare's edge protocol configuration unchanged.
 - Keep Supabase connection replacement, legacy MagnetAPI follow-up acceptance and the independent Windows rewrite visible in the roadmap. They are not claimed as completed by this patch.
 
 ## v4.1.1 - 2026-09-15

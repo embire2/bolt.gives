@@ -118,12 +118,12 @@ export function createPreviewOrigin({
     }
 
     const session = lookup(value.sessionId);
+    const url = new URL(req.url || '/', originFor(value.host));
+    const isHealthRead = req.method === 'GET' && url.pathname === '/__bolt/health';
 
-    if (!session?.preview?.port) {
+    if (!session || (!session.preview?.port && !isHealthRead)) {
       return null;
     }
-
-    const url = new URL(req.url || '/', originFor(value.host));
 
     if (req.headers.origin && req.headers.origin !== url.origin) {
       return null;
@@ -204,12 +204,14 @@ export function createPreviewOrigin({
         }
 
         // A repair document can inspect only its own readiness, never platform logs or secrets.
+        const port = authorized.session.preview?.port;
+        const ready = Boolean(port && healthy(authorized.session));
         res.writeHead(200, { ...headers, 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
-            healthy: healthy(authorized.session),
-            previewOwnershipConfirmed: healthy(authorized.session),
-            preview: { baseUrl: `/runtime/preview/${authorized.value.sessionId}/${authorized.session.preview.port}/` },
+            healthy: ready,
+            previewOwnershipConfirmed: ready,
+            preview: port ? { baseUrl: `/runtime/preview/${authorized.value.sessionId}/${port}/` } : null,
           }),
         );
 

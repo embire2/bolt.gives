@@ -2681,11 +2681,14 @@ export function applyPreviewResponseHeaders(rawHeaders = {}, isolated = false) {
   };
 }
 
-export function buildPreviewRedirectHeaders(location) {
-  return applyPreviewResponseHeaders({
-    Location: location,
-    'Cache-Control': 'no-store',
-  });
+export function buildPreviewRedirectHeaders(location, isolated = false) {
+  return applyPreviewResponseHeaders(
+    {
+      Location: location,
+      'Cache-Control': 'no-store',
+    },
+    isolated,
+  );
 }
 
 export function buildPreviewRepairHeaders() {
@@ -5668,7 +5671,8 @@ export function buildPreviewRepairPage(
           const statusResponse = await fetch(statusUrl, { cache: 'no-store' });
           const status = statusResponse.ok ? await statusResponse.json() : null;
           if (status?.healthy && status?.previewOwnershipConfirmed && status?.preview?.baseUrl) {
-            const target = new URL(status.preview.baseUrl, window.location.origin);
+            const upstream = new URL(status.preview.baseUrl, window.location.origin);
+            const target = new URL(upstream.pathname + upstream.search, window.location.origin);
             target.searchParams.set('__bolt_handoff', Date.now().toString());
             window.location.replace(target.toString());
             return;
@@ -7899,7 +7903,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   const nextPreviewPath = resolveStalePreviewRedirectPath(session, req.url || pathname, pathname);
 
   if (nextPreviewPath) {
-    res.writeHead(307, buildPreviewRedirectHeaders(nextPreviewPath));
+    res.writeHead(307, buildPreviewRedirectHeaders(nextPreviewPath, req.boltIsolatedPreview));
     res.end();
 
     return;
@@ -8907,8 +8911,18 @@ export function createRuntimeServer() {
         const target = parsePreviewProxyRequestTarget(req.url);
         const session = target && sessions.get(target.sessionId);
 
-        if (!session?.preview?.port) {
+        if (!session) {
           sendText(res, 404, 'Preview is not running.');
+          return;
+        }
+
+        if (!session.preview?.port) {
+          if (shouldServePreviewHandoffPage({ method: req.method, upstreamPath: target.upstreamPath })) {
+            sendPreviewRepairPage(res, session);
+          } else {
+            sendText(res, 404, 'Preview is not running.');
+          }
+
           return;
         }
 

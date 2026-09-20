@@ -13,6 +13,7 @@ import { fetchRuntimeControlJson } from '@bolt/runtime/lib/.server/runtime-contr
 import { resolveRuntimeEnvFromContext } from '@bolt/runtime/lib/.server/runtime-env';
 import type { ManagedInstanceRecord, ManagedInstanceSupport } from '@bolt/control-plane/lib/managed-instances';
 import { APP_VERSION } from '@bolt/core/lib/version';
+import { FREE_HOSTED_MODEL_LABEL } from '@bolt/agent/lib/modules/llm/free-provider-config';
 import { readProfileCredentials, resolveProfileSession } from '~/lib/.server/profile-session';
 import { ProfileOnboarding } from '~/components/profile/ProfileOnboarding';
 
@@ -575,8 +576,8 @@ export default function ManagedInstancesPage() {
                     <li>Instances are currently available indefinitely unless suspended by the operator.</li>
                     <li>Updates follow the current stable branch: {support.sourceBranch}.</li>
                     <li>
-                      FREE boots with ChatGPT-Luna at medium effort without requiring a provider key. Users can connect
-                      a personal MagnetAPI key for its broader Frontier model catalog without leaving their project.
+                      FREE uses {FREE_HOSTED_MODEL_LABEL} without requiring a provider key, with 20 API credits per
+                      GMT+2 day. Users can connect a personal provider key without leaving their project.
                     </li>
                     <li>
                       Your registration profile, including your email address, is stored in the private admin panel for

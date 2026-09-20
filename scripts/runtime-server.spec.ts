@@ -747,6 +747,17 @@ describe('runtime server workspace isolation', () => {
     );
   });
 
+  it('preserves the cross-origin embed permission when an isolated Preview redirects to a new port', () => {
+    expect(buildPreviewRedirectHeaders('/runtime/preview/session-redirect/4200/', true)).toEqual(
+      expect.objectContaining({
+        Location: '/runtime/preview/session-redirect/4200/',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Referrer-Policy': 'no-referrer',
+      }),
+    );
+  });
+
   it('does not mark healthy javascript preview assets as preview errors', () => {
     const session = {
       preview: {
@@ -966,6 +977,7 @@ describe('runtime server workspace isolation', () => {
     expect(html).toContain('status?.previewOwnershipConfirmed');
     expect(html).not.toContain("method: 'HEAD'");
     expect(html).toContain('window.location.replace');
+    expect(html).toContain('new URL(upstream.pathname + upstream.search, window.location.origin)');
   });
 
   it('releases reserved preview ports when a session terminates', () => {

@@ -89,6 +89,7 @@ describe('installer clean and repair configuration', () => {
     expect(repaired.BOLT_SELF_HOST_ACCESS_TOKEN).toBe(first.BOLT_SELF_HOST_ACCESS_TOKEN);
     expect(repaired.BOLT_PROFILE_COOKIE_SECRET).toBe(first.BOLT_PROFILE_COOKIE_SECRET);
     expect(await caddy()).toMatch(/handle \/runtime\/\*\s*\{\s*reverse_proxy 127\.0\.0\.1:5173/);
+    expect(await caddy()).toContain('Alt-Svc "clear"');
   }, 15_000);
   it('keeps hosted profile auth for an explicit new platform database', async () => {
     const { apply, caddy } = await configure('', true);

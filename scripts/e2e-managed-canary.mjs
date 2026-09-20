@@ -24,7 +24,7 @@ const page = await context.newPage();
 try {
   await page.goto(new URL('/managed-instances', baseUrl).href);
 
-  const dialog = page.locator('[role="dialog"][aria-labelledby="profile-onboarding-title"]');
+  const dialog = page.getByRole('dialog').filter({ has: page.locator('#profile-onboarding-title') });
   await dialog.getByLabel('Name and Surname').fill('Release Canary');
   await dialog.getByLabel('Email address', { exact: true }).fill(email);
   await dialog.getByLabel('Country', { exact: true }).fill('South Africa');

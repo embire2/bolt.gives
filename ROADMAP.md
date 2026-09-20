@@ -20,6 +20,7 @@ Prioritize reproduced failures in existing user journeys. The requested FREE mod
 
 - [x] Create the dedicated Cloudflare Pages alpha test instance with its own custom hostname, valid TLS and the existing isolated alpha runtime. Keep it outside automatic production fleet refreshes.
 - [x] Correct custom-domain collaboration routing and FREE relay handling. Regression tests, a live WebSocket handshake and real browser journeys pass; included in v4.1.2.
+- [x] Correct shared registration throttling, authenticated Preview health polling during port handoff and cross-origin redirect headers. Retain strict chat-cancellation assertions and use the validated application streaming transport.
 - [x] Replace the former FREE/Luna route with GLM 5.3 Flash and verify same-model follow-up, history and publishing. Fix mandatory reasoning consuming the old output budget; the real GLM browser repeat passed in 160 seconds. Retain the historical Luna failure as a separate MagnetAPI BYOK acceptance item; changing the default does not prove that upstream fixed.
 - [ ] Rewrite Supabase connection verification and error handling; test invalid keys, unavailable projects, failed replacement, and project/account switching without losing a working connection.
 - [x] Verify alpha provisioning with generation, a Luna-to-Sonnet follow-up, history restore and public publishing; confirm the published page in an anonymous browser after the coding runtime stops. This does not clear the Luna-only failure above.

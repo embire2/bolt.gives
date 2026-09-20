@@ -691,6 +691,10 @@ async function main() {
   // Pin the requested provider/model in localStorage so the smoke bypasses provider setup.
   await page.addInitScript(
     ({ provider, model, collaborationDisabled }) => {
+      if (window !== window.top) {
+        return;
+      }
+
       const host = window.location.hostname;
       document.cookie = `selectedProvider=${encodeURIComponent(provider)}; Path=/; SameSite=Lax`;
       document.cookie = `selectedModel=${encodeURIComponent(model)}; Path=/; SameSite=Lax`;

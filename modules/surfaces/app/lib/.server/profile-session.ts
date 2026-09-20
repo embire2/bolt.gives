@@ -1,4 +1,5 @@
 import { createCookie } from '@remix-run/cloudflare';
+import { getClientIP } from '@bolt/core/lib/security';
 import { fetchRuntimeControlJson, RuntimeControlError } from '@bolt/runtime/lib/.server/runtime-control';
 import type { UserProfile } from '~/lib/profile-context';
 import { isSingleUserMode } from './self-host';
@@ -140,12 +141,18 @@ export async function resolveProfileSession(
 export async function registerProfile(
   input: { name: string; email: string; country: string },
   runtimeEnv: RuntimeEnv = {},
+  request?: Request,
 ) {
+  const clientIp = request ? getClientIP(request) : 'unknown';
+
   return await fetchRuntimeControlJson<ProfileSessionPayload>(
     '/profile/register',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(clientIp !== 'unknown' ? { 'x-forwarded-for': clientIp } : {}),
+      },
       body: JSON.stringify(input),
     },
     runtimeEnv,
