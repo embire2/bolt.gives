@@ -7689,14 +7689,15 @@ async function handleRunCommand(req, res, session, body) {
     host: HOST,
   });
 
+  // Prepare the directory before clearing the live Preview; no filesystem await may expose a portless handoff.
+  await prepareProjectProcessDirectory(session.dir);
+
   if (kind === 'start') {
     await terminateSessionProcesses(session, { preservePreviewPort: previewPort });
     clearPreviewDiagnostics(session, 'starting');
   }
 
   writeEvent({ type: 'status', message: `Running ${kind} command on hosted runtime` });
-
-  await prepareProjectProcessDirectory(session.dir);
 
   const child = spawnProjectProcess('bash', ['-lc', effectiveCommand], {
     cwd: session.dir,
