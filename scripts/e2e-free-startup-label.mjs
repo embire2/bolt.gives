@@ -81,8 +81,8 @@ try {
   const modelSelect = page.locator('[role="combobox"][aria-controls="model-listbox"]');
   await modelSelect.click();
 
-  const modelLabels = (await page.locator('#model-listbox [role="option"]').allTextContents()).map((label) =>
-    label.trim(),
+  const modelLabels = (await page.locator('#model-listbox [role="option"] .truncate > span').allTextContents()).map(
+    (label) => label.trim(),
   );
   const expectedModelLabels = ['GLM 5.3 Flash'];
 

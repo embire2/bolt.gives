@@ -36,9 +36,9 @@ const screenshotCards = [
     src: `${SCREENSHOT_BASE_URL}/profile-onboarding-v3.4.1.png`,
   },
   {
-    title: 'Working prompt-to-preview app',
-    description: 'Historical v3.4.1 capture: a generated Tideboard running in the real hosted Preview.',
-    src: `${SCREENSHOT_BASE_URL}/tideboard-preview-v3.4.1.png`,
+    title: 'GLM prompt to working Preview',
+    description: 'Real v4.1.2 alpha capture: a Calendar after a GLM follow-up and saved-history reload.',
+    src: `${SCREENSHOT_BASE_URL}/agent-mode-glm-v4.1.2.png`,
   },
   {
     title: 'Visible FREE boundary',

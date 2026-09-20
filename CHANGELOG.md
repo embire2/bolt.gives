@@ -8,7 +8,7 @@
 - Require authenticated account identity for managed-instance requests. Default to one instance per account across browser sessions; operators can toggle this policy in `/admin` without removing existing instances.
 - Serve the protected admin panel at each configured instance's `/admin` URL through the configured backend. Keep operator signing keys off Cloudflare fleet instances, reject cross-origin mutations, and invalidate expired/pre-password-change admin sessions. Production no longer accepts a public development signing secret.
 - Read admin credentials and runtime routing from request environment bindings, not a build-time process shim, so the precompiled Pages server can actually serve the protected panel.
-
+- Block public production login with the unchanged bootstrap admin password until an operator completes server-local setup. Preserve existing passwords and stop registry reads or parse failures from rewriting account records; registry writes are atomic and private.
 - Support a server-configured SMTP sender display name and Reply-To on every email path, including browser and Desktop sign-in. Require STARTTLS for port 587, bound connection timeouts, and refresh the transport after protected credential changes without exposing passwords in admin status.
 - Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. Use disposable projects on staging.
 - Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.

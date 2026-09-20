@@ -10,7 +10,7 @@ Status legend:
 
 Current stable release:
 
-- [~] `v4.1.2` release acceptance: GLM 5.3 Flash, 20 daily API credits, authenticated one-instance policy and `/admin`, secure outgoing mail, custom-domain relay and collaboration fixes. Publish only after real alpha generation, follow-up, restore, publishing and fleet checks; see [release scope](docs/releases/v4.1.2.md).
+- [x] `v4.1.2` web/server fixes: GLM 5.3 Flash, 20 daily API credits, authenticated one-instance policy and `/admin`, secure outgoing mail, custom-domain relay and collaboration fixes. Real alpha generation, follow-up, restore and publishing passed; the release acceptance attachment records final production/fleet checks. See [release scope](docs/releases/v4.1.2.md) and [dated evidence](docs/quality/2026-09-20-v4.1.2-acceptance.md).
 - [x] `v4.1.1` patch: Cloudflare-compatible readiness, canonical production-branch refresh and release-gate/onboarding acceptance corrections. The original `v4.1.0` tag is preserved; deploy the patch for managed instances.
 - [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
 
@@ -19,11 +19,11 @@ Current stable release:
 Prioritize reproduced failures in existing user journeys. The requested FREE model, allowance and instance policy changes ship with v4.1.2; broader feature work remains separate. Verify on `https://alpha.bolt.gives` before production.
 
 - [x] Create the dedicated Cloudflare Pages alpha test instance with its own custom hostname, valid TLS and the existing isolated alpha runtime. Keep it outside automatic production fleet refreshes.
-- [x] Correct custom-domain collaboration routing and FREE relay handling. Regression tests, a live WebSocket handshake, and the Luna-to-Sonnet browser journey pass on the alpha candidate; not promoted to production.
-- [~] Replace the former FREE/Luna route with GLM 5.3 Flash and verify same-model follow-up, history and publishing. Retain the historical Luna failure as a separate MagnetAPI BYOK acceptance item; changing the default does not prove that upstream fixed.
+- [x] Correct custom-domain collaboration routing and FREE relay handling. Regression tests, a live WebSocket handshake and real browser journeys pass; included in v4.1.2.
+- [x] Replace the former FREE/Luna route with GLM 5.3 Flash and verify same-model follow-up, history and publishing. Fix mandatory reasoning consuming the old output budget; the real GLM browser repeat passed in 160 seconds. Retain the historical Luna failure as a separate MagnetAPI BYOK acceptance item; changing the default does not prove that upstream fixed.
 - [ ] Rewrite Supabase connection verification and error handling; test invalid keys, unavailable projects, failed replacement, and project/account switching without losing a working connection.
 - [x] Verify alpha provisioning with generation, a Luna-to-Sonnet follow-up, history restore and public publishing; confirm the published page in an anonymous browser after the coding runtime stops. This does not clear the Luna-only failure above.
-- [ ] Complete the remaining bug fixes and repeat acceptance before release. Update the public website and release notes with verified fixes, not promises of a bug-free platform.
+- [x] Publish v4.1.2's verified fixes, real screenshot and acceptance evidence without claiming a bug-free platform. Keep the Supabase rewrite and the follow-up acceptance list open for the next patch.
 
 Environment ownership and validation limits: [alpha staging guide](docs/operations/alpha-staging.md).
 

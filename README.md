@@ -22,6 +22,8 @@
 
 **Validation policy:** release checks cover module boundaries, types, lint, unit/integration tests, production artifacts and browser bundle budgets. A real Chromium journey must generate files, load Preview, apply a follow-up to the same project, restore history and verify public publishing. Quota, authenticated provisioning and admin proxy/session regressions are tested separately. Recovery fixtures inject failures explicitly; they are not represented as real-provider generation. [Installer CI](https://github.com/embire2/bolt.gives/actions/workflows/installer-recovery.yml) covers clean/repair contracts; native Windows acceptance remains independent.
 
+**v4.1.2 acceptance:** 1,510 tests passed, nine skipped; all six template Preview smokes passed. A real GLM Cloudflare browser journey completed generation, follow-up, history restore and publishing in 160 seconds. The published app remained available after its coding runtime stopped. [Evidence and remaining limits](docs/quality/2026-09-20-v4.1.2-acceptance.md).
+
 **Billing is active:** production Upgrade opens a USD 5 monthly Stripe subscription Checkout. The dedicated signed webhook is enabled; unsigned/tampered requests are rejected, replay is tested, and disposable PostgreSQL tests cover activation, renewal and duplicate events. The live test Checkout was expired without charging a card. A real paid transaction is reserved for the operator's acceptance test.
 
 **Open-source installation and feedback:** try the Linux installer below, bring your own provider key, and [open an Issue](https://github.com/embire2/bolt.gives/issues/new/choose) with your version and reproduction steps. PostgreSQL is not required for generated projects. The Windows native rewrite, full Windows/WSL reboot-resume acceptance and optional remote CLI-node availability are tracked separately, not presented as completed by this web release. Codeball is removed; required tests, builds and security scans remain.
@@ -47,6 +49,17 @@ The product rule is simple: **generated files are not a successful result; a hea
 ## Real Screenshots
 
 These screenshots are captured from the actual application with Playwright. They are not design mockups.
+
+### v4.1.2: GLM, saved history and a usable Preview
+
+This 20 September capture shows the dedicated Cloudflare alpha after a real GLM
+follow-up and saved-history reload. The 20-credit balance, compact composer,
+current model and running Calendar are visible together. The same test published
+the app and checked it independently of the coding runtime.
+
+![v4.1.2 GLM Calendar after follow-up and saved-history restore](docs/screenshots/agent-mode-glm-v4.1.2.png)
+
+The earlier captures below show the evolution of v4, not the current FREE model.
 
 ### Start in plain English
 

@@ -22,6 +22,13 @@ Do not copy release facts into multiple files. Use these sources:
 
 The public repository is `https://github.com/embire2/bolt.gives`. `main` is the release source of truth. `alpha` may be used for high-risk soak work and must remain aligned with `main` when no soak is active. Never force-push a shared branch unless explicitly approved.
 
+Admin secrets and runtime routing must use request environment bindings in the
+compiled server, not a build-time `process.env` shim. Public production admin
+login refuses an unchanged bootstrap password; initial setup is server-local.
+Never reset an existing password during deployment. Tenant registry reads must
+not rewrite records, and read/parse failures must preserve the file and fail
+closed, never recreate bootstrap credentials.
+
 ## First 15 Minutes
 
 1. Read this file, the nearest module `AGENTS.md`, and the relevant section of `docs/architecture/modules.md`.
