@@ -37,9 +37,22 @@ describe('tenant-admin action auth flow', () => {
   it('uses the request runtime and protected signing binding in precompiled deployments', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     vi.stubGlobal('fetch', fetchMock);
+
     const response = await action({
-      request: new Request('https://alpha.example/admin', { method: 'POST', body: new URLSearchParams({ intent: 'login', username: 'admin', password: 'fixture-only' }) }),
-      context: { cloudflare: { env: { NODE_ENV: 'production', BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4322/runtime', BOLT_TENANT_ADMIN_COOKIE_SECRET: 'private-fixture-key' } } }, params: {},
+      request: new Request('https://alpha.example/admin', {
+        method: 'POST',
+        body: new URLSearchParams({ intent: 'login', username: 'admin', password: 'fixture-only' }),
+      }),
+      context: {
+        cloudflare: {
+          env: {
+            NODE_ENV: 'production',
+            BOLT_RUNTIME_CONTROL_URL: 'http://127.0.0.1:4322/runtime',
+            BOLT_TENANT_ADMIN_COOKIE_SECRET: 'private-fixture-key',
+          },
+        },
+      },
+      params: {},
     } as any);
     expect(response.status).toBe(303);
     expect(response.headers.get('Set-Cookie')).toMatch(/^__Host-bolt_tenant_admin=/);
