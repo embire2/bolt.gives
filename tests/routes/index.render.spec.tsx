@@ -40,7 +40,9 @@ describe('index route fallback shell', () => {
     expect(screen.getByText('Create managed instance')).toBeTruthy();
     expect(screen.getByText('Real screenshots')).toBeTruthy();
     expect(screen.getByAltText('Personal workspace profile screenshot')).toBeTruthy();
-    expect(screen.getByAltText('Working prompt-to-preview app screenshot')).toBeTruthy();
+    expect(screen.getByAltText('GLM prompt to working Preview screenshot').getAttribute('src')).toBe(
+      '/screenshots/agent-mode-glm-v4.1.2.png',
+    );
     expect(screen.getByAltText('Visible FREE boundary screenshot')).toBeTruthy();
     expect(screen.getByAltText('Custom Domain pricing screenshot')).toBeTruthy();
     expect(screen.getByAltText(/Generated bolt\.gives SEO image/i)).toBeTruthy();
