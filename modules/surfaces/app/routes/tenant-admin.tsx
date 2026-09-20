@@ -346,6 +346,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const password = String(formData.get('password') || '');
 
     try {
+      if (!['development', 'test'].includes(env.NODE_ENV || '')) {
+        const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
+
+        if (status.admin?.mustChangePassword !== false) {
+          return json(
+            { error: 'Complete the initial admin password setup on the server before public sign-in.' },
+            { status: 403 },
+          );
+        }
+      }
+
       await fetchRuntimeJson<{ ok: boolean }>('/tenant-admin/verify-admin', {
         method: 'POST',
         headers: {

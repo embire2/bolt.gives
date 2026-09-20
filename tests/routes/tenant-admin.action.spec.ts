@@ -35,7 +35,9 @@ describe('tenant-admin action auth flow', () => {
   });
 
   it('uses the request runtime and protected signing binding in precompiled deployments', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ ok: true, admin: { mustChangePassword: false } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await action({
@@ -56,7 +58,26 @@ describe('tenant-admin action auth flow', () => {
     } as any);
     expect(response.status).toBe(303);
     expect(response.headers.get('Set-Cookie')).toMatch(/^__Host-bolt_tenant_admin=/);
-    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:4322/runtime/tenant-admin/verify-admin');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://127.0.0.1:4322/runtime/tenant-admin/verify-admin');
+  });
+
+  it('refuses public default-admin login without changing the existing password', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ admin: { mustChangePassword: true } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await action({
+      request: new Request('https://alpha.example/admin', {
+        method: 'POST',
+        body: new URLSearchParams({ intent: 'login', username: 'admin', password: 'admin' }),
+      }),
+      context: {
+        cloudflare: { env: { NODE_ENV: 'production', BOLT_TENANT_ADMIN_COOKIE_SECRET: 'private-fixture-key' } },
+      },
+      params: {},
+    } as any);
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('forwards smtp configuration writes to the runtime endpoint for authenticated admins', async () => {
