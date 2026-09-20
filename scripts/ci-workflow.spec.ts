@@ -69,4 +69,19 @@ describe('GitHub workflow dependency setup', () => {
     expect(workflow).toContain('Production deployment did not become ready: $DEPLOYMENT_URL');
     expect(workflow).not.toContain('cloudflare/pages-action');
   });
+
+  it('deploys PR previews without the removed Pages action or masked smoke failures', () => {
+    const workflow = readRepoFile('.github/workflows/preview.yaml');
+
+    expect(workflow).toContain('pnpm exec wrangler pages deploy build/client');
+    expect(workflow).toContain('--branch "pr-$PR_NUMBER"');
+    expect(workflow).toContain('--commit-hash "$PR_HEAD_SHA"');
+    expect(workflow).toContain('Preview deployment did not become ready: $PREVIEW_DEPLOY_URL');
+    expect(workflow.indexOf('name: Run smoke tests on preview')).toBeLessThan(
+      workflow.indexOf('name: Add preview URL comment to PR'),
+    );
+    expect(workflow).not.toContain('cloudflare/pages-action');
+    expect(workflow).not.toContain('|| echo "Preview environment check completed"');
+    expect(workflow).not.toContain('name: Build for production');
+  });
 });

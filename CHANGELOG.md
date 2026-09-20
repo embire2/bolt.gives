@@ -13,6 +13,7 @@
 - Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. Use disposable projects on staging.
 - Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.
 - Use the configured FREE streaming relay on custom Cloudflare domains, not only `pages.dev`. Validate caller CSRF before attaching a trusted relay credential; ignore spoofed inbound relay headers during that validation.
+- Replace the unavailable Cloudflare Pages PR-preview action with the pinned Wrangler CLI path, remove a duplicate build, and require a successful bounded HTTP smoke before posting a ready comment.
 - Keep Supabase connection replacement, legacy MagnetAPI follow-up acceptance and the independent Windows rewrite visible in the roadmap. They are not claimed as completed by this patch.
 
 ## v4.1.1 - 2026-09-15

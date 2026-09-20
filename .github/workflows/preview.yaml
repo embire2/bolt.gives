@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     # Draft reliability/security checkpoints must run CI without publishing an app.
     if: github.event.action != 'closed' && github.event.pull_request.draft == false
-    
+
     steps:
       - name: Check if preview deployment is configured
         id: check-secrets
@@ -40,22 +40,47 @@ jobs:
         if: steps.check-secrets.outputs.configured == 'true'
         uses: ./.github/actions/setup-and-build
 
-      - name: Build for production
-        if: steps.check-secrets.outputs.configured == 'true'
-        run: pnpm run build
-        env:
-          NODE_ENV: production
-
       - name: Deploy to Cloudflare Pages
         if: steps.check-secrets.outputs.configured == 'true'
         id: deploy
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: bolt-gives-preview
-          directory: build/client
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NO_COLOR: '1'
+        run: |
+          set -o pipefail
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]
+          deploy_log="$(mktemp)"
+          pnpm exec wrangler pages deploy build/client \
+            --project-name bolt-gives-preview \
+            --branch "pr-$PR_NUMBER" \
+            --commit-hash "$PR_HEAD_SHA" \
+            --commit-message "Preview PR $PR_NUMBER" \
+            --commit-dirty=false | tee "$deploy_log"
+          deployment_url="$(grep -Eo 'https://[a-z0-9-]+\.bolt-gives-preview\.pages\.dev' "$deploy_log" | tail -n 1)"
+          if [[ -z "$deployment_url" ]]; then
+            echo "Wrangler did not report a preview deployment URL." >&2
+            exit 1
+          fi
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+      - name: Run smoke tests on preview
+        if: steps.check-secrets.outputs.configured == 'true'
+        env:
+          PREVIEW_DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          for attempt in $(seq 1 24); do
+            if curl --connect-timeout 10 --max-time 20 -fLsS "$PREVIEW_DEPLOY_URL" -o /tmp/preview.html &&
+              grep -q "bolt.gives" /tmp/preview.html; then
+              echo "Preview deployment is ready: $PREVIEW_DEPLOY_URL"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Preview deployment did not become ready: $PREVIEW_DEPLOY_URL" >&2
+          exit 1
 
       - name: Preview deployment not configured
         if: steps.check-secrets.outputs.configured == 'false'
@@ -132,24 +157,6 @@ jobs:
                 body: commentBody
               });
             }
-
-      - name: Run smoke tests on preview
-        env:
-          PREVIEW_DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-        run: |
-          if [[ "${{ steps.check-secrets.outputs.configured }}" == "true" ]]; then
-            echo "Running smoke tests on preview deployment..."
-            echo "Preview URL: $PREVIEW_DEPLOY_URL"
-            # Basic HTTP check instead of Playwright tests
-            if [[ -n "$PREVIEW_DEPLOY_URL" ]]; then
-              curl -fLsS --retry 2 --max-time 30 "$PREVIEW_DEPLOY_URL" || echo "Preview environment check completed"
-            else
-              echo "Preview URL is empty, skipping smoke test"
-            fi
-          else
-            echo "✅ Smoke tests skipped - preview deployment not configured"
-            echo "This is normal and expected when Cloudflare secrets are not available"
-          fi
 
       - name: Preview workflow summary
         run: |
