@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 import { closePageThenCleanupSession, resolveCodingAppUrl } from './live-release-smoke-utils.mjs';
 import { hideProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 import { isIsolatedPreviewNavigationAbort, observedPromptTokens } from './calendar-e2e-contracts.mjs';
+import { waitForSettledRuntime } from './e2e-runtime-readiness.mjs';
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
@@ -465,6 +466,15 @@ async function verifyPersistedProjectRestore(page, options) {
   }
 
   const origin = new URL(baseUrl).origin;
+
+  try {
+    await waitForSettledRuntime(async () => {
+      const result = await fetchRuntimeJson(page, originalRuntimeSessionId, 'preview-status');
+      return result.payload;
+    });
+  } catch (error) {
+    return { ok: false, persisted, reason: error.message };
+  }
   await page.goto(`${origin}/chat`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await ensureChatComposerVisible(page);
   await page.getByRole('button', { name: 'Open sidebar' }).first().click();

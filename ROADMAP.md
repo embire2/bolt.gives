@@ -19,6 +19,7 @@ Current stable release:
 Prioritize reproduced failures in existing user journeys. The requested FREE model, allowance and instance policy changes ship with v4.1.2; broader feature work remains separate. Verify on `https://alpha.bolt.gives` before production.
 
 - [x] Keep admin fleet status non-blocking during serialized deployments and reject cross-origin admin mutations before rendering, including direct production requests. Preserve mutation locking, customer assignments and existing operator credentials.
+- [x] Preserve authorized isolated asset reads across cleared port reservations and wait for in-progress runtime starts during history restoration. Require settled runtime readiness before the idle-history browser check; retain all zero-replay, cancellation and browser-error assertions.
 - [x] Create the dedicated Cloudflare Pages alpha test instance with its own custom hostname, valid TLS and the existing isolated alpha runtime. Keep it outside automatic production fleet refreshes.
 - [x] Correct custom-domain collaboration routing and FREE relay handling. Regression tests, a live WebSocket handshake and real browser journeys pass; included in v4.1.2.
 - [x] Correct shared registration throttling, authenticated Preview health polling during port handoff and cross-origin redirect headers. Retain strict chat-cancellation assertions and use the validated application streaming transport.

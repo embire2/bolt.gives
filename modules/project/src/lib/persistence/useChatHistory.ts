@@ -134,6 +134,7 @@ export function useChatHistory(options: { loadPersistedChat?: boolean; ownerId?:
       try {
         const rebound = await rebindHealthyHostedRuntimePreview({
           sessionId: validSnapshot.runtimeSessionId,
+          shouldContinue,
           applyPreview: (preview) => {
             if (shouldContinue()) {
               workbenchStore.syncHostedPreview(preview);

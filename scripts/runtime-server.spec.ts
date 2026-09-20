@@ -2209,6 +2209,23 @@ describe('runtime server workspace isolation', () => {
     ).toBe(false);
   });
 
+  it('waits through an authenticated isolated read handoff without granting port ownership', () => {
+    const request = {
+      method: 'GET',
+      requestedPort: 6102,
+      sessionPreviewPort: undefined,
+      sessionReservationMatches: false,
+      authorizedIsolatedPreview: true,
+      attempt: 0,
+    };
+    expect(shouldRetryPreviewOwnershipMismatch(request)).toBe(true);
+    expect(isPreviewPortOwnedBySession({ id: 'isolated-handoff', preview: undefined }, 6102)).toBe(false);
+    expect(shouldRetryPreviewOwnershipMismatch({ ...request, authorizedIsolatedPreview: false })).toBe(false);
+    expect(shouldRetryPreviewOwnershipMismatch({ ...request, method: 'POST' })).toBe(false);
+    expect(shouldRetryPreviewOwnershipMismatch({ ...request, sessionPreviewPort: 6103 })).toBe(false);
+    expect(shouldRetryPreviewOwnershipMismatch({ ...request, attempt: 12 })).toBe(false);
+  });
+
   it('detects whether the isolated workspace owns its own project manifest', async () => {
     const workspace = await makeTempDir('bolt-runtime-workspace-');
 

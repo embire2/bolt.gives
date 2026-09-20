@@ -2750,6 +2750,7 @@ export function shouldRetryPreviewOwnershipMismatch({
   requestedPort = 0,
   sessionPreviewPort = 0,
   sessionReservationMatches = false,
+  authorizedIsolatedPreview = false,
   attempt = 0,
 } = {}) {
   const normalizedMethod = String(method || 'GET').toUpperCase();
@@ -2761,7 +2762,7 @@ export function shouldRetryPreviewOwnershipMismatch({
     !['GET', 'HEAD'].includes(normalizedMethod) ||
     !Number.isInteger(requested) ||
     requested <= 0 ||
-    (isAssignedPort ? requested !== assigned : sessionReservationMatches !== true)
+    (isAssignedPort ? requested !== assigned : sessionReservationMatches !== true && authorizedIsolatedPreview !== true)
   ) {
     return false;
   }
@@ -7967,6 +7968,9 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
         requestedPort: port,
         sessionPreviewPort: session.preview?.port,
         sessionReservationMatches: isPreviewPortReserved(port, session.id),
+
+        // A signed isolated request can wait through a cleared reservation, never bypass ownership to connect.
+        authorizedIsolatedPreview: req.boltIsolatedPreview === true,
         attempt,
       })
     ) {
