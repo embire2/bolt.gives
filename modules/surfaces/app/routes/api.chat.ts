@@ -27,6 +27,7 @@ import { AgentRecoveryController } from '@bolt/agent/lib/.server/llm/agent-recov
 import { StreamRecoveryManager } from '@bolt/agent/lib/.server/llm/stream-recovery';
 import { describeStreamError } from '@bolt/agent/lib/.server/llm/stream-error';
 import { enforceDataStreamDeadline } from '@bolt/agent/lib/.server/llm/data-stream-deadline';
+import { createChatStreamResponse } from '@bolt/agent/lib/.server/llm/chat-stream-response';
 import { recordAgentRunMetrics } from '@bolt/agent/lib/.server/llm/run-metrics';
 import {
   deriveProjectMemoryKey,
@@ -3253,16 +3254,7 @@ Next: I am sending the final result now.`,
         })
       : dataStream;
 
-    return new Response(responseStream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache, no-transform',
-        'Text-Encoding': 'chunked',
-        'X-Bolt-Stream-Deadline-Ms': responseMaxDurationMs?.toString() || 'disabled',
-      },
-    });
+    return createChatStreamResponse(responseStream, responseMaxDurationMs);
   } catch (error: any) {
     stopHeartbeatIfRunning();
 

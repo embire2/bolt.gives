@@ -17,8 +17,8 @@
 - Preserve per-visitor registration rate-limit identity instead of placing every user in the backend's shared IP bucket. Correct the native onboarding dialog selector and stale FREE model wording in instance-creation acceptance.
 - Keep signed project repair health checks available while the development server changes ports, without exposing project files or platform routes. Preserve cross-origin embedding headers on isolated Preview redirects.
 - Serve an authenticated waiting document during initial Preview port handoff rather than an unembeddable error page, and keep its eventual navigation on the caller's gateway instead of a backend loopback address.
-- Clear Caddy's HTTP/3 alternative-service advertisement for application sites so streaming uses the verified HTTP/2 path. Keep unrelated sites and Cloudflare's edge protocol configuration unchanged.
-- Give the chat transport explicit network-stream ownership, releasing its reader independently of the SDK on completion, failure and cancellation without cloning the response. Disable proxy transformation of chat streams.
+- Transfer native chat response ownership to one bounded consumer, cancelling the unused branch immediately instead of draining a duplicate. This prevents Chromium HTTPS completion from being cancelled when the SDK reads the last chunk. Preserve actual cancellation, backpressure and network errors.
+- Declare AI SDK v1 data framing correctly rather than labelling it EventSource SSE; prevent proxy transformation and buffering. Keep normal HTTP protocol negotiation enabled.
 - Allow up to a minute for read-only assets on an assigned Preview port to survive a rebuild handoff. Recheck ownership on every attempt, reject writes/foreign ports, and stop retries after client disconnect or the bounded deadline.
 - Keep Supabase connection replacement, legacy MagnetAPI follow-up acceptance and the independent Windows rewrite visible in the roadmap. They are not claimed as completed by this patch.
 

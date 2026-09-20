@@ -188,7 +188,7 @@ The deployed tree may be synchronized without `.git`. Verify the deployment mani
 
 For runtime changes, validate both app and runtime services. For collaboration or web-browsing changes, validate the corresponding service too. Bind internal listeners to loopback unless the architecture explicitly requires a protected network listener.
 
-Keep Caddy application sites on the validated streaming transport with `Alt-Svc: clear`; do not change protocols for unrelated sites. Registration must preserve visitor rate-limit identity. An authenticated isolated Preview health read remains available during port handoff, but unavailable project assets and platform routes stay blocked.
+Chat owns one active response consumer: cancel the unused transfer branch immediately and keep read-ahead bounded. Never add a duplicate background drain or suppress actual chat cancellation to pass E2E. Use the AI SDK v1 data-stream headers and normal HTTP protocol negotiation. Registration must preserve visitor rate-limit identity. An authenticated isolated Preview health read remains available during port handoff, but unavailable project assets and platform routes stay blocked.
 
 Self-host installations support interactive setup, custom app/admin/create domains, optional local PostgreSQL for profile/admin data, and Caddy-managed HTTPS. Generated apps bring their own data service. Installer changes require shell syntax checks plus a realistic clean and repair path.
 
