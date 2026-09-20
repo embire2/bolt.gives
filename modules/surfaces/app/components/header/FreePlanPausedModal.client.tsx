@@ -43,10 +43,10 @@ export function FreePlanPausedModal({ open, resetAt, onDismiss }: FreePlanPaused
               FREE service paused
             </div>
             <h2 id="free-plan-paused-title" className="mt-6 font-serif text-5xl leading-[0.92] tracking-[-0.04em]">
-              Today&apos;s Agent tokens are used.
+              Today&apos;s API credits are used.
             </h2>
             <p className="mt-5 text-sm leading-6 text-[#52645e]">
-              You have used your daily allocation of 100 Agent tokens, calibrated to cover at least 30 minutes of active
+              You have used your daily allocation of 20 API credits, calibrated to cover around 20 minutes of active
               coding. Hosted FREE coding is paused until your balance resets at {formatResetTime(resetAt)}.
             </p>
 

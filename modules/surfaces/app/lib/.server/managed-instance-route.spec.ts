@@ -24,15 +24,19 @@ describe('managed-instance request environment', () => {
   });
 
   it('sends registration to that same runtime and signs a host-only session cookie', async () => {
-    const transport = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({
-        sessionToken: 'fixture',
-        instance: { email: 'fixture@example.invalid', projectName: 'fixture' },
-      }),
-    );
+    const transport = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ ok: true, profile: { id: 'fixture', email: 'fixture@example.invalid' } }))
+      .mockResolvedValueOnce(
+        Response.json({
+          sessionToken: 'fixture',
+          instance: { email: 'fixture@example.invalid', projectName: 'fixture' },
+        }),
+      );
     const response = await action({
       request: new Request('https://staging.example/managed-instances', {
         method: 'POST',
+        headers: { Authorization: `BoltProfile 11111111-1111-1111-1111-111111111111.${'a'.repeat(40)}` },
         body: new URLSearchParams({
           intent: 'spawn',
           name: 'Fixture',
@@ -42,7 +46,8 @@ describe('managed-instance request environment', () => {
       }),
       context: { cloudflare: { env } },
     } as never);
-    expect(transport.mock.calls[0][0]).toBe('https://staging.example/runtime/managed-instances/spawn');
+    expect(transport.mock.calls[0][0]).toBe('https://staging.example/runtime/profile/session');
+    expect(transport.mock.calls[1][0]).toBe('https://staging.example/runtime/managed-instances/spawn');
     expect(response.status).toBe(302);
     expect(response.headers.get('Set-Cookie')).toMatch(/^__Host-bolt_managed_instance=/);
   });

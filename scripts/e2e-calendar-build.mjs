@@ -10,12 +10,12 @@ import { isIsolatedPreviewNavigationAbort, observedPromptTokens } from './calend
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'http://127.0.0.1:8788');
 const outDir = process.env.E2E_OUTPUT_DIR || 'output/e2e-calendar';
 const providerName = process.env.E2E_PROVIDER || 'FREE';
-const modelName = process.env.E2E_MODEL || 'gpt-5.6-sol';
+const modelName = process.env.E2E_MODEL || 'z-ai/glm-5.3-flash';
 const appToken = `CAL_${Date.now().toString(36)}`.toUpperCase();
 const requireFollowUp = process.env.E2E_REQUIRE_FOLLOWUP === '1';
 const requireHistoryRestore = process.env.E2E_REQUIRE_HISTORY_RESTORE === '1';
 const requireProjectDatabase = process.env.E2E_REQUIRE_PROJECT_DATABASE === '1';
-const followUpModelName = requireFollowUp ? process.env.E2E_FOLLOWUP_MODEL || 'claude-sonnet-5' : null;
+const followUpModelName = requireFollowUp ? process.env.E2E_FOLLOWUP_MODEL || modelName : null;
 const followUpToken = requireFollowUp ? `CAL_FUP_${Date.now().toString(36)}`.toUpperCase() : null;
 const totalDeadlineMs = Number(process.env.E2E_DEADLINE_MS || 7 * 60 * 1000);
 const runtimeFetchTimeoutMs = Math.max(1000, Number(process.env.E2E_RUNTIME_FETCH_TIMEOUT_MS || '15000'));
@@ -76,6 +76,14 @@ async function selectVisibleFreeModel(page, model) {
   const selector = page
     .locator('select[aria-label="FREE workspace coding model"]:visible, select[aria-label="FREE coding model"]:visible')
     .first();
+
+  if ((await selector.count()) === 0 && model === 'z-ai/glm-5.3-flash') {
+    await page.getByTitle('FREE / GLM 5.3 Flash', { exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+    log('retained current FREE model', model);
+
+    return;
+  }
+
   await selector.waitFor({ state: 'visible', timeout: 30000 });
   await selector.selectOption(model);
 

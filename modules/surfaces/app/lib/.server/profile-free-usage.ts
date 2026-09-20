@@ -34,6 +34,7 @@ export async function createProfileFreeUsageMeter(options: {
   sessionId?: string;
 }) {
   const startedAt = Date.now();
+  let lastRecordedAt = startedAt;
   const profile = await resolveProfileSession(options.request, options.runtimeEnv);
   const subjectKey = profile?.id;
   const customDomainStatus =
@@ -87,13 +88,15 @@ export async function createProfileFreeUsageMeter(options: {
       }
 
       try {
+        const finishedAt = Date.now();
         await recordFreeUsageQuotaForRequest({
           request: options.request,
           runtimeEnv: options.runtimeEnv,
           subjectKey,
-          activeDurationMs: Date.now() - startedAt,
+          activeDurationMs: finishedAt - lastRecordedAt,
           ...input,
         });
+        lastRecordedAt = finishedAt;
       } catch (error) {
         console.warn(
           `Failed to record hosted FREE token usage: ${error instanceof Error ? error.message : String(error)}`,

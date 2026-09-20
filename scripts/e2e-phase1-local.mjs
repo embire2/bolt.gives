@@ -59,15 +59,15 @@ const ownerToken = crypto.randomBytes(32).toString('hex');
 const quotaSecret = crypto.randomBytes(32).toString('hex');
 const replay = process.env.BOLT_E2E_HOOK_REPLAY === '1';
 const local = replay ? {} : parse(await fs.readFile(path.join(repo, '.env.local')).catch(() => Buffer.from('')));
-const magnetKey = replay
-  ? 'magnet-user-owned-replay-fixture-not-a-key'
-  : process.env.MAGNET_API_KEY || local.MAGNET_API_KEY;
+const providerKey = replay
+  ? 'owned-replay-fixture-not-a-key'
+  : process.env.BOLT_FREE_OPENROUTER_API_KEY || local.BOLT_FREE_OPENROUTER_API_KEY;
 
-if (!magnetKey) {
-  throw new Error('Set MAGNET_API_KEY in the ignored operator .env.local to run live generation.');
+if (!providerKey) {
+  throw new Error('Set BOLT_FREE_OPENROUTER_API_KEY in the ignored operator .env.local to run live generation.');
 }
 
-const secrets = [magnetKey, ownerToken];
+const secrets = [providerKey, ownerToken];
 const redact = (value) => secrets.reduce((text, secret) => text.split(secret).join('[redacted]'), String(value));
 let runtime;
 let previewGateway;
@@ -318,8 +318,9 @@ try {
     BOLT_RUNTIME_CONTROL_PUBLIC_URL: runtimeBase,
     BOLT_APP_PUBLIC_URL: base,
     BOLT_PROFILE_COOKIE_SECRET: crypto.randomBytes(32).toString('hex'),
+    BOLT_TENANT_ADMIN_COOKIE_SECRET: crypto.randomBytes(32).toString('hex'),
     BOLT_SELF_HOST_MODE: 'single-user',
-    MAGNET_API_KEY: magnetKey,
+    BOLT_FREE_OPENROUTER_API_KEY: providerKey,
     BOLT_FREE_USAGE_QUOTA_SECRET: quotaSecret,
     WEB_BROWSE_SERVICE_URL: `http://127.0.0.1:${browsePort}`,
   });

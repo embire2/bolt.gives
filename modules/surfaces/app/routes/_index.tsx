@@ -25,7 +25,7 @@ const SEO_KEYWORDS = [
   'Cloudflare Pages AI app',
   'transparent agentic coding',
   'browser based coding agent',
-  'MagnetAPI.org FREE AI coding models',
+  'GLM 5.3 Flash free AI coding',
   'bolt.gives contributor project',
 ].join(', ');
 
@@ -37,12 +37,12 @@ const screenshotCards = [
   },
   {
     title: 'Working prompt-to-preview app',
-    description: 'A real FREE ChatGPT-Luna run generated and restored this Tideboard Preview on live alpha.',
+    description: 'Historical v3.4.1 capture: a generated Tideboard running in the real hosted Preview.',
     src: `${SCREENSHOT_BASE_URL}/tideboard-preview-v3.4.1.png`,
   },
   {
     title: 'Visible FREE boundary',
-    description: 'At 100 daily Agent tokens, hosted coding pauses cleanly and explains every available next step.',
+    description: 'Historical pause-screen capture. The current FREE allowance is 20 API credits per GMT+2 day.',
     src: `${SCREENSHOT_BASE_URL}/free-plan-paused-v3.4.1.png`,
   },
   {
@@ -53,14 +53,14 @@ const screenshotCards = [
 ];
 
 const platformHighlights = [
-  'Stable v4.0.1 release with unified Agent Mode and console-clean Cloudflare publishing: conversation, a persistent prompt, Code, and Preview stay together while the agent works.',
-  'FREE includes at least 30 active coding minutes within 100 Agent tokens per day; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
+  `v${APP_VERSION} focuses on reliable hosted coding: conversation, a persistent prompt, Code, and Preview stay together while the agent works.`,
+  'FREE includes 20 API credits per day for around 20 minutes of active coding with GLM 5.3 Flash; Custom Domain includes 10,000 Agent tokens at the $5/month launch price, a $20/month value.',
   'Follow-up prompts stay visible beside files and Preview after a project starts, without automatic Chat/Workspace switching.',
   'History-aware follow-up recovery keeps improving the current project until requested file changes and exact visible text requirements actually land.',
   'Artifact stream recovery prevents restarted model output from saving raw artifact/action tags into project source files.',
-  `Hosted ${FREE_PROVIDER_NAME} starts with ChatGPT-Luna at medium effort through the protected server-side path. Users can also connect their own MagnetAPI key for its current Frontier model catalog.`,
+  `Hosted ${FREE_PROVIDER_NAME} uses ${FREE_HOSTED_MODEL_LABEL} through a protected server-side OpenRouter connection. Users can also connect their own provider key without spending hosted FREE credits.`,
   'Web browsing and website scrape-to-build prompts are restored for direct URL-based rebuilds.',
-  'Managed Cloudflare trials use their own assigned hostnames and same-origin runtime previews.',
+  'Managed Cloudflare instances use their own assigned hostnames and isolated, health-verified project previews. One instance per account is the default, controlled by the administrator.',
   'Projects start database-free and can connect Supabase in two fields or use a user-owned PostgreSQL URL held by the private runtime.',
   'Follow-up prompts keep project history, runtime snapshots, and current workspace context.',
   'Contributors can join through GitHub issues and roadmap-aligned pull requests.',
@@ -412,11 +412,11 @@ export default function Index() {
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">stable</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
-                  <div className="text-2xl font-black">v4.1.0</div>
+                  <div className="text-2xl font-black">Bug fixes</div>
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">roadmap</div>
                 </div>
                 <div className="rounded-2xl border border-slate-950/10 bg-white/70 p-4 shadow-sm">
-                  <div className="text-2xl font-black">4 coding models</div>
+                  <div className="text-2xl font-black">GLM 5.3 Flash</div>
                   <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{FREE_PROVIDER_NAME}</div>
                 </div>
               </div>

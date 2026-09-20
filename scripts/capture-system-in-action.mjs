@@ -44,7 +44,7 @@ try {
     },
     {
       name: 'selectedModel',
-      value: 'gpt-5.6-sol',
+      value: 'z-ai/glm-5.3-flash',
       url: baseUrl,
       sameSite: 'Lax',
       secure: baseUrl.startsWith('https://'),

@@ -129,7 +129,7 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
   const customDomainActive = projectCustomDomainActive || accountCustomDomainActive;
   const allowance = projectCustomDomainActive
     ? (customDomain.tokensAllowance ?? customDomain.creditsAllowance)
-    : (freeBalance?.tokensAllowance ?? 100);
+    : (freeBalance?.tokensAllowance ?? 20);
   const remaining = projectCustomDomainActive
     ? (customDomain.tokensRemaining ?? customDomain.creditsRemaining)
     : (freeBalance?.tokensRemaining ?? allowance);
@@ -165,7 +165,7 @@ export function UsageBalanceBadge({ alwaysVisible = false }: { alwaysVisible?: b
               />
             </div>
             <div className="mt-0.5 text-[9px] font-semibold text-[#52645e]">
-              of {formatAgentTokens(allowance)} Agent tokens {customDomainActive ? 'this month' : 'today'}
+              of {formatAgentTokens(allowance)} {customDomainActive ? 'Agent tokens this month' : 'API credits today'}
             </div>
           </div>
         </div>

@@ -212,25 +212,25 @@ describe('runtime server workspace isolation', () => {
     expect(getFreeUsageQuotaResetAt(new Date('2026-06-26T22:00:01.000Z'))).toBe('2026-06-27T22:00:00.000Z');
   });
 
-  it('blocks hosted FREE usage when the daily 100-Agent-token allowance is reached', () => {
+  it('blocks hosted FREE usage when the daily 20-API-credit allowance is reached', () => {
     const decision = buildFreeUsageQuotaDecision(
-      { agentTokens: 100, totalTokens: 120_000, costUsd: 0.04 },
-      { tokenLimit: 100, limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
+      { agentTokens: 20, totalTokens: 120_000, costUsd: 0.04 },
+      { tokenLimit: 20, limitUsd: 1, now: new Date('2026-06-26T12:00:00.000Z') },
     );
 
     expect(decision.allowed).toBe(false);
-    expect(decision.usedTokens).toBe(100);
+    expect(decision.usedTokens).toBe(20);
     expect(decision.remainingTokens).toBe(0);
     expect(decision.remainingUsd).toBeCloseTo(0.96);
-    expect(decision.message).toContain('100 Agent tokens');
+    expect(decision.message).toContain('20 API credits');
     expect(decision.message).toContain('$5/month launch price');
     expect(decision.message).toContain('00:00 GMT+2');
   });
 
-  it('guarantees 30 active coding minutes for the daily 100-Agent-token allowance', () => {
-    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 15 * 60 * 1000, providerTokens: 50_000 })).toBe(50);
-    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 30 * 60 * 1000, providerTokens: 100_000 })).toBe(100);
-    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 60 * 1000, providerTokens: 20_000 })).toBeCloseTo(10 / 3);
+  it('charges one API credit per active coding minute within the daily allowance', () => {
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 15 * 60 * 1000, providerTokens: 50_000 })).toBe(15);
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 20 * 60 * 1000, providerTokens: 100_000 })).toBe(20);
+    expect(calculateFreeAgentTokenCharge({ activeDurationMs: 60 * 1000, providerTokens: 20_000 })).toBe(1);
   });
 
   it('normalizes hosted FREE usage ledgers without retaining invalid subjects', () => {
@@ -265,7 +265,7 @@ describe('runtime server workspace isolation', () => {
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 150,
-      agentTokens: 0.15,
+      agentTokens: 0.045,
     });
     expect(days['2026-06-26']).not.toHaveProperty('invalid');
     expect(days).not.toHaveProperty('nope');

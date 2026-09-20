@@ -60,6 +60,7 @@ export type ManagedInstanceFleetSummary = {
 };
 
 export type ManagedInstanceSupport = {
+  singleInstancePerUser?: boolean;
   supported: boolean;
   reason: string | null;
   trialDays: number;

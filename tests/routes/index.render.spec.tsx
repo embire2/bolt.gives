@@ -62,7 +62,7 @@ describe('index route fallback shell', () => {
       ),
     ).toBeTruthy();
     expect(screen.getAllByText('FREE').length).toBeGreaterThan(0);
-    expect(screen.getByText(/ChatGPT-Luna - Medium effort/i)).toBeTruthy();
+    expect(screen.getByText(/GLM 5.3 Flash/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/How can Bolt help you today\?/i)).toBeNull();
   });
 

@@ -89,6 +89,10 @@ import {
   sendProfileLoginLink,
 } from './admin-mailer.mjs';
 import { updateRuntimeEnvFile } from './runtime-env-file.mjs';
+import {
+  readManagedInstancePolicy,
+  updateManagedInstancePolicy,
+} from '@bolt/control-plane/server/managed-instance-policy.mjs';
 import { reloadProjectCaddy } from '@bolt/control-plane/server/project-caddy-reload.mjs';
 import {
   buildRuntimeNodeDatabaseTunnelInvocation,
@@ -378,10 +382,7 @@ const FREE_USAGE_QUOTA_PATH =
   process.env.RUNTIME_FREE_USAGE_QUOTA_PATH || path.join(PERSIST_ROOT, 'free-usage-quota.json');
 const FREE_USAGE_DAILY_TOKEN_LIMIT = Math.max(
   1,
-  Number(process.env.BOLT_FREE_DAILY_TOKEN_LIMIT || process.env.FREE_DAILY_TOKEN_LIMIT || '100'),
-);
-const FREE_USAGE_DAILY_LIMIT_USD = Number(
-  process.env.BOLT_FREE_DAILY_USD_LIMIT || process.env.FREE_DAILY_USD_LIMIT || '1',
+  Number(process.env.BOLT_FREE_DAILY_TOKEN_LIMIT || process.env.FREE_DAILY_TOKEN_LIMIT || '20'),
 );
 const ADMIN_DB_CONFIG = buildAdminDatabaseConfig();
 const ADMIN_PANEL_PUBLIC_URL = process.env.BOLT_ADMIN_PANEL_PUBLIC_URL || 'https://admin.bolt.gives';
@@ -537,143 +538,43 @@ export function authorizeFreeUsageQuotaSecret(providedSecret, expectedSecret = F
   return authorizeHostedFreeRelaySecret(providedSecret, expectedSecret);
 }
 
-export function getFreeUsageQuotaDayKey(now = new Date()) {
-  return new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-export function getFreeUsageQuotaResetAt(now = new Date()) {
-  const shifted = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-  const nextLocalMidnight = Date.UTC(
-    shifted.getUTCFullYear(),
-    shifted.getUTCMonth(),
-    shifted.getUTCDate() + 1,
-    0,
-    0,
-    0,
-    0,
-  );
-
-  return new Date(nextLocalMidnight - 2 * 60 * 60 * 1000).toISOString();
-}
-
-function normalizeFreeUsageLimitUsd(value = FREE_USAGE_DAILY_LIMIT_USD) {
-  const limit = Number(value);
-  return Number.isFinite(limit) && limit > 0 ? limit : 1;
-}
-
-function normalizeFreeUsageTokenLimit(value = FREE_USAGE_DAILY_TOKEN_LIMIT) {
-  const limit = Number(value);
-  return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100;
-}
-
-function normalizeFreeUsageCostUsd(value) {
-  const cost = Number(value);
-  return Number.isFinite(cost) && cost > 0 ? cost : 0;
-}
-
-function normalizeFreeUsageTokens(value) {
-  const tokens = Number(value);
-  return Number.isFinite(tokens) && tokens > 0 ? tokens : 0;
-}
-
-const FREE_AGENT_TOKEN_WINDOW_MS = 30 * 60 * 1000;
-
-export function calculateFreeAgentTokenCharge({ activeDurationMs, providerTokens } = {}) {
-  const rawProviderTokens = normalizeFreeUsageTokens(providerTokens);
-  const durationMs = Number(activeDurationMs);
-
-  if (Number.isFinite(durationMs) && durationMs >= 0) {
-    return Math.min(
-      rawProviderTokens,
-      (Math.min(durationMs, FREE_AGENT_TOKEN_WINDOW_MS) * 100) / FREE_AGENT_TOKEN_WINDOW_MS,
-    );
-  }
-
-  /*
-   * Older clients do not report duration. Normalize their provider usage instead of
-   * allowing one normal generation to consume the full daily Agent allowance.
-   */
-  return Math.min(rawProviderTokens, rawProviderTokens / 1000);
-}
-
-export function normalizeFreeUsageQuotaLedger(input) {
-  const days = {};
-
-  if (!input || typeof input !== 'object' || !input.days || typeof input.days !== 'object') {
-    return { version: 2, days };
-  }
-
-  for (const [dayKey, rawSubjects] of Object.entries(input.days)) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !rawSubjects || typeof rawSubjects !== 'object') {
-      continue;
-    }
-
-    const subjects = {};
-
-    for (const [subjectHash, rawEntry] of Object.entries(rawSubjects)) {
-      if (!/^[a-f0-9]{64}$/i.test(subjectHash) || !rawEntry || typeof rawEntry !== 'object') {
-        continue;
-      }
-
-      subjects[subjectHash] = {
-        costUsd: normalizeFreeUsageCostUsd(rawEntry.costUsd),
-        requests: Math.max(0, Math.floor(Number(rawEntry.requests) || 0)),
-        promptTokens: normalizeFreeUsageTokens(rawEntry.promptTokens),
-        completionTokens: normalizeFreeUsageTokens(rawEntry.completionTokens),
-        totalTokens: normalizeFreeUsageTokens(rawEntry.totalTokens),
-        agentTokens:
-          rawEntry.agentTokens === undefined
-            ? Math.min(100, normalizeFreeUsageTokens(rawEntry.totalTokens) / 1000)
-            : normalizeFreeUsageTokens(rawEntry.agentTokens),
-        updatedAt: typeof rawEntry.updatedAt === 'string' ? rawEntry.updatedAt : null,
-      };
-    }
-
-    days[dayKey] = subjects;
-  }
-
-  return { version: 2, days };
-}
-
-export function buildFreeUsageQuotaDecision(entry = {}, options = {}) {
-  const now = options.now instanceof Date ? options.now : new Date();
-  const tokenLimit = normalizeFreeUsageTokenLimit(options.tokenLimit);
-  const usedTokens = normalizeFreeUsageTokens(entry?.agentTokens);
-  const remainingTokens = Math.max(0, tokenLimit - usedTokens);
-  const limitUsd = normalizeFreeUsageLimitUsd(options.limitUsd);
-  const usedUsd = normalizeFreeUsageCostUsd(entry?.costUsd);
-  const remainingUsd = Math.max(0, limitUsd - usedUsd);
-  const allowed = usedTokens < tokenLimit;
-  const message = allowed
-    ? null
-    : 'The hosted FREE service has been paused because you have used all 100 Agent tokens for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at 00:00 GMT+2.';
-
-  return {
-    allowed,
-    usedTokens,
-    remainingTokens,
-    tokenLimit,
-    usedUsd,
-    remainingUsd,
-    limitUsd,
-    resetAt: getFreeUsageQuotaResetAt(now),
-    resetTimezone: 'GMT+2',
-    message,
-  };
-}
+import {
+  getFreeUsageQuotaDayKey,
+  getFreeUsageQuotaResetAt,
+  normalizeFreeUsageCostUsd,
+  normalizeFreeUsageTokens,
+  calculateFreeAgentTokenCharge,
+  normalizeFreeUsageQuotaLedger,
+  buildFreeUsageQuotaDecision,
+} from '@bolt/control-plane/server/free-usage-policy.mjs';
+export {
+  getFreeUsageQuotaDayKey,
+  getFreeUsageQuotaResetAt,
+  calculateFreeAgentTokenCharge,
+  normalizeFreeUsageQuotaLedger,
+  buildFreeUsageQuotaDecision,
+} from '@bolt/control-plane/server/free-usage-policy.mjs';
 
 async function readFreeUsageQuotaLedger() {
   try {
     const raw = await fs.readFile(FREE_USAGE_QUOTA_PATH, 'utf8');
     return normalizeFreeUsageQuotaLedger(JSON.parse(raw));
-  } catch {
-    return normalizeFreeUsageQuotaLedger(null);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return normalizeFreeUsageQuotaLedger(null);
+    }
+
+    throw new Error('The hosted FREE quota store is unavailable. Retry shortly.');
   }
 }
 
 async function writeFreeUsageQuotaLedger(ledger) {
   await fs.mkdir(path.dirname(FREE_USAGE_QUOTA_PATH), { recursive: true });
-  await writeJsonAtomically(FREE_USAGE_QUOTA_PATH, JSON.stringify(normalizeFreeUsageQuotaLedger(ledger), null, 2));
+  await writeJsonAtomically(
+    FREE_USAGE_QUOTA_PATH,
+    JSON.stringify(normalizeFreeUsageQuotaLedger(ledger), null, 2),
+    0o600,
+  );
 }
 
 function pruneFreeUsageQuotaLedger(ledger, activeDayKey) {
@@ -732,7 +633,16 @@ export async function checkFreeUsageQuota({ subjectHash, tokenLimit, limitUsd, n
   return buildFreeUsageQuotaDecision(entry, { tokenLimit, limitUsd, now });
 }
 
-export async function recordFreeUsageQuota({
+let freeQuotaWriteQueue = Promise.resolve();
+
+export function recordFreeUsageQuota(options = {}) {
+  const operation = freeQuotaWriteQueue.then(() => recordFreeUsageQuotaEntry(options));
+  freeQuotaWriteQueue = operation.catch(() => undefined);
+
+  return operation;
+}
+
+async function recordFreeUsageQuotaEntry({
   subjectHash,
   costUsd,
   usage,
@@ -740,6 +650,7 @@ export async function recordFreeUsageQuota({
   limitUsd,
   now = new Date(),
   activeDurationMs,
+  runId,
 } = {}) {
   const normalizedSubjectHash = assertValidFreeUsageQuotaSubject(subjectHash);
   const dayKey = getFreeUsageQuotaDayKey(now);
@@ -757,6 +668,13 @@ export async function recordFreeUsageQuota({
     updatedAt: null,
   };
   const normalizedUsage = normalizeFreeUsageQuotaUsage(usage);
+  const normalizedRunId = typeof runId === 'string' ? runId.slice(0, 128) : '';
+
+  if (normalizedRunId && entry.runIds?.includes(normalizedRunId)) {
+    return buildFreeUsageQuotaDecision(entry, { tokenLimit, limitUsd, now });
+  }
+
+  entry.runIds = [...(entry.runIds || []), ...(normalizedRunId ? [normalizedRunId] : [])].slice(-512);
 
   entry.costUsd = normalizeFreeUsageCostUsd(entry.costUsd) + normalizeFreeUsageCostUsd(costUsd);
   entry.requests = Math.max(0, Math.floor(Number(entry.requests) || 0)) + 1;
@@ -1205,6 +1123,10 @@ async function resolveManagedRolloutGuardState({ force = false } = {}) {
 }
 
 async function buildManagedInstanceSupportState() {
+  return { ...(await inspectManagedInstanceSupportState()), ...readManagedInstancePolicy() };
+}
+
+async function inspectManagedInstanceSupportState() {
   const config = getManagedInstanceCloudflareConfig();
 
   if (!MANAGED_INSTANCE_PUBLIC_ENABLED) {
@@ -1302,11 +1224,11 @@ async function ensureManagedInstanceRegistry() {
   }
 }
 
-export async function writeJsonAtomically(filePath, payload) {
+export async function writeJsonAtomically(filePath, payload, mode = 0o644) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tempPath, payload, 'utf8');
+  await fs.writeFile(tempPath, payload, { encoding: 'utf8', mode, flag: 'wx' });
   await fs.rename(tempPath, filePath);
 }
 
@@ -6663,9 +6585,9 @@ function sanitizeProfileBilling(billing) {
     return {
       plan: 'free',
       status: 'inactive',
-      tokensAllowance: 100,
+      tokensAllowance: FREE_USAGE_DAILY_TOKEN_LIMIT,
       tokensUsed: 0,
-      tokensRemaining: 100,
+      tokensRemaining: FREE_USAGE_DAILY_TOKEN_LIMIT,
       periodStart: null,
       periodEnd: null,
     };
@@ -8927,7 +8849,7 @@ export function createRuntimeServer() {
         const body = await readJsonBody(req);
         const quota = await checkFreeUsageQuota({
           subjectHash: body?.subjectHash,
-          tokenLimit: body?.tokenLimit,
+          tokenLimit: FREE_USAGE_DAILY_TOKEN_LIMIT,
           limitUsd: body?.limitUsd,
         });
 
@@ -8959,9 +8881,10 @@ export function createRuntimeServer() {
           subjectHash: body?.subjectHash,
           costUsd: body?.costUsd,
           usage: body?.usage,
-          tokenLimit: body?.tokenLimit,
+          tokenLimit: FREE_USAGE_DAILY_TOKEN_LIMIT,
           limitUsd: body?.limitUsd,
           activeDurationMs: body?.activeDurationMs,
+          runId: body?.runId,
         });
 
         sendJson(res, 200, {
@@ -9200,8 +9123,20 @@ export function createRuntimeServer() {
         }
 
         const body = await readJsonBody(req);
-        const name = String(body.name || '').trim();
-        const email = String(body.email || '')
+        const profile =
+          ADMIN_DB_CONFIG.enabled &&
+          (await readClientProfileSession({
+            id: String(body.profileSession?.id || ''),
+            tokenHash: hashProfileAuthToken(body.profileSession?.token),
+          }));
+
+        if (!profile) {
+          sendText(res, 401, 'Sign in before requesting an instance.');
+          return;
+        }
+
+        const name = String(profile.name || '').trim();
+        const email = String(profile.email || '')
           .trim()
           .toLowerCase();
         const requestedSubdomain = slugifyManagedInstanceSubdomain(body.subdomain);
@@ -9255,6 +9190,7 @@ export function createRuntimeServer() {
           }
 
           const claim = claimManagedInstanceTrial(registry, {
+            ...readManagedInstancePolicy(),
             name,
             email,
             requestedSubdomain,
@@ -9536,6 +9472,27 @@ export function createRuntimeServer() {
         });
       } catch (error) {
         sendText(res, 500, error instanceof Error ? error.message : 'Failed to suspend the managed instance.');
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/runtime/tenant-admin/instance-policy') {
+      try {
+        const body = await readJsonBody(req);
+        await runSerializedManagedInstanceRegistryOperation(async () => {
+          const registry = await ensureManagedInstanceRegistry();
+          const policy = await updateManagedInstancePolicy(body.singleInstancePerUser);
+          appendManagedInstanceEvent(registry, {
+            actor: 'admin',
+            action: 'instance.policy.updated',
+            target: 'fleet',
+            details: { singleInstancePerUser: String(policy.singleInstancePerUser) },
+          });
+          await writeManagedInstanceRegistry(registry);
+          sendJson(res, 200, { ok: true, ...policy });
+        });
+      } catch {
+        sendText(res, 400, 'Unable to save the instance policy.');
       }
       return;
     }

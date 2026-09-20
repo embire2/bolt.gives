@@ -35,22 +35,29 @@ export default function App() {
   </main>;
 }`;
 
-  return Response.json({
-    id: 'resp_owned_hook_replay',
-    object: 'response',
-    created_at: Math.floor(Date.now() / 1000),
-    status: 'completed',
-    model: 'gpt-5.6-sol',
-    output: [
-      {
-        type: 'function_call',
-        id: 'fc_replay',
-        call_id: 'call_replay',
-        name: 'write_file',
-        arguments: JSON.stringify({ path: 'src/App.tsx', content }),
-        status: 'completed',
-      },
-    ],
-    usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+  const artifact = `<boltArtifact id="owned-replay" title="Owned task board"><boltAction type="file" filePath="src/App.tsx">${content}</boltAction></boltArtifact>`;
+  const meta = { id: 'owned_hook_replay', created: Math.floor(Date.now() / 1000), model: 'z-ai/glm-5.3-flash' };
+  const usage = { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 };
+
+  if (!JSON.parse(String(body)).stream) {
+    return Response.json({
+      ...meta,
+      object: 'chat.completion',
+      choices: [{ index: 0, message: { role: 'assistant', content: artifact }, finish_reason: 'stop' }],
+      usage,
+    });
+  }
+
+  const events = [
+    {
+      ...meta,
+      object: 'chat.completion.chunk',
+      choices: [{ index: 0, delta: { role: 'assistant', content: artifact }, finish_reason: null }],
+    },
+    { ...meta, object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage },
+  ];
+
+  return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
+    headers: { 'Content-Type': 'text/event-stream' },
   });
 }

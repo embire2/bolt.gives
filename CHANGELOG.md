@@ -1,12 +1,17 @@
 # Changelog
 
-## Unreleased
+## v4.1.2 - 2026-09-20
+
+- Replace the managed FREE upstream with OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Normalize old FREE selections to the current model while retaining project context. Funded credentials are server-only and cannot be overridden by browser-supplied keys. MagnetAPI and OpenRouter remain separate bring-your-own-key providers.
+- Set hosted FREE to 20 API credits per GMT+2 day, charged at one credit per minute of server-measured active generation. Preserve consumed time when migrating the previous allowance, serialize ledger writes, and deduplicate repeated usage records. Custom Domain allowances are unchanged.
+- Require authenticated account identity for managed-instance requests. Default to one instance per account across browser sessions; operators can toggle this policy in `/admin` without removing existing instances.
+- Serve the protected admin panel at each configured instance's `/admin` URL through the configured backend. Keep operator signing keys off Cloudflare fleet instances, reject cross-origin mutations, and invalidate expired/pre-password-change admin sessions. Production no longer accepts a public development signing secret.
 
 - Support a server-configured SMTP sender display name and Reply-To on every email path, including browser and Desktop sign-in. Require STARTTLS for port 587, bound connection timeouts, and refresh the transport after protected credential changes without exposing passwords in admin status.
-- Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. This is a staging environment, not a new stable release.
+- Add an operator-owned Cloudflare test instance at `alpha.bolt.gives`, routed to the existing isolated alpha backend rather than production. Use disposable projects on staging.
 - Proxy custom-domain collaboration WebSocket upgrades through the configured backend, preserve the upgrade response, and reject cross-origin requests and self-proxy loops.
 - Use the configured FREE streaming relay on custom Cloudflare domains, not only `pages.dev`. Validate caller CSRF before attaching a trusted relay credential; ignore spoofed inbound relay headers during that validation.
-- Keep the next patch focused on reproduced bugs, Supabase reliability and end-to-end acceptance rather than new features. Follow-up/browser failures discovered during staging are still open until verified.
+- Keep Supabase connection replacement, legacy MagnetAPI follow-up acceptance and the independent Windows rewrite visible in the roadmap. They are not claimed as completed by this patch.
 
 ## v4.1.1 - 2026-09-15
 

@@ -1,5 +1,4 @@
 import {
-  createCookie,
   json,
   redirect,
   type ActionFunctionArgs,
@@ -28,6 +27,13 @@ import type {
   ManagedInstanceSupport,
 } from '@bolt/control-plane/lib/managed-instances';
 import { getPublicUrlConfig } from '@bolt/core/lib/public-urls';
+import {
+  createAdminSessionCookie,
+  isAuthenticatedAdminSession,
+  requirePrivilegedAdminSession,
+  type TenantAdminSession,
+} from '~/lib/.server/admin-session';
+import { InstancePolicy } from '~/components/admin/InstancePolicy';
 import { APP_VERSION } from '@bolt/core/lib/version';
 
 type TenantRecord = {
@@ -126,53 +132,6 @@ function formatAdminTimestamp(value: string | null | undefined) {
     timeStyle: 'short',
     timeZone: 'UTC',
   }).format(parsed);
-}
-
-function getTenantAdminCookieSecret() {
-  return (
-    (typeof globalThis.process !== 'undefined' && globalThis.process.env?.BOLT_TENANT_ADMIN_COOKIE_SECRET?.trim()) ||
-    'bolt-tenant-admin-dev-secret-change-me'
-  );
-}
-
-function createAdminSessionCookie() {
-  const secure = typeof process !== 'undefined' ? process.env.NODE_ENV === 'production' : true;
-  return createCookie(secure ? '__Host-bolt_tenant_admin' : 'bolt_tenant_admin', {
-    httpOnly: true,
-    path: '/',
-    sameSite: 'lax',
-    secure,
-    maxAge: 60 * 60 * 12,
-    secrets: [getTenantAdminCookieSecret()],
-  });
-}
-
-type TenantAdminSession = {
-  username: string;
-  issuedAt: string;
-};
-
-function isAuthenticatedAdminSession(
-  session: TenantAdminSession | null | undefined,
-  admin: TenantAdminRecord | undefined,
-) {
-  return Boolean(session?.username && admin?.username && session.username === admin.username);
-}
-
-function requirePrivilegedAdminSession(
-  session: TenantAdminSession | null | undefined,
-  admin: TenantAdminRecord | undefined,
-  actionLabel: string,
-) {
-  if (!isAuthenticatedAdminSession(session, admin)) {
-    return 'Sign in as tenant admin first.';
-  }
-
-  if (admin?.mustChangePassword) {
-    return `Change the default admin password before ${actionLabel}.`;
-  }
-
-  return null;
 }
 
 function getRuntimeControlBaseUrl() {
@@ -344,12 +303,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const origin = request.headers.get('Origin');
+
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') {
+    return json({ error: 'Cross-origin admin request blocked.' }, { status: 403 });
+  }
+
   const adminSessionCookie = createAdminSessionCookie();
   const formData = await request.formData();
   const intent = String(formData.get('intent') || '');
 
+  if (intent === 'instance-policy') {
+    const status = await fetchRuntimeJson<TenantAdminStatusPayload>('/tenant-admin/status');
+    const session = await adminSessionCookie.parse(request.headers.get('Cookie'));
+    const error = requirePrivilegedAdminSession(session, status.admin, 'changing the instance policy');
+
+    if (error) {
+      return json({ error }, { status: 401 });
+    }
+
+    await fetchRuntimeJson('/tenant-admin/instance-policy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ singleInstancePerUser: formData.get('singleInstancePerUser') === 'on' }),
+    });
+
+    return redirect('/admin', { status: 303 });
+  }
+
   if (intent === 'logout') {
-    return redirect('/tenant-admin', {
+    return redirect('/admin', {
       status: 303,
       headers: {
         'Set-Cookie': await adminSessionCookie.serialize('', { maxAge: 0 }),
@@ -373,7 +356,7 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ error: 'Invalid tenant admin credentials.' }, { status: 400 });
     }
 
-    return redirect('/tenant-admin', {
+    return redirect('/admin', {
       status: 303,
       headers: {
         'Set-Cookie': await adminSessionCookie.serialize({
@@ -418,7 +401,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin', { status: 303 });
+    return redirect('/admin', { status: 303 });
   }
 
   if (intent === 'change-admin-password') {
@@ -447,7 +430,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin', { status: 303 });
+    return redirect('/admin', { status: 303 });
   }
 
   if (intent === 'toggle-tenant-status') {
@@ -478,7 +461,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin', { status: 303 });
+    return redirect('/admin', { status: 303 });
   }
 
   if (intent === 'approve-tenant') {
@@ -508,7 +491,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/admin');
   }
 
   if (intent === 'issue-tenant-invite') {
@@ -539,7 +522,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/admin');
   }
 
   if (intent === 'reset-tenant-password') {
@@ -570,7 +553,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/admin');
   }
 
   if (intent === 'refresh-managed-instance' || intent === 'suspend-managed-instance') {
@@ -620,7 +603,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/admin');
   }
 
   if (intent === 'configure-smtp' || intent === 'clear-smtp') {
@@ -664,7 +647,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin', { status: 303 });
+    return redirect('/admin', { status: 303 });
   }
 
   if (intent === 'send-client-email') {
@@ -718,7 +701,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    return redirect('/tenant-admin');
+    return redirect('/admin');
   }
 
   return json({ error: 'Unknown action.' }, { status: 400 });
@@ -1181,7 +1164,7 @@ export default function TenantAdminPage() {
                               Apply filters
                             </button>
                             <a
-                              href={`/tenant-admin?${new URLSearchParams({
+                              href={`/admin?${new URLSearchParams({
                                 search: clientProfileFilters.search,
                                 company: clientProfileFilters.company,
                                 country: clientProfileFilters.country,
@@ -1489,6 +1472,7 @@ export default function TenantAdminPage() {
                     </span>
                   </div>
 
+                  <InstancePolicy enabled={managedSupport.singleInstancePerUser !== false} />
                   {!managedSupport.supported ? (
                     <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-bolt-elements-textPrimary">
                       {managedSupport.reason}

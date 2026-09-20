@@ -2,7 +2,7 @@
 
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
-[![Current release](https://img.shields.io/badge/release-v4.1.1-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.1)
+[![Current release](https://img.shields.io/badge/release-v4.1.2-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.2)
 [![Roadmap](https://img.shields.io/badge/roadmap-reliability%20%26%20native%20Windows-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
@@ -12,15 +12,15 @@
 
 [Try bolt.gives](https://bolt.gives) | [Report a bug](https://github.com/embire2/bolt.gives/issues/new/choose) | [Share feedback](https://github.com/embire2/bolt.gives/discussions) | [Read the roadmap](ROADMAP.md)
 
-> **Next release: reliability first, not new features.** We are testing fixes on the dedicated [alpha test instance](https://alpha.bolt.gives/chat) before production rollout. Alpha may contain unfinished changes: use disposable projects, not important data. See the [test environment guide](docs/operations/alpha-staging.md) and [actionable bug-fix queue](ROADMAP.md#next-patch-bug-fixes-only).
+> **Reliability first.** Each release is tested on the dedicated [alpha test instance](https://alpha.bolt.gives/chat) before production rollout. Alpha may contain unfinished changes: use disposable projects, not important data. See the [test environment guide](docs/operations/alpha-staging.md) and [actionable bug-fix queue](ROADMAP.md#next-patch-bug-fixes-only).
 
-> **v4.1.1, 15 September 2026:** the stable v4.1.0 reliability release plus a Cloudflare readiness compatibility correction found during fleet acceptance. The original v4.1.0 tag remains unchanged. Production runs the isolated application and non-root project runtime, with authenticated control-plane access and publicly trusted per-project Preview HTTPS. [Current release notes and installation](docs/releases/v4.1.1.md) describe the patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the combined reliability work and validation limits.
+> **v4.1.2, 20 September 2026:** hosted FREE now uses **GLM 5.3 Flash** through OpenRouter, with **20 API credits per GMT+2 day**, approximately 20 active coding minutes. Account-bound instance creation, an operator-controlled one-instance limit, `/admin` on configured instance domains, custom-domain relay/collaboration fixes, and consistent secure outgoing email are included. [Release notes and installation](docs/releases/v4.1.2.md) describe this patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the underlying isolated runtime and recovery work.
 
 **What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.
 
 **The stuck-repair bug is reproduced and fixed.** A browser hook crash followed by a late successful HTML response could cancel repair and falsely report Ready while source was broken. That race now preserves Repairing, restores the last-good source, and then restores visible Preview. [Before/after evidence](docs/quality/2026-09-15-browser-recovery.md) distinguishes the injected browser error from real-provider generation. Intentional stop also no longer triggers an unwanted Preview restart.
 
-**Validation:** 1,481 tests pass, nine are skipped, and boundaries, typecheck, production build and bundle budgets pass. Lint has zero errors and ten existing warnings. Real Chromium journeys cover FREE/Luna generation, follow-up, saved history and publishing; recovery tests inject actual source/browser failures. Six first-party template packs pass real Preview smoke checks, including persisted Calendar event identities. [Installer CI](https://github.com/embire2/bolt.gives/actions/runs/34972966963) covers Ubuntu 22.04/24.04 clean/repair contracts and PowerShell 5.1/7.
+**Validation policy:** release checks cover module boundaries, types, lint, unit/integration tests, production artifacts and browser bundle budgets. A real Chromium journey must generate files, load Preview, apply a follow-up to the same project, restore history and verify public publishing. Quota, authenticated provisioning and admin proxy/session regressions are tested separately. Recovery fixtures inject failures explicitly; they are not represented as real-provider generation. [Installer CI](https://github.com/embire2/bolt.gives/actions/workflows/installer-recovery.yml) covers clean/repair contracts; native Windows acceptance remains independent.
 
 **Billing is active:** production Upgrade opens a USD 5 monthly Stripe subscription Checkout. The dedicated signed webhook is enabled; unsigned/tampered requests are rejected, replay is tested, and disposable PostgreSQL tests cover activation, renewal and duplicate events. The live test Checkout was expired without charging a card. A real paid transaction is reserved for the operator's acceptance test.
 
@@ -99,7 +99,7 @@ Version 4 replaced separate, competing Chat and Workspace routes with one contin
 - The selected model can change during a project without discarding history.
 - Recovery is bounded. The UI shows a stable repairing state instead of looping forever between Working and Needs Repair.
 
-The hosted FREE default is **ChatGPT-Luna - Medium effort** through the protected server-side MagnetAPI transport. Compatibility choices for Opus 4.8, Sonnet 5, and Fable 5 remain available without embedding the operator credential in the browser bundle or generated project.
+The hosted FREE model is **GLM 5.3 Flash**, using the verified OpenRouter ID [`z-ai/glm-5.3-flash`](https://openrouter.ai/z-ai/glm-5.3-flash). Each account receives **20 API credits per day**, approximately **20 minutes of active generation**, resetting at **00:00 GMT+2**. Idle editing is not charged. The funded key stays on the operator's server, never in this repository, generated projects or managed Cloudflare instances. When the allowance is exhausted, use your own provider key, upgrade, or wait for reset.
 
 The separate **MagnetAPI** provider uses your own User API Key. Sign in at [MagnetAPI.org](https://magnetapi.org), buy a plan, create a key and enter it in bolt.gives. The dropdown includes ChatGPT-Luna, ChatGPT-5.6 Ultra, Opus 5, Sonnet 5 and Fable 5.1 compatibility labels, plus account-specific model discovery. Availability depends on the upstream account; personal requests never fall back to the operator-funded FREE key. MagnetAPI's advertised discount is its pricing claim, not a bolt.gives price guarantee.
 
@@ -140,7 +140,9 @@ The separate **MagnetAPI** provider uses your own User API Key. Sign in at [Magn
 
 ### Operate a Fleet
 
-- Managed instance registration and assignment.
+- Signed-in managed instance registration and account-owned assignment.
+- One instance per account by default, with an operator on/off toggle in `/admin`.
+- Admin access at `https://your-instance.example/admin`; protected backend authentication is retained.
 - Release-SHA rollout guards.
 - Health-verified refreshes and last-good rollback data.
 - Tenant, profile, audit, mail, and deployment control-plane surfaces.
@@ -234,7 +236,7 @@ First we will prove a small editor/terminal/Preview slice and measure it against
 
 The supported self-host target is Ubuntu 20.04 or newer. A current Ubuntu LTS release is recommended.
 
-> **Stable versus development (B04):** the stable no-database installer has a mandatory-registration gap. The unreleased Phase 1 installer instead creates a private single-owner login without PostgreSQL or SMTP. Until those changes are released, stable installs should configure platform profile storage or use `--with-postgres`. Installer configuration/repair tests and isolated application journeys are not proof of a complete clean-machine apt/systemd/Caddy installation.
+> **Database-free installation:** fresh installs create a private single-owner login without PostgreSQL or SMTP. Use `--with-postgres` only for optional platform profile/admin storage. Installer CI covers configuration and repair contracts; complete Windows/WSL reboot-resume remains separate acceptance work.
 
 ### Requirements
 
@@ -255,7 +257,7 @@ chmod +x install-bolt-gives.sh
 ./install-bolt-gives.sh
 ```
 
-The development installer:
+The installer:
 
 - verifies Ubuntu and refuses root execution;
 - installs Node.js 22 and pnpm 9.14.4;
@@ -268,7 +270,7 @@ The development installer:
 
 Recovery is bounded and explicit: failed downloads/package commands retry; dependency repairs retain the frozen lockfile; failed builds restore previous build artifacts; invalid Caddy configuration is rolled back without forcibly restarting the shared proxy. Repairs never reset an existing PostgreSQL role's password or take over another role's database. A failed Git update leaves the current installation and private configuration in place. Already-running services are explicitly restarted after a successful update, and health checks use finite timeouts. Rerun the same command after correcting a reported prerequisite. Disk exhaustion, invalid credentials, conflicting local changes, DNS, and operating-system reboots cannot be safely repaired by pretending success.
 
-### Windows PowerShell Setup (Development)
+### Windows PowerShell Setup
 
 The public [install.ps1](install.ps1) installs the **open-source server in Ubuntu on WSL2**, not the separately versioned native Windows desktop application. It supports Windows PowerShell 5.1 and PowerShell 7. Review the script in the validation checkout, then run:
 
@@ -282,9 +284,9 @@ WSL installation requests administrator approval when needed. If a reboot or fir
 
 PowerShell 5.1/7 and Ubuntu 22.04/24.04 clean/repair CI pass. Full Windows/WSL installation and reboot-resume remain unverified; treat Windows setup as a supported bootstrap path with that explicit acceptance limitation, not a newly released native desktop client.
 
-### Single-Owner Mode (Unreleased)
+### Single-Owner Mode
 
-On a fresh database-free Phase 1 installation, the installer sets `BOLT_SELF_HOST_MODE=single-user` and generates `BOLT_SELF_HOST_ACCESS_TOKEN` in the protected `.env.local` file inside the installation directory (by default, `$HOME/bolt.gives`). Open that file privately on your server, enter the owner token in the browser's **Your private workspace** form, then select an AI provider and enter your own API key. Do not share or commit the owner token.
+On a fresh database-free installation, the installer sets `BOLT_SELF_HOST_MODE=single-user` and generates `BOLT_SELF_HOST_ACCESS_TOKEN` in the protected `.env.local` file inside the installation directory (by default, `$HOME/bolt.gives`). Open that file privately on your server, enter the owner token in the browser's **Your private workspace** form, then select an AI provider and enter your own API key. Do not share or commit the owner token.
 
 This is one private owner, not an unauthenticated multi-user service. The profile and hashed sessions survive runtime restarts in a mode-`0600` file outside project source. Repair installs preserve the token; explicitly rotating it invalidates prior sessions while retaining the owner identity. Runtime HTTP and Preview WebSocket requests pass through owner authentication. Keep the runtime listener private on loopback.
 
@@ -344,7 +346,7 @@ browser bindings. Port 587 uses STARTTLS, not implicit TLS; port 465 uses
 implicit TLS. `BOLT_ADMIN_SMTP_FROM` is the sender email address,
 `BOLT_ADMIN_SMTP_FROM_NAME` is its optional display name, and
 `BOLT_ADMIN_SMTP_REPLY_TO` sets an optional default Reply-To across outgoing
-messages. These sender-name and Reply-To settings are part of the next patch.
+messages. Sender-name and Reply-To support is included in v4.1.2.
 
 If the admin panel has saved SMTP overrides, update those too: the protected
 runtime settings file takes precedence over service environment values. Hosted

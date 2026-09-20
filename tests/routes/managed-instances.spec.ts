@@ -9,6 +9,7 @@ vi.mock('@bolt/runtime/lib/.server/runtime-control', () => ({
 }));
 
 const route = await import('~/routes/managed-instances');
+const authorization = `BoltProfile 11111111-1111-1111-1111-111111111111.${'a'.repeat(40)}`;
 
 describe('managed instances route', () => {
   beforeEach(() => {
@@ -26,6 +27,10 @@ describe('managed instances route', () => {
 
   it('falls back to the signed session cookie instance when runtime session lookup fails', async () => {
     runtimeControlMocks.fetchRuntimeControlJson.mockImplementation(async (pathname: string) => {
+      if (pathname === '/profile/session') {
+        return { ok: true, profile: { id: 'owner', name: 'Owner Example', email: 'owner@example.com' } };
+      }
+
       if (pathname === '/managed-instances/spawn') {
         return {
           ok: true,
@@ -64,7 +69,7 @@ describe('managed instances route', () => {
 
     const actionRequest = new Request('https://alpha1.bolt.gives/managed-instances', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: authorization },
       body: new URLSearchParams({
         intent: 'spawn',
         name: 'Owner Example',
@@ -91,7 +96,7 @@ describe('managed instances route', () => {
 
     const loaderResponse = await route.loader({
       request: new Request('https://alpha1.bolt.gives/managed-instances', {
-        headers: { Cookie: String(setCookie).split(';')[0] },
+        headers: { Cookie: String(setCookie).split(';')[0], Authorization: authorization },
       }),
       context: {},
       params: {},
@@ -108,4 +113,17 @@ describe('managed instances route', () => {
       currentGitSha: 'abc1234',
     });
   }, 30000);
+
+  it('rejects anonymous registration before requesting infrastructure', async () => {
+    const response = await route.action({
+      request: new Request('https://alpha.bolt.gives/managed-instances', {
+        method: 'POST',
+        body: new URLSearchParams({ intent: 'spawn', email: 'owner@example.com' }),
+      }),
+      context: {},
+      params: {},
+    } as any);
+    expect(response.status).toBe(401);
+    expect(runtimeControlMocks.fetchRuntimeControlJson).not.toHaveBeenCalled();
+  });
 });

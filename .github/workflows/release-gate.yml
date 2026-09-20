@@ -49,6 +49,7 @@ jobs:
             echo "BOLT_SELF_HOST_ACCESS_TOKEN=$owner_token"
             echo "BOLT_E2E_OWNER_ACCESS_TOKEN=$owner_token"
             echo "BOLT_PROFILE_COOKIE_SECRET=$cookie_secret"
+            echo "BOLT_TENANT_ADMIN_COOKIE_SECRET=$cookie_secret"
           } >> "$GITHUB_ENV"
 
       - name: Start local runtime stack

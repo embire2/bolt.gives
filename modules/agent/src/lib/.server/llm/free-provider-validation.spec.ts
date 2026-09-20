@@ -18,7 +18,7 @@ describe('validateFreeProviderSelection', () => {
           modelName,
           apiKey: 'fixture-key',
         }),
-      ).toEqual({ resolvedModelName: modelName, usedFallback: false });
+      ).toEqual({ resolvedModelName: FREE_HOSTED_MODEL, usedFallback: modelName !== FREE_HOSTED_MODEL });
     }
     expect(fetchSpy).not.toHaveBeenCalled();
   });

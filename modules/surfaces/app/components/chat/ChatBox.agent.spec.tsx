@@ -62,7 +62,7 @@ function renderAgentComposer(overrides: Record<string, unknown> = {}) {
     qrModalOpen: false,
     setQrModalOpen: vi.fn(),
     handleFileUpload: vi.fn(),
-    model: 'gpt-5.6-sol',
+    model: 'z-ai/glm-5.3-flash',
     setModel: vi.fn(),
     agentMode: 'chat' as const,
     setAgentMode: vi.fn(),
@@ -86,18 +86,15 @@ describe('ChatBox Agent Mode composer', () => {
     const props = renderAgentComposer();
 
     expect(screen.getByTestId('agent-compact-composer')).toBeTruthy();
-    expect(screen.getByLabelText('FREE coding model')).toHaveProperty('value', 'gpt-5.6-sol');
+    expect(screen.getByText('FREE / GLM 5.3 Flash')).toBeTruthy();
     expect(screen.getByLabelText('Agent behavior')).toHaveProperty('value', 'chat');
     expect(screen.getByRole('textbox').getAttribute('placeholder')).toContain('build or change');
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'FREE coding model' }), {
-      target: { value: 'claude-opus-4-8' },
-    });
     fireEvent.change(screen.getByRole('combobox', { name: 'Agent behavior' }), {
       target: { value: 'plan' },
     });
 
-    expect(props.setModel).toHaveBeenCalledWith('claude-opus-4-8');
+    expect(props.setModel).not.toHaveBeenCalled();
     expect(props.setAgentMode).toHaveBeenCalledWith('plan');
   });
 

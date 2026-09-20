@@ -1,12 +1,10 @@
 import type { LanguageModelV1 } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { BaseProvider } from '@bolt/agent/lib/modules/llm/base-provider';
 import type { ModelInfo } from '@bolt/agent/lib/modules/llm/types';
 import {
   FREE_HOSTED_API_BASE_URL,
   FREE_HOSTED_API_TOKEN_KEY,
-  FREE_HOSTED_MODEL,
   FREE_HOSTED_MODEL_MAX_COMPLETION_TOKENS,
   FREE_HOSTED_MODEL_REASONING_EFFORT,
   FREE_HOSTED_MODEL_MAX_TOKENS,
@@ -126,7 +124,7 @@ export function normalizeHostedFreeRequest(payload: unknown): unknown {
     }
   }
 
-  const isLunaModel = payload.model === FREE_HOSTED_MODEL;
+  const isLunaModel = payload.model === 'gpt-5.6-sol';
   const normalizedPayload = {
     ...payload,
     instructions: instructions.filter(Boolean).join('\n\n'),
@@ -816,10 +814,10 @@ export default class FreeProvider extends BaseProvider {
     providerSettings?: Record<string, IProviderSetting>;
     onStreamActivity?: () => void;
   }): LanguageModelV1 {
-    const { serverEnv, apiKeys, providerSettings } = options;
+    const { serverEnv } = options;
     const { apiKey } = this.getProviderBaseUrlAndKey({
-      apiKeys,
-      providerSettings: providerSettings?.[this.name],
+      apiKeys: undefined,
+      providerSettings: undefined,
       serverEnv: serverEnv as any,
       defaultBaseUrlKey: '',
       defaultApiTokenKey: FREE_HOSTED_API_TOKEN_KEY,
@@ -831,25 +829,11 @@ export default class FreeProvider extends BaseProvider {
 
     const resolvedModel = resolveHostedFreeModel(options.model);
 
-    if (isHostedFreeClaudeModel(resolvedModel)) {
-      const magnetApi = createAnthropic({
-        apiKey,
-        baseURL: FREE_HOSTED_API_BASE_URL,
-        fetch: hostedFreeClaudeFetch,
-      });
-
-      return magnetApi(resolvedModel) as LanguageModelV1;
-    }
-
-    const magnetApi = createOpenAI({
+    const openRouter = createOpenRouter({
       apiKey,
       baseURL: FREE_HOSTED_API_BASE_URL,
-      compatibility: 'strict',
-      fetch: options.onStreamActivity
-        ? (input, init) => hostedFreeFetchWithActivity(input, init, options.onStreamActivity)
-        : hostedFreeFetch,
     });
 
-    return magnetApi.responses(resolvedModel) as LanguageModelV1;
+    return openRouter.chat(resolvedModel) as LanguageModelV1;
   }
 }

@@ -379,8 +379,8 @@ function assertRequiredEnv(env) {
     missing.push('BOLT_FREE_USAGE_QUOTA_SECRET');
   }
 
-  if (!String(env.MAGNET_API_KEY || '').trim()) {
-    missing.push('MAGNET_API_KEY');
+  if (!String(env.BOLT_FREE_OPENROUTER_API_KEY || '').trim()) {
+    missing.push('BOLT_FREE_OPENROUTER_API_KEY');
   }
 
   if (missing.length > 0) {
@@ -391,12 +391,12 @@ function assertRequiredEnv(env) {
 function printHelp() {
   console.log(`Usage: node scripts/cloudflare-free-provider-config.mjs [--project bolt-gives] [--include-managed] [--dry-run]
 
-Sync Cloudflare Pages projects for the hosted FREE provider without exposing the upstream MagnetAPI key.
+Sync Cloudflare Pages projects for the hosted FREE provider without exposing the upstream OpenRouter key.
 
 Required server env:
   CLOUDFLARE_API_TOKEN
   CLOUDFLARE_ACCOUNT_ID
-  MAGNET_API_KEY
+  BOLT_FREE_OPENROUTER_API_KEY
   BOLT_HOSTED_FREE_RELAY_SECRET
   BOLT_FREE_USAGE_QUOTA_SECRET (or FREE_USAGE_QUOTA_SECRET; falls back to relay secret)
 

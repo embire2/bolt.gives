@@ -9,7 +9,7 @@ const upstreamFetch = globalThis.fetch;
 
 globalThis.fetch = async (...args) => {
   const url = new URL(typeof args[0] === 'object' && 'url' in args[0] ? args[0].url : String(args[0]));
-  const observe = url.hostname === 'magnetapi.org' || url.hostname.endsWith('.magnetapi.org');
+  const observe = url.hostname === 'openrouter.ai';
   const started = Date.now();
 
   if (observe && process.env.BOLT_E2E_HOOK_REPLAY === '1') {

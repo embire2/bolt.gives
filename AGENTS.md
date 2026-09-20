@@ -53,13 +53,13 @@ Preserve these behaviors unless a product decision explicitly replaces them:
 
 ### Hosted Models and Quotas
 
-The managed `FREE` provider is server-side only. Its default `gpt-5.6-sol` route is shown as ChatGPT-Luna and always uses medium reasoning effort. The compatibility choices `claude-opus-4-8`, `claude-sonnet-5`, and `claude-fable-5` remain available, and users may switch model during a project without losing history or runtime context.
+The managed `FREE` provider is server-side only. It uses OpenRouter `z-ai/glm-5.3-flash`, displayed as GLM 5.3 Flash. Older persisted FREE model selections normalize to this model without losing project history or runtime context.
 
-MagnetAPI.org is the managed FREE upstream transport: Responses API for ChatGPT-Luna and Messages API for Claude models. ChatGPT generation must pass through the strict server-side file-action bridge rather than emitting unbounded prose artifacts. `MagnetAPI` is also a separate user-key provider: hosted users must supply their own MagnetAPI User API Key, and that path must never fall back to the operator-funded FREE credential. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
+The funded OpenRouter key lives in protected `BOLT_FREE_OPENROUTER_API_KEY` server configuration. Never distribute it to managed Pages instances: they use the authenticated FREE relay. `MagnetAPI` and `OpenRouter` are separate user-key providers and must never fall back to the operator-funded credential. Preserve the existing Magnet Responses/Messages normalization and file-action bridge for personal-key compatibility. Provider credentials must never enter browser bundles, generated projects, logs, screenshots, managed instances, or commits.
 
 Validate provider configuration locally; do not gate generation on a separate paid test prompt. Actual generation determines upstream availability. Intentional runtime shutdown must invalidate pending health/repair work, never restore older source in response to the expected disconnect.
 
-Hosted FREE profiles receive 100 Agent tokens per GMT+2 day, calibrated to useful coding time rather than raw model-token accounting. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month. Entitlements and resets come from signed server-side billing events, not browser redirects.
+Hosted FREE profiles receive 20 API credits per GMT+2 day, calibrated at one credit per minute of server-measured active generation. Idle editor time is not charged. Keep ledger writes serialized and usage records idempotent; preserve used coding time when migrating older ledger versions. Custom Domain accounts receive 10,000 provider-reported Agent tokens per successfully paid month. Entitlements and resets come from signed server-side billing events, not browser redirects.
 
 ### Desktop Boundary
 
@@ -161,7 +161,7 @@ Runtime-node steady state uses the non-root `bolt-runtime-agent` with SSH keys a
 
 ## Managed Instances and Publishing
 
-`/managed-instances` is registration-first: one client receives one assigned instance. Show the hostname returned by the control plane, never a guessed hostname. Operators manage profiles, assignments, refreshes, suspensions, rollout history, and email activity through `admin.bolt.gives`.
+`/managed-instances` requires a signed-in profile and derives ownership from that server-verified identity, not the form email. One account receives one instance by default. The operator can toggle `BOLT_MANAGED_INSTANCE_ONE_PER_USER` in `/admin`; overrides are protected runtime settings and existing instances are retained. Show the hostname returned by the control plane, never a guessed hostname. Operators manage profiles, assignments, refreshes, suspensions, rollout history, and email activity through `/admin` on their configured domain; the legacy admin hostname remains supported. Managed Cloudflare `/admin` requests proxy to the configured protected backend, not a copied operator signing secret.
 
 Free project publishing uses the configured protected Cloudflare account and a persistent Pages advanced-mode Worker at `https://{subdomain}.instances.bolt.gives`. Operational and reserved names such as `admin`, `create`, `alpha1`, and `ahmad` cannot be assigned to projects. Verify deployment through the runtime control plane and then load the public application; a successful API response alone is insufficient.
 

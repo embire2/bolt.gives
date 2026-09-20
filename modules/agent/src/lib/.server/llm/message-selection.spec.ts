@@ -110,11 +110,11 @@ describe('message-selection', () => {
 
   it('keeps an approved FREE model selected for the next prompt', () => {
     const selection = sanitizeSelectionWithApiKeys({
-      selection: { model: 'claude-sonnet-5', provider: 'FREE' },
-      apiKeys: { FREE: 'magnet-server-key' },
+      selection: { model: FREE_HOSTED_MODEL, provider: 'FREE' },
+      apiKeys: {},
     });
 
-    expect(selection).toEqual({ model: 'claude-sonnet-5', provider: 'FREE' });
+    expect(selection).toEqual({ model: FREE_HOSTED_MODEL, provider: 'FREE' });
   });
 
   it('does not allow a client to route FREE through an arbitrary model ID', () => {

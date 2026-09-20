@@ -1,6 +1,7 @@
 import type { ServerBuild } from '@remix-run/cloudflare';
 import { createPagesFunctionHandler } from '@remix-run/cloudflare-pages';
 import { resolveProfileSession } from '../modules/surfaces/app/lib/.server/profile-session';
+import { proxyManagedAdmin } from '../modules/surfaces/app/lib/.server/admin-proxy';
 import {
   createKvRateLimitStore,
   createSecurityHeaders,
@@ -267,6 +268,12 @@ export const onRequest: PagesFunction<PagesEnv> = async (context) => {
   const url = new URL(request.url);
 
   // A generated sibling-origin Preview must not mutate the platform via its runtime proxy.
+  const adminResponse = await proxyManagedAdmin(request, env);
+
+  if (adminResponse) {
+    return adminResponse;
+  }
+
   if (url.pathname === '/runtime/tenant-admin' || url.pathname.startsWith('/runtime/tenant-admin/')) {
     return new Response('Not found', { status: 404 });
   }

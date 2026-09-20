@@ -209,7 +209,7 @@ describe('BaseChat Agent Mode', () => {
       <BaseChat
         chatStarted
         provider={freeProvider}
-        model="gpt-5.6-sol"
+        model="z-ai/glm-5.3-flash"
         setModel={setModel}
         agentMode="chat"
         setAgentMode={setAgentMode}
@@ -217,13 +217,13 @@ describe('BaseChat Agent Mode', () => {
     );
 
     fireEvent.change(await screen.findByRole('combobox', { name: 'FREE coding model' }), {
-      target: { value: 'claude-sonnet-5' },
+      target: { value: 'z-ai/glm-5.3-flash' },
     });
     fireEvent.change(screen.getByRole('combobox', { name: 'Agent behavior' }), {
       target: { value: 'plan' },
     });
 
-    expect(setModel).toHaveBeenCalledWith('claude-sonnet-5');
+    expect(setModel).toHaveBeenCalledWith('z-ai/glm-5.3-flash');
     expect(setAgentMode).toHaveBeenCalledWith('plan');
   });
 

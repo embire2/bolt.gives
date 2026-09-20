@@ -12,7 +12,7 @@ import { getHostedFreeRelaySecret, HOSTED_FREE_RELAY_SECRET_HEADER } from './hos
 const DEFAULT_RUNTIME_CONTROL_BASE_URL = 'http://127.0.0.1:4321/runtime';
 const CANONICAL_RUNTIME_CONTROL_BASE_URL = 'https://bolt.gives/runtime';
 const DEFAULT_FREE_DAILY_LIMIT_USD = 1;
-const DEFAULT_FREE_DAILY_TOKEN_LIMIT = 100;
+const DEFAULT_FREE_DAILY_TOKEN_LIMIT = 20;
 const FREE_QUOTA_RESET_LABEL = '00:00 GMT+2';
 const FREE_QUOTA_ERROR_CODE = 'FREE_PROVIDER_DAILY_LIMIT_EXCEEDED';
 
@@ -54,7 +54,7 @@ export class FreeUsageQuotaExceededError extends Error {
 }
 
 export function buildFreeUsageQuotaLimitMessage() {
-  return `The hosted FREE service has been paused because you have used all 100 Agent tokens for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at ${FREE_QUOTA_RESET_LABEL}.`;
+  return `The hosted FREE service has been paused because you have used all 20 API credits for today. Upgrade to Custom Domain for the $5/month launch price, use your own API key, or wait for your balance to reset at ${FREE_QUOTA_RESET_LABEL}.`;
 }
 
 function getRuntimeControlBaseUrl(runtimeEnv: RuntimeEnv = {}, requestUrl = '') {

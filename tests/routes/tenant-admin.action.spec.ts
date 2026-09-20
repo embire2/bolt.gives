@@ -31,7 +31,7 @@ describe('tenant-admin action auth flow', () => {
     const response = await action({ request, context: { cloudflare: {} as never }, params: {} });
     expect(response.status).toBe(303);
     expect(response.headers.get('Set-Cookie')).toContain('bolt_tenant_admin=');
-    expect(response.headers.get('Location')).toBe('/tenant-admin');
+    expect(response.headers.get('Location')).toBe('/admin');
   });
 
   it('forwards smtp configuration writes to the runtime endpoint for authenticated admins', async () => {

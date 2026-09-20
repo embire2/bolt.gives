@@ -41,7 +41,7 @@ try {
 
       return (
         comboboxText.some((text) => text.includes('FREE')) &&
-        comboboxText.some((text) => text.includes('ChatGPT-Luna - Medium effort'))
+        comboboxText.some((text) => text.includes('GLM 5.3 Flash'))
       );
     },
     undefined,
@@ -78,9 +78,13 @@ try {
   }
 
   const providerText = (await page.getByRole('combobox').filter({ hasText: 'FREE' }).first().textContent()) || '';
-  const modelSelect = page.getByRole('combobox', { name: 'FREE coding model' });
-  const modelLabels = (await modelSelect.locator('option').allTextContents()).map((label) => label.trim());
-  const expectedModelLabels = ['ChatGPT-Luna - Medium effort', 'Opus 4.8', 'Sonnet 5', 'Fable 5'];
+  const modelSelect = page.locator('[role="combobox"][aria-controls="model-listbox"]');
+  await modelSelect.click();
+
+  const modelLabels = (await page.locator('#model-listbox [role="option"]').allTextContents()).map((label) =>
+    label.trim(),
+  );
+  const expectedModelLabels = ['GLM 5.3 Flash'];
 
   if (!providerText.includes('FREE')) {
     throw new Error(`Expected FREE provider on startup, received: ${providerText}`);
@@ -92,19 +96,17 @@ try {
     );
   }
 
-  if ((await modelSelect.inputValue()) !== 'gpt-5.6-sol') {
-    throw new Error(`Expected ChatGPT-Luna on startup, received: ${await modelSelect.inputValue()}`);
+  if (!(await modelSelect.textContent())?.includes('GLM 5.3 Flash')) {
+    throw new Error(`Expected GLM 5.3 Flash on startup, received: ${await modelSelect.textContent()}`);
   }
 
-  const selectedFreeModel = await modelSelect.inputValue();
+  await page.locator('#model-listbox [role="option"]').filter({ hasText: 'GLM 5.3 Flash' }).click();
 
-  await modelSelect.selectOption('claude-sonnet-5');
+  const selectedFreeModel = (await context.cookies()).find((cookie) => cookie.name === 'selectedModel')?.value;
 
-  if ((await modelSelect.inputValue()) !== 'claude-sonnet-5') {
-    throw new Error('Expected FREE model selection to switch to Sonnet 5.');
+  if (decodeURIComponent(selectedFreeModel || '') !== 'z-ai/glm-5.3-flash') {
+    throw new Error('The selected FREE model did not persist the current model ID.');
   }
-
-  await modelSelect.selectOption('gpt-5.6-sol');
 
   const providerSelect = page.locator('[role="combobox"][aria-controls="provider-listbox"]');
   await providerSelect.click();

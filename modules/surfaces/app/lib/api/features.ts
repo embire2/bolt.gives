@@ -12,6 +12,13 @@ type FeatureDefinition = Omit<Feature, 'viewed'>;
 
 const FEATURE_FEED: FeatureDefinition[] = [
   {
+    id: 'release-v4.1.2',
+    name: 'v4.1.2: GLM 5.3 Flash, fair daily credits and safer administration',
+    description:
+      'Hosted FREE uses GLM 5.3 Flash through protected OpenRouter routing. Each account gets 20 API credits daily, around 20 active generation minutes. One managed instance per account is the default, with an operator toggle at /admin. This reliability patch also fixes custom-domain streaming/collaboration and outgoing email identity; provider and SMTP keys stay server-side.',
+    releaseDate: '2026-09-20',
+  },
+  {
     id: 'release-v4.0.1',
     name: 'v4.0.1 console-clean Cloudflare projects',
     description:

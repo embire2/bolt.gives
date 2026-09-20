@@ -10,7 +10,7 @@ const targets = (
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
-const models = (process.env.FREE_PROVIDER_SMOKE_MODELS || 'gpt-5.6-sol,claude-opus-4-8,claude-sonnet-5,claude-fable-5')
+const models = (process.env.FREE_PROVIDER_SMOKE_MODELS || 'z-ai/glm-5.3-flash')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);

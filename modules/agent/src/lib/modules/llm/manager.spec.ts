@@ -33,15 +33,9 @@ describe('LLMManager.updateModelList', () => {
     });
 
     expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(
-      expect.arrayContaining([
-        'OpenAI:gpt-5.4',
-        'FREE:gpt-5.6-sol',
-        'FREE:claude-opus-4-8',
-        'FREE:claude-sonnet-5',
-        'FREE:claude-fable-5',
-      ]),
+      expect.arrayContaining(['OpenAI:gpt-5.4', 'FREE:z-ai/glm-5.3-flash']),
     );
-    expect(modelList).toHaveLength(5);
+    expect(modelList).toHaveLength(2);
   });
 
   it('respects providers explicitly disabled in settings', async () => {
@@ -73,13 +67,8 @@ describe('LLMManager.updateModelList', () => {
     });
 
     expect(modelList.map((model) => `${model.provider}:${model.name}`)).toEqual(
-      expect.arrayContaining([
-        'FREE:gpt-5.6-sol',
-        'FREE:claude-opus-4-8',
-        'FREE:claude-sonnet-5',
-        'FREE:claude-fable-5',
-      ]),
+      expect.arrayContaining(['FREE:z-ai/glm-5.3-flash']),
     );
-    expect(modelList).toHaveLength(4);
+    expect(modelList).toHaveLength(1);
   });
 });

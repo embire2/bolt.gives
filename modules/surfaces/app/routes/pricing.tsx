@@ -182,9 +182,9 @@ export default function PricingPage() {
         <section className="grid border-b border-[#11130f] lg:grid-cols-2">
           <article className="border-b border-[#11130f] p-8 lg:border-b-0 lg:border-r sm:p-12">
             <div className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-[#406100]">FREE</div>
-            <h2 className="mt-5 font-serif text-5xl leading-none">At least 30 coding minutes daily</h2>
+            <h2 className="mt-5 font-serif text-5xl leading-none">20 API credits daily</h2>
             <p className="mt-5 max-w-xl leading-7 text-[#34382f]">
-              The 100 Agent-token allowance is calibrated to active generation time so it covers at least 30 minutes of
+              The 20 API-credit allowance is calibrated to active generation time so it covers around 20 minutes of
               coding. Build, preview, iterate, and publish to a shareable <code>*.instances.bolt.gives</code> Cloudflare
               Worker; the balance resets every day at 00:00 GMT+2, or use your own provider key without this hosted
               allowance.

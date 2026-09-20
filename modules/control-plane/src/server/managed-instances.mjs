@@ -403,6 +403,7 @@ export function getManagedInstanceBySessionSecret(registry, sessionSecret) {
  * @property {string} [rootDomain]
  * @property {number} [trialDays]
  * @property {string | undefined} [sessionSecret]
+ * @property {boolean} [singleInstancePerUser]
  */
 
 /**
@@ -411,7 +412,15 @@ export function getManagedInstanceBySessionSecret(registry, sessionSecret) {
  */
 export function claimManagedInstanceTrial(
   registry,
-  { name, email, requestedSubdomain, rootDomain = 'pages.dev', trialDays = 0, sessionSecret = undefined },
+  {
+    name,
+    email,
+    requestedSubdomain,
+    rootDomain = 'pages.dev',
+    trialDays = 0,
+    sessionSecret = undefined,
+    singleInstancePerUser = true,
+  },
 ) {
   const normalizedName = String(name || '').trim();
   const normalizedEmail = normalizeManagedInstanceEmail(email);
@@ -421,7 +430,11 @@ export function claimManagedInstanceTrial(
   const existingSessionInstance =
     sessionSecretHash && registry.instances.find((instance) => instance.clientSessionSecretHash === sessionSecretHash);
 
-  if (existingSessionInstance) {
+  if (
+    existingSessionInstance &&
+    existingSessionInstance.clientKeyHash === clientKeyHash &&
+    (singleInstancePerUser || existingSessionInstance.projectName === normalizedSubdomain)
+  ) {
     return {
       kind: 'existing',
       sessionSecret,
@@ -431,7 +444,7 @@ export function claimManagedInstanceTrial(
 
   const existingInstance = registry.instances.find((instance) => instance.clientKeyHash === clientKeyHash) || null;
 
-  if (existingInstance) {
+  if (existingInstance && singleInstancePerUser) {
     if (sessionSecretHash && sessionSecretHash === existingInstance.clientSessionSecretHash) {
       return {
         kind: 'existing',
@@ -462,7 +475,9 @@ export function claimManagedInstanceTrial(
     };
   }
 
-  const effectiveSessionSecret = String(sessionSecret || createManagedInstanceSessionSecret());
+  const effectiveSessionSecret = String(
+    (!existingSessionInstance && sessionSecret) || createManagedInstanceSessionSecret(),
+  );
   const effectiveRootDomain = String(rootDomain || registry.rootDomain || 'pages.dev');
   const routeHostname = buildManagedInstanceHostname(normalizedSubdomain, effectiveRootDomain);
   const instance = {

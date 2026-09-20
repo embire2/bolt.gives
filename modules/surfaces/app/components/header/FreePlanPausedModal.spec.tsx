@@ -17,7 +17,7 @@ describe('FreePlanPausedModal', () => {
     render(<FreePlanPausedModal open resetAt="2026-07-29T22:00:00.000Z" onDismiss={() => undefined} />);
 
     expect(screen.getByText('FREE service paused')).toBeTruthy();
-    expect(screen.getByText(/daily allocation of 100 Agent tokens/i)).toBeTruthy();
+    expect(screen.getByText(/daily allocation of 20 API credits/i)).toBeTruthy();
     expect(screen.getByText('$5')).toBeTruthy();
     expect(screen.getByText(/\$20\/month/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Upgrade for \$5\/month/i })).toBeTruthy();
