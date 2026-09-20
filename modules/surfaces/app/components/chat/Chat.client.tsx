@@ -96,7 +96,7 @@ import {
   isHostedFreeFundingError,
   shouldIgnoreDisconnectAfterCompletedRun,
 } from '@bolt/agent/lib/runtime/recovery-errors';
-import { securedFetch } from '@bolt/project/lib/hooks/useCsrf';
+import { securedChatFetch } from '@bolt/project/lib/hooks/chat-fetch';
 import {
   buildStarterBootstrapMessages,
   findPendingStarterRequest,
@@ -695,7 +695,7 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
-      fetch: securedFetch,
+      fetch: securedChatFetch,
       headers: { 'X-Bolt-Selected-Provider': provider.name },
       body: {
         apiKeys,

@@ -3258,7 +3258,7 @@ Next: I am sending the final result now.`,
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
         Connection: 'keep-alive',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Text-Encoding': 'chunked',
         'X-Bolt-Stream-Deadline-Ms': responseMaxDurationMs?.toString() || 'disabled',
       },

@@ -2197,6 +2197,14 @@ describe('runtime server workspace isolation', () => {
         sessionPreviewPort: 6102,
         attempt: 9,
       }),
+    ).toBe(true);
+    expect(
+      shouldRetryPreviewOwnershipMismatch({
+        method: 'GET',
+        requestedPort: 6102,
+        sessionPreviewPort: 6102,
+        attempt: 12,
+      }),
     ).toBe(false);
   });
 

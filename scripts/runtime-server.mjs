@@ -286,6 +286,7 @@ const POST_SYNC_PREVIEW_PROBE_DELAY_MS = Number(process.env.RUNTIME_PREVIEW_PROB
 const POST_SYNC_PREVIEW_PROBE_WINDOW_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_WINDOW_MS || '12000');
 const POST_SYNC_PREVIEW_PROBE_INTERVAL_MS = Number(process.env.RUNTIME_PREVIEW_PROBE_INTERVAL_MS || '1500');
 const PREVIEW_PROXY_RETRY_DELAYS_MS = [200, 500, 1000, 1500, 3000, 4000, 5000, 7000, 8000];
+const PREVIEW_OWNERSHIP_RETRY_DELAYS_MS = [...PREVIEW_PROXY_RETRY_DELAYS_MS, 10000, 10000, 10000];
 const PRESERVED_DIRS = GENERATED_WORKSPACE_DIRECTORIES;
 const VITE_MAIN_ENTRY_SRC_RE =
   /<script[^>]+type=(['"])module\1[^>]+src=(['"])(\/src\/main\.(tsx|jsx))\2[^>]*><\/script>/i;
@@ -2747,7 +2748,7 @@ export function shouldRetryPreviewOwnershipMismatch({
     return false;
   }
 
-  return attempt >= 0 && attempt < PREVIEW_PROXY_RETRY_DELAYS_MS.length;
+  return attempt >= 0 && attempt < PREVIEW_OWNERSHIP_RETRY_DELAYS_MS.length;
 }
 
 function normalizePreviewText(value) {
@@ -7910,15 +7911,17 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
   }
 
   const hasPreviewOwnership = isPreviewPortOwnedBySession(session, port);
-  const scheduleRetry = () => {
+  const scheduleRetry = (delays = PREVIEW_PROXY_RETRY_DELAYS_MS) => {
     if (res.writableEnded || res.destroyed) {
       return;
     }
 
-    const delay = PREVIEW_PROXY_RETRY_DELAYS_MS[attempt] || 0;
+    const delay = delays[attempt] || 0;
 
     setTimeout(() => {
-      proxyPreviewRequest(req, res, pathname, attempt + 1);
+      if (!res.writableEnded && !res.destroyed) {
+        proxyPreviewRequest(req, res, pathname, attempt + 1);
+      }
     }, delay);
   };
 
@@ -7949,7 +7952,7 @@ function proxyPreviewRequest(req, res, pathname, attempt = 0) {
         attempt,
       })
     ) {
-      scheduleRetry();
+      scheduleRetry(PREVIEW_OWNERSHIP_RETRY_DELAYS_MS);
       return;
     }
 

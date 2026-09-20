@@ -18,6 +18,8 @@
 - Keep signed project repair health checks available while the development server changes ports, without exposing project files or platform routes. Preserve cross-origin embedding headers on isolated Preview redirects.
 - Serve an authenticated waiting document during initial Preview port handoff rather than an unembeddable error page, and keep its eventual navigation on the caller's gateway instead of a backend loopback address.
 - Clear Caddy's HTTP/3 alternative-service advertisement for application sites so streaming uses the verified HTTP/2 path. Keep unrelated sites and Cloudflare's edge protocol configuration unchanged.
+- Give the chat transport explicit network-stream ownership, releasing its reader independently of the SDK on completion, failure and cancellation without cloning the response. Disable proxy transformation of chat streams.
+- Allow up to a minute for read-only assets on an assigned Preview port to survive a rebuild handoff. Recheck ownership on every attempt, reject writes/foreign ports, and stop retries after client disconnect or the bounded deadline.
 - Keep Supabase connection replacement, legacy MagnetAPI follow-up acceptance and the independent Windows rewrite visible in the roadmap. They are not claimed as completed by this patch.
 
 ## v4.1.1 - 2026-09-15
