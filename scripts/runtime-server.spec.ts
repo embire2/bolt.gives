@@ -84,6 +84,7 @@ import {
   startHostedPreviewForSession,
   syncWorkspaceSnapshot,
   updateSessionPreview,
+  validateManagedInstanceHealthResponse,
   waitForProjectManifest,
   waitForSessionPreviewHealth,
   workspaceSnapshotHasChanges,
@@ -616,6 +617,46 @@ describe('runtime server workspace isolation', () => {
         serverBuildReadable: true,
       }),
     ).toEqual({ ready: true, reason: null });
+  });
+
+  it('rejects a stale managed production alias instead of reporting false rollout success', () => {
+    expect(
+      validateManagedInstanceHealthResponse({
+        url: 'https://tenant.pages.dev/api/health',
+        responseOk: true,
+        status: 200,
+        body: JSON.stringify({ status: 'alive', version: '4.1.2' }),
+        expectedVersion: '4.1.3',
+      }),
+    ).toEqual({
+      ok: false,
+      error: 'https://tenant.pages.dev/api/health returned version 4.1.2 instead of 4.1.3',
+    });
+  });
+
+  it('requires structured runtime health metadata for managed deployments', () => {
+    expect(
+      validateManagedInstanceHealthResponse({
+        url: 'https://deployment.pages.dev/api/health',
+        responseOk: true,
+        status: 200,
+        body: '<!doctype html><title>Old deployment</title>',
+        expectedVersion: '4.1.3',
+      }),
+    ).toEqual({
+      ok: false,
+      error: 'https://deployment.pages.dev/api/health returned HTTP 200 without JSON health metadata',
+    });
+
+    expect(
+      validateManagedInstanceHealthResponse({
+        url: 'https://deployment.pages.dev/api/health',
+        responseOk: true,
+        status: 200,
+        body: JSON.stringify({ status: 'alive', version: '4.1.3' }),
+        expectedVersion: '4.1.3',
+      }),
+    ).toEqual({ ok: true, error: null });
   });
 
   it('skips inactive and already-current managed instances during full-fleet rollout', () => {

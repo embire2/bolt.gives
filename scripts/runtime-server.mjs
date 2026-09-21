@@ -2141,16 +2141,54 @@ async function deployManagedInstanceProject(instance, reason = 'manual-refresh')
   };
 }
 
+export function validateManagedInstanceHealthResponse({
+  url,
+  responseOk,
+  status,
+  body,
+  expectedVersion = RUNTIME_VERSION,
+}) {
+  if (!responseOk) {
+    return { ok: false, error: `${url} returned HTTP ${status}` };
+  }
+
+  let payload;
+
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return { ok: false, error: `${url} returned HTTP ${status} without JSON health metadata` };
+  }
+
+  if (payload?.version !== expectedVersion) {
+    return {
+      ok: false,
+      error: `${url} returned version ${payload?.version || 'missing'} instead of ${expectedVersion}`,
+    };
+  }
+
+  if (payload?.status !== 'alive' && payload?.ok !== true) {
+    return { ok: false, error: `${url} did not report a healthy runtime state` };
+  }
+
+  return { ok: true, error: null };
+}
+
 async function verifyManagedInstanceDeploymentHealth(deployment, { timeoutMs = 90000, pollMs = 3000 } = {}) {
   const startedAt = Date.now();
-  const candidates = [
-    deployment?.deploymentUrl ? `${String(deployment.deploymentUrl).replace(/\/$/, '')}/api/health` : null,
-    deployment?.pagesUrl ? `${String(deployment.pagesUrl).replace(/\/$/, '')}/api/health` : null,
-    deployment?.pagesUrl ? `${String(deployment.pagesUrl).replace(/\/$/, '')}/chat` : null,
-  ].filter(Boolean);
+  const candidates = Array.from(
+    new Set(
+      [
+        deployment?.deploymentUrl ? `${String(deployment.deploymentUrl).replace(/\/$/, '')}/api/health` : null,
+        deployment?.pagesUrl ? `${String(deployment.pagesUrl).replace(/\/$/, '')}/api/health` : null,
+      ].filter(Boolean),
+    ),
+  );
   let lastError = 'No managed instance URL was available for health verification.';
 
   while (Date.now() - startedAt <= timeoutMs) {
+    const failures = [];
+
     for (const url of candidates) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -2158,29 +2196,42 @@ async function verifyManagedInstanceDeploymentHealth(deployment, { timeoutMs = 9
       try {
         const response = await fetch(url, {
           method: 'GET',
-          redirect: 'follow',
+          redirect: 'manual',
           signal: controller.signal,
           headers: {
-            Accept: 'text/html,application/json',
+            Accept: 'application/json',
           },
         });
+        const body = await response.text();
+        const validation = validateManagedInstanceHealthResponse({
+          url,
+          responseOk: response.ok,
+          status: response.status,
+          body,
+        });
 
-        if (response.ok) {
-          return {
-            ok: true,
-            url,
-            status: response.status,
-            checkedAt: new Date().toISOString(),
-          };
+        if (!validation.ok) {
+          failures.push(validation.error);
         }
-
-        lastError = `${url} returned HTTP ${response.status}`;
       } catch (error) {
-        lastError = `${url} failed health verification: ${error instanceof Error ? error.message : 'request failed'}`;
+        failures.push(
+          `${url} failed health verification: ${error instanceof Error ? error.message : 'request failed'}`,
+        );
       } finally {
         clearTimeout(timeout);
       }
     }
+
+    if (candidates.length > 0 && failures.length === 0) {
+      return {
+        ok: true,
+        url: candidates.join(', '),
+        status: 200,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    lastError = failures.join('; ') || lastError;
 
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
