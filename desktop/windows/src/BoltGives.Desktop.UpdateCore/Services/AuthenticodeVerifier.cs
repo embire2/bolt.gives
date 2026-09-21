@@ -11,7 +11,8 @@ public static class AuthenticodeVerifier
     private sealed record CertificatePin(string Resource, string Hash, bool IsRoot);
 
     private const string LegacyRootHash = "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8";
-    private const string LegacyIssuerHash = "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2";
+    private const string LegacyAoc03Hash = "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2";
+    private const string LegacyEoc01Hash = "DB303E2706C14D39B46B3FA8731160FB30FBEEAC69283FE6F9BD0241CEAA7906";
     private const string LegacyPcaHash = "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16";
     private const string CurrentRootHash = "5367F20C7ADE0E2BCA790915056D086B720C33C1FA2A2661ACF787E3292E1270";
     private const string CurrentPcaHash = "3D29798CC5D3F0644A7E0DC9CB1CADE523EA5EC83B335109B605BFEAA7D5F5C1";
@@ -23,7 +24,8 @@ public static class AuthenticodeVerifier
     private static readonly CertificatePin[] CertificatePins =
     [
         new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-root-2020.cer", LegacyRootHash, true),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-id-verification-cs-aoc-ca-03.cer", LegacyIssuerHash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-id-verification-cs-aoc-ca-03.cer", LegacyAoc03Hash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-id-verification-cs-eoc-ca-01.cer", LegacyEoc01Hash, false),
         new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-code-signing-pca-2020.cer", LegacyPcaHash, false),
         new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-identity-verification-root-2020.cer", CurrentRootHash, true),
         new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-code-signing-pca-2021.cer", CurrentPcaHash, false),
@@ -34,7 +36,8 @@ public static class AuthenticodeVerifier
     ];
     private static readonly string[][] ApprovedHierarchies =
     [
-        [LegacyRootHash, LegacyPcaHash, LegacyIssuerHash],
+        [LegacyRootHash, LegacyPcaHash, LegacyAoc03Hash],
+        [LegacyRootHash, LegacyPcaHash, LegacyEoc01Hash],
         [CurrentRootHash, CurrentPcaHash, CurrentAoc03Hash],
         [CurrentRootHash, CurrentPcaHash, CurrentAoc04Hash],
         [CurrentRootHash, CurrentPcaHash, CurrentEoc03Hash],

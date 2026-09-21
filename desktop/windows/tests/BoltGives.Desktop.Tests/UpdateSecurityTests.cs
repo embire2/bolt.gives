@@ -85,6 +85,7 @@ public sealed class UpdateSecurityTests
 
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-identity-verification-root-2020.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-id-verification-cs-aoc-ca-03.cer"));
+        Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-id-verification-cs-eoc-ca-01.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-identity-verification-code-signing-pca-2020.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-identity-verification-root-2020.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-id-verified-cs-aoc-ca-03.cer"));
@@ -123,6 +124,11 @@ public sealed class UpdateSecurityTests
             "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8",
             "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16",
             "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2",
+        ]));
+        Assert.True(AuthenticodeVerifier.MatchesApprovedHierarchy([
+            "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8",
+            "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16",
+            "DB303E2706C14D39B46B3FA8731160FB30FBEEAC69283FE6F9BD0241CEAA7906",
         ]));
     }
 

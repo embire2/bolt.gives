@@ -40,7 +40,7 @@ The GitHub Actions workflow builds on `windows-latest`, runs the portable regres
 
 On first launch, Desktop explains how to pin its running icon to the taskbar. Windows requires the user to approve taskbar pins, so the app does not attempt a hidden pin.
 
-The workflow signs the native executable, assemblies, privileged updater, and installer through Azure Artifact Signing. CI requires an RFC3161 timestamp and verifies a complete approved Microsoft ID Verified certificate hierarchy before publishing any artifact. The verifier accepts the legacy hierarchy and Microsoft's current AOC/EOC 03/04 issuer rotations only when they terminate at their matching pinned PCA and root.
+The workflow signs the native executable, assemblies, privileged updater, and installer through Azure Artifact Signing. CI requires an RFC3161 timestamp and verifies a complete approved Microsoft ID Verified certificate hierarchy before publishing any artifact. The verifier accepts the configured legacy AOC03/EOC01 and current AOC/EOC 03/04 issuer rotations only when they terminate at their matching pinned PCA and root.
 
 The active Azure profile is `PrivateTrust`. Its root is not part of the default Windows trusted-root program, so an unmanaged machine may still show an unknown-publisher or SmartScreen warning. An approved `PublicTrust` profile is required to remove that consumer-distribution limitation; CI does not misrepresent Private Trust as public trust.
 
