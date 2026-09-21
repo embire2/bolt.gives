@@ -1,5 +1,14 @@
 # Changelog
 
+## v4.1.3 - 2026-09-21
+
+- Replace the project Database chooser with a guided Supabase-only wizard. Users without an account can open Supabase registration in a new tab, return to the same project, and connect with only the Project URL and publishable/anon key.
+- Verify the exact `*.supabase.co` REST endpoint with a bounded, non-following server request before atomically saving credentials. Reject secret/service-role keys, redirects, invalid origins, authentication failures and unreachable projects without replacing the last working record.
+- Add publishable-key environment aliases while preserving anon-key aliases for existing generated apps. New PostgreSQL project connections are rejected; legacy private records remain readable for migration and platform profile/admin PostgreSQL remains separate.
+- Keep the history drawer fully opaque while it slides and place history-item actions on an opaque action rail so collapsed/hover states cannot render text over text.
+- Publish the native Windows source, tests, installer, signature validation and release workflow under `desktop/windows`. Desktop v1.11.0 adds a native Supabase wizard and removes PostgreSQL provisioning claims from Live CLI.
+- Preserve the independent mandatory Desktop updater: exact GitHub assets, bounded downloads, SHA-256, pinned Authenticode, UAC, old-process shutdown, installed-version verification and rollback remain release gates.
+
 ## v4.1.2 - 2026-09-20
 
 - Hold already-authorized isolated Preview asset reads through a cleared port reservation during restart, without connecting until ownership is verified again. History restoration waits briefly for an existing runtime start instead of immediately replaying setup; navigation cancels that wait. Idle-history E2E now requires settled runtime readiness before leaving the project, retaining zero-replay and all browser-error assertions.

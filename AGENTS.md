@@ -70,7 +70,7 @@ Hosted FREE profiles receive 20 API credits per GMT+2 day, calibrated at one cre
 
 ### Desktop Boundary
 
-The native Windows client has an independent `Desktop v*` release line. Its proprietary C#/.NET WPF source, private CI tree, and dependencies are outside this public repository. Public releases may contain only compiled artifacts, checksums, release notes, and update metadata.
+The native Windows client has an independent `Desktop v*` release line. Its C#/.NET 8 WPF source, portable tests, installer definition, and signed-release workflow live in `desktop/windows` in this public repository. Keep the desktop version independent from `package.json`; publish compiled installers, checksums, notes, and update metadata under `desktop-v*` tags only after Windows release acceptance passes.
 
 The desktop client must use native controls for authentication, projects, Chat, Workspace, editing, terminal, deployments, settings, and updates. WebView2 is allowed only for generated project Preview. Sign-in uses an emailed six-digit one-time code entered in the app. Never add operator credentials or hosted provider keys to a desktop binary.
 
@@ -158,11 +158,11 @@ An E2E for prompt-to-preview is complete only when a normal browser submits a pr
 
 ## Databases and Runtime Isolation
 
-Normal hosted projects start without a database. A user may connect Supabase with a project URL plus publishable/anon key, or attach a user-owned PostgreSQL connection string. Connection records are stored outside project source with mode `0600`; only redacted status reaches the browser, and variables are injected server-side into that project's commands and Preview. PostgreSQL is never injected into a static Cloudflare build. Credentials must not be written to generated source, browser history, snapshots, deployment artifacts, commentary, or logs.
+Normal hosted projects start without a database. The public Database wizard supports only user-owned Supabase with a project URL plus publishable/anon key. The runtime verifies the Supabase endpoint and key before atomically replacing the private mode-`0600` record; only redacted status reaches the browser. Credentials are injected server-side into that project's commands and Preview and must not be written to generated source, browser history, snapshots, deployment artifacts, commentary, or logs.
 
-Legacy local per-project PostgreSQL provisioning is operator opt-in through `BOLT_PROJECT_DATABASE_ENABLED=true`; fresh installs keep it disabled. The platform's own profile/admin database remains independent and optional for self-hosts.
+Legacy local per-project PostgreSQL records remain readable so existing projects can migrate without data loss, but new PostgreSQL project connections and public provisioning are disabled. The platform's own optional PostgreSQL profile/admin database is an independent self-host concern and is never inherited by generated apps.
 
-`/workspace-setup` additionally provisions an optional dedicated Ubuntu CLI workspace. One project gets one Unix user, one private directory, quotas, and auditable operations. It is database-free by default; operators may explicitly add a local PostgreSQL role/database, while most users should connect Supabase or their own PostgreSQL service from Agent Mode. Client-selected usernames must be valid non-reserved Linux usernames. Passwords are one-time handoff values; retain only hashes and metadata.
+`/workspace-setup` additionally provisions an optional dedicated Ubuntu CLI workspace. One project gets one Unix user, one private directory, quotas, and auditable operations. Public provisioning is database-free; users connect their own Supabase project from Agent Mode. Client-selected usernames must be valid non-reserved Linux usernames. Passwords are one-time handoff values; retain only hashes and metadata.
 
 Runtime-node steady state uses the non-root `bolt-runtime-agent` with SSH keys and constrained server-side `sudo`. Root/password access is bootstrap or explicitly approved emergency access only and must be removed from service configuration after key verification. A failed provision remains failed with a redacted reason; never mark it active optimistically.
 

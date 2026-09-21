@@ -1,0 +1,187 @@
+name: Build and release native Windows Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Independent Desktop version
+        required: true
+        default: 1.11.0
+      mandatory:
+        description: Block older native clients until updated
+        required: true
+        type: boolean
+        default: true
+      publish_release:
+        description: Publish the signed assets to a desktop-v release
+        required: true
+        type: boolean
+        default: false
+      features:
+        description: Pipe-separated release features
+        required: true
+        default: Public native source|Supabase-only database wizard|Database-free Live CLI|Fail-safe mandatory updater
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      DESKTOP_VERSION: ${{ inputs.version }}
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: desktop/windows
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and test
+        run: |
+          dotnet restore BoltGives.Desktop.sln
+          dotnet format BoltGives.Desktop.sln --verify-no-changes --no-restore
+          dotnet test BoltGives.Desktop.sln --configuration Release --no-restore --logger "trx;LogFileName=desktop-tests.trx"
+
+      - name: Publish self-contained application and updater
+        run: |
+          dotnet publish src/BoltGives.Desktop/BoltGives.Desktop.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output artifacts/publish `
+            -p:Version=$env:DESKTOP_VERSION `
+            -p:AssemblyVersion="$($env:DESKTOP_VERSION).0" `
+            -p:FileVersion="$($env:DESKTOP_VERSION).0" `
+            -p:InformationalVersion="Desktop-$env:DESKTOP_VERSION"
+          dotnet publish src/BoltGives.Desktop.Updater/BoltGives.Desktop.Updater.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output artifacts/updater `
+            -p:Version=$env:DESKTOP_VERSION `
+            -p:AssemblyVersion="$($env:DESKTOP_VERSION).0" `
+            -p:FileVersion="$($env:DESKTOP_VERSION).0" `
+            -p:InformationalVersion="Desktop-Updater-$env:DESKTOP_VERSION"
+          Copy-Item artifacts/updater/BoltGives.Desktop.Updater.exe artifacts/publish/BoltGives.Desktop.Updater.exe -Force
+
+      - name: Sign native application
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: |
+            ${{ github.workspace }}\desktop\windows\artifacts\publish\BoltGives.Desktop.exe
+            ${{ github.workspace }}\desktop\windows\artifacts\publish\BoltGives.Desktop.dll
+            ${{ github.workspace }}\desktop\windows\artifacts\publish\BoltGives.Desktop.Core.dll
+            ${{ github.workspace }}\desktop\windows\artifacts\publish\BoltGives.Desktop.UpdateCore.dll
+            ${{ github.workspace }}\desktop\windows\artifacts\publish\BoltGives.Desktop.Updater.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: bolt.gives Desktop
+          description-url: https://bolt.gives
+          correlation-id: desktop-${{ github.run_id }}-application
+
+      - name: Verify native signatures
+        run: |
+          ./scripts/Test-ArtifactSignature.ps1 -Path @(
+            "artifacts/publish/BoltGives.Desktop.exe",
+            "artifacts/publish/BoltGives.Desktop.dll",
+            "artifacts/publish/BoltGives.Desktop.Core.dll",
+            "artifacts/publish/BoltGives.Desktop.UpdateCore.dll",
+            "artifacts/publish/BoltGives.Desktop.Updater.exe"
+          )
+
+      - name: Acquire signed WebView2 prerequisite
+        run: |
+          $directory = New-Item -ItemType Directory -Force -Path artifacts/prerequisites
+          $bootstrapper = Join-Path $directory.FullName 'MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrapper
+          $signature = Get-AuthenticodeSignature $bootstrapper
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "WebView2 bootstrapper signature is $($signature.Status)."
+          }
+          if ($signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw "WebView2 bootstrapper has an unexpected publisher: $($signature.SignerCertificate.Subject)"
+          }
+
+      - name: Build installer
+        run: |
+          choco install innosetup --no-progress --yes
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:DESKTOP_VERSION" installer/BoltGivesDesktop.iss
+
+      - name: Sign installer
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\desktop\windows\artifacts\installer\bolt.gives-Desktop-Setup-${{ inputs.version }}-x64.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: bolt.gives Desktop Installer
+          description-url: https://bolt.gives
+          correlation-id: desktop-${{ github.run_id }}-installer
+
+      - name: Verify install, launch, update, and rollback
+        run: |
+          $installer = "artifacts/installer/bolt.gives-Desktop-Setup-$env:DESKTOP_VERSION-x64.exe"
+          ./scripts/Test-ArtifactSignature.ps1 -Path $installer
+          ./scripts/Invoke-DesktopReleaseSmoke.ps1 -Version $env:DESKTOP_VERSION -InstallerPath $installer
+
+      - name: Build update manifest
+        env:
+          MANDATORY_UPDATE: ${{ inputs.mandatory }}
+          RELEASE_FEATURES: ${{ inputs.features }}
+        run: |
+          $installer = "artifacts/installer/bolt.gives-Desktop-Setup-$env:DESKTOP_VERSION-x64.exe"
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $features = @($env:RELEASE_FEATURES -split '\|' | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() })
+          $manifest = [ordered]@{
+            version = $env:DESKTOP_VERSION
+            mandatory = [System.Convert]::ToBoolean($env:MANDATORY_UPDATE)
+            minimumSupportedVersion = $env:DESKTOP_VERSION
+            installerUrl = "https://github.com/embire2/bolt.gives/releases/download/desktop-v$env:DESKTOP_VERSION/bolt.gives-Desktop-Setup-$env:DESKTOP_VERSION-x64.exe"
+            sha256 = $hash
+            installerSize = (Get-Item $installer).Length
+            features = $features
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content artifacts/installer/bolt.gives-Desktop-update.json -Encoding utf8NoBOM
+          [System.IO.File]::WriteAllText(
+            "artifacts/installer/bolt.gives-Desktop-$env:DESKTOP_VERSION-SHA256SUMS.txt",
+            "$hash  bolt.gives-Desktop-Setup-$env:DESKTOP_VERSION-x64.exe`n",
+            [System.Text.UTF8Encoding]::new($false))
+
+      - name: Upload signed release candidate
+        uses: actions/upload-artifact@v5
+        with:
+          name: bolt-gives-desktop-${{ inputs.version }}
+          path: desktop/windows/artifacts/installer/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish Desktop release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "desktop-v$env:DESKTOP_VERSION" `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --target "$env:GITHUB_SHA" `
+            --title "bolt.gives Desktop v$env:DESKTOP_VERSION" `
+            --notes-file RELEASE_NOTES.md `
+            artifacts/installer/*

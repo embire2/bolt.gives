@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 Status legend:
 
@@ -10,6 +10,7 @@ Status legend:
 
 Current stable release:
 
+- [x] `v4.1.3` web/server: Supabase-only verified setup, safe credential rotation, opaque history navigation, and public native Windows source. See [release scope](docs/releases/v4.1.3.md).
 - [x] `v4.1.2` web/server fixes: GLM 5.3 Flash, 20 daily API credits, authenticated one-instance policy and `/admin`, secure outgoing mail, custom-domain relay and collaboration fixes. Real alpha generation, follow-up, restore and publishing passed; the release acceptance attachment records final production/fleet checks. See [release scope](docs/releases/v4.1.2.md) and [dated evidence](docs/quality/2026-09-20-v4.1.2-acceptance.md).
 - [x] `v4.1.1` patch: Cloudflare-compatible readiness, canonical production-branch refresh and release-gate/onboarding acceptance corrections. The original `v4.1.0` tag is preserved; deploy the patch for managed instances.
 - [x] `v4.1.0` web/server: both reliability phases combined; production uses non-root isolated execution and trusted per-project Preview origins. Native Windows remains an independent release.
@@ -25,7 +26,7 @@ Prioritize reproduced failures in existing user journeys. The requested FREE mod
 - [x] Correct shared registration throttling, authenticated Preview health polling during port handoff and cross-origin redirect headers. Retain strict chat-cancellation assertions and use the validated application streaming transport.
 - [x] Transfer chat response ownership to one bounded consumer, release readers independently of SDK lifetime, identify the actual data-stream protocol and preserve bounded asset reads across longer rebuild handoffs. Keep cancellation, failure and foreign-port rejection covered by regressions.
 - [x] Replace the former FREE/Luna route with GLM 5.3 Flash and verify same-model follow-up, history and publishing. Fix mandatory reasoning consuming the old output budget; the real GLM browser repeat passed in 160 seconds. Retain the historical Luna failure as a separate MagnetAPI BYOK acceptance item; changing the default does not prove that upstream fixed.
-- [ ] Rewrite Supabase connection verification and error handling; test invalid keys, unavailable projects, failed replacement, and project/account switching without losing a working connection.
+- [x] Rewrite Supabase connection verification and error handling; reject invalid keys/origins, verify before atomic replacement, preserve a working connection after failure, and expose only the Supabase wizard for new connections.
 - [x] Verify alpha provisioning with generation, a Luna-to-Sonnet follow-up, history restore and public publishing; confirm the published page in an anonymous browser after the coding runtime stops. This does not clear the Luna-only failure above.
 - [x] Publish v4.1.2's verified fixes, real screenshot and acceptance evidence without claiming a bug-free platform. Keep the Supabase rewrite and the follow-up acceptance list open for the next patch.
 
@@ -54,7 +55,7 @@ claim that every platform/provider combination is certified by web v4.1.0.
 - [ ] F04: Restore connectivity to the optional SSH CLI node and validate its dedicated-user lifecycle. Keep unavailable CLI provisioning explicitly failed; hosted Preview/publishing must remain independent.
 - [ ] F05: Extend fleet-scale CPU/RAM/bundle profiling, collaboration reconnect, OTP expiry, mobile/database and cross-version acceptance matrices.
 - [ ] F06: Replace the disabled legacy process-local self-updater on hosted rootless servers with an independently authorized, health-verified operator update service. Hosted releases use the validated deployment/control-plane path; no unrestricted sudo or false in-app update success.
-- [ ] W01-W07: Build and test the private native Windows rewrite in its independent lane below. Do not force an unverified desktop replacement.
+- [~] W01-W07: Desktop v1.11.0 source and signed-release CI are public. Continue the independent native lane below for broader UI Automation, accessibility and future WinUI research.
 
 <details>
 <summary>Historical pre-release checkpoints (superseded by the outcome above)</summary>
@@ -118,13 +119,14 @@ of actual idle state. This is separate from the earlier Podman creation race.
 
 </details>
 
-Independent Desktop release:
+Independent Desktop releases:
 
+- [x] `Desktop v1.11.0`
 - [x] `Desktop v1.10.2`
 
-## Desktop v1.10.2 - Shipped Separately
+## Desktop v1.11.0 - Public Native Source
 
-Release theme: complete the project-aware native coding workflow and make mandatory self-update recoverable without weakening the open-source web/server boundary.
+Release theme: publish the working native client and make database setup consistent across web and Windows without weakening updater security.
 
 - [x] Build Chat, Workspace, projects, editor, terminal, deployments, settings, model selection, token balance, authentication, and updates with C#/.NET 8 WPF/XAML controls.
 - [x] Restrict WebView2 to generated project Preview; never load the hosted bolt.gives product UI.
@@ -136,8 +138,11 @@ Release theme: complete the project-aware native coding workflow and make mandat
 - [x] Create Start Menu and Desktop shortcuts and ask the user to approve a taskbar pin on first launch.
 - [x] Add independent optional/mandatory update metadata, progress reporting, trusted-host enforcement, release-size and SHA-256 verification, and mandatory coding lockout.
 - [x] Add a separately signed updater with UAC elevation, requesting-process validation, old-process shutdown, disk-capacity checks, installed-version verification, and automatic rollback.
-- [x] Add fail-closed Azure Artifact Signing, RFC3161 timestamps, and pinned Private Trust chain verification to private CI.
+- [x] Add fail-closed Azure Artifact Signing, RFC3161 timestamps, and pinned Private Trust chain verification to Windows release CI.
 - [x] Exercise signed install, successful replacement, deliberate validation failure, and verified rollback on Windows CI before publishing artifacts.
+- [x] Publish the C#/.NET source, portable tests, Inno Setup package and signed release workflow under `desktop/windows`.
+- [x] Add a native Supabase-only wizard with external registration/dashboard links, client-side secret-key rejection and server verification.
+- [x] Keep Live CLI database-free and remove PostgreSQL credentials from its native workflow.
 - [ ] Obtain an Azure `PublicTrust` profile so Windows trusts the public installer by default and SmartScreen can build publisher reputation.
 
 ## Historical v4.1.0 Audit Plan
@@ -212,24 +217,24 @@ Phase 1 validation: **1,241 tests passed, nine skipped**, strict boundaries/type
 
 ### Existing Work Awaiting Release Validation
 
-- [~] `main` contains database-free generated projects, Supabase quick connect, private user-owned PostgreSQL connections, optional-database CLI workspaces/installer, and session-scoped runtime cleanup. B01/B02/B04/B06 and I02/I06 must close their remaining contract gaps.
+- [~] `main` contains database-free generated projects, the verified Supabase-only setup wizard, database-free CLI workspaces/installer, and session-scoped runtime cleanup. Legacy private PostgreSQL records remain readable only for migration. B01/B02/B04/B06 and I02/I06 must close their remaining contract gaps.
 - [~] The checkout contains Luna medium-effort labelling, separate user-key MagnetAPI discovery, a dismissible banner, and shell changes. These are not marked shipped until I03 and staging verification pass.
 
 </details>
 
-## Native Windows Rewrite - Separate Release Lane
+## Future Native Windows Evolution
 
 Preferred stack: **C++20 + C++/WinRT + WinUI 3/XAML + Windows App SDK**, developed and tested on Windows. Start with a measured editor/terminal/Preview vertical slice; C# WinUI 3 is the fallback only if the spike demonstrates a safer result. Existing WPF is already native; changing language alone is not a performance fix.
 
-- [ ] W01: Inventory Desktop v1.10.2 parity; establish a private Windows build runner, pinned toolchain, signing prerequisites, and measured baseline.
+- [x] W01: Inventory Desktop parity; establish a public source tree, Windows build runner, pinned toolchain, signing prerequisites, portable tests and measured release workflow.
 - [ ] W02: Prove native shell, editor interop, terminal control, compact prompt, accessibility, and Preview-only WebView2 before expanding the rewrite.
 - [ ] W03: Implement native six-digit OTP, OS-protected account-scoped credentials, and backup-first migration/rollback of settings and history.
 - [ ] W04: Implement versioned server contracts, async native chat/tool streams, cancellation, model switching, queued follow-ups, and project restore.
 - [ ] W05: Deliver native editor/diff/search, terminal, optional database connection, publishing, balance, and settings as separate parity slices.
 - [ ] W06: Decide packaging/migration; implement signed, resumable updates with progress, controlled shutdown, relaunch, rollback, and elevation only when installation scope requires it.
-- [ ] W07 / I07: Run native UI Automation, Preview interaction, standard-user install, upgrade from v1.10.2, tampering/offline/low-disk/UAC-decline recovery, DPI, keyboard, and performance gates on Windows.
+- [ ] W07 / I07: Expand native UI Automation, Preview interaction, standard-user install, tampering/offline/low-disk/UAC-decline recovery, DPI, keyboard, and performance gates on Windows.
 
-Proposed rewrite release: **Desktop v2.0.0**, not yet approved or shipped. Preserve the private desktop source boundary; public releases contain compiled artifacts, checksums, notes, and update metadata only. Keep v1.10.2 supported until native parity, trusted signing, migration, and updater tests pass. Do not force an unverified replacement onto users. See the [Windows work packages](docs/quality/2026-09-12-v4.1-audit.md#native-windows-rewrite) for the acceptance criteria.
+Proposed WinUI research release: **Desktop v2.0.0**, not yet approved or shipped. Keep source public and retain Desktop v1.11.0 until a replacement proves native parity, trusted signing, migration, updater safety and measurable performance gains. Do not force an unverified replacement onto users. See the [Windows work packages](docs/quality/2026-09-12-v4.1-audit.md#native-windows-rewrite) for the acceptance criteria.
 
 ## Deferred Expansion
 

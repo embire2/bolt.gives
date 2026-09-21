@@ -1,0 +1,27 @@
+<Application x:Class="BoltGives.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="InkBrush" Color="#10231D" />
+    <SolidColorBrush x:Key="ForestBrush" Color="#173F32" />
+    <SolidColorBrush x:Key="LimeBrush" Color="#C9F36A" />
+    <SolidColorBrush x:Key="PaperBrush" Color="#FFFDF5" />
+    <SolidColorBrush x:Key="MistBrush" Color="#EEF2EC" />
+    <Style TargetType="Button">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="Background" Value="{StaticResource LimeBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource ForestBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="BorderBrush" Value="#8AA197" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Background" Value="White" />
+      <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+    </Style>
+  </Application.Resources>
+</Application>

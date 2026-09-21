@@ -81,16 +81,11 @@ export interface HostedProjectConnection {
   updatedAt: string | null;
 }
 
-export type HostedProjectConnectionInput =
-  | {
-      provider: 'supabase';
-      supabaseUrl: string;
-      anonKey: string;
-    }
-  | {
-      provider: 'postgresql';
-      databaseUrl: string;
-    };
+export type HostedProjectConnectionInput = {
+  provider: 'supabase';
+  supabaseUrl: string;
+  anonKey: string;
+};
 
 export interface HostedRuntimeNodeWorkspace {
   id?: string;

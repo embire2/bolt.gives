@@ -3,9 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { Client } from 'pg';
 
-const MAX_DATABASE_URL_LENGTH = 4096;
 const MAX_SUPABASE_VALUE_LENGTH = 4096;
 
 function connectionRecordPath(config, sessionId) {
@@ -92,15 +90,17 @@ export function normalizeProjectConnection(input) {
     const url = parseUrl(supabaseUrl, 'Supabase project URL');
 
     if (
-      !['https:', 'http:'].includes(url.protocol) ||
+      url.protocol !== 'https:' ||
       !url.hostname ||
+      !url.hostname.endsWith('.supabase.co') ||
+      url.hostname.split('.').length !== 3 ||
       url.username ||
       url.password ||
       url.pathname !== '/' ||
       url.search ||
       url.hash
     ) {
-      throw new Error('Supabase project URL must be an HTTP(S) origin without embedded credentials.');
+      throw new Error('Enter the HTTPS project URL supplied by Supabase.');
     }
 
     return {
@@ -110,26 +110,22 @@ export function normalizeProjectConnection(input) {
     };
   }
 
-  if (provider === 'postgresql') {
-    const databaseUrl = String(input?.databaseUrl || '').trim();
+  throw new Error('New project database connections support Supabase only.');
+}
 
-    if (!databaseUrl || databaseUrl.length > MAX_DATABASE_URL_LENGTH) {
-      throw new Error('Enter a PostgreSQL connection string.');
-    }
-
-    const url = parseUrl(databaseUrl, 'PostgreSQL connection string');
-
-    if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2) {
-      throw new Error('PostgreSQL connection string must include a host and database name.');
-    }
-
-    return {
-      provider: 'postgresql',
-      databaseUrl: url.toString(),
-    };
+function normalizeStoredProjectConnection(input) {
+  if (String(input?.provider || '').toLowerCase() !== 'postgresql') {
+    return normalizeProjectConnection(input);
   }
 
-  throw new Error('Choose Supabase or PostgreSQL before connecting.');
+  const databaseUrl = String(input?.databaseUrl || '').trim();
+  const url = parseUrl(databaseUrl, 'Stored PostgreSQL connection string');
+
+  if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname || url.pathname.length < 2) {
+    throw new Error('The stored PostgreSQL connection is invalid.');
+  }
+
+  return { provider: 'postgresql', databaseUrl: url.toString() };
 }
 
 export function sanitizeProjectConnection(record) {
@@ -139,8 +135,8 @@ export function sanitizeProjectConnection(record) {
 
     return {
       provider: 'supabase',
-      status: 'configured',
-      verifiedAt: null,
+      status: record.verifiedAt ? 'verified' : 'configured',
+      verifiedAt: record.verifiedAt || null,
       label: projectRef || url.hostname,
       host: url.hostname,
       updatedAt: record.updatedAt || null,
@@ -169,8 +165,10 @@ export function buildProjectConnectionEnvironment(record, options = {}) {
   if (record?.provider === 'supabase') {
     return {
       VITE_SUPABASE_URL: record.supabaseUrl,
+      VITE_SUPABASE_PUBLISHABLE_KEY: record.anonKey,
       VITE_SUPABASE_ANON_KEY: record.anonKey,
       SUPABASE_URL: record.supabaseUrl,
+      SUPABASE_PUBLISHABLE_KEY: record.anonKey,
       SUPABASE_ANON_KEY: record.anonKey,
     };
   }
@@ -220,7 +218,7 @@ export async function readProjectConnection(sessionId, config = buildProjectConn
 
   try {
     const record = JSON.parse(await fsApi.readFile(connectionRecordPath(config, normalizedSessionId), 'utf8'));
-    const normalized = normalizeProjectConnection(record);
+    const normalized = normalizeStoredProjectConnection(record);
 
     return { ...record, ...normalized };
   } catch (error) {
@@ -232,19 +230,38 @@ export async function readProjectConnection(sessionId, config = buildProjectConn
   }
 }
 
-export async function verifyPostgresConnection(record, config, dependencies = {}) {
-  const createClient = dependencies.createClient || ((options) => new Client(options));
-  const client = createClient({
-    connectionString: record.databaseUrl,
-    connectionTimeoutMillis: config.connectionTimeoutMs,
-    statement_timeout: config.connectionTimeoutMs,
-  });
+export async function verifySupabaseConnection(record, config, dependencies = {}) {
+  const fetchFn = dependencies.fetchFn || fetch;
+  const verificationUrl = new URL('/rest/v1/', record.supabaseUrl);
+  let response;
 
   try {
-    await client.connect();
-    await client.query('SELECT 1');
-  } finally {
-    await client.end();
+    response = await fetchFn(verificationUrl, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: { apikey: record.anonKey, Accept: 'application/json' },
+      signal: AbortSignal.timeout(config.connectionTimeoutMs),
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      throw new Error('Supabase verification timed out. Check the project URL and try again.');
+    }
+
+    throw new Error('Supabase could not be reached. Check the project URL and try again.');
+  }
+
+  await response.body?.cancel().catch(() => undefined);
+
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error('Supabase redirected the verification request. Use the project URL shown in its Connect dialog.');
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 || response.status === 403
+        ? 'Supabase rejected the publishable key. Copy the Project URL and publishable key from the Connect dialog.'
+        : 'Supabase did not confirm this project. Check its status and try again.',
+    );
   }
 }
 
@@ -256,11 +273,8 @@ export async function saveProjectConnection(
 ) {
   const normalizedSessionId = normalizeSessionId(sessionId);
   const normalized = normalizeProjectConnection(input);
-
-  if (normalized.provider === 'postgresql') {
-    const verify = dependencies.verifyPostgresConnectionFn || verifyPostgresConnection;
-    await verify(normalized, config, dependencies);
-  }
+  const verify = dependencies.verifySupabaseConnectionFn || verifySupabaseConnection;
+  await verify(normalized, config, dependencies);
 
   const existing = await readProjectConnection(normalizedSessionId, config, dependencies);
   const now = new Date().toISOString();
@@ -269,7 +283,7 @@ export async function saveProjectConnection(
     ...normalized,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
-    verifiedAt: normalized.provider === 'postgresql' ? now : null,
+    verifiedAt: now,
   };
 
   await writeRecord(config, normalizedSessionId, record, dependencies.fsApi || fs);

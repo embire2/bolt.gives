@@ -13,7 +13,6 @@ const runtimeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('~/lib/profile-context', () => ({ useProfile: runtimeMocks.useProfile }));
-
 vi.mock('@bolt/runtime/lib/runtime/hosted-runtime-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@bolt/runtime/lib/runtime/hosted-runtime-client')>()),
   ...runtimeMocks,
@@ -22,24 +21,11 @@ vi.mock('@bolt/project/lib/stores/workbench', () => ({
   workbenchStore: { hostedRuntimeSessionId: 'database-ui-session' },
 }));
 vi.mock('@bolt/project/lib/stores/supabase', () => ({ updateSupabaseConnection: vi.fn() }));
-vi.mock('@bolt/project/lib/hooks/useSupabaseConnection', () => ({
-  useSupabaseConnection: () => ({
-    connection: { token: '', stats: undefined },
-    connecting: false,
-    fetchingStats: false,
-    fetchingApiKeys: false,
-    handleConnect: vi.fn(),
-    selectProject: vi.fn(),
-    handleCreateProject: vi.fn(),
-    updateToken: vi.fn(),
-    isConnected: false,
-  }),
-}));
 vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 let SupabaseConnection: (typeof import('./SupabaseConnection'))['SupabaseConnection'];
 
-describe('project Database control', () => {
+describe('Supabase setup wizard', () => {
   beforeAll(async () => {
     (window as any).__vite_plugin_react_preamble_installed__ = true;
     SupabaseConnection = (await import('./SupabaseConnection')).SupabaseConnection;
@@ -47,39 +33,49 @@ describe('project Database control', () => {
 
   beforeEach(() => {
     runtimeMocks.useProfile.mockReturnValue({ id: 'profile-fixture' });
-    runtimeMocks.fetchHostedProjectConnection.mockClear();
-    projectDatabaseConnection.set(null);
+    runtimeMocks.fetchHostedProjectConnection.mockReset();
     runtimeMocks.fetchHostedProjectConnection.mockResolvedValue(null);
     runtimeMocks.saveHostedProjectConnection.mockReset();
     runtimeMocks.deleteHostedProjectConnection.mockReset();
+    projectDatabaseConnection.set(null);
   });
 
   afterEach(cleanup);
 
-  it('does not issue an unauthorized database lookup before profile login', () => {
+  it('does not issue an unauthorized connection lookup before profile login', () => {
     runtimeMocks.useProfile.mockReturnValue(null);
     render(<SupabaseConnection />);
     expect(runtimeMocks.fetchHostedProjectConnection).not.toHaveBeenCalled();
   });
 
-  it('quick-connects Supabase without requiring an account management token', async () => {
+  it('offers Supabase registration in a new tab without a PostgreSQL option', () => {
+    render(<SupabaseConnection />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open database connection' }));
+
+    const registration = screen.getByRole('link', { name: 'Register Supabase for Free' });
+    expect(registration.getAttribute('href')).toBe('https://supabase.com/dashboard/sign-up');
+    expect(registration.getAttribute('target')).toBe('_blank');
+    expect(screen.queryByText('PostgreSQL')).toBeNull();
+  });
+
+  it('verifies and saves a user-owned Supabase project', async () => {
     runtimeMocks.saveHostedProjectConnection.mockResolvedValue({
       provider: 'supabase',
-      status: 'connected',
+      status: 'verified',
       label: 'calendar',
       host: 'calendar.supabase.co',
-      updatedAt: '2026-09-03T12:00:00.000Z',
+      updatedAt: '2026-09-21T12:00:00.000Z',
+      verifiedAt: '2026-09-21T12:00:00.000Z',
     });
     render(<SupabaseConnection />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open database connection' }));
-    fireEvent.change(screen.getByLabelText('Project URL'), {
-      target: { value: 'https://calendar.supabase.co' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'I have a Supabase account' }));
+    fireEvent.change(screen.getByLabelText('Project URL'), { target: { value: 'https://calendar.supabase.co' } });
     fireEvent.change(screen.getByLabelText('Publishable or anon key'), {
       target: { value: 'public-anon-key-value' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Connect Supabase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
 
     await waitFor(() =>
       expect(runtimeMocks.saveHostedProjectConnection).toHaveBeenCalledWith('database-ui-session', {
@@ -88,32 +84,28 @@ describe('project Database control', () => {
         anonKey: 'public-anon-key-value',
       }),
     );
-    expect(screen.getByRole('button', { name: 'Open database connection' }).textContent).toContain('calendar');
+    expect(await screen.findByText('Step 3: Supabase is verified')).toBeTruthy();
   });
 
-  it('verifies a user-owned PostgreSQL URL through the hosted runtime', async () => {
-    runtimeMocks.saveHostedProjectConnection.mockResolvedValue({
+  it('preserves a legacy connection when Supabase replacement fails', async () => {
+    runtimeMocks.fetchHostedProjectConnection.mockResolvedValue({
       provider: 'postgresql',
-      status: 'connected',
-      label: 'app@db.example.com',
-      host: 'db.example.com',
-      databaseName: 'app',
-      updatedAt: '2026-09-03T12:00:00.000Z',
+      status: 'verified',
+      label: 'legacy@database.example',
+      host: 'database.example',
+      updatedAt: '2026-09-20T12:00:00.000Z',
     });
+    runtimeMocks.saveHostedProjectConnection.mockRejectedValue(new Error('Supabase rejected the publishable key.'));
     render(<SupabaseConnection />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open database connection' }));
-    fireEvent.click(screen.getByRole('button', { name: 'PostgreSQL' }));
-    fireEvent.change(screen.getByLabelText('Connection string'), {
-      target: { value: 'postgresql://user:private@db.example.com/app?sslmode=require' },
-    });
+    expect(await screen.findByText('Legacy database connected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Move to Supabase' }));
+    fireEvent.change(screen.getByLabelText('Project URL'), { target: { value: 'https://calendar.supabase.co' } });
+    fireEvent.change(screen.getByLabelText('Publishable or anon key'), { target: { value: 'invalid-public-key' } });
     fireEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
 
-    await waitFor(() =>
-      expect(runtimeMocks.saveHostedProjectConnection).toHaveBeenCalledWith('database-ui-session', {
-        provider: 'postgresql',
-        databaseUrl: 'postgresql://user:private@db.example.com/app?sslmode=require',
-      }),
-    );
+    await waitFor(() => expect(runtimeMocks.saveHostedProjectConnection).toHaveBeenCalledOnce());
+    expect(projectDatabaseConnection.get()?.provider).toBe('postgresql');
   });
 });

@@ -36,4 +36,4 @@ NODE_OPTIONS=--max-old-space-size=6142 pnpm run build
 
 ## Is Supabase required?
 
-No. Generated projects start without a database. When an app needs persistence, open **Database** and either paste a Supabase project URL plus publishable/anon key or connect your own PostgreSQL URL. PostgreSQL credentials stay in the private runtime and are not written into generated files.
+No. Generated projects start without a database. When an app needs persistence, open **Database**, register for Supabase if needed, and paste the Project URL plus publishable/anon key. The runtime verifies the project and stores the credentials outside generated source.

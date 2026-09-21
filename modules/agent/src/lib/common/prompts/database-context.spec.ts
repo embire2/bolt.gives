@@ -14,6 +14,8 @@ describe('project database prompt context', () => {
     const prompt = getProjectDatabasePromptContext({ isConnected: false });
 
     expect(prompt).toContain('Projects do not require a database');
+    expect(prompt).toContain('connect their Supabase project');
+    expect(prompt).not.toContain('Supabase or PostgreSQL');
     expect(prompt).toContain('do not block unrelated work');
   });
 });

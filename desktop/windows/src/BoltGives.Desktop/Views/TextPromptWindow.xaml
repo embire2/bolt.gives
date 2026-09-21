@@ -1,0 +1,18 @@
+<Window x:Class="BoltGives.Desktop.Views.TextPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="470" Height="220" ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource MistBrush}" FontFamily="Segoe UI Variable Text">
+  <Border Margin="20" Padding="20" Background="{StaticResource PaperBrush}" BorderBrush="#C4D0CA"
+          BorderThickness="1" CornerRadius="16">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+      <TextBlock x:Name="PromptText" FontWeight="Bold" />
+      <TextBox x:Name="ValueTextBox" Grid.Row="1" Margin="0,9,0,14" Height="42" />
+      <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button Content="Cancel" IsCancel="True" Background="#F1F3F0" Margin="0,0,8,0" />
+        <Button Content="Save" IsDefault="True" Click="Save_Click" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

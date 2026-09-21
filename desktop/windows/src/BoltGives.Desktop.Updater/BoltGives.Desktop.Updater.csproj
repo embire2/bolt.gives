@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PublishAot>true</PublishAot>
+    <StripSymbols>true</StripSymbols>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>BoltGives.Desktop.Updater</AssemblyName>
+    <RootNamespace>BoltGives.Desktop.Updater</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BoltGives.Desktop.UpdateCore\BoltGives.Desktop.UpdateCore.csproj" />
+  </ItemGroup>
+</Project>

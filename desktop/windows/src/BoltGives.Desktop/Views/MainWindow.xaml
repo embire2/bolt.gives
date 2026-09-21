@@ -1,0 +1,478 @@
+<Window x:Class="BoltGives.Desktop.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="bolt.gives Desktop" Width="1540" Height="960" MinWidth="1120" MinHeight="720"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource MistBrush}"
+        FontFamily="Segoe UI Variable Text" Loaded="Window_Loaded" Closing="Window_Closing">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="64" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="34" />
+    </Grid.RowDefinitions>
+
+    <Border x:Name="UpdateBanner" Visibility="Collapsed" Background="#173F32" Padding="16,10">
+      <DockPanel LastChildFill="True">
+        <Button x:Name="UpdateButton" Content="Update now" DockPanel.Dock="Right" Click="UpdateNow_Click" Margin="14,0,0,0" />
+        <Button x:Name="DismissUpdateButton" Content="Dismiss" DockPanel.Dock="Right" Click="DismissUpdate_Click"
+                Margin="8,0,0,0" Background="#F1F3F0" Visibility="Collapsed" />
+        <ProgressBar x:Name="UpdateProgress" DockPanel.Dock="Right" Width="190" Height="10" Visibility="Collapsed"
+                     Minimum="0" Maximum="100" Margin="14,0" />
+        <TextBlock x:Name="UpdateText" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="1" Background="{StaticResource PaperBrush}" BorderBrush="#C4D0CA" BorderThickness="0,0,0,1">
+      <Grid Margin="20,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource ForestBrush}">
+            <TextBlock Text="B" Foreground="{StaticResource LimeBrush}" FontFamily="Georgia" FontSize="21"
+                       FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Margin="11,0,0,0">
+            <TextBlock Text="bolt.gives Desktop" FontFamily="Georgia" FontSize="19" FontWeight="Bold" />
+            <TextBlock Text="NATIVE WINDOWS AGENT" FontSize="10" Foreground="#657A71" FontWeight="Bold" />
+          </StackPanel>
+        </StackPanel>
+        <TextBlock x:Name="GreetingText" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="17" Foreground="{StaticResource InkBrush}" TextTrimming="CharacterEllipsis" Margin="24,0" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="BalanceButton" Padding="12,7" Background="#E7F4C8" Click="ShowAccount_Click">
+            <TextBlock x:Name="BalanceText" FontWeight="Bold" Foreground="#304515" />
+          </Button>
+          <TextBlock x:Name="DesktopVersionText" VerticalAlignment="Center" Foreground="#657A71" Margin="14,0,0,0" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="250" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <Border Background="#10231D" Padding="14">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <Button x:Name="NewProjectButton" Content="+ New project" Click="NewProject_Click" Margin="0,0,0,12" />
+          <ListBox x:Name="ProjectsList" Grid.Row="1" SelectionChanged="ProjectsList_SelectionChanged"
+                   Background="Transparent" BorderThickness="0" Foreground="White" DisplayMemberPath="Title"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          <UniformGrid Grid.Row="2" Columns="3" Margin="0,10,0,12">
+            <Button Content="Rename" Padding="6,5" Margin="0,0,4,0" Click="RenameProject_Click" />
+            <Button Content="Copy" Padding="6,5" Margin="2,0" Click="DuplicateProject_Click" />
+            <Button Content="Delete" Padding="6,5" Margin="4,0,0,0" Click="DeleteProject_Click" />
+          </UniformGrid>
+          <StackPanel Grid.Row="3">
+            <TextBlock Text="PRIVATE TO THIS PROFILE" Foreground="#91AA9E" FontSize="10" FontWeight="Bold" />
+            <TextBlock Text="History, model, memory and runtime identity restore together."
+                       Foreground="#C8D4CF" TextWrapping="Wrap" FontSize="12" Margin="0,5,0,0" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <TabControl x:Name="MainTabs" Grid.Column="1" Background="{StaticResource MistBrush}" BorderThickness="0"
+                  Padding="10" SelectionChanged="MainTabs_SelectionChanged">
+        <TabItem Header="CHAT">
+          <Grid Margin="8">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ListBox x:Name="ChatMessagesList" Background="{StaticResource PaperBrush}" BorderBrush="#C4D0CA"
+                     BorderThickness="1" Padding="14" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="#FFFFFF" BorderBrush="#D1DDD7" BorderThickness="1" CornerRadius="14"
+                          Padding="14" Margin="0,0,0,10" MaxWidth="900" HorizontalAlignment="Left">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Role}" FontSize="10" FontWeight="Bold" Foreground="#668076" />
+                      <TextBlock Text="{Binding DisplayContent}" TextWrapping="Wrap" Margin="0,5,0,0" FontSize="14" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Border Grid.Row="1" Background="{StaticResource PaperBrush}" BorderBrush="{StaticResource ForestBrush}"
+                    BorderThickness="1" CornerRadius="17" Padding="12" Margin="0,12,0,0">
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                  <TextBox x:Name="ChatPromptTextBox" MinHeight="66" MaxHeight="145" AcceptsReturn="True"
+                           TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" PreviewKeyDown="Prompt_PreviewKeyDown"
+                           AutomationProperties.Name="Chat prompt. Press Control Enter to send." />
+                  <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                    <Button x:Name="SendChatButton" Content="Build" Click="SendChatPrompt_Click" />
+                    <Button x:Name="StopChatButton" Content="Stop" Click="StopRun_Click" Margin="0,7,0,0"
+                            Background="#FCE8E5" IsEnabled="False" />
+                  </StackPanel>
+                </Grid>
+                <DockPanel Grid.Row="1" Margin="0,9,0,0">
+                  <TextBlock x:Name="QueuedPromptText" Foreground="#657A71" VerticalAlignment="Center" />
+                  <ComboBox x:Name="ChatModeComboBox" DockPanel.Dock="Right" Width="108" Height="32" Margin="8,0,0,0"
+                            SelectionChanged="ChatModeComboBox_SelectionChanged">
+                    <ComboBoxItem Tag="build">Build</ComboBoxItem>
+                    <ComboBoxItem Tag="discuss">Discuss</ComboBoxItem>
+                  </ComboBox>
+                  <ComboBox x:Name="ModelComboBox" DockPanel.Dock="Right" Width="180" Height="32"
+                            SelectionChanged="ModelComboBox_SelectionChanged">
+                    <ComboBoxItem Tag="gpt-5.6-sol">ChatGPT-5.6 SOL</ComboBoxItem>
+                    <ComboBoxItem Tag="claude-opus-4-8">Opus 4.8</ComboBoxItem>
+                    <ComboBoxItem Tag="claude-sonnet-5">Sonnet 5</ComboBoxItem>
+                    <ComboBoxItem Tag="claude-fable-5">Fable 5</ComboBoxItem>
+                  </ComboBox>
+                </DockPanel>
+              </Grid>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="WORKSPACE">
+          <Grid Margin="6">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="205" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="310" />
+            </Grid.ColumnDefinitions>
+            <Border Background="#F8FAF7" BorderBrush="#C4D0CA" BorderThickness="1" CornerRadius="12" Padding="9">
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <DockPanel Margin="2,0,2,7">
+                  <Button Content="Refresh" DockPanel.Dock="Right" Padding="8,4" Click="RefreshWorkspace_Click" />
+                  <TextBlock Text="FILES" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                </DockPanel>
+                <TextBox x:Name="FileSearchTextBox" Grid.Row="1" Height="34" Margin="0,0,0,7"
+                         TextChanged="FileSearch_TextChanged" />
+                <ListBox x:Name="FilesList" Grid.Row="2" SelectionChanged="FilesList_SelectionChanged"
+                         BorderThickness="0" Background="Transparent" DisplayMemberPath="Path"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+              </Grid>
+            </Border>
+
+            <Grid Grid.Column="1" Margin="9,0">
+              <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="175" /></Grid.RowDefinitions>
+              <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabs_SelectionChanged">
+                <TabItem Header="CODE">
+                  <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="40" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <DockPanel Background="#173F32" LastChildFill="True">
+                      <Button Content="Save" DockPanel.Dock="Right" Margin="6" Padding="10,3" Click="SaveFile_Click" />
+                      <TextBlock x:Name="SelectedFileText" Foreground="White" Margin="12,0" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <avalonEdit:TextEditor x:Name="CodeEditor" Grid.Row="1" ShowLineNumbers="True"
+                                           FontFamily="Cascadia Code" FontSize="13" Background="#FCFDFB"
+                                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                           PreviewKeyDown="CodeEditor_PreviewKeyDown" />
+                  </Grid>
+                </TabItem>
+                <TabItem Header="PREVIEW">
+                  <Grid Background="#DCE5E0">
+                    <Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <DockPanel Background="#173F32" LastChildFill="True">
+                      <Button Content="Open" DockPanel.Dock="Right" Margin="4" Padding="9,3" Click="OpenPreview_Click" />
+                      <Button Content="Reload" DockPanel.Dock="Right" Margin="4" Padding="9,3" Click="ReloadPreview_Click" />
+                      <ComboBox x:Name="PreviewSizeComboBox" DockPanel.Dock="Right" Width="120" Height="30" Margin="6"
+                                SelectionChanged="PreviewSize_SelectionChanged">
+                        <ComboBoxItem Tag="0">Full width</ComboBoxItem>
+                        <ComboBoxItem Tag="1024">Laptop</ComboBoxItem>
+                        <ComboBoxItem Tag="768">Tablet</ComboBoxItem>
+                        <ComboBoxItem Tag="390">Phone</ComboBoxItem>
+                      </ComboBox>
+                      <TextBlock x:Name="PreviewAddressText" Foreground="White" Margin="12,0" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <Border x:Name="PreviewViewport" Grid.Row="1" Background="White" HorizontalAlignment="Stretch">
+                      <Grid>
+                        <wv2:WebView2 x:Name="PreviewBrowser" NavigationStarting="PreviewBrowser_NavigationStarting"
+                                      CoreWebView2InitializationCompleted="PreviewBrowser_CoreWebView2InitializationCompleted" />
+                        <Border x:Name="PreviewEmpty" Background="#EEF2EC" Padding="30">
+                          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+                            <TextBlock x:Name="PreviewEmptyTitle" Text="Preview is waiting for a verified app"
+                                       FontFamily="Georgia" FontSize="24" TextAlignment="Center" />
+                            <TextBlock x:Name="PreviewEmptyDetail" Text="Keep prompting while the agent builds and repairs the runtime."
+                                       Foreground="#52645E" Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" />
+                            <ProgressBar x:Name="PreviewRepairProgress" Height="8" Margin="0,18,0,0" IsIndeterminate="True"
+                                         Visibility="Collapsed" />
+                          </StackPanel>
+                        </Border>
+                      </Grid>
+                    </Border>
+                  </Grid>
+                </TabItem>
+                <TabItem Header="DIFF">
+                  <TextBox x:Name="DiffTextBox" IsReadOnly="True" FontFamily="Cascadia Mono" FontSize="12"
+                           TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                           Background="#FCFDFB" />
+                </TabItem>
+              </TabControl>
+              <Border Grid.Row="1" Margin="0,8,0,0" Background="#0B1814" CornerRadius="10" Padding="9">
+                <Grid>
+                  <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                  <TextBox x:Name="TerminalOutput" Background="#0B1814" Foreground="#D8F7A0" BorderThickness="0"
+                           FontFamily="Cascadia Mono" FontSize="12" IsReadOnly="True" AcceptsReturn="True"
+                           VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" />
+                  <DockPanel Grid.Row="1" Margin="0,6,0,0">
+                    <Button Content="Run" DockPanel.Dock="Right" Padding="12,4" Click="RunTerminal_Click" />
+                    <TextBox x:Name="TerminalCommandTextBox" Background="#152A23" Foreground="White"
+                             BorderBrush="#426A5B" FontFamily="Cascadia Mono"
+                             PreviewKeyDown="TerminalCommand_PreviewKeyDown"
+                             AutomationProperties.Name="Terminal command. Press Enter to run." />
+                  </DockPanel>
+                </Grid>
+              </Border>
+            </Grid>
+
+            <Border Grid.Column="2" Background="{StaticResource PaperBrush}" BorderBrush="#C4D0CA"
+                    BorderThickness="1" CornerRadius="12" Padding="10">
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <StackPanel>
+                  <TextBlock Text="WORKSPACE ACTIVITY" FontSize="11" FontWeight="Bold" />
+                  <TextBlock Text="Plain-English progress and technical detail stay separate."
+                             Foreground="#657A71" TextWrapping="Wrap" FontSize="12" Margin="0,3,0,8" />
+                </StackPanel>
+                <TabControl Grid.Row="1" Background="Transparent">
+                  <TabItem Header="LIVE">
+                    <ListBox x:Name="ActivityList" BorderThickness="0" Background="Transparent"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                  </TabItem>
+                  <TabItem Header="DETAILS">
+                    <ListBox x:Name="TechnicalList" BorderThickness="0" Background="Transparent"
+                             FontFamily="Cascadia Mono" FontSize="11" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                  </TabItem>
+                  <TabItem Header="STATE">
+                    <TextBlock x:Name="RuntimeStateText" TextWrapping="Wrap" Padding="8" />
+                  </TabItem>
+                </TabControl>
+                <Grid Grid.Row="2" Margin="0,8,0,0">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                  <TextBox x:Name="WorkspacePromptTextBox" MinHeight="60" MaxHeight="105" AcceptsReturn="True"
+                           TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" PreviewKeyDown="Prompt_PreviewKeyDown"
+                           AutomationProperties.Name="Workspace guidance prompt. Press Control Enter to send." />
+                  <DockPanel Grid.Row="1" Margin="0,6,0,0">
+                    <Button x:Name="StopWorkspaceButton" Content="Stop" DockPanel.Dock="Right" Padding="10,5"
+                            Click="StopRun_Click" IsEnabled="False" Background="#FCE8E5" />
+                    <Button Content="Guide agent" DockPanel.Dock="Right" Padding="10,5" Margin="0,0,6,0"
+                            Click="SendWorkspacePrompt_Click" />
+                    <TextBlock x:Name="WorkspaceQueueText" Foreground="#657A71" VerticalAlignment="Center" />
+                  </DockPanel>
+                </Grid>
+              </Grid>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="DeployTab" Header="DEPLOY">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="28" MaxWidth="800" HorizontalAlignment="Left">
+              <TextBlock Text="Publish the project" FontFamily="Georgia" FontSize="32" />
+              <TextBlock Text="Use a free bolt.gives subdomain, the protected Cloudflare account, or Custom Domain hosting."
+                         Foreground="#52645E" TextWrapping="Wrap" Margin="0,8,0,24" />
+              <Border Background="White" BorderBrush="#C4D0CA" BorderThickness="1" CornerRadius="16" Padding="18">
+                <StackPanel>
+                  <TextBlock Text="OPENWEB.SOFTWARE / FREE SUBDOMAIN" FontWeight="Bold" FontSize="11" />
+                  <TextBox x:Name="SubdomainTextBox" Margin="0,10,0,0" />
+                  <Button Content="Publish free subdomain" HorizontalAlignment="Left" Margin="0,10,0,0" Click="PublishFree_Click" />
+                </StackPanel>
+              </Border>
+              <Border Background="White" BorderBrush="#C4D0CA" BorderThickness="1" CornerRadius="16" Padding="18" Margin="0,14,0,0">
+                <StackPanel>
+                  <TextBlock Text="CLOUDFLARE PAGES" FontWeight="Bold" FontSize="11" />
+                  <TextBox x:Name="CloudflareProjectTextBox" Margin="0,10,0,0" />
+                  <Button Content="Deploy to managed Cloudflare" HorizontalAlignment="Left" Margin="0,10,0,0" Click="DeployCloudflare_Click" />
+                </StackPanel>
+              </Border>
+              <Border Background="#173F32" BorderBrush="#173F32" BorderThickness="1" CornerRadius="16" Padding="18" Margin="0,14,0,0">
+                <StackPanel>
+                  <TextBlock Text="CUSTOM DOMAIN / $5 PER 30 DAYS" Foreground="#C9F36A" FontWeight="Bold" FontSize="11" />
+                  <TextBlock Text="10,000 Agent tokens per paid month, your own domain, deeper builds and priority recovery."
+                             Foreground="White" TextWrapping="Wrap" Margin="0,7,0,10" />
+                  <TextBox x:Name="CustomDomainTextBox" />
+                  <Button Content="Continue to secure checkout" HorizontalAlignment="Left" Margin="0,10,0,0" Click="CustomDomain_Click" />
+                </StackPanel>
+              </Border>
+              <TextBlock x:Name="DeployStatusText" TextWrapping="Wrap" Margin="0,16,0,0" />
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem x:Name="DatabaseTab" Header="DATABASE">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="30" MaxWidth="820" HorizontalAlignment="Left">
+              <TextBlock Text="Connect Supabase" FontFamily="Georgia" FontSize="32" />
+              <TextBlock Text="Use your own Supabase account. The native app verifies the project before its credentials are stored in the private runtime."
+                         Foreground="#52645E" TextWrapping="Wrap" Margin="0,8,0,20" />
+              <UniformGrid Columns="3" Margin="0,0,0,20">
+                <Border x:Name="SupabaseProgressOne" Height="7" CornerRadius="4" Background="#18A66A" Margin="0,0,6,0" />
+                <Border x:Name="SupabaseProgressTwo" Height="7" CornerRadius="4" Background="#D4DDD8" Margin="3,0" />
+                <Border x:Name="SupabaseProgressThree" Height="7" CornerRadius="4" Background="#D4DDD8" Margin="6,0,0,0" />
+              </UniformGrid>
+
+              <Border x:Name="SupabaseWelcomePanel" Background="White" BorderBrush="#C4D0CA" BorderThickness="1"
+                      CornerRadius="16" Padding="22">
+                <StackPanel>
+                  <TextBlock Text="STEP 1 / USE YOUR SUPABASE ACCOUNT" FontWeight="Bold" FontSize="11" Foreground="#173F32" />
+                  <TextBlock Text="Supabase provides the database and dashboard. bolt.gives connects only the project you choose."
+                             Foreground="#52645E" TextWrapping="Wrap" Margin="0,9,0,18" />
+                  <WrapPanel>
+                    <Button Content="Register Supabase for Free" Click="RegisterSupabase_Click" Margin="0,0,10,10" />
+                    <Button Content="I have a Supabase account" Click="ShowSupabaseCredentials_Click"
+                            Margin="0,0,10,10" Background="#173F32" Foreground="White" />
+                  </WrapPanel>
+                  <TextBlock Text="Registration opens in your browser. Return to this wizard after creating a project."
+                             Foreground="#657A71" TextWrapping="Wrap" FontSize="12" />
+                </StackPanel>
+              </Border>
+
+              <Border x:Name="SupabaseCredentialsPanel" Visibility="Collapsed" Background="White" BorderBrush="#C4D0CA"
+                      BorderThickness="1" CornerRadius="16" Padding="22">
+                <StackPanel>
+                  <TextBlock Text="STEP 2 / CONNECT YOUR PROJECT" FontWeight="Bold" FontSize="11" Foreground="#173F32" />
+                  <TextBlock Text="Copy the Project URL and publishable key from the Supabase Connect dialog. Secret and service-role keys are rejected."
+                             Foreground="#52645E" TextWrapping="Wrap" Margin="0,9,0,18" />
+                  <TextBlock Text="Project URL" FontWeight="Bold" Margin="0,0,0,5" />
+                  <TextBox x:Name="SupabaseProjectUrlTextBox" />
+                  <TextBlock Text="Publishable or anon key" FontWeight="Bold" Margin="0,14,0,5" />
+                  <PasswordBox x:Name="SupabasePublishableKeyBox" Padding="10,8"
+                               AutomationProperties.Name="Supabase publishable or anon key" />
+                  <TextBlock x:Name="SupabaseValidationText" Foreground="#A33225" TextWrapping="Wrap" Margin="0,10,0,0" />
+                  <WrapPanel Margin="0,16,0,0">
+                    <Button Content="Open Supabase dashboard" Click="OpenSupabaseDashboard_Click" Margin="0,0,10,10" />
+                    <Button Content="Back" Click="BackFromSupabaseCredentials_Click" Margin="0,0,10,10" />
+                    <Button x:Name="ConnectSupabaseButton" Content="Verify and connect" Click="ConnectSupabase_Click"
+                            Margin="0,0,10,10" Background="#148456" Foreground="White" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+
+              <Border x:Name="SupabaseConnectedPanel" Visibility="Collapsed" Background="#E8F6EE" BorderBrush="#18A66A"
+                      BorderThickness="1" CornerRadius="16" Padding="22">
+                <StackPanel>
+                  <TextBlock x:Name="SupabaseConnectedTitle" Text="STEP 3 / SUPABASE IS VERIFIED"
+                             FontWeight="Bold" FontSize="11" Foreground="#173F32" />
+                  <TextBlock x:Name="SupabaseConnectedLabel" FontFamily="Cascadia Mono" FontSize="15"
+                             TextWrapping="Wrap" Margin="0,10,0,0" />
+                  <TextBlock x:Name="SupabaseConnectedDetail"
+                             Text="Restart Preview after changing credentials so the generated app receives the new environment."
+                             Foreground="#52645E" TextWrapping="Wrap" Margin="0,10,0,16" />
+                  <WrapPanel>
+                    <Button x:Name="ReplaceSupabaseButton" Content="Replace credentials" Click="ShowSupabaseCredentials_Click"
+                            Margin="0,0,10,10" />
+                    <Button Content="Disconnect" Click="DisconnectSupabase_Click" Margin="0,0,10,10"
+                            Background="#FCE8E5" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+              <TextBlock x:Name="SupabaseStatusText" TextWrapping="Wrap" Margin="0,14,0,0" Foreground="#52645E" />
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="LIVE CLI">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid Margin="28" MaxWidth="980" HorizontalAlignment="Left">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="430" /><ColumnDefinition Width="500" /></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Isolated Ubuntu workspace" FontFamily="Georgia" FontSize="32" />
+                <TextBlock Text="Create a private Linux user and isolated project directory. Connect Supabase separately when the app needs data."
+                           Foreground="#52645E" TextWrapping="Wrap" Margin="0,8,0,22" />
+                <TextBlock Text="Project name" FontWeight="Bold" Margin="0,0,0,5" />
+                <TextBox x:Name="LiveProjectNameTextBox" />
+                <TextBlock Text="CLI username" FontWeight="Bold" Margin="0,13,0,5" />
+                <TextBox x:Name="LiveUsernameTextBox" />
+                <TextBlock Text="CLI password" FontWeight="Bold" Margin="0,13,0,5" />
+                <PasswordBox x:Name="LivePasswordBox" Padding="10,8" />
+                <Button x:Name="ProvisionWorkspaceButton" Content="Create live workspace" HorizontalAlignment="Left"
+                        Margin="0,15,0,0" Click="ProvisionWorkspace_Click" />
+                <TextBlock x:Name="LiveWorkspaceStatusText" TextWrapping="Wrap" Margin="0,14,0,0" />
+              </StackPanel>
+              <Border Grid.Column="1" Margin="28,0,0,0" Background="#10231D" CornerRadius="18" Padding="20">
+                <StackPanel>
+                  <TextBlock Text="ONE-TIME CONNECTION DETAILS" Foreground="#C9F36A" FontSize="11" FontWeight="Bold" />
+                  <TextBlock Text="These credentials are shown once. Store them before leaving this page."
+                             Foreground="White" TextWrapping="Wrap" Margin="0,7,0,14" />
+                  <TextBox x:Name="LiveWorkspaceResultTextBox" IsReadOnly="True" AcceptsReturn="True"
+                           MinHeight="360" FontFamily="Cascadia Mono" FontSize="12" TextWrapping="Wrap"
+                           VerticalScrollBarVisibility="Auto" Background="#0B1814" Foreground="#D8F7A0" />
+                </StackPanel>
+              </Border>
+            </Grid>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem x:Name="AccountTab" Header="ACCOUNT">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="30" MaxWidth="760" HorizontalAlignment="Left">
+              <TextBlock Text="Your bolt.gives account" FontFamily="Georgia" FontSize="32" />
+              <Border Background="White" BorderBrush="#C4D0CA" BorderThickness="1" CornerRadius="16" Padding="18" Margin="0,22,0,0">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Text="Name" FontWeight="Bold" /><TextBlock x:Name="AccountNameText" Grid.Column="1" />
+                  <TextBlock Text="Email" Grid.Row="1" FontWeight="Bold" Margin="0,10,0,0" /><TextBlock x:Name="AccountEmailText" Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" />
+                  <TextBlock Text="Country" Grid.Row="2" FontWeight="Bold" Margin="0,10,0,0" /><TextBlock x:Name="AccountCountryText" Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" />
+                  <TextBlock Text="Plan" Grid.Row="3" FontWeight="Bold" Margin="0,10,0,0" /><TextBlock x:Name="AccountPlanText" Grid.Row="3" Grid.Column="1" Margin="0,10,0,0" />
+                </Grid>
+              </Border>
+              <Border Background="#173F32" CornerRadius="16" Padding="18" Margin="0,14,0,0">
+                <StackPanel>
+                  <TextBlock Text="AGENT TOKEN BALANCE" Foreground="#C9F36A" FontSize="11" FontWeight="Bold" />
+                  <TextBlock x:Name="AccountBalanceText" Foreground="White" FontSize="27" FontWeight="Bold" Margin="0,7,0,0" />
+                  <ProgressBar x:Name="AccountBalanceProgress" Height="10" Minimum="0" Maximum="100" Margin="0,12,0,0" />
+                  <TextBlock x:Name="AccountResetText" Foreground="#D8E4DE" Margin="0,8,0,0" />
+                </StackPanel>
+              </Border>
+              <WrapPanel Margin="0,16,0,0">
+                <Button Content="Refresh balance" Click="RefreshBalance_Click" Margin="0,0,10,10" />
+                <Button Content="Open Custom Domain deployment" Click="ShowDeploy_Click" Margin="0,0,10,10" />
+              </WrapPanel>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="SETTINGS">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="30" MaxWidth="700" HorizontalAlignment="Left">
+              <TextBlock Text="Desktop settings" FontFamily="Georgia" FontSize="32" />
+              <TextBlock Text="The FREE model selector remains beside the Chat prompt and can change between follow-ups without losing project history."
+                         Foreground="#52645E" TextWrapping="Wrap" Margin="0,15,0,22" />
+              <WrapPanel>
+                <Button Content="Check for updates" Click="CheckUpdates_Click" Margin="0,0,10,10" />
+                <Button Content="Report a bug" Click="ReportBug_Click" Margin="0,0,10,10" />
+                <Button Content="Sign out" Click="SignOut_Click" Margin="0,0,10,10" />
+              </WrapPanel>
+              <Border Background="White" BorderBrush="#C4D0CA" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,18,0,0">
+                  <TextBlock Text="Preview uses WebView2 only for the generated project. Chat, Workspace, code editing, terminal, Supabase setup, deployments, Live CLI, account, authentication and updates are native Windows controls."
+                           Foreground="#52645E" TextWrapping="Wrap" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </Grid>
+
+    <Border Grid.Row="3" Background="#DDE6E1" BorderBrush="#BCCBC4" BorderThickness="0,1,0,0">
+      <DockPanel Margin="12,0">
+        <TextBlock x:Name="RuntimeStatusText" Text="Ready" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="ProjectIdentityText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#657A71" />
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>

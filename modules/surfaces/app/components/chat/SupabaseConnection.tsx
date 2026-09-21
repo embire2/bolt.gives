@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { toast } from 'react-toastify';
 import { classNames } from '@bolt/core/utils/classNames';
-import { useSupabaseConnection } from '@bolt/project/lib/hooks/useSupabaseConnection';
 import { projectDatabaseConnection } from '@bolt/project/lib/stores/project-database';
 import { updateSupabaseConnection } from '@bolt/project/lib/stores/supabase';
 import { workbenchStore } from '@bolt/project/lib/stores/workbench';
@@ -14,7 +13,10 @@ import {
 import { Dialog, DialogButton, DialogClose, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { useProfile } from '~/lib/profile-context';
 
-type DatabaseTab = 'supabase' | 'postgresql';
+type WizardStep = 'welcome' | 'credentials' | 'connected';
+
+const SUPABASE_SIGN_UP_URL = 'https://supabase.com/dashboard/sign-up';
+const SUPABASE_PROJECTS_URL = 'https://supabase.com/dashboard/projects';
 
 const inputClasses = classNames(
   'w-full rounded-lg border border-bolt-elements-borderColor px-3 py-2.5 text-sm',
@@ -24,25 +26,12 @@ const inputClasses = classNames(
 
 export function SupabaseConnection() {
   const profileId = useProfile()?.id;
-  const {
-    connection: supabaseAccount,
-    connecting: connectingAccount,
-    fetchingStats,
-    fetchingApiKeys,
-    handleConnect: connectSupabaseAccount,
-    selectProject,
-    handleCreateProject,
-    updateToken,
-    isConnected: accountConnected,
-  } = useSupabaseConnection();
   const connection = useStore(projectDatabaseConnection);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [tab, setTab] = useState<DatabaseTab>('supabase');
+  const [step, setStep] = useState<WizardStep>('welcome');
   const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
-  const [databaseUrl, setDatabaseUrl] = useState('');
+  const [publishableKey, setPublishableKey] = useState('');
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const runtimeSessionId = workbenchStore.hostedRuntimeSessionId;
 
   useEffect(() => {
@@ -55,9 +44,8 @@ export function SupabaseConnection() {
   useEffect(() => {
     let active = true;
     projectDatabaseConnection.set(null);
-    setEditing(false);
-    setSupabaseAnonKey('');
-    setDatabaseUrl('');
+    setStep('welcome');
+    setPublishableKey('');
 
     if (!profileId) {
       return undefined;
@@ -67,6 +55,7 @@ export function SupabaseConnection() {
       .then((currentConnection) => {
         if (active) {
           projectDatabaseConnection.set(currentConnection);
+          setStep(currentConnection ? 'connected' : 'welcome');
         }
       })
       .catch(() => {
@@ -78,6 +67,11 @@ export function SupabaseConnection() {
     };
   }, [runtimeSessionId, profileId]);
 
+  const openDialog = () => {
+    setStep(connection ? 'connected' : 'welcome');
+    setIsDialogOpen(true);
+  };
+
   const connectSupabase = async () => {
     setSaving(true);
 
@@ -85,66 +79,18 @@ export function SupabaseConnection() {
       const nextConnection = await saveHostedProjectConnection(runtimeSessionId, {
         provider: 'supabase',
         supabaseUrl,
-        anonKey: supabaseAnonKey,
+        anonKey: publishableKey,
       });
       projectDatabaseConnection.set(nextConnection);
       updateSupabaseConnection({
-        credentials: { supabaseUrl: supabaseUrl.trim(), anonKey: supabaseAnonKey.trim() },
+        credentials: { supabaseUrl: supabaseUrl.trim(), anonKey: publishableKey.trim() },
         isConnected: true,
       });
-      setSupabaseAnonKey('');
-      toast.success('Supabase settings saved, not connectivity-verified. Restart Preview to apply them.');
-      setEditing(false);
-      setIsDialogOpen(false);
+      setPublishableKey('');
+      setStep('connected');
+      toast.success('Supabase verified and connected. Restart Preview to apply it to a running app.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not connect Supabase');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const importSupabaseProject = async (projectId: string) => {
-    setSaving(true);
-
-    try {
-      const credentials = await selectProject(projectId);
-
-      if (!credentials?.supabaseUrl || !credentials.anonKey) {
-        throw new Error('Supabase did not return a publishable key for this project.');
-      }
-
-      const nextConnection = await saveHostedProjectConnection(runtimeSessionId, {
-        provider: 'supabase',
-        supabaseUrl: credentials.supabaseUrl,
-        anonKey: credentials.anonKey,
-      });
-      projectDatabaseConnection.set(nextConnection);
-      setSupabaseAnonKey('');
-      toast.success('Supabase settings saved, not connectivity-verified. Restart Preview to apply them.');
-      setEditing(false);
-      setIsDialogOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not connect this Supabase project');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const connectPostgresql = async () => {
-    setSaving(true);
-
-    try {
-      const nextConnection = await saveHostedProjectConnection(runtimeSessionId, {
-        provider: 'postgresql',
-        databaseUrl,
-      });
-      projectDatabaseConnection.set(nextConnection);
-      setDatabaseUrl('');
-      toast.success('PostgreSQL verified at save time. Restart Preview to apply the new connection.');
-      setEditing(false);
-      setIsDialogOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not connect PostgreSQL');
     } finally {
       setSaving(false);
     }
@@ -162,7 +108,10 @@ export function SupabaseConnection() {
         project: undefined,
         isConnected: false,
       });
-      toast.success('Database settings removed. Restart Preview to remove the old connection from running commands.');
+      setSupabaseUrl('');
+      setPublishableKey('');
+      setStep('welcome');
+      toast.success('Database settings removed. Restart Preview to clear the old runtime environment.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not disconnect the database');
     } finally {
@@ -174,20 +123,23 @@ export function SupabaseConnection() {
     <div className="relative mr-2">
       <button
         type="button"
-        onClick={() => setIsDialogOpen(true)}
+        onClick={openDialog}
         className={classNames(
           'flex min-h-8 items-center gap-2 rounded-md border border-bolt-elements-borderColor px-2.5 py-1.5 text-xs font-medium',
           'bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive',
         )}
-        title="Connect a database to this project"
+        title="Connect Supabase to this project"
         aria-label="Open database connection"
       >
         <span className="i-ph:database h-4 w-4 text-[#18a66a]" aria-hidden="true" />
-        <span>{connection ? connection.label : 'Database'}</span>
+        <span>{connection?.provider === 'supabase' ? connection.label : 'Supabase'}</span>
         {connection ? (
           <span
-            className="h-1.5 w-1.5 rounded-full bg-amber-500"
-            aria-label={connection.status === 'verified' ? 'Verified at save time' : 'Configured, not verified'}
+            className={classNames(
+              'h-1.5 w-1.5 rounded-full',
+              connection.provider === 'supabase' && connection.status === 'verified' ? 'bg-[#18a66a]' : 'bg-amber-500',
+            )}
+            aria-label={connection.status === 'verified' ? 'Verified' : 'Migration required'}
           />
         ) : null}
       </button>
@@ -197,39 +149,155 @@ export function SupabaseConnection() {
           <Dialog className="max-h-[85vh] max-w-[620px] overflow-y-auto p-6">
             <DialogTitle>
               <span className="i-ph:database h-5 w-5 text-[#18a66a]" />
-              Project database
+              Connect Supabase
             </DialogTitle>
             <DialogDescription className="mt-2 text-sm leading-6 text-bolt-elements-textSecondary">
-              Projects start without a database. Connect only what this app needs; credentials stay in the private
-              runtime and are not written into generated files.
+              Projects start without a database. Use your own Supabase project; credentials stay in the private runtime
+              and are never written into generated source.
             </DialogDescription>
 
-            {connection && !editing ? (
-              <div className="mt-5 space-y-4">
-                <div className="rounded-xl border border-[#18a66a]/40 bg-[#18a66a]/10 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-bolt-elements-textPrimary">
-                    <span className="h-2 w-2 rounded-full bg-[#18a66a]" />
-                    {connection.provider === 'supabase' ? 'Supabase' : 'PostgreSQL'}{' '}
-                    {connection.status === 'verified' ? 'verified at save time' : 'configured, not verified'}
+            <div className="mt-5 flex items-center gap-2" aria-label="Supabase setup progress">
+              {(['welcome', 'credentials', 'connected'] as const).map((wizardStep, index) => (
+                <div
+                  key={wizardStep}
+                  className={classNames(
+                    'h-1.5 flex-1 rounded-full',
+                    index <= ['welcome', 'credentials', 'connected'].indexOf(step)
+                      ? 'bg-[#18a66a]'
+                      : 'bg-bolt-elements-background-depth-3',
+                  )}
+                />
+              ))}
+            </div>
+
+            {step === 'welcome' ? (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-xl border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-5">
+                  <p className="text-sm font-semibold text-bolt-elements-textPrimary">
+                    Step 1: use your Supabase account
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-bolt-elements-textSecondary">
+                    Supabase provides the hosted database and dashboard. bolt.gives connects only the project you
+                    choose.
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <a
+                      href={SUPABASE_SIGN_UP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg bg-[#148456] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f6f48]"
+                    >
+                      Register Supabase for Free
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setStep('credentials')}
+                      className="rounded-lg border border-bolt-elements-borderColor px-4 py-2.5 text-sm font-semibold text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive"
+                    >
+                      I have a Supabase account
+                    </button>
                   </div>
-                  <p className="mt-1 text-sm text-bolt-elements-textSecondary">{connection.label}</p>
-                  <p className="mt-2 text-xs text-bolt-elements-textTertiary">
-                    Saved settings are not a live health check. Restart Preview after changing or removing credentials;
-                    an already running process keeps its old environment. Verify database access in your app before
-                    publishing.
+                  <p className="mt-3 text-xs leading-5 text-bolt-elements-textTertiary">
+                    Registration opens in a new tab. Return here after creating a project.
                   </p>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <DialogButton
-                    type="secondary"
-                    onClick={() => {
-                      setTab(connection.provider);
-                      setEditing(true);
-                    }}
+                <div className="flex justify-end">
+                  <DialogClose asChild>
+                    <DialogButton type="secondary">Close</DialogButton>
+                  </DialogClose>
+                </div>
+              </div>
+            ) : null}
+
+            {step === 'credentials' ? (
+              <div className="mt-6 rounded-xl border border-bolt-elements-borderColor p-5">
+                <p className="text-sm font-semibold text-bolt-elements-textPrimary">Step 2: connect your project</p>
+                <p className="mt-2 text-xs leading-5 text-bolt-elements-textSecondary">
+                  Open the Supabase project Connect dialog and copy its Project URL and publishable key. Secret and
+                  service-role keys are rejected.
+                </p>
+                <label className="mt-5 block text-sm font-medium text-bolt-elements-textPrimary" htmlFor="supabase-url">
+                  Project URL
+                </label>
+                <input
+                  id="supabase-url"
+                  type="url"
+                  value={supabaseUrl}
+                  onChange={(event) => setSupabaseUrl(event.target.value)}
+                  placeholder="https://your-project.supabase.co"
+                  className={classNames(inputClasses, 'mt-1.5')}
+                />
+                <label className="mt-4 block text-sm font-medium text-bolt-elements-textPrimary" htmlFor="supabase-key">
+                  Publishable or anon key
+                </label>
+                <input
+                  id="supabase-key"
+                  type="password"
+                  value={publishableKey}
+                  onChange={(event) => setPublishableKey(event.target.value)}
+                  placeholder="sb_publishable_... or eyJ..."
+                  className={classNames(inputClasses, 'mt-1.5')}
+                  autoComplete="off"
+                />
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                  <a
+                    href={SUPABASE_PROJECTS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-semibold text-[#148456] hover:underline dark:text-[#5ee2a6]"
+                  >
+                    Open Supabase dashboard
+                  </a>
+                  <div className="flex gap-2">
+                    <DialogButton
+                      type="secondary"
+                      onClick={() => setStep(connection ? 'connected' : 'welcome')}
+                      disabled={saving}
+                    >
+                      Back
+                    </DialogButton>
+                    <button
+                      type="button"
+                      onClick={connectSupabase}
+                      disabled={saving || !supabaseUrl.trim() || !publishableKey.trim()}
+                      className="rounded-lg bg-[#148456] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f6f48] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {saving ? 'Verifying...' : 'Verify and connect'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {step === 'connected' && connection ? (
+              <div className="mt-6 space-y-4">
+                <div
+                  className={classNames(
+                    'rounded-xl border p-5',
+                    connection.provider === 'supabase'
+                      ? 'border-[#18a66a]/40 bg-[#18a66a]/10'
+                      : 'border-amber-500/40 bg-amber-500/10',
+                  )}
+                >
+                  <p className="text-sm font-semibold text-bolt-elements-textPrimary">
+                    {connection.provider === 'supabase' ? 'Step 3: Supabase is verified' : 'Legacy database connected'}
+                  </p>
+                  <p className="mt-2 text-sm text-bolt-elements-textSecondary">{connection.label}</p>
+                  <p className="mt-3 text-xs leading-5 text-bolt-elements-textTertiary">
+                    {connection.provider === 'supabase'
+                      ? 'Restart Preview after changing credentials so the generated app receives the new environment.'
+                      : 'New database connections are Supabase-only. Move this project to Supabase to replace the legacy connection.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep('credentials')}
+                    className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm font-semibold text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive"
                     disabled={saving}
                   >
-                    Replace credentials
-                  </DialogButton>
+                    {connection.provider === 'supabase' ? 'Replace credentials' : 'Move to Supabase'}
+                  </button>
                   <DialogClose asChild>
                     <DialogButton type="secondary">Close</DialogButton>
                   </DialogClose>
@@ -238,198 +306,7 @@ export function SupabaseConnection() {
                   </DialogButton>
                 </div>
               </div>
-            ) : (
-              <div className="mt-5">
-                {editing && (
-                  <button
-                    type="button"
-                    className="mb-3 underline"
-                    disabled={saving}
-                    onClick={() => {
-                      setEditing(false);
-                      setSupabaseAnonKey('');
-                      setDatabaseUrl('');
-                    }}
-                  >
-                    Cancel replacement
-                  </button>
-                )}
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-bolt-elements-background-depth-2 p-1">
-                  {(['supabase', 'postgresql'] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setTab(value)}
-                      className={classNames(
-                        'rounded-md px-3 py-2 text-sm font-semibold transition-colors',
-                        tab === value
-                          ? 'bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary shadow-sm'
-                          : 'text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
-                      )}
-                    >
-                      {value === 'supabase' ? 'Supabase' : 'PostgreSQL'}
-                    </button>
-                  ))}
-                </div>
-
-                {tab === 'supabase' ? (
-                  <div className="mt-5 space-y-4">
-                    <div className="rounded-lg border border-bolt-elements-borderColor p-4">
-                      <h3 className="text-sm font-semibold text-bolt-elements-textPrimary">Quick connect</h3>
-                      <p className="mt-1 text-xs leading-5 text-bolt-elements-textSecondary">
-                        Copy both values from Supabase: Project Settings, then API.
-                      </p>
-                      <label
-                        className="mt-4 block text-sm font-medium text-bolt-elements-textPrimary"
-                        htmlFor="supabase-url"
-                      >
-                        Project URL
-                      </label>
-                      <input
-                        id="supabase-url"
-                        type="url"
-                        value={supabaseUrl}
-                        onChange={(event) => setSupabaseUrl(event.target.value)}
-                        placeholder="https://your-project.supabase.co"
-                        className={classNames(inputClasses, 'mt-1.5')}
-                      />
-                      <label
-                        className="mt-4 block text-sm font-medium text-bolt-elements-textPrimary"
-                        htmlFor="supabase-key"
-                      >
-                        Publishable or anon key
-                      </label>
-                      <input
-                        id="supabase-key"
-                        type="password"
-                        value={supabaseAnonKey}
-                        onChange={(event) => setSupabaseAnonKey(event.target.value)}
-                        placeholder="sb_publishable_... or eyJ..."
-                        className={classNames(inputClasses, 'mt-1.5')}
-                      />
-                      <div className="mt-4 flex items-center justify-between gap-3">
-                        <a
-                          href="https://supabase.com/dashboard/projects"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-medium text-[#148456] hover:underline dark:text-[#5ee2a6]"
-                        >
-                          Open Supabase dashboard
-                        </a>
-                        <button
-                          type="button"
-                          onClick={connectSupabase}
-                          disabled={saving || !supabaseUrl.trim() || !supabaseAnonKey.trim()}
-                          className="rounded-lg bg-[#148456] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f6f48] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {saving ? 'Connecting...' : 'Connect Supabase'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <details className="rounded-lg border border-bolt-elements-borderColor p-4">
-                      <summary className="cursor-pointer text-sm font-semibold text-bolt-elements-textPrimary">
-                        Choose from my Supabase account
-                      </summary>
-                      <p className="mt-2 text-xs leading-5 text-bolt-elements-textSecondary">
-                        Optional: use a personal access token once to list your projects. It is kept in memory only for
-                        this browser session.
-                      </p>
-                      {!accountConnected ? (
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                          <input
-                            type="password"
-                            value={supabaseAccount.token}
-                            onChange={(event) => updateToken(event.target.value)}
-                            placeholder="Supabase personal access token"
-                            className={classNames(inputClasses, 'flex-1')}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void connectSupabaseAccount()}
-                            disabled={connectingAccount || !supabaseAccount.token.trim()}
-                            className="rounded-lg border border-bolt-elements-borderColor px-4 py-2 text-sm font-semibold text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundActive disabled:opacity-50"
-                          >
-                            {connectingAccount ? 'Loading...' : 'List projects'}
-                          </button>
-                        </div>
-                      ) : fetchingStats ? (
-                        <p className="mt-3 text-sm text-bolt-elements-textSecondary">Loading projects...</p>
-                      ) : (
-                        <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-                          {supabaseAccount.stats?.projects?.map((project) => (
-                            <button
-                              key={project.id}
-                              type="button"
-                              onClick={() => void importSupabaseProject(project.id)}
-                              disabled={saving || fetchingApiKeys}
-                              className="flex w-full items-center justify-between rounded-lg border border-bolt-elements-borderColor px-3 py-2 text-left hover:border-[#18a66a] disabled:opacity-50"
-                            >
-                              <span>
-                                <span className="block text-sm font-medium text-bolt-elements-textPrimary">
-                                  {project.name}
-                                </span>
-                                <span className="block text-xs text-bolt-elements-textSecondary">{project.region}</span>
-                              </span>
-                              <span className="text-xs font-semibold text-[#148456] dark:text-[#5ee2a6]">Connect</span>
-                            </button>
-                          ))}
-                          {!supabaseAccount.stats?.projects?.length ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleCreateProject()}
-                              className="text-sm font-medium text-[#148456] hover:underline dark:text-[#5ee2a6]"
-                            >
-                              Create a Supabase project
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
-                    </details>
-                  </div>
-                ) : (
-                  <div className="mt-5 rounded-lg border border-bolt-elements-borderColor p-4">
-                    <h3 className="text-sm font-semibold text-bolt-elements-textPrimary">
-                      Connect your PostgreSQL server
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-bolt-elements-textSecondary">
-                      The runtime verifies the connection before saving it. The URL is injected as DATABASE_URL and
-                      never returned to the browser.
-                    </p>
-                    <label
-                      className="mt-4 block text-sm font-medium text-bolt-elements-textPrimary"
-                      htmlFor="postgres-url"
-                    >
-                      Connection string
-                    </label>
-                    <input
-                      id="postgres-url"
-                      type="password"
-                      value={databaseUrl}
-                      onChange={(event) => setDatabaseUrl(event.target.value)}
-                      placeholder="postgresql://user:password@host:5432/database?sslmode=require"
-                      className={classNames(inputClasses, 'mt-1.5')}
-                    />
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={connectPostgresql}
-                        disabled={saving || !databaseUrl.trim()}
-                        className="rounded-lg bg-[#173f5f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f304b] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {saving ? 'Verifying...' : 'Verify and connect'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-5 flex justify-end">
-                  <DialogClose asChild>
-                    <DialogButton type="secondary">Cancel</DialogButton>
-                  </DialogClose>
-                </div>
-              </div>
-            )}
+            ) : null}
           </Dialog>
         ) : null}
       </DialogRoot>

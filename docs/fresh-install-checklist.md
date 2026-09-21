@@ -99,9 +99,10 @@ Validated self-host build command:
 
 Generated projects do not require a database. In Chat or Agent Mode, open **Database**:
 
-1. For Supabase, paste the Project URL and publishable/anon key from Project Settings > API.
-2. For PostgreSQL, paste a restricted application connection string and let the runtime verify it.
-3. Never add either connection to generated source or commit it to Git.
+1. Select **Register Supabase for Free** if the user does not have an account; registration opens in a new tab.
+2. Paste the Project URL and publishable/anon key from the Supabase Connect dialog.
+3. Let the runtime verify the project before it stores the connection.
+4. Never add the connection to generated source or commit it to Git.
 
 ## Optional shared sessions
 

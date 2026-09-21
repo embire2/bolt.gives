@@ -115,8 +115,9 @@ export function HistoryItem({
             <span className="truncate pr-24">{currentDescription}</span>
           </WithTooltip>
           <div
+            aria-label="Project actions"
             className={classNames(
-              'absolute right-0 top-0 bottom-0 flex items-center bg-transparent px-2 transition-colors',
+              'absolute inset-y-0 right-0 isolate flex items-center bg-white pl-4 pr-2 shadow-[-14px_0_18px_rgba(255,255,255,0.98)] transition-colors dark:bg-gray-950 dark:shadow-[-14px_0_18px_rgba(3,7,18,0.98)]',
             )}
           >
             <div className="flex items-center gap-2.5 text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">

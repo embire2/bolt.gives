@@ -2,7 +2,7 @@
 
 > **Looking for the commercial edition?** [WebCoder.Codes](https://webcoder.codes) is the commercial version of this project. Its team of 120+ developers is building a managed Agentic Coding experience for organizations that want commercial hosting, support, and product development beyond the open-source release.
 
-[![Current release](https://img.shields.io/badge/release-v4.1.2-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.2)
+[![Current release](https://img.shields.io/badge/release-v4.1.3-173f5f)](https://github.com/embire2/bolt.gives/releases/tag/v4.1.3)
 [![Roadmap](https://img.shields.io/badge/roadmap-reliability%20%26%20native%20Windows-d97706)](ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-148456)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](.nvmrc)
@@ -14,7 +14,7 @@
 
 > **Reliability first.** Each release is tested on the dedicated [alpha test instance](https://alpha.bolt.gives/chat) before production rollout. Alpha may contain unfinished changes: use disposable projects, not important data. See the [test environment guide](docs/operations/alpha-staging.md) and [actionable bug-fix queue](ROADMAP.md#next-patch-bug-fixes-only).
 
-> **v4.1.2, 20 September 2026:** hosted FREE now uses **GLM 5.3 Flash** through OpenRouter, with **20 API credits per GMT+2 day**, approximately 20 active coding minutes. Account-bound instance creation, an operator-controlled one-instance limit, `/admin` on configured instance domains, custom-domain relay/collaboration fixes, and consistent secure outgoing email are included. [Release notes and installation](docs/releases/v4.1.2.md) describe this patch; [v4.1.0 notes](docs/releases/v4.1.0.md) describe the underlying isolated runtime and recovery work.
+> **v4.1.3, 21 September 2026:** project databases now use a guided **Supabase-only** setup with free-registration links and server verification before credentials are saved. The history drawer and item actions remain opaque while opening and closing. The complete native Windows source now lives in [`desktop/windows`](desktop/windows), and **Desktop v1.11.0** adds the same native Supabase wizard while keeping Live CLI workspaces database-free. [Release notes](docs/releases/v4.1.3.md) describe this patch; [v4.1.2 notes](docs/releases/v4.1.2.md) cover the current GLM FREE model and account/fleet changes.
 
 **What changed:** current, bounded source snapshots; reliable follow-up/history restoration; faster FREE startup without a separate paid probe; account-owned provider keys; protected public browsing; pricing and Checkout repairs; truthful database/payment status; accessible onboarding; and recoverable Linux/PowerShell installers. Code/Preview selection and the compact follow-up prompt remain stable during generation and repair.
 
@@ -30,7 +30,7 @@ Preview asset reads also survive a brief cleared-port handoff without bypassing 
 
 **Billing is active:** production Upgrade opens a USD 5 monthly Stripe subscription Checkout. The dedicated signed webhook is enabled; unsigned/tampered requests are rejected, replay is tested, and disposable PostgreSQL tests cover activation, renewal and duplicate events. The live test Checkout was expired without charging a card. A real paid transaction is reserved for the operator's acceptance test.
 
-**Open-source installation and feedback:** try the Linux installer below, bring your own provider key, and [open an Issue](https://github.com/embire2/bolt.gives/issues/new/choose) with your version and reproduction steps. PostgreSQL is not required for generated projects. The Windows native rewrite, full Windows/WSL reboot-resume acceptance and optional remote CLI-node availability are tracked separately, not presented as completed by this web release. Codeball is removed; required tests, builds and security scans remain.
+**Open-source installation and feedback:** try the Linux installer below, bring your own provider key, and [open an Issue](https://github.com/embire2/bolt.gives/issues/new/choose) with your version and reproduction steps. Generated projects start database-free and can connect a user-owned Supabase project when needed. The native Windows source and signed-release workflow are public; Windows/WSL server installation remains a separate path. Codeball is removed; required tests, builds and security scans remain.
 
 ## What You Can Do
 
@@ -100,7 +100,7 @@ stops. Both chat streams completed normally, with no fatal browser/network error
 
 ### Connect data only when the app needs it
 
-Projects start without a database. Supabase quick connect needs only the Project URL and publishable/anon key; PostgreSQL uses a private server-held connection string.
+Projects start without a database. The guided wizard can open free Supabase registration in a new tab, then verifies the user's Project URL and publishable/anon key before saving it privately.
 
 ![bolt.gives project Database connection dialog](docs/screenshots/database.png)
 
@@ -173,38 +173,28 @@ The PostgreSQL database used by bolt.gives itself for profiles or operator data 
 
 ### Connect Supabase
 
-1. Create or open a project in [Supabase](https://supabase.com/dashboard/projects).
-2. In Supabase, open **Project Settings > API**.
-3. In bolt.gives, open **Database > Supabase**.
-4. Paste the **Project URL** and **Publishable key** or legacy **anon key**.
-5. Select **Connect Supabase**, then restart an existing Preview to apply the new environment.
+1. In bolt.gives, open **Database**.
+2. If needed, select **Register Supabase for Free**. Registration opens in a new tab so the project remains available.
+3. Create or open a project and use its **Connect** dialog to find the Project URL and publishable key.
+4. Return to the wizard, select **I have a Supabase account**, and paste the **Project URL** and **Publishable key** or legacy **anon key**.
+5. Select **Verify and connect**. Restart an existing Preview to apply the new environment.
 
-Supabase reports **configured, not verified**. Saving a URL/key is not proof of network access, permissions, or RLS correctness. Test a real database operation in your app. Use **Replace credentials** for rotation; an unsuccessful replacement preserves the previous record. Restart Preview after replacement or disconnection because existing processes retain their old environment.
+The runtime sends a bounded request to the project's REST endpoint and reports **verified** only when Supabase accepts the publishable key. It does not bypass Row Level Security or treat table access as a health requirement. Use **Replace credentials** for rotation; an unsuccessful replacement preserves the previous record. Restart Preview after replacement or disconnection because existing processes retain their old environment.
 
 The runtime provides these variables to the project:
 
 ```text
 VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
 VITE_SUPABASE_ANON_KEY
 SUPABASE_URL
+SUPABASE_PUBLISHABLE_KEY
 SUPABASE_ANON_KEY
 ```
 
 Supabase publishable/anon keys are designed for client use, but Row Level Security still controls access. Enable RLS and write policies for every client-accessible table. Never use a Supabase service-role key in the quick-connect field.
 
-An optional account picker can list projects from a Supabase personal access token. That management token stays in memory for the current browser session and is not persisted to local storage.
-
-### Connect Your PostgreSQL Server
-
-1. Create a restricted database user for one application.
-2. Allow network access from the bolt.gives runtime host.
-3. In bolt.gives, open **Database > PostgreSQL**.
-4. Paste a connection string such as `postgresql://app:password@db.example.com/app?sslmode=require`.
-5. Select **Verify and connect**.
-
-The runtime tests `SELECT 1` before saving the connection. It stores the URL in a mode-`0600` record outside project source and injects `DATABASE_URL` plus standard `PG*` variables into that project's server process. Only the provider, host, database name, and connection status return to the browser.
-
-PostgreSQL URLs are deliberately excluded from static Cloudflare build environments. A browser-only static app should use Supabase or a separately deployed API rather than exposing direct PostgreSQL credentials.
+New project database connections are Supabase-only. Existing private PostgreSQL records remain readable long enough to migrate a project safely, but the UI and API do not create or replace them. The optional PostgreSQL server used by some self-hosters for bolt.gives profile/admin data is separate and is never exposed to generated applications.
 
 ## How We Reached v4
 
@@ -237,15 +227,15 @@ The complete release record is in [CHANGELOG.md](CHANGELOG.md).
 
 The first audit recorded a Code/Preview timeout and snapshot 502; these failures are retained in historical evidence, not counted as passes. The final web acceptance adds real source/follow-up/history checks, isolated Preview, rootless processes, public publishing, signed billing and deterministic browser-error recovery. Test evidence has grown from 1,167 to 1,462 passing tests.
 
-[ROADMAP.md](ROADMAP.md) separates shipped corrections from remaining validation and follow-up work. Windows/WSL reboot-resume, the native Windows rewrite, broader model/account matrices and fleet-scale performance profiling are not claimed complete. New feature expansion stays secondary to measurable reliability.
+[ROADMAP.md](ROADMAP.md) separates shipped corrections from remaining validation and follow-up work. Windows/WSL server reboot-resume, broader model/account matrices, future WinUI research and fleet-scale performance profiling remain open. New feature expansion stays secondary to measurable reliability.
 
 Both implementation checkpoints are combined in v4.1.0. The production app/runtime migration is complete, and original source, private records and host configuration remain available for rollback. Paid Stripe acceptance remains an explicit operator test; no automated test charged a real card.
 
-### A Truly Native Windows Client
+### Native Windows Client
 
-The preferred rewrite is **C++20 with C++/WinRT, WinUI 3/XAML, and the Windows App SDK**, developed and tested in a Windows environment. Native controls will handle authentication, projects, chat, editor, terminal, settings, and deployments. WebView2 is allowed only for generated-app Preview, not for loading the bolt.gives website as the application. Microsoft's [native Windows guidance](https://learn.microsoft.com/en-us/windows/apps/get-started/) supports WinUI 3 with C++ or C#.
+**Desktop v1.11.0** is a C#/.NET 8 WPF application using native Windows controls for authentication, projects, Chat, Workspace, editing, terminal, Supabase setup, deployment, account state, and updates. WebView2 is restricted to generated-project Preview; the app does not wrap the bolt.gives website. The source, portable test suite, Inno Setup definition, and signed-release workflow are in [`desktop/windows`](desktop/windows).
 
-First we will prove a small editor/terminal/Preview slice and measure it against the existing WPF client, which is already a native Windows technology. C# WinUI 3 remains an alternative only if that evidence supports a safer implementation. The [Windows work packages](docs/quality/2026-09-12-v4.1-audit.md#native-windows-rewrite) cover OTP login, account-safe migration, feature parity, responsive streaming, signed updates, rollback, and real Windows UI Automation.
+The updater downloads only an exact versioned GitHub asset, checks size and SHA-256, verifies the pinned Authenticode chain, requests administrator approval, closes the old app, validates the installed version, and rolls back on failure. Desktop uses its own `desktop-v*` version line. Future WinUI/C++ research remains a roadmap item and must outperform the working native client before replacing it.
 
 **Desktop v1.10.2 remains the released client. Desktop v2.0.0 is the proposed rewrite version**, independent of web v4.1.0 and not yet shipped. Desktop source remains private; public releases receive compiled assets only. No mandatory replacement will be rolled out before native parity, signing, migration, and updater failure-path tests pass.
 
@@ -289,7 +279,7 @@ Recovery is bounded and explicit: failed downloads/package commands retry; depen
 
 ### Windows PowerShell Setup
 
-The public [install.ps1](install.ps1) installs the **open-source server in Ubuntu on WSL2**, not the separately versioned native Windows desktop application. It supports Windows PowerShell 5.1 and PowerShell 7. Review the script in the validation checkout, then run:
+The public [install.ps1](install.ps1) installs the **open-source server in Ubuntu on WSL2**, not the separately versioned native Windows desktop application. The Desktop installer is published under the latest [`desktop-v*` release](https://github.com/embire2/bolt.gives/releases?q=desktop-v). The PowerShell script supports Windows PowerShell 5.1 and PowerShell 7. Review it in the validation checkout, then run:
 
 ```powershell
 .\install.ps1 -CheckOnly
@@ -438,7 +428,7 @@ The project needs testing on VPS providers, network configurations, browsers, ge
 3. Wait for the health-verified Preview.
 4. Ask for a follow-up change.
 5. Reload and reopen the project from history.
-6. Try a Supabase connection, a restricted PostgreSQL connection, or no database at all.
+6. Try the Supabase wizard or continue with no database at all.
 7. Publish if your Cloudflare integration is configured.
 
 Open a [bug report](https://github.com/embire2/bolt.gives/issues/new/choose) with the route, selected provider/model, exact visible error, final command exit code, Preview health reason, browser console output, and redacted service logs. Never attach credentials or customer data.

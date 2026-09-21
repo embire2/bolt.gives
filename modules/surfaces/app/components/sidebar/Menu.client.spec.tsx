@@ -120,4 +120,12 @@ describe('Menu sidebar behavior', () => {
     render(<Menu />);
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
   });
+
+  it('keeps the sliding history surface opaque', () => {
+    render(<Menu />);
+
+    const shell = screen.getByTestId('sidebar-shell');
+    expect(shell.className).toContain('bg-white');
+    expect(shell.className).toContain('dark:bg-gray-950');
+  });
 });

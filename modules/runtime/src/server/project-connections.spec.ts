@@ -25,6 +25,9 @@ async function createConfig() {
 }
 
 describe('user-owned project database connections', () => {
+  const verificationResponse = () =>
+    new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+
   it('persists Supabase outside project source and returns only redacted status', async () => {
     const config = await createConfig();
     const record = await saveProjectConnection(
@@ -35,6 +38,7 @@ describe('user-owned project database connections', () => {
         anonKey: 'public-anon-key-value',
       },
       config,
+      { fetchFn: vi.fn(async () => verificationResponse()) },
     );
     const files = await fs.readdir(config.secretRoot);
     const status = sanitizeProjectConnection(record);
@@ -44,13 +48,14 @@ describe('user-owned project database connections', () => {
     expect(status).toMatchObject({
       provider: 'supabase',
       label: 'project-ref',
-      status: 'configured',
-      verifiedAt: null,
+      status: 'verified',
+      verifiedAt: record.updatedAt,
     });
     expect(JSON.stringify(status)).not.toContain('public-anon-key-value');
     expect(buildProjectConnectionEnvironment(record)).toMatchObject({
       VITE_SUPABASE_URL: 'https://project-ref.supabase.co',
       VITE_SUPABASE_ANON_KEY: 'public-anon-key-value',
+      VITE_SUPABASE_PUBLISHABLE_KEY: 'public-anon-key-value',
     });
   });
 
@@ -83,17 +88,13 @@ describe('user-owned project database connections', () => {
     await expect(fs.readdir(config.secretRoot)).resolves.toEqual([]);
   });
 
-  it('verifies PostgreSQL before persisting and omits it from static build environments', async () => {
+  it('does not offer new PostgreSQL connections', async () => {
     const config = await createConfig();
-    const verifyPostgresConnectionFn = vi.fn(async () => undefined);
     const databaseUrl = 'postgresql://app:private@db.example.com:5433/calendar?sslmode=require';
-    const record = await saveProjectConnection('project-two', { provider: 'postgresql', databaseUrl }, config, {
-      verifyPostgresConnectionFn,
-    });
-
-    expect(verifyPostgresConnectionFn).toHaveBeenCalledOnce();
-    expect(sanitizeProjectConnection(record)).toMatchObject({ status: 'verified', verifiedAt: record.updatedAt });
-    expect(buildProjectConnectionEnvironment(record)).toMatchObject({
+    await expect(saveProjectConnection('project-two', { provider: 'postgresql', databaseUrl }, config)).rejects.toThrow(
+      'Supabase only',
+    );
+    expect(buildProjectConnectionEnvironment({ provider: 'postgresql', databaseUrl })).toMatchObject({
       DATABASE_URL: databaseUrl,
       PGHOST: 'db.example.com',
       PGPORT: '5433',
@@ -102,8 +103,9 @@ describe('user-owned project database connections', () => {
       PGPASSWORD: 'private',
       PGSSLMODE: 'require',
     });
-    expect(buildProjectConnectionEnvironment(record, { target: 'static-build' })).toEqual({});
-    expect(JSON.stringify(sanitizeProjectConnection(record))).not.toContain('private');
+    expect(
+      buildProjectConnectionEnvironment({ provider: 'postgresql', databaseUrl }, { target: 'static-build' }),
+    ).toEqual({});
   });
 
   it('deletes a connection without leaving project credentials behind', async () => {
@@ -116,6 +118,7 @@ describe('user-owned project database connections', () => {
         anonKey: 'public-anon-key-value',
       },
       config,
+      { fetchFn: vi.fn(async () => verificationResponse()) },
     );
 
     await deleteProjectConnection('project-three', config);
@@ -124,13 +127,13 @@ describe('user-owned project database connections', () => {
 
   it('does not replace the last saved connection when credential rotation fails', async () => {
     const config = await createConfig();
-    const input = { provider: 'postgresql', databaseUrl: 'postgresql://app:fixture@db.example/app' };
+    const input = { provider: 'supabase', supabaseUrl: 'https://rotation.supabase.co', anonKey: 'public-fixture-key' };
     const record = await saveProjectConnection('rotation', input, config, {
-      verifyPostgresConnectionFn: async () => undefined,
+      fetchFn: vi.fn(async () => verificationResponse()),
     });
     await expect(
-      saveProjectConnection('rotation', { ...input, databaseUrl: 'postgresql://app:wrong@db.example/app' }, config, {
-        verifyPostgresConnectionFn: async () => {
+      saveProjectConnection('rotation', { ...input, anonKey: 'wrong-public-key' }, config, {
+        verifySupabaseConnectionFn: async () => {
           throw new Error('fixture unreachable');
         },
       }),
@@ -138,21 +141,28 @@ describe('user-owned project database connections', () => {
     expect(await readProjectConnection('rotation', config)).toEqual(record);
   });
 
-  it('never labels an uncontacted Supabase origin healthy and rejects non-origin URLs', async () => {
+  it('verifies Supabase before saving and rejects non-Supabase origins', async () => {
     const config = await createConfig();
-    const input = { provider: 'supabase', supabaseUrl: 'https://unreachable.example', anonKey: 'public-fixture-key' };
-    const record = await saveProjectConnection('offline', input, config);
-    expect(sanitizeProjectConnection(record)).toMatchObject({ status: 'configured', verifiedAt: null });
+    const input = { provider: 'supabase', supabaseUrl: 'https://offline.supabase.co', anonKey: 'public-fixture-key' };
     await expect(
-      saveProjectConnection(
-        'offline',
-        { ...input, supabaseUrl: 'https://unreachable.example/path?key=fixture' },
-        config,
-      ),
-    ).rejects.toThrow('origin');
+      saveProjectConnection('offline', input, config, {
+        fetchFn: vi.fn(async () => new Response('{}', { status: 401 })),
+      }),
+    ).rejects.toThrow('rejected the publishable key');
+    await expect(fs.readdir(config.secretRoot)).resolves.toEqual([]);
+    await expect(
+      saveProjectConnection('offline', { ...input, supabaseUrl: 'https://unreachable.example' }, config),
+    ).rejects.toThrow('HTTPS project URL');
 
-    const replaced = await saveProjectConnection('offline', { ...input, anonKey: 'replacement-fixture-key' }, config);
+    const replaced = await saveProjectConnection('offline', { ...input, anonKey: 'replacement-fixture-key' }, config, {
+      fetchFn: vi.fn(async (_url, options) => {
+        expect(options.redirect).toBe('manual');
+        expect(options.headers).toMatchObject({ apikey: 'replacement-fixture-key' });
+
+        return verificationResponse();
+      }),
+    });
     expect((await readProjectConnection('offline', config))?.anonKey).toBe('replacement-fixture-key');
-    expect(sanitizeProjectConnection(replaced)?.status).toBe('configured');
+    expect(sanitizeProjectConnection(replaced)?.status).toBe('verified');
   });
 });

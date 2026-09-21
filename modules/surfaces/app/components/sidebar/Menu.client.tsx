@@ -27,18 +27,17 @@ const LazyControlPanel = lazy(() =>
 
 const menuVariants = {
   closed: {
-    opacity: 0,
     visibility: 'hidden',
-    left: '-340px',
+    x: '-110%',
     transition: {
       duration: 0.2,
       ease: cubicEasingFn,
+      visibility: { delay: 0.2 },
     },
   },
   open: {
-    opacity: 1,
     visibility: 'initial',
-    left: 0,
+    x: 0,
     transition: {
       duration: 0.2,
       ease: cubicEasingFn,

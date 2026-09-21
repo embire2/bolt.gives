@@ -23,5 +23,5 @@ export function getProjectDatabasePromptContext(
     return `A Supabase project is connected. The hosted runtime injects VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_URL, and SUPABASE_ANON_KEY. Read those variables at runtime or build time. Never copy their values into generated source or .env files.`;
   }
 
-  return `No project database is connected. Projects do not require a database. If the requested feature genuinely needs persistence, ask the user to open Database and connect Supabase or PostgreSQL; do not block unrelated work and do not invent credentials.`;
+  return `No project database is connected. Projects do not require a database. If the requested feature genuinely needs persistence, ask the user to open Database and connect their Supabase project; do not block unrelated work and do not invent credentials.`;
 }

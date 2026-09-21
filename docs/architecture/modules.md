@@ -65,4 +65,4 @@ Do not bypass a dependency rule with a long relative path. If two low-level modu
 
 ## Project Data Boundary
 
-Generated projects do not receive a database automatically. `runtime` stores an explicitly connected Supabase or PostgreSQL record outside project source, injects its environment only into the owning session, and returns redacted status to browser surfaces. `project` owns the Database control state, while `agent` sees only the provider and variable contract. The optional PostgreSQL database used by bolt.gives profiles/admin is a separate control-plane concern.
+Generated projects do not receive a database automatically. `runtime` verifies and stores an explicitly connected Supabase record outside project source, injects its environment only into the owning session, and returns redacted status to browser surfaces. `project` owns the Database control state, while `agent` sees only the provider and variable contract. Legacy PostgreSQL records are read only for migration; new project connections are Supabase-only. The optional PostgreSQL database used by bolt.gives profiles/admin is a separate control-plane concern.

@@ -35,7 +35,7 @@ A subsequent real-provider Chromium journey passed in 262 seconds: Luna generati
 
 ![Actual alpha Preview after the follow-up and history reload](../screenshots/alpha-custom-domain-20260919.png)
 
-Candidate checks: 1,485 unit/integration tests passed, nine skipped; 152 surfaces-module tests passed; boundaries, typecheck, lint, build and bundle budgets passed. Lint retains ten existing warnings. Public source and client artifacts passed the configured-credential scan. These checks cover the gateway candidate, not the unfinished Supabase rewrite.
+The last recorded candidate passed 1,485 unit/integration tests with nine skipped, 152 surfaces-module tests, boundaries, typecheck, lint, build, and bundle budgets. Lint retained ten existing warnings. Public source and client artifacts passed the configured-credential scan. Treat these numbers as historical evidence: every new candidate, including the Supabase wizard, must produce its own release-gate and browser acceptance record before promotion.
 
 Before promoting any candidate, a normal authenticated browser must generate a project, render Preview, apply a follow-up to the same project, restore its history after navigation/reload, publish it, and load the public app after its coding runtime stops. Browser exceptions, cancellation, stale output and failed WebSockets are not acceptable substitutes for that evidence.
 
