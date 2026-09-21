@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { isStaticAssetRequestUrl, resolveCodingAppUrl, selectBreakTarget } from './live-release-smoke-utils.mjs';
+import { completeProfileOnboardingForScreenshot } from './screenshot-profile-onboarding.mjs';
 
 const baseUrl = resolveCodingAppUrl(process.env.BASE_URL || 'https://alpha1.bolt.gives');
 const providerName = process.env.E2E_PROVIDER || 'FREE';
@@ -222,6 +223,11 @@ try {
 
   logProgress('Opening application', `baseUrl=${baseUrl} provider=${providerName} model=${modelName}`);
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+
+  if (await completeProfileOnboardingForScreenshot(page)) {
+    logProgress('Profile onboarding complete');
+  }
+
   await waitForPromptSurface(page);
 
   if (asset404s.length > 0) {

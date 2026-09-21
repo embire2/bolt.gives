@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   closePageThenCleanupSession,
@@ -5,6 +6,17 @@ import {
   resolveCodingAppUrl,
   selectBreakTarget,
 } from './live-release-smoke-utils.mjs';
+
+describe('live release journey', () => {
+  it('completes required profile onboarding before locating the prompt', () => {
+    const source = fs.readFileSync(new URL('./live-release-smoke.mjs', import.meta.url), 'utf8');
+    const onboardingIndex = source.indexOf('completeProfileOnboardingForScreenshot(page)');
+    const promptIndex = source.indexOf('await waitForPromptSurface(page)', onboardingIndex);
+
+    expect(onboardingIndex).toBeGreaterThan(-1);
+    expect(promptIndex).toBeGreaterThan(onboardingIndex);
+  });
+});
 
 describe('selectBreakTarget', () => {
   it('targets the active app component referenced by index.html and main entry', () => {
