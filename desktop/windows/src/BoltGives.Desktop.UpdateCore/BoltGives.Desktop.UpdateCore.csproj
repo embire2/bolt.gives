@@ -10,5 +10,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\certificates\*.cer" Link="Certificates\%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="BoltGives.Desktop.Tests" />
   </ItemGroup>
 </Project>

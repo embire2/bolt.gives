@@ -1,33 +1,37 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string[]] $Path,
-
-  [string] $TrustRootPath = "certificates/microsoft-enterprise-identity-verification-root-2020.cer",
-
-  [string[]] $IntermediatePath = @(
-    "certificates/microsoft-enterprise-id-verification-cs-aoc-ca-03.cer",
-    "certificates/microsoft-enterprise-identity-verification-code-signing-pca-2020.cer"
-  )
+  [string[]] $Path
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$expectedCertificateHashes = @{}
-$expectedCertificateHashes[$TrustRootPath] = "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8"
-$expectedCertificateHashes[$IntermediatePath[0]] = "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2"
-$expectedCertificateHashes[$IntermediatePath[1]] = "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16"
-
-$trustRoot = $null
+$pins = @(
+  @{ Path = "certificates/microsoft-enterprise-identity-verification-root-2020.cer"; Hash = "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8"; Root = $true; Hierarchy = "legacy" },
+  @{ Path = "certificates/microsoft-enterprise-id-verification-cs-aoc-ca-03.cer"; Hash = "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2"; Root = $false; Hierarchy = "legacy" },
+  @{ Path = "certificates/microsoft-enterprise-identity-verification-code-signing-pca-2020.cer"; Hash = "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16"; Root = $false; Hierarchy = "legacy" },
+  @{ Path = "certificates/microsoft-identity-verification-root-2020.cer"; Hash = "5367F20C7ADE0E2BCA790915056D086B720C33C1FA2A2661ACF787E3292E1270"; Root = $true; Hierarchy = "current" },
+  @{ Path = "certificates/microsoft-id-verified-cs-aoc-ca-04.cer"; Hash = "15CEF5F63CA6D1F022B293E92C61C0059C49BB92EECDBCDE3A125D3C6356D94F"; Root = $false; Hierarchy = "current" },
+  @{ Path = "certificates/microsoft-id-verified-code-signing-pca-2021.cer"; Hash = "3D29798CC5D3F0644A7E0DC9CB1CADE523EA5EC83B335109B605BFEAA7D5F5C1"; Root = $false; Hierarchy = "current" }
+)
+$approvedPublisherAttributes = @(
+  "CN=lovemedia2.onmicrosoft.com",
+  "O=lovemedia2.onmicrosoft.com",
+  "OU=OpenWeb.co.za",
+  "C=ZA"
+)
+$certificates = @{}
+$trustRoots = [System.Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
 $intermediates = [System.Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
-foreach ($certificatePath in @($TrustRootPath) + $IntermediatePath) {
-  $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certificatePath)
+foreach ($pin in $pins) {
+  $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pin.Path)
   $actualHash = $certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
-  if ($actualHash -ne $expectedCertificateHashes[$certificatePath]) {
-    throw "$certificatePath did not match its pinned SHA-256 certificate hash."
+  if ($actualHash -ne $pin.Hash) {
+    throw "$($pin.Path) did not match its pinned SHA-256 certificate hash."
   }
-  if ($certificatePath -eq $TrustRootPath) {
-    $trustRoot = $certificate
+  $certificates[$pin.Path] = $certificate
+  if ($pin.Root) {
+    $null = $trustRoots.Add($certificate)
   } else {
     $null = $intermediates.Add($certificate)
   }
@@ -49,11 +53,17 @@ foreach ($file in $Path) {
   if (-not $signature.TimeStamperCertificate) {
     throw "$file does not contain an RFC3161 timestamp."
   }
+  $subjectAttributes = @($signature.SignerCertificate.Subject -split ',' | ForEach-Object { $_.Trim() })
+  foreach ($attribute in $approvedPublisherAttributes) {
+    if ($subjectAttributes -notcontains $attribute) {
+      throw "$file is signed by an unexpected publisher."
+    }
+  }
 
   $signerChain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
   $signerChain.ChainPolicy.TrustMode = [System.Security.Cryptography.X509Certificates.X509ChainTrustMode]::CustomRootTrust
   $signerChain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
-  $null = $signerChain.ChainPolicy.CustomTrustStore.Add($trustRoot)
+  $signerChain.ChainPolicy.CustomTrustStore.AddRange($trustRoots)
   $signerChain.ChainPolicy.ExtraStore.AddRange($intermediates)
   if (-not $signerChain.Build($signature.SignerCertificate)) {
     $details = ($signerChain.ChainStatus | ForEach-Object { $_.Status.ToString() }) -join ', '
@@ -62,10 +72,12 @@ foreach ($file in $Path) {
   $chainHashes = @($signerChain.ChainElements | ForEach-Object {
     $_.Certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
   })
-  foreach ($expectedPath in @($TrustRootPath) + $IntermediatePath) {
-    if ($chainHashes -notcontains $expectedCertificateHashes[$expectedPath]) {
-      throw "$file does not use the pinned bolt.gives signing hierarchy ($expectedPath is missing)."
-    }
+  $matchesApprovedHierarchy = @('legacy', 'current') | Where-Object {
+    $hierarchy = $_
+    @($pins | Where-Object Hierarchy -eq $hierarchy | Where-Object { $chainHashes -contains $_.Hash }).Count -eq 3
+  }
+  if (-not $matchesApprovedHierarchy) {
+    throw "$file does not use an approved bolt.gives Artifact Signing hierarchy."
   }
 
   $timestampChain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()

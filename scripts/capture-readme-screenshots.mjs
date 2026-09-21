@@ -133,7 +133,7 @@ async function captureDatabaseConnection() {
 
   const databaseButton = page.getByRole('button', { name: 'Open database connection' }).first();
   await databaseButton.click();
-  await page.getByRole('heading', { name: 'Project database' }).waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('heading', { name: 'Connect Supabase' }).waitFor({ state: 'visible', timeout: 15000 });
   await page.screenshot({ path: path.join(outDir, 'database.png'), fullPage: true });
   await page.keyboard.press('Escape');
 }

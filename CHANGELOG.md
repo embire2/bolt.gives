@@ -8,6 +8,7 @@
 - Keep the history drawer fully opaque while it slides and place history-item actions on an opaque action rail so collapsed/hover states cannot render text over text.
 - Publish the native Windows source, tests, installer, signature validation and release workflow under `desktop/windows`. Desktop v1.11.0 adds a native Supabase wizard and removes PostgreSQL provisioning claims from Live CLI.
 - Preserve the independent mandatory Desktop updater: exact GitHub assets, bounded downloads, SHA-256, pinned Authenticode, UAC, old-process shutdown, installed-version verification and rollback remain release gates.
+- Accept Microsoft's current ID Verified Artifact Signing hierarchy alongside the pinned legacy hierarchy. Both paths still require the complete pinned chain, the bolt.gives publisher identity, code-signing usage and an RFC3161 timestamp.
 
 ## v4.1.2 - 2026-09-20
 

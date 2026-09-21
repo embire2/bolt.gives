@@ -86,5 +86,17 @@ public sealed class UpdateSecurityTests
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-identity-verification-root-2020.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-id-verification-cs-aoc-ca-03.cer"));
         Assert.Contains(resources, name => name.EndsWith("microsoft-enterprise-identity-verification-code-signing-pca-2020.cer"));
+        Assert.Contains(resources, name => name.EndsWith("microsoft-identity-verification-root-2020.cer"));
+        Assert.Contains(resources, name => name.EndsWith("microsoft-id-verified-cs-aoc-ca-04.cer"));
+        Assert.Contains(resources, name => name.EndsWith("microsoft-id-verified-code-signing-pca-2021.cer"));
+    }
+
+    [Fact]
+    public void RequiresTheValidatedBoltGivesPublisherIdentity()
+    {
+        const string expected = "CN=lovemedia2.onmicrosoft.com, O=lovemedia2.onmicrosoft.com, OU=OpenWeb.co.za, STREET=22 Ladlau Drive, L=Ballito, S=KwaZulu-Natal, C=ZA, PostalCode=4399";
+
+        Assert.True(AuthenticodeVerifier.IsExpectedPublisherSubject(expected));
+        Assert.False(AuthenticodeVerifier.IsExpectedPublisherSubject(expected.Replace("O=lovemedia2.onmicrosoft.com", "O=Imposter Ltd")));
     }
 }

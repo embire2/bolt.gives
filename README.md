@@ -237,7 +237,7 @@ Both implementation checkpoints are combined in v4.1.0. The production app/runti
 
 The updater downloads only an exact versioned GitHub asset, checks size and SHA-256, verifies the pinned Authenticode chain, requests administrator approval, closes the old app, validates the installed version, and rolls back on failure. Desktop uses its own `desktop-v*` version line. Future WinUI/C++ research remains a roadmap item and must outperform the working native client before replacing it.
 
-**Desktop v1.10.2 remains the released client. Desktop v2.0.0 is the proposed rewrite version**, independent of web v4.1.0 and not yet shipped. Desktop source remains private; public releases receive compiled assets only. No mandatory replacement will be rolled out before native parity, signing, migration, and updater failure-path tests pass.
+**Desktop v1.11.0 is the current mandatory native release. Desktop v2.0.0 remains a proposed WinUI research version**, independent of the web release line and not yet approved. The current WPF source is public; a future replacement will not ship until it proves native parity, trusted signing, migration, updater rollback, accessibility, and performance.
 
 ## Install on Ubuntu
 
