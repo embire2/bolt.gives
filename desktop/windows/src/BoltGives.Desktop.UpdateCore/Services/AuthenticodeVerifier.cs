@@ -8,16 +8,37 @@ public sealed record ArtifactVerificationResult(bool IsTrusted, string Message);
 
 public static class AuthenticodeVerifier
 {
-    private sealed record CertificatePin(string Resource, string Hash, bool IsRoot, string Hierarchy);
+    private sealed record CertificatePin(string Resource, string Hash, bool IsRoot);
+
+    private const string LegacyRootHash = "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8";
+    private const string LegacyIssuerHash = "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2";
+    private const string LegacyPcaHash = "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16";
+    private const string CurrentRootHash = "5367F20C7ADE0E2BCA790915056D086B720C33C1FA2A2661ACF787E3292E1270";
+    private const string CurrentPcaHash = "3D29798CC5D3F0644A7E0DC9CB1CADE523EA5EC83B335109B605BFEAA7D5F5C1";
+    private const string CurrentAoc03Hash = "ACAA07D57D4274B290D86C156AA0D6C5633E3CD92D43751E6A0F797C5B2DFF4D";
+    private const string CurrentAoc04Hash = "15CEF5F63CA6D1F022B293E92C61C0059C49BB92EECDBCDE3A125D3C6356D94F";
+    private const string CurrentEoc03Hash = "BFF5C1A54B421E0CC12372F221FA56E6F1B0305A9C071A2AF1BF45893D2A4623";
+    private const string CurrentEoc04Hash = "BC309555FA42C563B8EEBFB7117695C6BAE89E4BA19C03CB721979A563A60929";
 
     private static readonly CertificatePin[] CertificatePins =
     [
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-root-2020.cer", "D549DC2314F7A16E496A515491B273BC9C098E40A070D61EF1602870F0C402D8", true, "legacy"),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-id-verification-cs-aoc-ca-03.cer", "39C27939CF5BF64E79BAF65AD40E7A93EEE861740433D4492F5030FC777D63C2", false, "legacy"),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-code-signing-pca-2020.cer", "D603BCAAA62A93C0BE43BDE5E5B58047B39FFFC3D4083313E940E09BA8D3EB16", false, "legacy"),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-identity-verification-root-2020.cer", "5367F20C7ADE0E2BCA790915056D086B720C33C1FA2A2661ACF787E3292E1270", true, "current"),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-cs-aoc-ca-04.cer", "15CEF5F63CA6D1F022B293E92C61C0059C49BB92EECDBCDE3A125D3C6356D94F", false, "current"),
-        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-code-signing-pca-2021.cer", "3D29798CC5D3F0644A7E0DC9CB1CADE523EA5EC83B335109B605BFEAA7D5F5C1", false, "current"),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-root-2020.cer", LegacyRootHash, true),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-id-verification-cs-aoc-ca-03.cer", LegacyIssuerHash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-enterprise-identity-verification-code-signing-pca-2020.cer", LegacyPcaHash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-identity-verification-root-2020.cer", CurrentRootHash, true),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-code-signing-pca-2021.cer", CurrentPcaHash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-cs-aoc-ca-03.cer", CurrentAoc03Hash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-cs-aoc-ca-04.cer", CurrentAoc04Hash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-cs-eoc-ca-03.cer", CurrentEoc03Hash, false),
+        new("BoltGives.Desktop.UpdateCore.Certificates.microsoft-id-verified-cs-eoc-ca-04.cer", CurrentEoc04Hash, false),
+    ];
+    private static readonly string[][] ApprovedHierarchies =
+    [
+        [LegacyRootHash, LegacyPcaHash, LegacyIssuerHash],
+        [CurrentRootHash, CurrentPcaHash, CurrentAoc03Hash],
+        [CurrentRootHash, CurrentPcaHash, CurrentAoc04Hash],
+        [CurrentRootHash, CurrentPcaHash, CurrentEoc03Hash],
+        [CurrentRootHash, CurrentPcaHash, CurrentEoc04Hash],
     ];
     private static readonly string[] ExpectedPublisherAttributes =
     [
@@ -68,10 +89,7 @@ public static class AuthenticodeVerifier
                 var chainHashes = chain.ChainElements
                     .Select(element => element.Certificate.GetCertHashString(HashAlgorithmName.SHA256))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var matchesApprovedHierarchy = CertificatePins
-                    .GroupBy(pin => pin.Hierarchy)
-                    .Any(hierarchy => hierarchy.All(pin => chainHashes.Contains(pin.Hash)));
-                if (!matchesApprovedHierarchy)
+                if (!MatchesApprovedHierarchy(chainHashes))
                     return new(false, "The artifact publisher chain does not match a pinned bolt.gives signing hierarchy.");
 
                 return new(true, "Authenticode signature and pinned publisher chain verified.");
@@ -104,6 +122,12 @@ public static class AuthenticodeVerifier
     {
         var attributes = subject.Split(',').Select(attribute => attribute.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return ExpectedPublisherAttributes.All(attributes.Contains);
+    }
+
+    internal static bool MatchesApprovedHierarchy(IEnumerable<string> certificateHashes)
+    {
+        var hashes = certificateHashes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ApprovedHierarchies.Any(hierarchy => hierarchy.All(hashes.Contains));
     }
 
     private static (CertificatePin Pin, X509Certificate2 Certificate) LoadPinnedCertificate(CertificatePin pin)
